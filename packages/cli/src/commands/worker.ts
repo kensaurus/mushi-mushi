@@ -31,6 +31,7 @@ import { apiCall, outputIsJson, requireConfig, requireUuid } from '../cli-shared
 import { loadConfig } from '../config.js'
 import { MushiCliError } from '../errors.js'
 import { isKeychainEnabled, tryDeleteWorkerKey, trySaveWorkerKey } from '../keychain.js'
+import { parseLocalAgent } from './work-agents.js'
 import { assertWorkerKey, readWorkerKey } from '../worker/daemon.js'
 import { flagLines, type WorkerFlagView } from '../worker/flags-view.js'
 import { parseLanesConf, SYSTEMD_UNIT_NAME, systemdUnit, WINDOWS_TASK_NAME, windowsTaskArgs } from '../worker/install.js'
@@ -111,12 +112,13 @@ export function registerWorkerCommands(program: Command): void {
     .option('--model <id>', 'One lane: its model when it first registers (the console can change it)')
     .option('--stop-at <time>', 'Every lane stops taking reports at this time when it first registers (ISO, e.g. 2026-10-31T14:59:00Z); change it in the console later')
     .option('--cursor-account <email>', 'Spend only this Cursor account: a CLI signed in as anyone else counts as signed out')
+    .option('--agent <name>', 'The coding agent every lane runs: cursor (default) or claude (Claude Code, signed in with claude auth login)')
     .option('--endpoint <url>', 'API endpoint (default: the CLI login\'s)')
     .option('--key-stdin', 'Read a worker key made in the console (Workers tab) from stdin instead of creating one')
     .option('--no-service', 'Write the lanes file and key only')
     .option('--yes', 'Do not ask before writing')
     .option('--dry-run', 'Print what would be written; write nothing')
-    .action(async (opts: { lanesConf?: string; cloneRoot?: string; lane?: string; project?: string; repoDir?: string; model?: string; stopAt?: string; cursorAccount?: string; endpoint?: string; keyStdin?: boolean; service: boolean; yes?: boolean; dryRun?: boolean }) => {
+    .action(async (opts: { lanesConf?: string; cloneRoot?: string; lane?: string; project?: string; repoDir?: string; model?: string; stopAt?: string; cursorAccount?: string; agent?: string; endpoint?: string; keyStdin?: boolean; service: boolean; yes?: boolean; dryRun?: boolean }) => {
       const cli = loadConfig()
       const endpoint = opts.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? cli.endpoint
       let stopAt: string | null = null
@@ -126,7 +128,8 @@ export function registerWorkerCommands(program: Command): void {
         stopAt = new Date(t).toISOString()
       }
       const lanes = lanesFromOptions(opts).map((l) => (stopAt ? { ...l, initial: { ...l.initial, stop_at: stopAt } } : l))
-      const cfg = validateWorkerConfig({ version: 1, ...(endpoint ? { endpoint } : {}), ...(opts.cursorAccount ? { cursorAccount: opts.cursorAccount } : {}), lanes })
+      const agent = opts.agent === undefined ? undefined : parseLocalAgent(opts.agent)
+      const cfg = validateWorkerConfig({ version: 1, ...(endpoint ? { endpoint } : {}), ...(opts.cursorAccount ? { cursorAccount: opts.cursorAccount } : {}), ...(agent ? { agent } : {}), lanes })
       const projectIds = [...new Set(cfg.lanes.map((l) => l.projectId))]
       const node = process.execPath
       const cli0 = cliPath()
@@ -141,7 +144,8 @@ export function registerWorkerCommands(program: Command): void {
 
       console.log(`Lanes (${WORKER_CONFIG_PATH}):`)
       printLanes(cfg)
-      if (cfg.cursorAccount) console.log(`Cursor: spends only ${cfg.cursorAccount}; signed in as anyone else, the worker waits.`)
+      if (cfg.agent === 'claude') console.log('Agent: Claude Code (claude -p) on the plan it is signed in to; lane models that are not Claude ids are not used.')
+      if (cfg.cursorAccount && cfg.agent !== 'claude') console.log(`Cursor: spends only ${cfg.cursorAccount}; signed in as anyone else, the worker waits.`)
       const keySource = process.env['MUSHI_WORKER_KEY'] ? 'MUSHI_WORKER_KEY' : opts.keyStdin ? 'stdin' : `a new worker key for ${projectIds.length} app(s), made with your CLI login`
       console.log(`\nKey: ${keySource}; stored in ${isKeychainEnabled() ? 'the OS keychain' : `${WORKER_KEY_PATH} (mode 0600; no keychain here)`}. It can only take reports and record their fixes.`)
       if (service?.kind === 'systemd') {

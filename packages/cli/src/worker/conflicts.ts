@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { agentEnv, clearWorktree, commitWithHooks, failureTail, git, installDeps, pushWithHooks, runProc, type WorkStage, classifyFailure } from '../commands/work.js'
+import { agentRun, agentSpec, type LocalAgent } from '../commands/work-agents.js'
 import type { ConflictTarget } from './protocol.js'
 
 const CONFLICT_AGENT_TIMEOUT_MS = 20 * 60_000
@@ -131,6 +132,8 @@ export function conflictPromptLocal(t: { repo: string; prNumber: number; base: s
 
 interface ConflictRunOptions {
   repoDir: string
+  /** The local agent (worker.json `agent`); default cursor. */
+  agent?: LocalAgent
   model?: string
   log: (line: string) => void
   signal?: AbortSignal
@@ -183,17 +186,15 @@ export async function resolveConflict(t: ConflictTarget, o: ConflictRunOptions):
       o.log(`  conflicts in ${files.length} file(s): ${files.slice(0, 6).join(', ')}${files.length > 6 ? ', …' : ''}`)
       const empty = join(tmpdir(), `mushi-conflict-${process.pid}`)
       mkdirSync(empty, { recursive: true })
-      const run = await runProc(
-        'cursor-agent',
-        ['-p', '--force', '--trust', '--output-format', 'text', '--workspace', wt, ...(o.model ? ['--model', o.model] : []), conflictPromptLocal({ repo: t.repo, prNumber: t.prNumber, base, files })],
-        { cwd: wt, env: agentEnv(process.env, empty), timeoutMs: CONFLICT_AGENT_TIMEOUT_MS, signal: o.signal },
-      )
+      const agent = o.agent ?? 'cursor'
+      const inv = agentRun(agent, { mode: 'edit', workspace: wt, model: o.model, prompt: conflictPromptLocal({ repo: t.repo, prNumber: t.prNumber, base, files }) })
+      const run = await runProc(inv.cmd, inv.args, { cwd: wt, env: agentEnv(process.env, empty), timeoutMs: CONFLICT_AGENT_TIMEOUT_MS, signal: o.signal, ...(inv.input !== undefined ? { input: inv.input } : {}) })
       if (o.signal?.aborted) {
         keep = true
         return { result: 'stopped', detail: `stopped (lost the lease); the worktree is kept in ${wt}` }
       }
       if (run.timedOut) return { result: 'timeout', failureKind: 'code', detail: `the agent did not finish within ${CONFLICT_AGENT_TIMEOUT_MS / 60_000} min` }
-      if (run.code !== 0) return { result: 'failed', failureKind: classifyFailure(failureTail(run, 300), 'agent'), detail: `cursor-agent exited ${run.code}: ${failureTail(run, 200)}` }
+      if (run.code !== 0) return { result: 'failed', failureKind: classifyFailure(failureTail(run, 300), 'agent'), detail: `${agentSpec(agent).bin} exited ${run.code}: ${failureTail(run, 200)}` }
       agentNote = run.stdout.trim().split('\n').filter((l) => l.trim()).slice(-3).join(' ').slice(0, 300) || 'the agent resolved the conflicts'
 
       // The rules the result must pass before anything is staged or committed.

@@ -13,6 +13,11 @@ Mushi Mushi was built for one person first: someone who makes apps with AI tools
 and then has to deal with the bugs. Two other groups get just as much from it.
 Find yours below.
 
+Short pages for a few common situations:
+[you built your app with Lovable or Bolt](/use-cases/no-code-founder),
+[you build apps for clients](/use-cases/agency-client-apps), and
+[you have a phone app](/use-cases/mobile-app) (Expo, React Native or Capacitor).
+
 ## You build apps with AI, mostly on your own
 
 You use Lovable, Bolt, Cursor or Claude Code. Your app has real users. You did

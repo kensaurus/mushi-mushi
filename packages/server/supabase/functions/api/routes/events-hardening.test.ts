@@ -8,6 +8,7 @@ import {
   admitEventNames,
   batchSchema,
   clampEventTs,
+  isSelfVisitReferrerSpam,
   readBodyCapped,
 } from './events.ts'
 import { clientIp, ipActorId } from './ingest-budget.ts'
@@ -103,4 +104,17 @@ Deno.test('reporter credentials are stored as the one-way key the SQL backfill w
   // A stored key replayed as a credential must not find the reporter.
   assertNotEquals(await reporterKey(key), key)
   assertEquals(await reporterKeyOrNull(null), null)
+})
+
+Deno.test('the self project drops landing visits from a referrer-spam host, and only those', () => {
+  const spam = { $referrer: 'https://www.aocr.org/index.html' }
+  assertEquals(isSelfVisitReferrerSpam('landing_view', spam, true), true)
+  assertEquals(isSelfVisitReferrerSpam('docs_page_view', spam, true), true)
+  // A customer's project keeps its own analytics untouched.
+  assertEquals(isSelfVisitReferrerSpam('landing_view', spam, false), false)
+  // Other events and real referrers are kept.
+  assertEquals(isSelfVisitReferrerSpam('cta_click', spam, true), false)
+  assertEquals(isSelfVisitReferrerSpam('landing_view', { $referrer: 'https://www.reddit.com/r/vibecoding/' }, true), false)
+  assertEquals(isSelfVisitReferrerSpam('landing_view', { $referrer: 'https://notaocr.org/' }, true), false)
+  assertEquals(isSelfVisitReferrerSpam('landing_view', {}, true), false)
 })

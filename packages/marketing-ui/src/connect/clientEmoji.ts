@@ -15,6 +15,7 @@ const CLIENT_EMOJI: Record<McpClientId, string> = {
   'claude-desktop': '🔸',
   zed: '⚡',
   any: '🌐',
+  lovable: '💜',
 }
 
 export function getConnectClientEmoji(id: McpClientId): string {

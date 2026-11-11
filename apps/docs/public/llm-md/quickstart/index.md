@@ -9,6 +9,11 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 
 # Quickstart
 
+  **Built with Lovable or Bolt? No terminal needed.** Skip this page and use
+  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt): you paste one
+  prompt, and it takes about five minutes. Building a phone app with Expo,
+  React Native or Capacitor? Go to [your phone app](/quickstart/mobile).
+
 - One command, `npx mushi-mushi`, adds a report button to your app.
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
 - Your AI editor reads it and writes the fix.

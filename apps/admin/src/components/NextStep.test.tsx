@@ -192,7 +192,7 @@ describe('NextStep', () => {
     expect(banner()).toBeNull()
     // The checklist's own row is the one setup step on screen.
     const marked = Array.from(container.querySelectorAll('li')).filter((li) => /do this next/i.test(li.textContent ?? ''))
-    expect(marked.map((li) => li.textContent)).toEqual([expect.stringContaining('Label sdk_installed')])
+    expect(marked.map((li) => li.textContent)).toEqual([expect.stringContaining('Put the report button in your app')])
 
     state.work = { ...QUIET, urgentOpenReports: 1 }
     render(
@@ -216,6 +216,7 @@ describe('NextStep', () => {
     render(createElement(SetupChecklist, { project: p, mode: 'wizard' }))
     const marked = Array.from(container.querySelectorAll('li')).filter((li) => /do this next/i.test(li.textContent ?? ''))
     expect(marked).toHaveLength(1)
-    expect(marked[0].textContent).toContain('Label api_key_generated')
+    // The checklist shows known steps in plain words (lib/setupStepWords.ts, 2026-11-11).
+    expect(marked[0].textContent).toContain('Get your app key')
   })
 })

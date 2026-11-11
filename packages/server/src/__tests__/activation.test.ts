@@ -62,9 +62,20 @@ describe('isActivationReport', () => {
   })
 
   it('console fixtures, the demo seed and hand-filed reports never activate', () => {
-    for (const source of ['admin_test_report', 'mushi-marketing-seed', 'admin_file']) {
+    for (const source of ['admin_test_report', 'mushi-marketing-seed', 'admin_file', 'cli_wizard']) {
       expect(isActivationReport(row({ custom_metadata: { source } })), source).toBe(false)
     }
+  })
+
+  it('the setup wizard test report never activates, even from a CLI that sent no source (2026-11-10)', () => {
+    expect(isActivationReport(row({ url: 'cli://wizard', custom_metadata: null }))).toBe(false)
+    expect(isActivationReport(row({ url: 'CLI://wizard' }))).toBe(false)
+    expect(isActivationCandidate(row({ url: 'cli://wizard' }))).toBe(false)
+  })
+
+  it('the CLI wizard tags its test report as cli_wizard', () => {
+    const init = readFileSync(resolve(__dirname, '../../../cli/src/init.ts'), 'utf8')
+    expect(init).toContain("metadata: { source: 'cli_wizard' }")
   })
 
   it('needs a real diagnosis: none, or the precomputed test fixture, does not count', () => {

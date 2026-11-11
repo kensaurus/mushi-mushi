@@ -19,7 +19,7 @@ import AppDetailClient from './AppDetailClient'
 export const metadata: Metadata = {
   title: 'App details',
   description:
-    'App detail page on the Mushi Bounties marketplace — bounty points, platforms, and how to start testing.',
+    'App detail page on the Mushi Mushi Bounties marketplace — bounty points, platforms, and how to start testing.',
   robots: { index: false, follow: true },
 }
 

@@ -127,6 +127,19 @@ describe('claimTenantRateLimit RPC contract', () => {
     expect(logged.warn).toContain('scoped_rate_limit_claim failed — allowing request')
   })
 
+  // Sentry 7817720841 (2026-10-29): the claim RPC hit the 8s statement
+  // timeout while the database was saturated. The limiter fails open by
+  // design, so the error log is the only signal that limits were off; a
+  // 57014 must never be reclassified as a transient warn.
+  it('fails open on a statement timeout and keeps it at error level', async () => {
+    logged.warn.length = 0
+    logged.error.length = 0
+    const db = recordingDb({ message: 'canceling statement due to statement timeout', code: '57014' } as never)
+    expect((await tenant.claimTenantRateLimit(db as never, 'project:p1:runner_ingest', 30, 60)).allowed).toBe(true)
+    expect(logged.error).toContain('scoped_rate_limit_claim failed — allowing request')
+    expect(logged.warn).toEqual([])
+  })
+
   it('keeps a signature drift (a coded error) at error level', async () => {
     logged.warn.length = 0
     logged.error.length = 0

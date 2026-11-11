@@ -308,7 +308,6 @@ All routes are served from the `api` function under `/v1/`:
 - `GET /v1/admin/ask-mushi/threads/:id` — Retrieve all messages in a thread
 - `DELETE /v1/admin/ask-mushi/threads/:id` — Delete a thread and all its messages (PII purge). Owner-scoped via RLS
 - `GET /v1/admin/ask-mushi/mentions?q=...` — Search reports, fixes, and branches for the `@` mention typeahead in the Ask Mushi Mushi composer
-- `POST /v1/admin/assist` — Back-compat shim that internally transforms the legacy payload and forwards to the `/ask-mushi/messages` handler. Will be removed after one release cycle
 - `GET /.well-known/agent-card` — A2A agent card
 - `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
 - `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients

@@ -11,9 +11,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { error } = vi.hoisted(() => ({ error: vi.fn() }))
+const { error, warn } = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn() }))
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
-  const logger = { info: () => {}, warn: () => {}, error, debug: () => {}, child: () => logger }
+  const logger = { info: () => {}, warn, error, debug: () => {}, child: () => logger }
   return { log: logger }
 })
 
@@ -47,7 +47,7 @@ async function loadResolver() {
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
-beforeEach(() => error.mockClear())
+beforeEach(() => { error.mockClear(); warn.mockClear() })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('self organization guard', () => {
@@ -56,13 +56,15 @@ describe('self organization guard', () => {
     await expect(resolveSelfEndUser(fakeDb(1) as never, 'user-1')).resolves.toBe('eu-1')
     await flush()
     expect(error).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('logs an error when another project shares the self org', async () => {
+  it('warns (not an error: a deliberate shared org since 2026-11-11) when another project shares the self org', async () => {
     const resolveSelfEndUser = await loadResolver()
     await expect(resolveSelfEndUser(fakeDb(2) as never, 'user-1')).resolves.toBe('eu-1')
     await flush()
-    expect(error).toHaveBeenCalledWith('product-events: self organization holds more than one project', {
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledWith('product-events: self organization holds more than one project', {
       orgId: 'org-self',
       projects: 2,
     })
@@ -74,6 +76,6 @@ describe('self organization guard', () => {
     await resolveSelfEndUser(db as never, 'user-1')
     await resolveSelfEndUser(db as never, 'user-2')
     await flush()
-    expect(error).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledTimes(1)
   })
 })

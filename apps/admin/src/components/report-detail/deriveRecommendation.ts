@@ -6,6 +6,7 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { KNOWN_ISSUES_SEARCH_HREF } from '../../lib/settingsTabs'
 import { NO_CODE_LOCATION_REASON } from '../../lib/reportCodeLocation'
 import { verdictFromError } from '../../lib/pdcaAct'
+import { isAgentOutOfUsageError } from '../../lib/agentOutOfUsage'
 
 /** The opt-in's name as the fix worker quotes it in a skip reason. */
 const WEB_SEARCH_SETTING_NAME = 'Search the web for known fixes'
@@ -375,6 +376,22 @@ function recommendationFor(
         actions: [
           { label: 'Configure codebase indexing \u2192', to: '/integrations/config#integrations-codebase', tone: 'primary' },
           ...(webSearchOff ? [{ label: 'Turn on web search \u2192', to: KNOWN_ISSUES_SEARCH_HREF, tone: 'ghost' as const }] : []),
+          { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
+        ],
+      }
+    }
+
+    // The coding agent's account ran out of credits: a retry goes to the same
+    // empty account (2026-11-07 on: 274 runs, "You're out of usage").
+    if (latest.status === 'failed' && isAgentOutOfUsageError(latest.error)) {
+      return {
+        title: "Fix stopped: the coding agent's account was out of credits",
+        description:
+          'While its credits are out, a retry stops the same way. Copy the fix prompt above into your editor, or run the fix with Claude Code on your own computer. Spend credits says whether the credits are back and when they come back.',
+        tone: 'urgent',
+        meta: lastAttemptMeta,
+        actions: [
+          { label: 'See what to do →', to: '/credits#agent-credits', tone: 'primary' },
           { label: 'Retry dispatch', onClick: onDispatch, tone: 'ghost' },
         ],
       }

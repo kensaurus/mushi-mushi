@@ -60,6 +60,45 @@ declare const Deno: { env: { get(name: string): string | undefined } }
 
 const rlog = log.child('tester-marketplace-routes')
 
+/** Subscription states a balance credit can still be applied to. */
+const CREDITABLE_PLAN_STATUSES = ['active', 'trialing', 'past_due']
+
+/**
+ * The Stripe customer of a paid plan in an organization the user owns or
+ * administers, newest period first; null when there is none. Plans and
+ * customers are per project and organization (`billing_subscriptions`,
+ * `billing_customers`), never per user.
+ */
+export async function paidPlanCustomerFor(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<string | null> {
+  const { data: memberships } = await db
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .in('role', ['owner', 'admin'])
+  const orgIds = (memberships ?? []).map((m: { organization_id: string }) => m.organization_id)
+  if (orgIds.length === 0) return null
+  const { data: subs } = await db
+    .from('billing_subscriptions')
+    .select('project_id')
+    .in('organization_id', orgIds)
+    .in('status', CREDITABLE_PLAN_STATUSES)
+    .order('current_period_end', { ascending: false })
+    .limit(5)
+  for (const sub of (subs ?? []) as Array<{ project_id: string | null }>) {
+    if (!sub.project_id) continue
+    const { data: customer } = await db
+      .from('billing_customers')
+      .select('stripe_customer_id')
+      .eq('project_id', sub.project_id)
+      .maybeSingle()
+    if (customer?.stripe_customer_id) return customer.stripe_customer_id as string
+  }
+  return null
+}
+
 // ─── OFAC-denied country codes (simplified list) ─────────────
 
 // Wave 9: Import centralized sanctions module (replaces inline OFAC set).
@@ -1271,21 +1310,43 @@ export function registerTesterMarketplaceRoutes(app: Hono<{ Variables: Variables
         const { stripeFromEnv, createCustomerBalanceCredit } = await import('../../_shared/stripe.ts')
         const stripeCfg = stripeFromEnv()
 
-        const { data: userSubscription } = await supabase
-          .from('subscriptions')
-          .select('stripe_customer_id')
-          .eq('user_id', authUserId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (stripeCfg && userSubscription?.stripe_customer_id) {
+        // The credit lands on the Stripe customer of a paid plan the tester
+        // owns or administers. This read a `subscriptions` table that does not
+        // exist (only org-level `billing_subscriptions`), so it always found
+        // nothing, skipped the credit and still marked the redemption complete:
+        // the tester lost the points and got no credit (found 2026-11-11).
+        const customerId = await paidPlanCustomerFor(supabase, authUserId)
+        if (!stripeCfg?.secretKey || !customerId) {
+          await supabase
+            .from('tester_redemptions')
+            .update({ status: 'failed', failure_reason: customerId ? 'stripe_not_configured' : 'no_paid_plan' })
+            .eq('id', redemption.id)
+          await awardPointsChecked(supabase, {
+            testerId: tester.id,
+            deltaPoints: effectivePointsSpent,
+            reason: 'reversal',
+            idempotencyKey: `refund:no-plan:${idempotencyKey}`,
+          })
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: customerId ? 'STRIPE_NOT_CONFIGURED' : 'NO_PAID_PLAN',
+                message: customerId
+                  ? 'Plan credit is not available right now. Your points are back in your wallet.'
+                  : 'Plan credit goes on a paid Mushi Mushi plan you own or manage, and we could not find one. Your points are back in your wallet.',
+              },
+            },
+            409,
+          )
+        }
+        {
           const faceValueCents = Math.round(effectivePointsSpent * premiumMultiplier)
           await createCustomerBalanceCredit(stripeCfg, {
-            customerId: userSubscription.stripe_customer_id,
+            customerId,
             amountCents: faceValueCents,
             currency: 'usd',
-            description: `Mushi Bounties: ${effectivePointsSpent.toLocaleString()} points → Mushi Pro credit (${premiumMultiplier}× premium)`,
+            description: `Mushi Mushi Bounties: ${effectivePointsSpent.toLocaleString()} points → Mushi Mushi plan credit (${premiumMultiplier}× premium)`,
             idempotencyKey: `mbounty:credit:${redemption.id}`,
           })
         }

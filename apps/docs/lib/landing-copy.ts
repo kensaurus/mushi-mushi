@@ -9,22 +9,26 @@ import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
 export const LANDING_HERO = {
   eyebrow: MUSHI_TAGLINE_V2.category,
   /**
-   * The one job the public surface leads with (ADR 0052, owner 2026-10-27):
-   * one sentence, no paragraph before the first action.
+   * The plain subline under the H1 (ADR 0056): both ways in (a user taps a
+   * button, Mushi Mushi checks the live site) and what every bug gets. Straight
+   * from the brand ladder so the landing, README and npm cannot drift.
    */
-  lead:
-    'A user says your app is broken. Mushi Mushi tells you why in plain English and hands the fix to Cursor, Claude Code or Lovable. No Sentry or monitoring needed.',
+  lead: MUSHI_TAGLINE_V2.subHero,
   /**
-   * Stage-fit proof under the actions: what it costs to try. No star count —
-   * at this stage a small number is anti-proof. Plain text, no links: the hero
-   * has one action (the install box) and one secondary link (the sample).
+   * The facts row under the hero's check box: what trying it costs. Plain text,
+   * no links, so the hero keeps one primary action and one secondary one.
+   * No star count: at this stage a small number is anti-proof.
    */
-  reassure: 'Free for one app: 100 diagnoses a month, no card. Open source.',
+  facts: [
+    'Free for one app: 100 diagnoses a month, no card',
+    'About 5 minutes to set up',
+    'No coding needed with Lovable or Bolt',
+  ],
 } as const
 
 /**
- * The hero's one secondary link: a sample diagnosis anyone can read without
- * signing up or installing. It says "sample" because the page is one.
+ * The sample diagnosis anyone can read without signing up or installing,
+ * linked one scroll down in "How it works". It says "sample" because it is one.
  */
 export const LANDING_SAMPLE_LINK = {
   id: 'landing-sample',
@@ -33,18 +37,42 @@ export const LANDING_SAMPLE_LINK = {
 } as const
 
 /**
- * The hero's one secondary link since ADR 0052's 2026-10-28 amendment (owner
- * decision): value before trust. A stranger checks their own live site with
- * nothing to install and no sign-up; the sample diagnosis moves one scroll down
- * to "How it works".
+ * The hero's PRIMARY action since ADR 0056: value before trust. A URL box that
+ * starts the free Production Check in place (no sign-up, nothing to install)
+ * and opens its report on /check. `src` is the funnel id the check records.
  */
-export const LANDING_CHECK_LINK = {
+export const LANDING_CHECK = {
   id: 'landing-check',
-  lead: 'Not ready to install?',
-  label: 'Check your live site free',
-  note: 'nothing to install, no sign-up',
-  href: '/check?src=landing-hero',
+  src: 'landing-hero',
+  heading: 'Check your live app free',
+  inputLabel: 'Your live app’s address',
+  placeholder: 'your-app.com',
+  button: 'Check my app',
+  note: 'No sign-up, nothing to install. About 30 seconds.',
+  emptyError: 'Enter your app’s address, like your-app.com.',
 } as const
+
+/**
+ * What a visitor typed in the hero box, as an http(s) address `/check` accepts
+ * (`urlFromSearch` needs a scheme): `my-app.com` becomes `https://my-app.com`.
+ * Null when nothing usable was typed.
+ */
+export function normalizeCheckUrl(raw: string): string | null {
+  const v = raw.trim()
+  if (!v) return null
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : `https://${v}`
+  try {
+    const u = new URL(withScheme)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+    if (!u.hostname.includes('.') && u.hostname !== 'localhost') return null
+    return withScheme
+  } catch {
+    return null
+  }
+}
+
+/** The lead over the hero's SECOND action, the install box (ADR 0056). */
+export const LANDING_INSTALL_LEAD = 'Ready to add the report button to your app?'
 
 /**
  * The actions inside the hero's install box, one per tab, so no two share an
@@ -90,8 +118,9 @@ export const LANDING_SETUP_PROMPT =
 export const LANDING_FIX_PROMPT = 'Get the latest Mushi Mushi report and fix it.'
 
 /**
- * The hero's install box (owner, 2026-10-27: "how to install with Claude or
- * Cursor, and give the user a simple prompt"). Pick your editor, then the same
+ * The hero's install box, its second action since ADR 0056 (owner, 2026-10-27:
+ * "how to install with Claude or Cursor, and give the user a simple prompt").
+ * Pick what you build with, Lovable or Bolt first, then the same
  * three steps for each: the cycle of ADR 0027 (connect, bugs come in, a fix
  * you review), each step ending in what you should see. Every editor install
  * is URL-only (`buildOAuthInstall`), so the editor runs the Mushi sign-in on
@@ -100,9 +129,10 @@ export const LANDING_FIX_PROMPT = 'Get the latest Mushi Mushi report and fix it.
 export const LANDING_INSTALL = {
   label: 'Install with',
   tabs: [
+    // Lovable/Bolt first (ADR 0056): a no-code founder is the same buyer.
+    { id: 'lovable', label: 'Lovable or Bolt', connect: 'Sign up free, then copy your script tag from the Script tag tab on the setup page.' },
     { id: 'claude-code', label: 'Claude Code', connect: 'Run this in your terminal. It adds Mushi Mushi to Claude Code.' },
     { id: 'cursor', label: 'Cursor', connect: 'Click to add Mushi Mushi to Cursor, then open a chat.' },
-    { id: 'lovable', label: 'Lovable or Bolt', connect: 'Sign up free, then copy your script tag from the Script tag tab on the setup page.' },
     { id: 'other', label: 'Other editors', connect: 'Pick yours: VS Code, Windsurf, Zed, Claude Desktop and more.' },
   ],
   steps: {
@@ -156,8 +186,16 @@ export interface LandingFaqItem {
 
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
+    q: 'Do I need to know how to code?',
+    a: 'No. If you build with Lovable or Bolt, you add Mushi Mushi by pasting one prompt, with no terminal. When a bug comes in, you read a short note in plain English and paste the fix instructions back into Lovable or Bolt. You check the change before you publish it.',
+  },
+  {
+    q: 'How long does setup take?',
+    a: 'About five minutes. In Lovable or Bolt, you sign up, copy your script tag and ask the builder to add it. In Cursor or Claude Code, it is one command or one click. A test report gets its plain-English diagnosis in about 10 seconds.',
+  },
+  {
     q: 'What is Mushi Mushi, in plain terms?',
-    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
+    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. It can also check your live site once for free, with no sign-up, for pages that error, dead links and images, and a title still saying "Lovable App". The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
   },
   {
     q: 'I build in Lovable or Bolt and have no terminal. Can I use it?',
@@ -169,7 +207,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'Who makes it, and can I use it today?',
-    a: 'Mushi Mushi is built by Kensaurus 合同会社, a small company in Japan, and it runs on the company\'s own apps and sites. The hosted service is live, the libraries are published on npm, and the source code is public on GitHub. The native iOS, Android and Flutter libraries are still previews.',
+    a: 'Built by one developer in Japan (Kensaurus 合同会社), who runs it on his own live apps and sites. The hosted service is live, the libraries are published on npm, and the source code is public on GitHub. The native iOS, Android and Flutter libraries are still previews.',
   },
   {
     q: 'Is Mushi Mushi a Sentry alternative?',
@@ -185,7 +223,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
-    a: 'Connect your editor to Mushi Mushi with the install box at the top of this page: one command for Claude Code, one click for Cursor. It uses MCP, the standard way AI editors connect to outside tools. Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
+    a: 'Connect your editor to Mushi Mushi with the install box near the top of this page: one command for Claude Code, one click for Cursor. It uses MCP, the standard way AI editors connect to outside tools. Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
   },
   {
     q: 'Is it open source? Can I self-host?',
@@ -212,7 +250,7 @@ export const LANDING_WHAT_THIS_IS = {
    * definition. Category and promise come from the brand SSOT so it cannot
    * drift from the eyebrow, the npm cards or the JSON-LD.
    */
-  definition: `Mushi Mushi is ${lowerFirst(MUSHI_TAGLINE_V2.category)}, an open-source tool that gives every bug your users report a ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
+  definition: `Mushi Mushi is an open-source tool for ${lowerFirst(MUSHI_TAGLINE_V2.category)}: every bug your users report gets a ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
   who: 'Solo founders who build with AI tools and then lose whole afternoons fixing code they did not fully write themselves. People who work this way are often called vibe coders.',
   boundary:
     'It works inside your code editor, not as yet another dashboard to check. Sentry, Linear and Slack can feed into the same list, but you need none of them to start.',
@@ -303,7 +341,7 @@ export const LANDING_QUICKSTART_PLATFORMS: readonly LandingPlatformCard[] = [
     href: '/quickstart/incident-loop',
     cmd: 'npx mushi-mushi',
     desc: 'A bug in your live app → a plain-English read → a fix prompt ready to paste into Cursor.',
-    badge: 'Start here',
+    badge: 'Cursor or Claude Code',
   },
   {
     title: 'MCP server',
@@ -395,7 +433,7 @@ export interface LandingPillar {
    * four indistinguishable text blocks. Keyed rather than inlined so the copy
    * module stays free of markup.
    */
-  glyph: 'report' | 'diagnose' | 'group' | 'ship'
+  glyph: 'install' | 'report' | 'diagnose' | 'group' | 'ship'
 }
 
 /** The landing's "How it works": the one job in three steps (ADR 0052). */
@@ -420,8 +458,52 @@ export const LANDING_PILLARS: readonly LandingPillar[] = [
   },
 ] as const
 
+/**
+ * The landing's "How it works" since ADR 0056: four steps, each with what you
+ * do and what Mushi Mushi does. Same wording as /what-is-mushi-mushi, kept to
+ * one card per step so it reads on a phone. `role` is what Mushi Mushi does.
+ */
+export interface LandingHowStep extends LandingPillar {
+  /** What the person does at this step, in plain words. */
+  you: string
+}
+
+export const LANDING_HOW_STEPS: readonly LandingHowStep[] = [
+  {
+    step: 'Step 1',
+    name: 'Add the button',
+    glyph: 'install',
+    you: 'Copy one line from Mushi Mushi and ask Lovable or Bolt to add it. In Cursor or Claude Code, it’s one command. About 5 minutes.',
+    role: 'Gives you the line with your app’s details already filled in.',
+  },
+  {
+    step: 'Step 2',
+    name: 'A customer reports a problem',
+    glyph: 'report',
+    you: 'Nothing.',
+    role: 'Your customer taps the button and types one sentence. Mushi Mushi adds a picture of their screen, the page they were on and what they tapped.',
+  },
+  {
+    step: 'Step 3',
+    name: 'Read what went wrong',
+    glyph: 'diagnose',
+    you: 'Open the report. It’s a short note in plain English.',
+    role: 'Works out the likely cause, says how serious it is and how sure it is, and groups repeat reports of one bug into one.',
+  },
+  {
+    step: 'Step 4',
+    name: 'Let your AI fix it',
+    glyph: 'ship',
+    you: 'Copy the fix instructions into Lovable, Bolt, Cursor or Claude Code. Check the change, then publish.',
+    role: 'Writes the fix instructions for your AI builder. When you mark the bug fixed, it can let the customer know.',
+  },
+] as const
+
 export const LANDING_HOW_IT_WORKS = {
   heading: 'How it works',
+  youLabel: 'You:',
+  mushiLabel: 'Mushi Mushi:',
+  stayInCharge: 'You stay in charge: nothing changes in your app until you approve it.',
   sampleLead: 'See all of it on one bug: the complaint, what was captured, the cause and the fix prompt.',
 } as const
 

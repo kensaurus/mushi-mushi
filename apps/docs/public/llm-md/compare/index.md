@@ -9,6 +9,8 @@ description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostH
 
 # Compare Mushi Mushi with the tools you already know
 
+> **Never used Sentry, Jam or PostHog?** You don't need any of them to use Mushi Mushi, so you can skip these pages. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 These pages exist because "is this a Sentry replacement?" is the first
 question almost everyone asks, and a fair answer needs the other tool's
 numbers next to ours. Each page states what the other product is for in its

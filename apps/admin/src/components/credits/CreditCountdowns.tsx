@@ -19,6 +19,7 @@ import { creditCountdowns, type CreditCountdown } from '../../lib/creditPlan'
 import type { SpendDownKeyStatus } from '../settings/spendDown'
 import { canChangeSpendDown } from './CursorLevers'
 import type { FirecrawlBalance } from './FirecrawlLevers'
+import { agentCreditsTitle, creditsBackLine, type AgentCreditsState } from '../../lib/agentCredits'
 
 interface Props {
   keys: SpendDownKeyStatus[] | null
@@ -26,6 +27,8 @@ interface Props {
   canManageOrg: boolean
   now: Date
   onChanged: () => void
+  /** The fix agents are out of credits (lib/agentCredits.ts): no "Turn on spend-down", no "room for". */
+  outOfCredits?: AgentCreditsState | null
 }
 
 const BAR_TONE: Record<CreditCountdown['tone'], string> = {
@@ -62,12 +65,13 @@ function whoCanTurnOn(idle: ReadonlyArray<SpendDownKeyStatus | undefined>): stri
     : 'The person who added each key, or an organization owner or admin for shared keys, can turn it on.'
 }
 
-export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }: Props) {
+export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged, outOfCredits = null }: Props) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null)
   if (keys == null) return <p className="text-xs text-fg-muted">Reading your keys…</p>
 
-  const cards = creditCountdowns({ cursorKeys: keys, firecrawl: balance, now })
+  const out = outOfCredits?.out ? outOfCredits : null
+  const cards = creditCountdowns({ cursorKeys: keys, firecrawl: balance, outOfCredits: out, now })
   const idle = cards.filter((c) => c.idle)
   const turnOn = idle
     .map((c) => keys.find((k) => k.id === c.id))
@@ -97,8 +101,9 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }
   }
 
   const soonest = cards[0]
-  const sentence =
-    idle.length > 0
+  const sentence = out
+    ? `${agentCreditsTitle(out)}. ${creditsBackLine(out) ?? ''} Spend-down cannot help until then; the card below says what to do now.`.replace('  ', ' ')
+    : idle.length > 0
       ? `${plural(idle.length, 'Cursor key has', 'Cursor keys have')} an expiry date but spend-down is off. ${
           // Only ask for what this person can do: the switch is greyed out
           // for a key someone else owns (2026-10-28).
@@ -109,7 +114,7 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged }
   return (
     <div className="space-y-3" data-testid="credit-countdowns">
       <PageStatus
-        tone={idle.length > 0 ? (idle.some((c) => c.tone === 'danger') ? 'danger' : 'warn') : 'ok'}
+        tone={out ? 'danger' : idle.length > 0 ? (idle.some((c) => c.tone === 'danger') ? 'danger' : 'warn') : 'ok'}
         sentence={sentence}
         ariaLabel="Expiring credits"
         action={

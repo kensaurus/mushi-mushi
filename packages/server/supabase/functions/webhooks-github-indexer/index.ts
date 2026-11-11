@@ -97,7 +97,7 @@ import {
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
 import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
-import { isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
+import { dbDiagnosticMessage, isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
 import { projectIdsForRepo, RepoLookupError } from './repo-projects.ts';
 
 ensureSentry('webhooks-github-indexer');
@@ -2010,11 +2010,13 @@ async function indexPushForProject(
       }]);
       if (error) {
         upsertFailures++;
-        log.error('chunk upsert failed', {
+        // An outage is a warn (the next push re-indexes the path); a coded
+        // failure, 57014 included, stays an error (Sentry 7772326346).
+        logDbFailure(log, 'chunk upsert failed', error, {
           projectId,
           path: c.path,
           symbolName: c.symbolName,
-          error: error.message,
+          error: dbDiagnosticMessage(error.message),
         });
         continue;
       }

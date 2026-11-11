@@ -9,6 +9,8 @@ description: PostHog session replay vs Mushi Mushi in 2026. Every session record
 
 # PostHog session replay vs Mushi Mushi
 
+> **Never used PostHog?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 PostHog records every session and every exception, and gives you product
 analytics on top. Mushi Mushi records the moment a user says something is wrong,
 attaches the screen they were looking at and the console/network tail, and

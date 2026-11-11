@@ -140,6 +140,13 @@ function n(v: number): string {
 export function creditCountdowns(input: {
   cursorKeys: readonly CountdownCursorKey[]
   firecrawl: { remaining: number | null; limit: number | null; periodEnd: string | null } | null
+  /**
+   * Set when the fix agents are out of credits (lib/agentCredits.ts). Then a
+   * Cursor card says so instead of "Room for up to 440 more fixes", and no
+   * key reads as idle: spend-down cannot spend credits that are gone
+   * (console audit 2026-11-11).
+   */
+  outOfCredits?: { backAt: string | null } | null
   now: Date
 }): CreditCountdown[] {
   const out: CreditCountdown[] = []
@@ -147,6 +154,23 @@ export function creditCountdowns(input: {
     const days = daysLeft(k.creditsExpireAt, input.now)
     if (days == null || !k.creditsExpireAt) continue
     const expired = days === 0 || k.state === 'expired'
+    if (input.outOfCredits && !expired) {
+      out.push({
+        id: k.id,
+        provider: 'cursor',
+        name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${k.keyHint})` : ''}`,
+        daysLeft: days,
+        date: shortDate(k.creditsExpireAt),
+        verb: 'resets',
+        used: 0,
+        of: null,
+        usedLine: 'Out of credits: Cursor refused the last fix runs.',
+        leftLine: `No fix can start on this key until ${shortDate(k.creditsExpireAt)}.`,
+        idle: false,
+        tone: 'danger',
+      })
+      continue
+    }
     const idle = !expired && !k.enabled
     const week = k.scoreboard && k.scoreboard.totals.runs > 0 ? ` · ${n(k.scoreboard.totals.runs)} in the last ${k.scoreboard.days} days` : ''
     const room = Math.max(0, k.dailyLimit * days - k.dispatchedToday)

@@ -25,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { MushiCliError } from '../errors.js'
+import { LOCAL_AGENTS, type LocalAgent } from '../commands/work-agents.js'
 
 /** fix and followups (ADR 0048); conflicts (ADR 0049), audit (ADR 0050) and skill (ADR 0042 amendment). */
 const LANE_MODES = ['fix', 'followups', 'conflicts', 'audit', 'skill'] as const
@@ -304,6 +305,12 @@ export interface WorkerConfig {
    * out, so another account's credits are never spent. Local only.
    */
   cursorAccount?: string
+  /**
+   * The coding agent every lane runs: `cursor` (default) or `claude` (Claude
+   * Code). Local only: the server never sends or stores it. With `claude`,
+   * the Cursor account settings and "Switch account" do not apply.
+   */
+  agent?: LocalAgent
   lanes: LocalLane[]
 }
 
@@ -320,6 +327,7 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
   if (c.version !== 1) fail('version must be 1')
   if (c.endpoint !== undefined && (typeof c.endpoint !== 'string' || !/^https?:\/\//.test(c.endpoint))) fail('endpoint must be an http(s) URL')
   if (c.cursorAccount !== undefined && (typeof c.cursorAccount !== 'string' || !/^[^\s@]{1,100}@[^\s@]{1,100}$/.test(c.cursorAccount))) fail('cursorAccount must be the account\'s email address')
+  if (c.agent !== undefined && (typeof c.agent !== 'string' || !(LOCAL_AGENTS as readonly string[]).includes(c.agent))) fail(`agent must be one of ${LOCAL_AGENTS.join(', ')}`)
   if (!Array.isArray(c.lanes) || c.lanes.length === 0) fail('list at least one lane')
   if ((c.lanes as unknown[]).length > 20) fail('at most 20 lanes')
   const names = new Set<string>()
@@ -348,6 +356,7 @@ export function validateWorkerConfig(raw: unknown): WorkerConfig {
     version: 1,
     ...(typeof c.endpoint === 'string' ? { endpoint: c.endpoint } : {}),
     ...(typeof c.cursorAccount === 'string' ? { cursorAccount: c.cursorAccount } : {}),
+    ...(typeof c.agent === 'string' ? { agent: c.agent as LocalAgent } : {}),
     lanes,
   }
 }

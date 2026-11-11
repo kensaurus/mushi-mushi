@@ -1,6 +1,6 @@
 # Mushi Mushi — getting-started context
 
-> The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
+> Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
 
@@ -352,6 +352,11 @@ description: Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude 
 ---
 
 # Quickstart
+
+  **Built with Lovable or Bolt? No terminal needed.** Skip this page and use
+  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt): you paste one
+  prompt, and it takes about five minutes. Building a phone app with Expo,
+  React Native or Capacitor? Go to [your phone app](/quickstart/mobile).
 
 - One command, `npx mushi-mushi`, adds a report button to your app.
 - When a user reports a bug, Mushi Mushi writes a plain-English diagnosis.
@@ -781,11 +786,19 @@ description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a mo
 
 # Pricing
 
-## Plans
+Free for one app. You pay only when you want Mushi Mushi on more apps. A
+**diagnosis** is one bug explained in plain English, and repeat reports of the
+same bug count once.
+
+Every plan includes the report button, the plain-English diagnosis and the fix
+prompt. You don't need an AI key of your own, and the integrations (Sentry,
+Slack, GitHub, Linear, Jira) work on every plan.
+
+## All plans
 
 A plan is the number of **apps** Mushi Mushi watches for your team: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear) works on every plan.
+Installing plugins from the Marketplace (PagerDuty, Zapier, the Cursor and Claude Code agents, Linear Sync, Sentry Mirror) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 

@@ -1349,6 +1349,19 @@ html:has(.landing-cinematic-hero) {
   overflow-x: clip;
 }
 
+/* The landing is the product page, not a docs article: no "— docs" after the
+   logo and no release banner (audit 2026-11-11). Nextra's ClientBanner writes
+   --nextra-banner-height inline on <html>; zeroing it with !important keeps the
+   navbar and sidebar from leaving a gap where the hidden banner was. */
+body:has(.landing-cinematic-hero) .docs-logo-suffix,
+body:has(.landing-cinematic-hero) .nextra-banner {
+  display: none;
+}
+
+html:has(.landing-cinematic-hero) {
+  --nextra-banner-height: 0px !important;
+}
+
 .landing-hero-reassure {
   margin: 0.85rem 0 0;
   font-size: 0.88rem;
@@ -1582,6 +1595,111 @@ html:has(.landing-cinematic-hero) {
 .landing-install-box__guide:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* The hero's primary action (ADR 0056): the free check's address box. */
+.landing-check-box {
+  max-width: 44rem;
+  margin-top: 1.5rem;
+}
+
+.landing-check-box__heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--mushi-ink);
+}
+
+.landing-check-box__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.landing-check-box__input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  min-height: 2.9rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.6rem;
+  background: var(--mushi-paper);
+  color: var(--mushi-ink);
+  font-size: 1rem;
+}
+
+.landing-check-box__input:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 1px;
+}
+
+.landing-check-box__button {
+  flex: 0 0 auto;
+  min-height: 2.9rem;
+  padding: 0.55rem 1.2rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: var(--mushi-vermillion);
+  color: #fff;
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.landing-check-box__button:hover {
+  opacity: 0.92;
+}
+
+.landing-check-box__button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+@media (max-width: 480px) {
+  .landing-check-box__button {
+    flex: 1 1 100%;
+  }
+}
+
+.landing-check-box__note {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-check-box__error {
+  margin: 0.45rem 0 0;
+  font-size: 0.88rem;
+  color: var(--mushi-viz-danger);
+}
+
+/* The facts row under the check box: plain text, no links. */
+.landing-hero-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.88rem;
+  color: var(--mushi-ink-muted);
+}
+
+.landing-hero-facts li::before {
+  content: '✓ ';
+  color: var(--mushi-vermillion);
+}
+
+/* The lead over the hero's second action, the install box. */
+.landing-install-lead {
+  margin: 1.75rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--mushi-ink);
+}
+
+.landing-install-lead + .landing-install-box {
+  margin-top: 0.6rem;
 }
 
 /* The hero's one secondary link, under the install box: the sample diagnosis. */
@@ -1855,6 +1973,20 @@ html:has(.landing-cinematic-hero) {
   .landing-diagnosis-track {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.25rem;
+  }
+}
+
+/* How it works since ADR 0056: four steps, two by two from tablet width up
+ * (four in a row would squeeze each "You / Mushi Mushi" pair). */
+@media (min-width: 640px) {
+  .landing-diagnosis-track--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .landing-diagnosis-track--four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

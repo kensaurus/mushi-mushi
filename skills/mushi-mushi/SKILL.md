@@ -1,6 +1,6 @@
 ---
 name: mushi-mushi
-description: "Set up and use Mushi Mushi, the bug mediator for AI-built apps: a user's bug report becomes a plain-English diagnosis and a paste-ready fix in Cursor or Claude Code over MCP. Use when installing the Mushi SDK, wiring the MCP server, managing Mushi keys, or asking how a Mushi feature works."
+description: "Find out what is broken in your live app and get it fixed, in plain words, with Mushi Mushi. Use when a user says the app is broken or a button does nothing, when you want to check a live Lovable, Bolt, Cursor or Claude Code app for broken pages, or to install the Mushi Mushi report button, MCP server or keys."
 triggers:
   - "setup mushi"
   - "install mushi"

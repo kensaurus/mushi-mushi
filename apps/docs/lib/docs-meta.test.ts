@@ -135,8 +135,9 @@ describe('structured data describes Mushi only', () => {
   it('the site-wide and landing JSON-LD use the brand pitch the npm cards end with', () => {
     expect(WEBSITE_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
     expect(SOFTWARE_APPLICATION_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
+    // Category line from ADR 0056 (was "The bug mediator for AI-built apps").
     expect(MUSHI_TAGLINE_V2.pitch).toBe(
-      'The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
+      'Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
     )
   })
 

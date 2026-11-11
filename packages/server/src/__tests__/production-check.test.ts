@@ -11,16 +11,33 @@
  *            - source maps: reported when a same-origin script carries the
  *              comment (or the SourceMap header); the .map is never fetched;
  *            - broken same-origin links; sign-in, account, admin and API links
- *              are never requested, nor are other origins;
- *            - Firecrawl is asked for markdown + links only, no PDF parsing,
- *              at most 4 pages (4 credits);
- *            - a Firecrawl answer that landed on a private address is dropped.
+ *              are never requested, nor are other origins' pages (images the
+ *              page loads from a CDN are);
+ *            - Firecrawl is asked for basic formats only (markdown, links,
+ *              rawHtml), no PDF parsing, at most 4 pages (4 credits);
+ *            - a Firecrawl answer that landed on a private address is dropped;
+ *            - breakage a visitor sees (ADR 0056): "page not found" screens at
+ *              HTTP 200, a blank render, the starter template's title,
+ *              description or share image, no share image, broken images (a web
+ *              page served at an image address counts), mixed content, and dead
+ *              links on the other pages too; sorted before security at the
+ *              same severity;
+ *            - a site no page of which could be read is `summary.unreachable`
+ *              with a reason and no findings, never an empty pass.
  */
 
 import { describe, expect, it, vi } from 'vitest'
 import {
+  RULE_KIND,
+  UNREACHABLE_TEXT,
   isSensitivePath,
+  mixedContent,
+  mixedContentFinding,
+  notFoundScreen,
   pageFindings,
+  placeholderParts,
+  shareImageFinding,
+  unreachableReason,
   pickSubpages,
   readHtmlMeta,
   decodeEntities,
@@ -47,10 +64,10 @@ function page(p: Partial<PageResult> & { url: string }): PageResult {
 
 describe('readHtmlMeta / readScriptSrcs', () => {
   it('reads title, description and lang, decoding entities', () => {
-    expect(readHtmlMeta(GOOD_HTML)).toEqual({ title: 'Acme & Co', description: 'Invoices that send themselves.', language: 'en' })
+    expect(readHtmlMeta(GOOD_HTML)).toEqual({ title: 'Acme & Co', description: 'Invoices that send themselves.', language: 'en', ogImage: null })
   })
   it('returns nulls for a bare page', () => {
-    expect(readHtmlMeta(BARE_HTML)).toEqual({ title: null, description: null, language: null })
+    expect(readHtmlMeta(BARE_HTML)).toEqual({ title: null, description: null, language: null, ogImage: null })
   })
   it('lists script sources in order', () => {
     expect(readScriptSrcs(GOOD_HTML)).toEqual(['/assets/app.js', 'https://cdn.other.com/lib.js'])
@@ -139,7 +156,16 @@ describe('sortFindings', () => {
   })
 })
 
-/** A small public site: home links to 4 pages (one 404, one sign-in), one script with a source map. */
+/** The home page as the browser rendered it: three images (one gone, one on a CDN) and an http:// script. */
+const HOME_RENDERED = `<html lang="en"><head><title>Acme</title><script src="http://cdn.old-host.com/widget.js"></script></head>
+<body><svg xmlns="http://www.w3.org/2000/svg"></svg><a href="http://plain-link.example.com/">a plain link is not mixed content</a>
+<img src="/logo.png" alt="Acme"><img src="/gone.png" alt=""><img src="https://images.acme-cdn.com/hero.jpg" alt="Hero"></body></html>`
+
+/**
+ * A small public site: home links to 4 pages (one 404, one sign-in), one
+ * script with a source map; the rendered home page loads 3 images (one is a
+ * web page at 200) and an http:// script; /pricing links to a dead page.
+ */
 function fixtureSite(opts: { homeHeaders?: Record<string, string>; firecrawlLanding?: string } = {}) {
   const requested: string[] = []
   const firecrawlBodies: Array<Record<string, unknown>> = []
@@ -155,7 +181,13 @@ function fixtureSite(opts: { homeHeaders?: Record<string, string>; firecrawlLand
         success: true,
         data: {
           markdown,
-          links: path === '/' ? ['https://acme.app/pricing', 'https://acme.app/missing', 'https://acme.app/broken-app', 'https://acme.app/login', 'https://elsewhere.test/'] : [],
+          rawHtml: path === '/' ? HOME_RENDERED : `<html><body><p>${markdown}</p></body></html>`,
+          links:
+            path === '/'
+              ? ['https://acme.app/pricing', 'https://acme.app/missing', 'https://acme.app/broken-app', 'https://acme.app/login', 'https://elsewhere.test/']
+              : path === '/pricing'
+                ? ['https://acme.app/pricing/old-plan', 'https://acme.app/missing', 'https://acme.app/admin']
+                : [],
           metadata: {
             statusCode: status,
             url: path === '/' && opts.firecrawlLanding ? opts.firecrawlLanding : body.url,
@@ -175,7 +207,10 @@ function fixtureSite(opts: { homeHeaders?: Record<string, string>; firecrawlLand
       })
     }
     if (url === 'https://acme.app/assets/app.js') return new Response('console.log(1)\n//# sourceMappingURL=app.js.map\n', { status: 200 })
-    if (url === 'https://acme.app/missing') return new Response(null, { status: 404 })
+    if (url === 'https://acme.app/missing' || url === 'https://acme.app/pricing/old-plan') return new Response(null, { status: 404 })
+    if (url === 'https://acme.app/logo.png' || url === 'https://images.acme-cdn.com/hero.jpg') return new Response(null, { status: 200, headers: { 'content-type': 'image/png' } })
+    // The host's single-page-app fallback: any unknown path is the app's HTML at 200.
+    if (url === 'https://acme.app/gone.png') return new Response(null, { status: 200, headers: { 'content-type': 'text/html' } })
     return new Response('ok', { status: 200 })
   })
   return { fetchImpl: fetchImpl as unknown as typeof fetch, requested, firecrawlBodies }
@@ -191,16 +226,28 @@ describe('runProductionCheck on a fixture site', () => {
     )
     expect(rules).not.toContain('missing_hsts')
     expect(rules).not.toContain('http_not_redirected')
-    expect(result.findings.find((f) => f.rule === 'broken_links')?.where).toEqual(['/missing (404)'])
+    // The home page's dead link, then the one found on /pricing (its admin link is never requested).
+    expect(result.findings.find((f) => f.rule === 'broken_links')?.where).toEqual(['/missing (404)', '/pricing/old-plan (404)'])
+    expect(result.findings.find((f) => f.rule === 'broken_images')?.where).toEqual(['/gone.png (a web page, not an image)'])
+    expect(result.findings.find((f) => f.rule === 'mixed_content')).toMatchObject({ severity: 'high', where: ['http://cdn.old-host.com/widget.js'] })
     expect(result.findings.find((f) => f.rule === 'source_maps_published')?.where).toEqual(['/assets/app.js'])
-    expect(result.summary).toMatchObject({ https: 'ok', scriptsChecked: 1, scriptsWithSourceMaps: 1, rendered: true })
+    expect(result.summary).toMatchObject({ https: 'ok', scriptsChecked: 1, scriptsWithSourceMaps: 1, rendered: true, linksChecked: 4, imagesChecked: 3 })
+    expect(result.summary.unreachable).toBeUndefined()
+    // Breakage leads; the security headers come last.
+    const firstSecurity = rules.findIndex((r) => ['missing_csp', 'missing_nosniff', 'missing_referrer_policy'].includes(r))
+    expect(rules.indexOf('broken_images')).toBeLessThan(firstSecurity)
+    expect(rules.indexOf('source_maps_published')).toBeGreaterThan(rules.indexOf('broken_links'))
 
-    // Firecrawl: home + 3 pages, markdown + links only, no PDF parsing.
+    // Firecrawl: home + 3 pages (4 credits), basic formats only, no PDF parsing.
     expect(site.firecrawlBodies).toHaveLength(4)
     for (const b of site.firecrawlBodies) {
-      expect(b.formats).toEqual(['markdown', 'links'])
+      const formats = b.formats as unknown[]
+      expect(formats.every((f) => typeof f === 'string' && ['markdown', 'links', 'rawHtml', 'html'].includes(f))).toBe(true)
       expect(b.parsers).toEqual([])
     }
+    // The image on a CDN is requested (the visitor's browser loads it too); /admin never is.
+    expect(site.requested).toContain('HEAD https://images.acme-cdn.com/hero.jpg')
+    expect(site.requested.some((r) => r.includes('/admin'))).toBe(false)
     // Never the sign-in link, another origin, a .map file, or a POST.
     expect(site.requested.some((r) => r.includes('/login'))).toBe(false)
     expect(site.requested.some((r) => r.includes('elsewhere.test'))).toBe(false)
@@ -246,5 +293,154 @@ describe('decodeEntities', () => {
   it('decodes each entity once: an escaped entity stays escaped (CodeQL js/double-escaping)', () => {
     expect(decodeEntities('Tom &amp;lt;3 Jerry')).toBe('Tom &lt;3 Jerry')
     expect(decodeEntities('A &amp; B &lt;b&gt; &quot;x&quot; it&#39;s')).toBe('A & B <b> "x" it\'s')
+  })
+})
+
+describe('breakage rules (ADR 0056)', () => {
+  const rendered = (p: Partial<PageResult> & { url: string }) => page({ rendered: true, renderUnreadable: false, ...p })
+
+  it('reads og:image, never og:image:width', () => {
+    const html = '<head><meta property="og:image:width" content="1200"><meta property="og:image" content="/og.png"></head>'
+    expect(readHtmlMeta(html).ogImage).toBe('/og.png')
+  })
+
+  it('a short rendered "page not found" at HTTP 200 is a finding; a long page about 404s is not', () => {
+    expect(notFoundScreen('# 404\n\nOops! Page not found\n\n[Return to Home](/)')).toBe(true)
+    expect(notFoundScreen(`${'How we handle a 404 page not found in our router. '.repeat(20)}`)).toBe(false)
+    const f = pageFindings([rendered({ url: 'https://acme.app/' }), rendered({ url: 'https://acme.app/pricing', markdown: '404 Oops! Page not found Return to Home' })])
+    expect(f.find((x) => x.rule === 'page_not_found_screen')).toMatchObject({ severity: 'high', where: ['/pricing'] })
+  })
+
+  it('a rendered page with almost no words is a blank page; the server HTML alone and an unreadable render are not judged', () => {
+    const shell = { markdown: '[](https://acme.app/) ![logo](/logo.svg)' }
+    const f = pageFindings([rendered({ url: 'https://acme.app/', ...shell })])
+    expect(f.find((x) => x.rule === 'blank_page')).toMatchObject({ severity: 'high', where: ['/'] })
+    // Plain fetch only: every app shell is empty there.
+    expect(pageFindings([page({ url: 'https://acme.app/', markdown: '' })]).some((x) => x.rule === 'blank_page')).toBe(false)
+    // Firecrawl returned no title, description or lang: it did not read the page.
+    expect(pageFindings([rendered({ url: 'https://acme.app/', ...shell, renderUnreadable: true })]).some((x) => x.rule === 'blank_page')).toBe(false)
+    // An error screen is reported as that, not also as blank.
+    const err = pageFindings([rendered({ url: 'https://acme.app/', markdown: 'Internal Server Error' })]).map((x) => x.rule)
+    expect(err).toContain('error_screen')
+    expect(err).not.toContain('blank_page')
+  })
+
+  it.each(['Lovable App', 'Vite + React', 'vite + react + ts', 'React App', 'Create Next App', 'My Bolt app', 'Document'])('"%s" is a placeholder title', (title) => {
+    expect(placeholderParts({ title, description: 'Real words.', ogImage: null })).toEqual([`title "${title}"`])
+  })
+
+  it("Lovable's template description and share image are placeholders; a real name is not", () => {
+    expect(placeholderParts({ title: 'cycle-flow', description: 'Lovable Generated Project', ogImage: 'https://lovable.dev/opengraph-image-p98pqg.png' })).toEqual([
+      'description "Lovable Generated Project"',
+      'share image from lovable.dev',
+    ])
+    expect(placeholderParts({ title: 'Acme Invoices', description: 'Invoices that send themselves.', ogImage: 'https://acme.app/og.png' })).toEqual([])
+    const f = pageFindings([page({ url: 'https://acme.app/', title: 'Lovable App', description: 'Lovable Generated Project' })]).find((x) => x.rule === 'placeholder_metadata')
+    expect(f).toMatchObject({ severity: 'medium', title: 'Your site is still called "Lovable App"', where: ['/ (title "Lovable App", description "Lovable Generated Project")'] })
+  })
+
+  it('no share image on the home page is one low finding', () => {
+    expect(shareImageFinding(page({ url: 'https://acme.app/' }))).toMatchObject({ rule: 'missing_share_image', severity: 'low' })
+    expect(shareImageFinding(page({ url: 'https://acme.app/', ogImage: '/og.png' }))).toBeNull()
+    expect(shareImageFinding(page({ url: 'https://acme.app/', statusCode: 500 }))).toBeNull()
+  })
+
+  it('mixed content: http:// scripts and styles are blocked (high), images warn (medium); links and namespaces are not files', () => {
+    const html = `<link rel="stylesheet" href="http://old.cdn.com/a.css"><link rel="canonical" href="http://acme.app/">
+<img src="http://old.cdn.com/a.png" data-src="http://lazy.example.com/b.png"><a href="http://x.com/">x</a><svg xmlns="http://www.w3.org/2000/svg"></svg>`
+    expect(mixedContent(html)).toEqual({ active: ['http://old.cdn.com/a.css'], passive: ['http://old.cdn.com/a.png'] })
+    expect(mixedContentFinding([page({ url: 'https://acme.app/', html })])).toMatchObject({ severity: 'high' })
+    expect(mixedContentFinding([page({ url: 'https://acme.app/', html: '<img src="http://old.cdn.com/a.png">' })])).toMatchObject({ severity: 'medium' })
+    // An http page is not "mixed".
+    expect(mixedContentFinding([page({ url: 'http://acme.app/', html })])).toBeNull()
+  })
+
+  it('every rule has a kind, and breakage sorts before security at the same severity', () => {
+    const f = (rule: string, severity: 'high' | 'medium' | 'low') => ({ rule, severity, title: rule, why: '', fix: '' })
+    const sorted = sortFindings([f('missing_csp', 'low'), f('source_maps_published', 'medium'), f('missing_description', 'low'), f('mixed_content', 'medium'), f('placeholder_metadata', 'medium'), f('broken_links', 'high')])
+    expect(sorted.map((x) => x.rule)).toEqual(['broken_links', 'mixed_content', 'placeholder_metadata', 'source_maps_published', 'missing_description', 'missing_csp'])
+    expect(Object.values(RULE_KIND).every((k) => ['breakage', 'content', 'security'].includes(k))).toBe(true)
+  })
+
+  it('security headers are ranked below breakage: CSP and HSTS are low now', () => {
+    const f = transportFindings('ok', { 'content-security-policy': false, 'strict-transport-security': false, 'x-content-type-options': true, 'referrer-policy': true })
+    expect(f.map((x) => [x.rule, x.severity])).toEqual([
+      ['missing_csp', 'low'],
+      ['missing_hsts', 'low'],
+    ])
+  })
+})
+
+describe('a site no page of which could be read', () => {
+  const DNS_ERROR = 'error sending request for url (https://nope.app/): client error (Connect): dns error: failed to lookup address information: Name or service not known'
+
+  it('reads why from the errors', () => {
+    expect(unreachableReason({ direct: new TypeError(DNS_ERROR) })).toBe('dns')
+    expect(unreachableReason({ render: new Error('FIRECRAWL_HTTP_500 SCRAPE_DNS_RESOLUTION_ERROR') })).toBe('dns')
+    expect(unreachableReason({ direct: new TypeError('invalid peer certificate: UnknownIssuer') })).toBe('tls')
+    expect(unreachableReason({ direct: new TypeError('tcp connect error: Connection refused (os error 111)') })).toBe('refused')
+    expect(unreachableReason({ direct: new DOMException('deadline', 'TimeoutError') })).toBe('timeout')
+    expect(unreachableReason({ direct: new Error('something else') })).toBe('no_answer')
+    for (const t of Object.values(UNREACHABLE_TEXT)) {
+      // Stored in production_checks.error, which holds at most 300 characters.
+      expect(t.error.length).toBeLessThanOrEqual(300)
+      expect(t.tryThis.length).toBeGreaterThan(40)
+    }
+  })
+
+  it('an address that does not resolve fails with reason dns and no findings (2026-11-11: it read "done", nothing found)', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).startsWith('https://api.firecrawl.dev')) {
+        return Response.json({ success: false, code: 'SCRAPE_DNS_RESOLUTION_ERROR', error: 'DNS resolution failed' }, { status: 500 })
+      }
+      throw new TypeError(DNS_ERROR)
+    })
+    const result = await runProductionCheck('https://nope.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })
+    expect(result.findings).toEqual([])
+    expect(result.summary.pages).toEqual([])
+    expect(result.summary.unreachable).toEqual({ reason: 'dns' })
+    expect(result.summary.rendered).toBe(false)
+  })
+
+  it('with a DNS resolver, a name that does not exist (refused as non-public by the guard) still reads as dns', async () => {
+    const resolver = vi.fn(async () => {
+      throw Object.assign(new Error('no such host'), { name: 'NotFound' })
+    })
+    const fetchImpl = vi.fn(async () => new Response('oops', { status: 500 }))
+    const result = await runProductionCheck('https://nope.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver })
+    expect(result.summary.unreachable).toEqual({ reason: 'dns' })
+    // Only Firecrawl was called: the guard refused the site before any request.
+    expect(fetchImpl.mock.calls.every(([u]) => String(u).startsWith('https://api.firecrawl.dev'))).toBe(true)
+  })
+
+  it('a redirect to a private address reads as blocked', async () => {
+    const resolver = vi.fn(async (_h: string, type: 'A' | 'AAAA') => (type === 'A' ? ['93.184.216.34'] : []))
+    const fetchImpl = vi.fn(async (input: string | URL | Request) =>
+      String(input).startsWith('https://api.firecrawl.dev') ? new Response('oops', { status: 500 }) : new Response(null, { status: 302, headers: { location: 'http://10.0.0.8/' } }),
+    )
+    const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver })
+    expect(result.summary.unreachable).toEqual({ reason: 'blocked' })
+  })
+
+  it('a server that answers 503 with no HTML is a page that was read: an error finding, not unreachable', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) =>
+      String(input).startsWith('https://api.firecrawl.dev') ? new Response('oops', { status: 500 }) : new Response('down for maintenance', { status: 503, headers: { 'content-type': 'text/plain' } }),
+    )
+    const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })
+    expect(result.summary.unreachable).toBeUndefined()
+    expect(result.findings.find((f) => f.rule === 'page_error_status')?.where).toEqual(['/ (503)'])
+  })
+
+  it('links that time out are not counted as checked', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.startsWith('https://api.firecrawl.dev')) return new Response('oops', { status: 500 })
+      if (url === 'https://acme.app/') return new Response(GOOD_HTML, { status: 200, headers: { 'content-type': 'text/html' } })
+      if (url === 'https://acme.app/pricing') throw new DOMException('slow', 'TimeoutError')
+      return new Response('ok', { status: 200 })
+    })
+    const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })
+    expect(result.summary.linksChecked).toBe(0)
+    expect(result.findings.some((f) => f.rule === 'broken_links')).toBe(false)
   })
 })

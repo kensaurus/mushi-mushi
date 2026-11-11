@@ -9,6 +9,8 @@ description: Jam.dev vs Mushi Mushi in 2026. A teammate recording a bug in the J
 
 # Jam vs Mushi Mushi
 
+> **Never used Jam?** You don't need it to use Mushi Mushi, so you can skip this page. [See what Mushi Mushi does](/what-is-mushi-mushi) instead.
+
 Jam and Mushi Mushi both put console and network logs next to a bug so nobody has
 to ask "can you reproduce that?". The difference is who presses the button.
 With Jam, a person on or near your team records the bug in Chrome. With

@@ -11,7 +11,7 @@ should use v2 hero.
 | Hero | *"Your AI wrote it. Mushi Mushi tells you why it broke."* | README headers, landing H1, docs landing |
 | Offer line | *"…and fixes it, with a reviewer that says no."* | Directly after the hero, in posts and decks (`heroOffer`; owner decision D1, 2026-10-28). Never add a price to it. |
 | Sub-hero | *"Plain-English diagnosis + a paste-ready fix, right inside Cursor."* | Lead paragraphs under hero |
-| Category | *"The bug mediator for AI-built apps"* | Eyebrow, npm, llms.txt |
+| Category | *"Bug fixing for AI-built apps"* | Eyebrow, npm, llms.txt. ADR 0056 (2026-11-11) replaced "The bug mediator for AI-built apps"; "mediator" stays in `docs/operators/` and integration pages, never in a hero. |
 | Micro CTA | *"Know why. Fix fast."* | og:description, slide headers |
 | Mark | *"虫虫"* | Logo-adjacent, footer whisper |
 

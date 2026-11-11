@@ -124,7 +124,7 @@ function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void
     <li data-testid={`worker-flag-${flag.kind}`} data-flag-id={flag.id}>
       <Callout
         tone={flag.severity === 'danger' ? 'danger' : 'warn'}
-        label={KIND_LABEL[flag.kind] ?? 'Worker problem'}
+        label={flag.id === 'credits_out' ? 'Out of credits' : (KIND_LABEL[flag.kind] ?? 'Worker problem')}
         action={flag.sinceSec != null ? <span className="text-2xs tabular-nums text-fg-muted">for {durationLabel(flag.sinceSec)}</span> : undefined}
       >
         <div className="space-y-1.5">
@@ -153,7 +153,7 @@ function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void
           )}
           {commands.map((a) => (
             <div key={a.command} className="space-y-0.5">
-              <p className="text-2xs text-fg-muted">{a.label}, on {flag.hostname ?? 'the machine'}:</p>
+              <p className="text-2xs text-fg-muted">{flag.id === 'credits_out' ? `${a.label}:` : `${a.label}, on ${flag.hostname ?? 'the machine'}:`}</p>
               <CodeValue value={a.command} multiline />
             </div>
           ))}

@@ -636,7 +636,7 @@ registerBillingProjectsQueueGraphRoutes(app);
 
 registerActivationRoutes(app);
 
-forwardToApiExt(['/v1/admin/ask-mushi', '/v1/admin/ask-mushi/*', '/v1/admin/assist']);
+forwardToApiExt(['/v1/admin/ask-mushi', '/v1/admin/ask-mushi/*']);
 registerConsoleKnowledgeRoutes(app);
 registerSdkAssistantRoutes(app);
 

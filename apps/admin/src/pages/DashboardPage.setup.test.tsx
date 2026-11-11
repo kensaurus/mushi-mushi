@@ -156,7 +156,8 @@ describe('Home while a required setup step is open', () => {
   it('shows the setup checklist inline, with Show me how on a never-seen SDK step, and no dead "Show setup guide"', async () => {
     await mount()
     const text = container.textContent ?? ''
-    expect(text).toContain('Install the SDK in your app')
+    // The checklist's plain words for sdk_installed (lib/setupStepWords.ts, 2026-11-11).
+    expect(text).toContain('Put the report button in your app')
     expect(text).not.toContain('Show setup guide')
     const fixIt = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Show me how')
     expect(fixIt).toBeTruthy()
@@ -171,7 +172,7 @@ describe('Home while a required setup step is open', () => {
     // gone (owner, 2026-10-27); the checklist marks the step itself.
     expect(container.querySelector('[data-testid="dashboard-hero-setup"]')).toBeNull()
     expect(container.textContent).not.toContain('Setup 3 of 4 done')
-    expect(container.textContent).toContain('Install the SDK in your app')
+    expect(container.textContent).toContain('Put the report button in your app')
     expect(container.textContent).not.toContain('Loop is clean')
     expect(container.textContent).not.toContain('Nothing waiting on you')
   })
@@ -180,7 +181,7 @@ describe('Home while a required setup step is open', () => {
     await mount()
     const text = container.textContent ?? ''
     expect(container.querySelector('[data-testid="home-needs-you"]')!.textContent).toContain('Your app is not sending to Mushi yet')
-    expect(container.querySelector('[data-testid="home-health-sdk"]')!.textContent).toContain('Set up the SDK')
+    expect(container.querySelector('[data-testid="home-health-sdk"]')!.textContent).toContain('Add the report button')
     expect(text).toContain('Connect your GitHub repo to see fixes move toward a release.')
     expect(text).toContain('Could not read access and details just now.')
     // An app with reports opens Home with the explainer closed.

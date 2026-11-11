@@ -69,7 +69,9 @@ export function GraphStatusBanner({
       <StatusBannerShell
         tone="warn"
         title={plainBanner ? 'Bugs arrived but the map is still empty' : 'Graph empty despite ingest'}
-        subtitle={stats.topPriorityLabel}
+        // One message, not two: the server's own label ("classifier may still be
+        // indexing") repeated the title in other words (audit 2026-11-11).
+        subtitle="Mushi Mushi links each bug to the screens and parts of your app as it explains it. The map fills in after a few explained bugs."
         action={
           stats.topPriorityTo ? (
             <Btn to={stats.topPriorityTo} size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>

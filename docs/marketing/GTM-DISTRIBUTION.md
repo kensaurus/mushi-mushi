@@ -31,12 +31,12 @@ thing and point to the same install flow.
 | **Cursor Marketplace plugin** | `packages/cursor-plugin/` | 📬 Publisher application submitted 2026-09-22 as `mushi-mushi` for `https://github.com/kensaurus/mushi-mushi`. Cursor reviews manually. This branch's `packages/cursor-plugin/mcp.json` uses the hosted Supabase URL. `master` still has `your-project.supabase.co` until this lands. |
 | **npm keywords** | All primary `@mushi-mushi/*` packages | ✅ Aligned to MCP / vibe-coder discovery terms |
 
-| **PulseMCP** | Auto-index from official registry | ⏳ Ingest weekly — no form; verify after ~7 days |
+| **PulseMCP** | Auto-index from official registry | ⏸️ Listed ([pulsemcp.com/servers/kensaurus-mushi-mushi](https://www.pulsemcp.com/servers/kensaurus-mushi-mushi)) with a stale description. Submissions and listing edits are paused (page dated 2026-09-03); it re-syncs from the official registry when it reopens. Checked 2026-11-11. |
 | **awesome-mcp-servers** | PR [#8625](https://github.com/punkpeye/awesome-mcp-servers/pull/8625) | ✅ Merged 2026-07-22 |
 | **awesome-remote-mcp-servers** | PR [#431](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431) (supersedes closed #428) | 📬 Still open. Nudged once on 2026-09-22 ([comment](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/431#issuecomment-5775955307)). Do not bump again. |
 | **cursor.directory** | Repo already registered | ✅ Duplicate on re-submit confirms live listing |
 | **mcp.so** | Web submit at `/submit` | ✅ Live — [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi). Description + Overview + Server Config on canonical URLs — see [`mcp-so-listing.md`](./mcp-so-listing.md) |
-| **smithery.ai** | `kensaurus/mushi-mushi` | ✅ Republished Jun 2026 — upstream `kensaur.us/mushi-mushi/hosted-mcp/` — see [`smithery-external-publish.json`](./smithery-external-publish.json) |
+| **smithery.ai** | `kensaurus/mushi-mushi` | ❌ **Gone (checked 2026-11-11).** Both `smithery.ai/server/kensaurus/mushi-mushi` and `/servers/...` return 404. Smithery joined Arcade (2026-08-05) and shut down its proxy, accounts, API and CLI on 2026-10-31; it remains only a curated public registry ([smithery.ai/future](https://www.smithery.ai/future)). Not a channel any more; do not republish. See [`launch-2026-11/submissions/08-mcp-directories-refresh.md`](./launch-2026-11/submissions/08-mcp-directories-refresh.md). |
 | **Wellknown** | Crawled record [`mushi-mushi-mcp`](https://wellknown.network/agents/mushi-mushi-mcp) | ✅ Claimed 2026-09-22 as GitHub `kensaurus`. Probes are unauthenticated `initialize` against the registry remote in `packages/mcp/server.json`; HTTP 401 counts as answered and the tool surface is not measured. The MCP server is `@mushi-mushi/mcp`. `@mushi-mushi/mcp-ci` is the GitHub Action, not the server. Do not mint a `MUSHI_API_KEY` for the prober. |
 
 Paste fields for remaining manual surfaces: [`STOREFRONTS.md` §7](./STOREFRONTS.md#7-mcp-registry--directory-listings-diagnoses-era).
@@ -56,7 +56,7 @@ scores. Full URL table: [`canonical-urls.md`](./canonical-urls.md).
 | npm install | `npx -y @mushi-mushi/mcp@latest` |
 | Setup wizard | `npx mushi-mushi setup --ide cursor` |
 | Hosted HTTP MCP (direct) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
-| Smithery / directory upstream | `https://kensaur.us/mushi-mushi/hosted-mcp/` |
+| Hosted MCP (directories, OAuth sign-in) | `https://kensaur.us/mushi-mushi/hosted-mcp/` |
 | API endpoint (`MUSHI_API_ENDPOINT`) | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` |
 | Repo | `https://github.com/kensaurus/mushi-mushi` |
 | Homepage | `https://kensaur.us/mushi-mushi` |
@@ -285,81 +285,19 @@ before submitting to cursor.sh/marketplace.
 
 ---
 
-## Smithery
+## Smithery (removed 2026-11-11)
 
-**Listing:** https://smithery.ai/servers/kensaurus/mushi-mushi
-
-Mushi is **API-key-only** (not OAuth). Smithery’s publisher deploy still runs an
-OAuth metadata probe on the **Supabase project origin**; end-user connect via
-`--headers` works today.
-
-### Publish (maintainers)
-
-**Preferred upstream (Smithery):** `https://kensaur.us/mushi-mushi/hosted-mcp/`  
-**Direct Supabase (CLI connect / dev):** `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp`
-
-```bash
-cd mushi-mushi
-npx @smithery/cli auth login          # once per machine
-
-# 1) Wire CloudFront proxy + origin PRM (once; also runs on deploy-admin.yml)
-node scripts/aws-setup-hosted-mcp.mjs
-
-# 2) Publish Smithery with kensaur.us URL (not raw *.supabase.co)
-npx @smithery/cli mcp publish \
-  "https://kensaur.us/mushi-mushi/hosted-mcp/" \
-  -n kensaurus/mushi-mushi \
-  --config-schema docs/marketing/smithery-config-schema.json
-```
-
-Config schema: [`smithery-config-schema.json`](./smithery-config-schema.json)  
-Paste bundle: [`smithery-external-publish.json`](./smithery-external-publish.json)
-
-After deploy, open **Releases → AUTHORIZE → Connect** (paste `MUSHI_API_KEY` from
-`.env.local`). If setup returns `oauth/resource_metadata_process_failed`, confirm
-origin PRM is live:
-
-```bash
-curl -sS https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp
-node scripts/verify-hosted-mcp.mjs
-```
-
-Then republish with the kensaur.us upstream URL (not raw `*.supabase.co`).
-
-### Hosted MCP auth surfaces (Jun 2026)
-
-The `mcp` edge function serves:
-
-- `GET|HEAD /.well-known/mcp/server-card.json` — static tool catalog (SEP-1649 bypass)
-- `GET|HEAD /functions/v1/mcp` (no SSE) — RFC 9728 PRM (Smithery resource probe)
-- `GET|HEAD /.well-known/oauth-protected-resource` — RFC 9728 PRM (same document)
-- `GET|HEAD /.well-known/oauth-authorization-server` — RFC 8414 AS metadata
-- `POST` without key → `401` + `WWW-Authenticate: Bearer resource_metadata="…"`
-- `User-Agent` matching `/smithery/i` → unauthenticated `initialize` / `tools/list` scan
-
-**Not fixable on Supabase alone:** Smithery also probes  
-`https://kensaur.us/.well-known/oauth-protected-resource/mushi-mushi/hosted-mcp`  
-when the upstream URL is `https://kensaur.us/mushi-mushi/hosted-mcp/`. Run
-[`scripts/aws-setup-hosted-mcp.mjs`](../../scripts/aws-setup-hosted-mcp.mjs) (wired
-into `deploy-admin.yml`).
-
-### Verify end-user connect (works today)
-
-```bash
-npx @smithery/cli mcp add kensaurus/mushi-mushi --name mushi-test
-npx @smithery/cli mcp update mushi-test \
-  --headers '{"x-mushi-api-key":"<MUSHI_API_KEY>","x-mushi-project-id":"<MUSHI_PROJECT_ID>"}'
-npx @smithery/cli tool list mushi-test
-```
-
-Mint keys at https://kensaur.us/mushi-mushi/docs/connect (`mcp:read` scope).
-
-Redeploy after auth changes:
-
-```bash
-cd packages/server
-npx supabase functions deploy mcp --project-ref dxptnwrhwsqckaftyymj --no-verify-jwt
-```
+Smithery is no longer a distribution surface. It joined Arcade on 2026-08-05
+([announcement](https://www.arcade.dev/blog/smithery-joins-arcade/)) and on
+2026-10-31 shut down "Server URLs on run.tools and server.smithery.ai; Smithery
+API, Connect, and Toolbox; Smithery accounts and API keys; The Smithery CLI and
+SDKs" ([smithery.ai/future](https://www.smithery.ai/future)). Our listing returns
+404 (checked 2026-11-11). The publish steps that used to live here are in git
+history; `smithery.yaml`, `smithery-config-schema.json` and
+`smithery-external-publish.json` are kept only until a housekeeping pass removes
+them. The hosted-MCP auth surfaces they relied on (RFC 9728 PRM, RFC 8414
+metadata, `401` + `WWW-Authenticate`) still serve every other OAuth client;
+verify them with `node scripts/verify-hosted-mcp.mjs`.
 
 ---
 
@@ -389,9 +327,6 @@ Run on every `@mushi-mushi/mcp` version bump:
 | Registry empty after release | Silent failure in release.yml | Dispatch **Publish MCP Registry** manually |
 | cursor.directory missing servers | `.mcp.json` not at repo root | Confirm file on `master`, re-submit repo URL |
 | Deeplink install wrong project | Hand-authored config | Use Connect page or `npx mushi-mushi setup --ide` |
-| Smithery AUTHORIZE `oauth/resource_metadata_process_failed` | Upstream still raw `*.supabase.co` or hosted-mcp behaviors missing | Run `node scripts/aws-setup-hosted-mcp.mjs`, republish with `https://kensaur.us/mushi-mushi/hosted-mcp/`, AUTHORIZE → Connect |
-| Smithery release URL missing `/mcp` | Bad paste in web UI | Republish via CLI with full `/functions/v1/mcp` URL |
-| Smithery stuck on old deployment setup URL | Stale `48cf9eda…` connection | After worker + successful publish, use latest release’s setup link; or delete/recreate server in Smithery UI |
 
 ---
 

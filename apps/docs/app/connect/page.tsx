@@ -323,8 +323,19 @@ export default function ConnectPage() {
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight text-[var(--mushi-ink)] sm:text-4xl">
-            Connect your editor
+            Connect your AI code editor
           </h1>
+          <p className="mt-2 text-sm text-[var(--mushi-ink-muted)]">
+            For Cursor, Claude Code, VS Code and other editors.{' '}
+            <strong className="font-medium text-[var(--mushi-ink)]">Using Lovable or Bolt? You don’t need this page.</strong>{' '}
+            <a
+              href="https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt"
+              className="underline decoration-[var(--mushi-rule)] underline-offset-2 hover:text-[var(--mushi-ink)]"
+            >
+              Add Mushi Mushi with one prompt instead
+            </a>
+            .
+          </p>
           <p className="mt-2 text-base text-[var(--mushi-ink-muted)]">
             {DEMO_INPUT
               ? 'Pick a client below. Demo needs no signup; sign in when you want your own project.'

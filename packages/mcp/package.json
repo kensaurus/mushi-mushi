@@ -3,7 +3,7 @@
   "mcpName": "io.github.kensaurus/mushi-mushi",
   "version": "0.30.4",
   "license": "MIT",
-  "description": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "MCP server for Cursor, Claude Code and Copilot. Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
   "type": "module",
   "exports": {
     ".": {

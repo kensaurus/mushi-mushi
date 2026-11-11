@@ -18,7 +18,7 @@ can execute without additional context.
 
 **North star.** Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
 
-**Category we own.** The bug mediator for AI-built apps — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
+**Category we own.** Bug fixing for AI-built apps (ADR 0056; "bug mediator" is the inside view, never a hero word) — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
 
 **The app recipe** (ADR 0016) is diagnosis context, not a new category: every
 recipe element is optional, renders "not connected" when empty, and changes

@@ -1,6 +1,6 @@
 # 0004. Lead with "the bug mediator for AI-built apps"
 
-Status: Accepted            Date: 2026-08-19
+Status: Superseded by [0056](0056-lead-with-what-breaks-in-the-live-app.md) (category line) on 2026-11-11            Date: 2026-08-19
 
 ## Context
 

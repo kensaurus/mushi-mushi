@@ -1,6 +1,7 @@
 import { legacyHubRoutes } from './lib/pageHubs'
 import { ReportsHomeRedirect } from './lib/reportsHomeRedirect'
 import { FirstRunGate } from './components/FirstRunGate'
+import { OperatorRoute } from './components/OperatorRoute'
 import { HubRedirect } from './components/PageHubView'
 import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
@@ -391,11 +392,11 @@ export function App() {
                   <Route path="/content/:id" element={<ContentQualityDetailPage />} />
                   <Route path="/projects" element={<ProjectsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/queue" element={<DLQPage />} />
+                  <Route path="/queue" element={<OperatorRoute><DLQPage /></OperatorRoute>} />
                   <Route path="/graph" element={<GraphPage />} />
                   <Route path="/inventory" element={<InventoryPage />} />
-                  <Route path="/judge" element={<JudgePage />} />
-                  <Route path="/query" element={<QueryPage />} />
+                  <Route path="/judge" element={<OperatorRoute><JudgePage /></OperatorRoute>} />
+                  <Route path="/query" element={<OperatorRoute><QueryPage /></OperatorRoute>} />
                   <Route path="/research" element={<ResearchPage />} />
                   <Route path="/fixes" element={<FixesPage />} />
                   <Route path="/pipeline" element={<PipelinePage />} />
@@ -410,7 +411,7 @@ export function App() {
                   <Route path="/ux-runs" element={<UxRunsPage />} />
                   <Route path="/first-user-test" element={<FirstUserTestPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
-                  <Route path="/prompt-lab" element={<PromptLabPage />} />
+                  <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />
                   <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />

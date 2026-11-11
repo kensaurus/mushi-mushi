@@ -1,6 +1,6 @@
 /**
  * FILE: packages/web/src/widget-brand-footer.test.ts
- * PURPOSE: Pin the "Bug reports by Mushi" mark (docs/plan-gtm.md Workstream C §5):
+ * PURPOSE: Pin the "Bug reports by Mushi Mushi" mark (docs/plan-gtm.md Workstream C §5):
  *          - link href carries the UTM pair and the anonymous project ref
  *          - `brandFooter: false` / omitted hides it; runtime `updateConfig` shows it
  *          - the impression callback fires once per widget instance, the click
@@ -40,7 +40,7 @@ describe('buildBrandFooterHref', () => {
   });
 });
 
-describe('MushiWidget — "Bug reports by Mushi" mark', () => {
+describe('MushiWidget — "Bug reports by Mushi Mushi" mark', () => {
   const widgets: MushiWidget[] = [];
 
   beforeEach(() => {
@@ -77,12 +77,12 @@ describe('MushiWidget — "Bug reports by Mushi" mark', () => {
     expect(a!.getAttribute('href')).toBe(EXPECTED_HREF);
     expect(a!.getAttribute('target')).toBe('_blank');
     expect(a!.getAttribute('rel')).toContain('noopener');
-    expect(a!.textContent).toContain('Bug reports by Mushi');
+    expect(a!.textContent).toContain('Bug reports by Mushi Mushi');
   });
 
   it('localizes the copy (ja)', () => {
     const w = mountOpen({ brandFooter: true, locale: 'ja' }, callbacks());
-    expect(footerLink(w)!.textContent).toContain('バグ報告は Mushi で');
+    expect(footerLink(w)!.textContent).toContain('バグ報告は Mushi Mushi で');
   });
 
   it('renders the link without ref until the hash resolves, then adds it', () => {

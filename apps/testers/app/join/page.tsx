@@ -24,12 +24,12 @@ function JoinPageInner() {
           <div className="mb-8 text-center">
             <p className="mb-4 text-4xl">🪲</p>
             <h1 className="mb-2 text-3xl font-bold">
-              {appSlug ? 'Join to test this app' : 'Become a Mushi tester'}
+              {appSlug ? 'Join to test this app' : 'Become a Mushi Mushi tester'}
             </h1>
             <p className="testers-muted">
               {appSlug
                 ? 'Sign up free and start earning points for finding bugs.'
-                : 'Find bugs in real apps. Earn points. Redeem for gift cards or Mushi Pro credit.'}
+                : 'Find bugs in real apps. Earn points. Redeem them for gift cards or credit toward a paid Mushi Mushi plan.'}
             </p>
           </div>
 
@@ -39,7 +39,7 @@ function JoinPageInner() {
                 { icon: '🐛', text: 'Find bugs in apps from real developers' },
                 { icon: '💰', text: 'Earn mushi-points for every accepted report' },
                 { icon: '🎁', text: 'Redeem for Amazon, Starbucks, App Store gift cards' },
-                { icon: '⚡', text: '1.3× bonus when you convert points to Mushi Pro credit' },
+                { icon: '⚡', text: '1.3× bonus when you turn points into Mushi Mushi plan credit' },
               ].map(({ icon, text }) => (
                 <li key={text} className="flex items-start gap-3">
                   <span className="mt-0.5 text-lg leading-none">{icon}</span>

@@ -40,6 +40,7 @@ import {
 import { resolveAndDereferencePlatformSettings } from '../_shared/integration-settings.ts'
 import { isTransientSentryFailure, thrownMessage } from '../_shared/sentry-api.ts'
 import { pullSentryResolves, reconcileSentryLinks } from '../_shared/sentry-reconcile.ts'
+import { dbDiagnosticMessage, logDbFailure, retryTransientRead } from '../_shared/error-codes.ts'
 
 ensureSentry('sentry-seer-poll')
 
@@ -238,15 +239,22 @@ app.post('/sentry-seer-poll', async (c) => {
   if (unauthorized) return unauthorized
 
   const db = getDb()
-  const { data: rows, error } = await db
-    .from('project_settings')
-    .select('project_id, sentry_org_slug, sentry_project_slug, sentry_seer_token_ref, sentry_auth_token_ref, sentry_seer_last_polled_at')
-    .eq('sentry_seer_enabled', true)
-    .limit(50)
+  // Reads, so one retry on a gateway page is safe. A Cloudflare 521 page
+  // reached Sentry as the whole HTML document (Sentry 7821508537,
+  // 2026-10-31): an outage is now a warn and a 503, and the next 15-minute
+  // poll tries again. Any other failure stays an error.
+  const { data: rows, error } = await retryTransientRead(() =>
+    db
+      .from('project_settings')
+      .select('project_id, sentry_org_slug, sentry_project_slug, sentry_seer_token_ref, sentry_auth_token_ref, sentry_seer_last_polled_at')
+      .eq('sentry_seer_enabled', true)
+      .limit(50),
+  )
 
   if (error) {
-    log.error('settings query failed', { error: error.message })
-    return c.json({ ok: false, error: error.message }, 500)
+    const detail = dbDiagnosticMessage(error.message)
+    const transient = logDbFailure(log, 'settings query failed', error, { error: detail })
+    return c.json({ ok: false, error: detail }, transient ? 503 : 500)
   }
 
   // Wave S3 (PERF): poll up to 5 projects in parallel. Each project's
@@ -261,12 +269,18 @@ app.post('/sentry-seer-poll', async (c) => {
     }
   })
 
-  const { data: importRows, error: importErr } = await db
-    .from('project_settings')
-    .select('project_id, sentry_project_slug, sentry_extra_project_slugs, sentry_auto_import_last_at')
-    .eq('sentry_auto_import', true)
-    .limit(50)
-  if (importErr) log.error('auto-import settings query failed', { error: importErr.message })
+  const { data: importRows, error: importErr } = await retryTransientRead(() =>
+    db
+      .from('project_settings')
+      .select('project_id, sentry_project_slug, sentry_extra_project_slugs, sentry_auto_import_last_at')
+      .eq('sentry_auto_import', true)
+      .limit(50),
+  )
+  if (importErr) {
+    logDbFailure(log, 'auto-import settings query failed', importErr, {
+      error: dbDiagnosticMessage(importErr.message),
+    })
+  }
   const imported = await mapWithConcurrency(importRows ?? [], 3, async (r) => {
     try {
       return { projectId: r.project_id, ...(await autoImportProject(db, r)) }

@@ -31,6 +31,8 @@ import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI } from '../_shared/models.ts
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
 import { projectLlmKey } from '../_shared/project-llm-key.ts'
+import { isLlmBudgetExceeded } from '../_shared/llm-account-state.ts'
+import { isQuotaMessage } from '../_shared/llm-quota.ts'
 
 // Cosine distance threshold for cluster assignment (≤ = assign, > = new cluster)
 const ASSIGN_DISTANCE = 0.18
@@ -43,10 +45,16 @@ const JUDGE_TOP_K = 5
 // Max reports to process per run (prevents 15-min timeout)
 const MAX_REPORTS_PER_RUN = 200
 
-/** Neither an Anthropic nor an OpenAI key resolved for the project (none set, or over budget). */
+/**
+ * No usable Claude key: none set, over budget, or the organization runs AI on
+ * OpenAI (resolveLlmKey hands out no Claude key then, byok.ts). The judge goes
+ * on to OpenAI; only when that has no key either does this reach the outer
+ * catch. The old text, "No Anthropic key for this project", read as the cause
+ * for an organization on OpenAI (Sentry 7818381614).
+ */
 class NoProjectLlmKeyError extends Error {
   constructor() {
-    super('No Anthropic key for this project')
+    super('No usable AI key for this project (Claude or OpenAI)')
     this.name = 'NoProjectLlmKeyError'
   }
 }
@@ -339,6 +347,21 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
               scope: 'mistake-clusterer',
               clusterId,
               projectId,
+            })
+            continue
+          }
+          // A spent or rate-limited provider account (Anthropic answers a
+          // spent workspace with a 400 "API usage limits", Sentry 7816015462)
+          // is an account state, not a fault: the next 6-hour window retries,
+          // the AI health probe shows the key as degraded, and withLlmFailover
+          // marks pooled keys quota_exhausted on the request paths.
+          const errText = err instanceof Error ? err.message : String(err)
+          if (isLlmBudgetExceeded(err) || isQuotaMessage(errText)) {
+            log.warn('coherence judge skipped: the AI provider refused for quota or budget', {
+              scope: 'mistake-clusterer',
+              clusterId,
+              projectId,
+              err: errText.slice(0, 300),
             })
             continue
           }

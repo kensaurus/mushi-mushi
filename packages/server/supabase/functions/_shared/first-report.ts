@@ -29,11 +29,12 @@ export const NON_REAL_REPORT_SOURCES: ReadonlySet<string> = new Set([
 /**
  * Report sources that are never a project's activation "first report": the
  * fixtures above, plus `admin_file` (a report an operator filed by hand from
- * the console, `mushi reports file` or MCP `file_report`). A filed report is
- * real work, so it keeps judge sampling and the known-issues lookup
- * (isNonRealReport); it just is not the app's users reporting.
+ * the console, `mushi reports file` or MCP `file_report`) and `cli_wizard`
+ * (the test report `mushi init` sends). A filed report is real work, so it
+ * keeps judge sampling and the known-issues lookup (isNonRealReport); it just
+ * is not the app's users reporting.
  */
-export const NOT_FIRST_REPORT_SOURCES: ReadonlySet<string> = new Set([...NON_REAL_REPORT_SOURCES, 'admin_file']);
+export const NOT_FIRST_REPORT_SOURCES: ReadonlySet<string> = new Set([...NON_REAL_REPORT_SOURCES, 'admin_file', 'cli_wizard']);
 
 /** True when the report never counts as the project's first report (activation, lifecycle). */
 export function isNotFirstReportSource(customMetadata: Record<string, unknown> | null | undefined): boolean {

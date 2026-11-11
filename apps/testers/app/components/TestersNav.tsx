@@ -1,6 +1,6 @@
 /**
  * FILE: apps/testers/app/components/TestersNav.tsx
- * PURPOSE: Shared sticky nav for all Mushi Bounties public marketplace routes.
+ * PURPOSE: Shared sticky nav for all Mushi Mushi Bounties public marketplace routes.
  */
 import Link from 'next/link'
 
@@ -11,7 +11,7 @@ export function TestersNav() {
     <nav className="testers-nav sticky top-0 z-40">
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
         <Link href="/" className="text-lg font-bold text-[var(--mushi-ink)]">
-          <span className="testers-brand-mark">mushi</span>mushi
+          <span className="testers-brand-mark">Mushi</span> Mushi
           <span className="testers-badge ml-2">Bounties</span>
         </Link>
         <div className="hidden items-center gap-4 text-sm sm:flex">

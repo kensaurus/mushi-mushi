@@ -102,7 +102,14 @@ export interface NavRegistryEntry {
   requiresFeature?: FeatureFlag
   requiresAdvancedMode?: boolean
   superAdmin?: boolean
-  /** Mushi-operator-only (entitlements `operator`) — company dashboards like /growth. */
+  /**
+   * Mushi-operator-only (entitlements `operator`): company dashboards like
+   * /growth, and since 2026-11-11 the operator cockpit (ADR 0052): pages about
+   * Mushi Mushi's own machinery (processing jobs, triage grading, prompts,
+   * agent skills, CI runners, Mushi's health) or the local-agent studios. A
+   * builder's sidebar, More pages and ⌘K leave them out; OPERATOR_ROUTES are
+   * also guarded in App.tsx.
+   */
   operatorOnly?: boolean
   /** false = palette-only utility route */
   inSidebar?: boolean
@@ -226,6 +233,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:skills',
     path: '/skills',
+    operatorOnly: true,
     label: 'Agent skills',
     sectionId: 'start',
     iconKey: 'skills',
@@ -349,6 +357,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:ux-runs',
     path: '/ux-runs',
+    operatorOnly: true,
     label: 'UX runs',
     sectionId: 'do',
     pdcaStage: 'do',
@@ -360,6 +369,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:iterate',
     path: '/iterate',
+    operatorOnly: true,
     label: 'Improvement runs',
     sectionId: 'do',
     pdcaStage: 'do',
@@ -423,6 +433,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:fullstack-audit',
     path: '/fullstack-audit',
+    operatorOnly: true,
     label: 'Full-stack audit',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -447,6 +458,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:ci',
     path: '/ci',
+    operatorOnly: true,
     label: 'CI runners',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -459,6 +471,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:health',
     path: '/health',
+    operatorOnly: true,
     // Mushi's own AI calls and background jobs, not the user's app (pattern
     // P6, console journeys 2026-10-27). The app's uptime and errors are on
     // Home. "app health" stays a keyword: every former label must.
@@ -474,6 +487,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:design',
     path: '/design',
+    operatorOnly: true,
     label: 'Design system',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -498,6 +512,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:judge',
     path: '/judge',
+    operatorOnly: true,
     label: 'Triage grading',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -522,6 +537,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:prompt-lab',
     path: '/prompt-lab',
+    operatorOnly: true,
     label: 'AI prompts',
     sectionId: 'check',
     pdcaStage: 'check',
@@ -568,6 +584,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:experiments',
     path: '/experiments',
+    operatorOnly: true,
     label: 'Experiments',
     sectionId: 'act',
     pdcaStage: 'act',
@@ -579,6 +596,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:research',
     path: '/research',
+    operatorOnly: true,
     label: 'Research',
     sectionId: 'act',
     pdcaStage: 'act',
@@ -641,6 +659,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:queue',
     path: '/queue',
+    operatorOnly: true,
     label: 'Processing jobs',
     sectionId: 'workspace',
     iconKey: 'queue',
@@ -661,6 +680,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   {
     id: 'nav:query',
     path: '/query',
+    operatorOnly: true,
     label: 'SQL query',
     sectionId: 'workspace',
     iconKey: 'query',
@@ -1147,6 +1167,30 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/team',
   '/settings',
 ]
+
+/**
+ * The sidebar a builder sees (console audit 2026-11-11, finding 8): someone
+ * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Connect and
+ * Settings; every other page they may open is under "More pages". Pipeline
+ * stays core for every account (ADR 0027 amendment 2026-10-27). Operators
+ * (entitlements `operator`) keep CORE_NAV_PATHS.
+ */
+/** @internal Exported for tests. */
+export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/pipeline', '/connect', '/settings']
+
+/** The core sidebar for this viewer. */
+export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly string[] {
+  return viewer.isOperator ? CORE_NAV_PATHS : BUILDER_CORE_NAV_PATHS
+}
+
+/**
+ * Operator pages that are also route-guarded (App.tsx OperatorRoute): Mushi
+ * Mushi's own processing queue, SQL console, triage grading and prompts. The
+ * other operator-only pages are left out of a builder's navigation but still
+ * open from a link, since product pages link to them.
+ */
+/** @internal Exported for tests. */
+export const OPERATOR_ROUTES: readonly string[] = ['/queue', '/query', '/judge', '/prompt-lab']
 
 /** Every check on the Checks page, in order within its group. Every path must exist in NAV_REGISTRY. */
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [

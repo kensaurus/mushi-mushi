@@ -1,6 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createEmbedding } from './embeddings.ts'
 import { log } from './logger.ts'
+import { dbDiagnosticMessage, logDbFailure } from './error-codes.ts'
 
 const ragLog = log.child('rag')
 
@@ -78,8 +79,11 @@ export async function getRelevantCodeWithReason(
   })
 
   if (error) {
-    const detail = error.message.slice(0, 240)
-    ragLog.error('match_codebase_files rpc failed', { projectId, err: detail })
+    // A gateway page collapses to its title, and an outage is a warn. A
+    // statement timeout (57014) is a slow search and stays an error
+    // (Sentry 7780281601).
+    const detail = dbDiagnosticMessage(error.message).slice(0, 240)
+    logDbFailure(ragLog, 'match_codebase_files rpc failed', error, { projectId, err: detail })
     return { files: [], reason: 'rpc_failed', detail }
   }
 

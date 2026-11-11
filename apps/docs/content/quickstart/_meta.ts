@@ -1,9 +1,10 @@
 export default {
   index: 'Choose your stack',
-  'incident-loop': 'Incident loop (start here)',
+  'lovable-bolt': 'Lovable or Bolt (no terminal)',
+  'incident-loop': 'Incident loop (Cursor or Claude Code)',
+  mobile: 'Your phone app (Expo, React Native, Capacitor)',
   'team-setup': 'Team setup checklist',
   'lovable-mcp': 'Lovable, Claude Code, Cursor',
-  'lovable-bolt': 'Lovable or Bolt (no terminal)',
   'cli-console-loop': 'CLI ↔ console loop',
   mcp: 'MCP server',
   react: 'React',
@@ -16,5 +17,4 @@ export default {
   android: 'Android (Kotlin)',
   flutter: 'Flutter',
   capacitor: 'Capacitor',
-  mobile: { title: 'Mobile (overview)', display: 'hidden' },
 }

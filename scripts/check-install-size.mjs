@@ -102,13 +102,20 @@ export const BUDGETS = [
   // 2026-11-03: 975 → 985 kB unpacked: the docs index gained the How it works
   // page, and every excerpt and the README spell the full product name
   // ("Mushi Mushi"). Text only, no code or dependency change; measured 976.0 kB.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 985_000 },
+  // 2026-11-11: 985 → 995 kB unpacked: the docs index gained the beginner pages
+  // (what it is, glossary, three persona pages) and the client registry gained
+  // Lovable (ADR 0056). Text only, no dependency change; measured 986.2 kB.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 250_000, unpacked: 995_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check
   // registry (ADR 0054, plan-simplicity Phase 1): one more check and its
   // warning rows. No new dependencies; measured at 990.0 kB unpacked in CI.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 270_000, unpacked: 995_000 },
+  // 2026-11-11: packed 270 → 275 kB, unpacked 995 → 1,010 kB: `mushi work
+  // --agent claude` (work-agents.ts: the agent table, the out-of-usage stop) so
+  // fixes run on Claude Code when Cursor credits are out. No new dependencies;
+  // measured 270.3 kB packed, 1,001.3 kB unpacked in CI.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 275_000, unpacked: 1_010_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

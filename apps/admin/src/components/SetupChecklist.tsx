@@ -15,12 +15,13 @@
  *          real work only and never repeats a setup step beside it.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { SetupProject, SetupStep } from '../lib/useSetupStatus'
 import { CHIP_TONE } from '../lib/chipTone'
 import { useClaimNextStep, useNextStep } from '../lib/useNextStep'
 import { setupCountLabel } from '../lib/setupProgress'
+import { plainSetupSteps } from '../lib/setupStepWords'
 import { Btn, Card, RefreshIconButton } from './ui'
 import { SdkHealthPanel } from './SdkHealthPanel'
 
@@ -60,7 +61,9 @@ function formatRelativeTime(iso: string | null | undefined): string | null {
   return `${Math.round(seconds / 86400)} days ago`
 }
 
-export function SetupChecklist({ project, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+export function SetupChecklist({ project: serverProject, mode, extrasOnly, onRefresh, adminEndpointHost }: SetupChecklistProps) {
+  // Plain words, and one button per page (lib/setupStepWords.ts, audit 2026-11-11).
+  const project = useMemo(() => ({ ...serverProject, steps: plainSetupSteps(serverProject.steps) }), [serverProject])
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
@@ -160,7 +163,7 @@ function BannerChecklist({
           </div>
           <p className="mt-0.5 text-2xs text-fg-muted truncate">
             {requiredDone
-              ? 'Optional integrations below unlock auto-fix PRs and BYOK billing.'
+              ? 'Optional extras below: Mushi Mushi can open fixes for you, or use your own AI key.'
               : `Project: ${project.project_name}`}
           </p>
         </div>
@@ -420,7 +423,8 @@ function ChecklistRow({
         {fix.panel}
       </div>
       {fix.button}
-      {!step.complete && (
+      {/* One action per row: the fix button when there is one, else the step's link. */}
+      {!step.complete && step.cta_label && !fix.button && (
         <Link
           to={step.cta_to}
           className="shrink-0 text-2xs text-accent-foreground hover:text-accent"
@@ -483,7 +487,7 @@ function ChecklistCard({
           {fix.panel}
         </div>
         {fix.button}
-        {!step.complete && (
+        {!step.complete && step.cta_label && !fix.button && (
           <Link
             to={step.cta_to}
             className="shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"

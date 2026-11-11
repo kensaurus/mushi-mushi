@@ -11,6 +11,12 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Plans
 
+No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
+You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
+included. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
+every plan; installing plugins from the Marketplace needs Builder or above, and
+team invites need Studio. Full details are on [pricing](/pricing).
+
 ## Sign-up flow
 
 1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.

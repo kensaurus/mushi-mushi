@@ -36,8 +36,21 @@ const ORG_INPUT = {
 }
 
 describe('MCP_CLIENTS registry', () => {
-  it('exports exactly 9 clients', () => {
-    expect(MCP_CLIENTS).toHaveLength(9)
+  it('exports exactly 10 clients', () => {
+    expect(MCP_CLIENTS).toHaveLength(10)
+  })
+
+  it('Lovable is keyless: the hosted OAuth URL and steps, no key anywhere', () => {
+    const lovable = getMcpClient('lovable')
+    expect(lovable.keyless).toBe(true)
+    const result = lovable.build(SAMPLE_INPUT)
+    expect(result.kind).toBe('remote-url')
+    if (result.kind === 'remote-url') {
+      expect(result.url).toMatch(/^https:\/\/kensaur\.us\/mushi-mushi\/hosted-mcp\//)
+      expect(result.headerSnippet).toBe('')
+      expect(result.steps?.length).toBeGreaterThan(2)
+      expect(JSON.stringify(result)).not.toContain(SAMPLE_INPUT.apiKey)
+    }
   })
 
   it('has no duplicate ids', () => {

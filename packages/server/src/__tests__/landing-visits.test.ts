@@ -13,7 +13,10 @@ import { describe, expect, it } from 'vitest'
 import {
   VISITOR_BUCKET_HEADER,
   cleanVisitSrc,
+  SPAM_REFERRER_HOSTS,
   isBotUserAgent,
+  isSpamReferrerHost,
+  isSpamReferrerUrl,
   normalizeVisitPath,
   parsePageViewBody,
   visitReferrerHost,
@@ -100,6 +103,91 @@ describe('isBotUserAgent', () => {
     expect(isBotUserAgent('Mozilla/5.0 HeadlessChrome/120.0')).toBe(true)
     expect(isBotUserAgent('')).toBe(true)
     expect(isBotUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15')).toBe(false)
+  })
+})
+
+describe('referrer spam (GTM research note 2026-11-11 §1.3)', () => {
+  it('matches a listed host and its subdomains, never a look-alike', () => {
+    expect(isSpamReferrerHost('aocr.org')).toBe(true)
+    expect(isSpamReferrerHost('www.aocr.org')).toBe(true)
+    expect(isSpamReferrerHost('WWW.AOCR.ORG.')).toBe(true)
+    expect(isSpamReferrerHost('m.www.aocr.org')).toBe(true)
+    expect(isSpamReferrerHost('notaocr.org')).toBe(false)
+    expect(isSpamReferrerHost('aocr.org.evil.example')).toBe(false)
+    expect(isSpamReferrerHost('news.ycombinator.com')).toBe(false)
+    expect(isSpamReferrerHost('')).toBe(false)
+    expect(isSpamReferrerHost(null)).toBe(false)
+  })
+
+  it('reads a full referrer URL (the SDK $referrer is origin + path)', () => {
+    expect(isSpamReferrerUrl('https://www.aocr.org/some/page')).toBe(true)
+    expect(isSpamReferrerUrl('www.aocr.org')).toBe(true)
+    expect(isSpamReferrerUrl('https://www.reddit.com/r/vibecoding/')).toBe(false)
+    expect(isSpamReferrerUrl('not a url/at all')).toBe(false)
+    expect(isSpamReferrerUrl(42)).toBe(false)
+  })
+
+  it('a spam view parses as usual, so the route can drop it before the rate limit and the write', () => {
+    const view = parsePageViewBody('{"path":"/","ref":"https://www.aocr.org/x"}')
+    expect(view?.referrerHost).toBe('www.aocr.org')
+    expect(isSpamReferrerHost(view!.referrerHost)).toBe(true)
+  })
+
+  it('the beacon route drops spam before it claims a rate-limit slot or writes a row', () => {
+    const route = read('api/routes/landing-visits.ts')
+    const beacon = route.slice(route.indexOf("'/v1/public/page-view'"), route.indexOf("'/v1/admin/growth/daily'"))
+    const drop = beacon.indexOf('isSpamReferrerHost(view.referrerHost)')
+    expect(drop).toBeGreaterThan(-1)
+    expect(drop).toBeLessThan(beacon.indexOf('scoped_rate_limit_claim'))
+    expect(drop).toBeLessThan(beacon.indexOf("rpc('record_landing_page_view'"))
+    // Dropped like a bot: accepted, nothing learned, nothing stored.
+    expect(beacon.slice(drop, drop + 80)).toContain('204')
+  })
+
+  it('the weekly funnel drops the self project visit events from a spam referrer', () => {
+    const events = read('api/routes/events.ts')
+    expect(events).toContain('isSelfVisitReferrerSpam(ev.name, properties, isSelfProject)')
+    // Env is read per request: Deno CI runs tests with no --allow-env.
+    expect(events).not.toMatch(/^const [A-Z_]+ = Deno\.env\.get/m)
+  })
+
+  describe('20261111090000_landing_referrer_spam.sql', () => {
+    const sql = migrationWith('create or replace function public.is_spam_referrer_host(')
+
+    it('lists the same hosts as SPAM_REFERRER_HOSTS', () => {
+      const fn = sql.slice(sql.indexOf('create or replace function public.is_spam_referrer_host('))
+      const arr = fn.slice(fn.indexOf('array['), fn.indexOf(']::text[]'))
+      const hosts = [...arr.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort()
+      expect(hosts).toEqual([...SPAM_REFERRER_HOSTS].sort())
+      // Host or subdomain, the same rule as isSpamReferrerHost.
+      expect(fn).toContain("like '%.' || spam.host")
+    })
+
+    it('never stores a spam view, and the scorecard leaves stored ones out without deleting them', () => {
+      const record = sql.slice(sql.indexOf('create or replace function public.record_landing_page_view('))
+      expect(record.indexOf('is_spam_referrer_host(v_ref)')).toBeLessThan(record.indexOf('insert into public.landing_page_views_daily'))
+      const score = sql.slice(sql.indexOf('create or replace function public.gtm_daily_scorecard('))
+      const views = score.slice(score.indexOf('views as ('), score.indexOf('spam as ('))
+      expect(views).toContain('not public.is_spam_referrer_host(v.referrer_host)')
+      expect(score).toContain("'spam_views_excluded'")
+      expect(sql).not.toMatch(/delete from public\.landing_page_views_daily/i)
+    })
+
+    it('adds sdk_seen_live for outside projects only (operators, synthetic accounts and complimentary orgs out)', () => {
+      const score = sql.slice(sql.indexOf('create or replace function public.gtm_daily_scorecard('))
+      expect(score).toContain("e.event_name = 'sdk_seen_live'")
+      expect(score).toContain("coalesce(o.billing_mode, '') <> 'complimentary'")
+      expect(score).toContain('public.synthetic_accounts')
+      expect(score).toContain('public.operator_users')
+      expect(score.match(/'sdk_seen_live',/g)?.length).toBe(2)
+    })
+
+    it('keeps every function service-role only', () => {
+      for (const fn of ['is_spam_referrer_host(text)', 'record_landing_page_view(text, text, text)', 'gtm_daily_scorecard(integer)']) {
+        expect(sql).toContain(`revoke all on function public.${fn} from public, anon, authenticated`)
+        expect(sql).toContain(`grant execute on function public.${fn} to service_role`)
+      }
+    })
   })
 })
 

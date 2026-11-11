@@ -39,7 +39,9 @@ import { tryLoadWorkerKey } from '../keychain.js'
 import { detectPlatform, hashHostId, nodeHostIO, readMachineId, type HostIO } from '../runner/host.js'
 import { onInterrupt } from '../signals.js'
 import { MUSHI_CLI_VERSION } from '../version.js'
+import { AGENT_UNAVAILABLE, agentSpec, isClaudeModel, type LocalAgent } from '../commands/work-agents.js'
 import {
+  checkAgentSignIn,
   checkCursorSignIn,
   classifyFailure,
   followUpOne,
@@ -98,8 +100,13 @@ const BACKOFF_MS = 2 * 60_000
  */
 const INFRA_BACKOFF_MS = 60_000
 const INFRA_BACKOFF_MAX_MS = 30 * 60_000
-/** The agent account would not run at all (spent usage, a model its plan lacks): the run says nothing about the report. */
-const AGENT_UNAVAILABLE = /ActionRequiredError|Increase limits|usage limit|out of (?:usage|credits)|Cannot use this model/i
+/**
+ * The agent account would not run (spent usage, signed out): every lane on
+ * the machine shares it, so every lane waits this long before it claims
+ * again, instead of claiming report after report into the same failure
+ * (2026-11-07: both Cursor keys spent, lanes kept claiming).
+ */
+const AGENT_UNAVAILABLE_WAIT_MS = 30 * 60_000
 const GH_CHECK_MS = 5 * 60_000
 const CURSOR_CHECK_MS = 20 * 60_000
 
@@ -142,6 +149,8 @@ export interface DaemonDeps {
   setCursorAccount?: (account: string) => void
   /** "Switch account" from the console. Without it the daemon does not offer to switch (no `can: cursor_login`). */
   cursorLogin?: CursorLogin
+  /** The coding agent the lanes run (worker.json `agent`); default cursor. */
+  agent?: LocalAgent
   /** Runs a first-time user test the console queued. Without it the daemon does not offer to take them. */
   freshEyes?: (t: FreshEyesTarget, o: { projectId: string; signal: AbortSignal; log: (line: string) => void }) => Promise<JobOutcome>
 }
@@ -192,6 +201,17 @@ export function machineFailed(result: string, failureKind: 'infra' | 'code' | un
   return (result === 'failed' && failureKind === 'infra') || AGENT_UNAVAILABLE.test(detail)
 }
 
+/**
+ * @internal Exported for tests only. The model a lane's run gets. Lane models
+ * are set in the console for Cursor (grok-4.7-xhigh, gpt-5); handed to Claude
+ * Code, every run would fail, so a claude worker uses only Claude model ids
+ * and otherwise Claude Code's own default.
+ */
+export function modelFor(agent: LocalAgent, model: string | null | undefined): string | undefined {
+  if (!model) return undefined
+  return agent === 'claude' && !isClaudeModel(model) ? undefined : model
+}
+
 /** Heartbeats in a row on which the server must refuse the key before the worker stops for good. */
 const KEY_REFUSALS_TO_STOP = 3
 
@@ -222,6 +242,13 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   let stopped: string | null = null
   /** The account the agents must run as: worker.json's, until the console names another. */
   let account = deps.cursorAccount
+  const agent: LocalAgent = deps.agent ?? 'cursor'
+  /** Run models the agent cannot use, said once each. */
+  const model = (m: string | null | undefined): string | undefined => {
+    const use = modelFor(agent, m)
+    if (m && !use) once(`model:${m}`, null, `the lane model ${m} is not a ${agentSpec(agent).label} model; using ${agentSpec(agent).label}'s default`)
+    return use
+  }
   const reported = new Set<string>()
   const pending = new Set<Promise<void>>()
 
@@ -317,7 +344,16 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   }
 
   /** Count machine-side failures in a row and hold the lane's next claim back accordingly. */
-  function afterRun(lane: LaneRuntime, failedOnMachine: boolean): void {
+  function afterRun(lane: LaneRuntime, failedOnMachine: boolean, agentDown = false): void {
+    if (agentDown) {
+      // One account serves every lane here: all of them wait, not just this one.
+      const until = deps.now() + AGENT_UNAVAILABLE_WAIT_MS
+      for (const l of lanes) {
+        l.nextClaimAt = Math.max(l.nextClaimAt, until)
+        l.nextFollowupAt = Math.max(l.nextFollowupAt, until)
+      }
+      say(lane, `  the ${agentSpec(agent).label} agent could not run (out of usage or signed out): no lane claims for ${AGENT_UNAVAILABLE_WAIT_MS / 60_000} min`)
+    }
     if (!failedOnMachine) {
       lane.infraStreak = 0
       return
@@ -334,8 +370,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claim.id, ac)
     lane.state = 'working'
     const t0 = deps.now()
-    const model = claim.model ?? lane.config?.model ?? undefined
-    const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model, now: t0, stage: 'prepare' })
+    const runModel = model(claim.model ?? lane.config?.model)
+    const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model: runModel, now: t0, stage: 'prepare' })
     lane.tracks.set(claim.id, track)
     say(lane, `claimed ${claim.report.id.slice(0, 8)}: ${(claim.report.summary ?? '').slice(0, 80)}`)
     const run = (async () => {
@@ -343,8 +379,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       try {
         out = await deps.workOne(api, claim.report, {
           repoDir: lane.local.repoDir,
-          agent: 'cursor',
-          model,
+          agent,
+          model: runModel,
           log: (l) => {
             pushLog(track, l)
             say(lane, l.trim())
@@ -364,7 +400,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${claim.report.id.slice(0, 8)} → ${out.outcome}`.slice(0, 160)
       say(lane, `  → ${out.outcome}${out.prUrl ? ` ${out.prUrl}` : ''}`)
-      afterRun(lane, machineFailed(out.result, out.failureKind, out.outcome))
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.outcome), out.agentUnavailable === true)
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claim.id}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -415,7 +451,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       if (out.result === 'failed') lane.counters.errors++
       lane.last = `${out.result}: ${out.detail}`.slice(0, 160)
       say(lane, `  → ${out.result}: ${out.detail}`)
-      afterRun(lane, machineFailed(out.result, out.failureKind, out.detail))
+      afterRun(lane, machineFailed(out.result, out.failureKind, out.detail), out.result === 'failed' && AGENT_UNAVAILABLE.test(out.detail))
       const done = await deps.call<{ requeued: boolean }>(`/v1/worker/claims/${claimId}/done`, {
         method: 'POST',
         body: JSON.stringify({
@@ -456,8 +492,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     const run = deps
       .followUpOne(api, f, {
         repoDir: lane.local.repoDir,
-        agent: 'cursor',
-        model: lane.config?.model ?? undefined,
+        agent,
+        model: model(lane.config?.model),
         log: (l) => {
           pushLog(track, l)
           say(lane, l.trim())
@@ -470,6 +506,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         if (/^failed/.test(r.outcome)) lane.counters.errors++
         lane.last = `follow-up → ${r.outcome}`.slice(0, 160)
         say(lane, `  → ${r.outcome}`)
+        if (r.agentUnavailable) afterRun(lane, true, true)
       })
       .catch((err: unknown) => {
         lane.counters.errors++
@@ -557,17 +594,17 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         return
       }
       const k = parsed.value
-      const model = k.model ?? lane.config?.model ?? undefined
+      const jobModel = model(k.model ?? lane.config?.model)
       if (k.kind === 'fix' && (c.mode === 'fix' || c.mode === 'skill')) {
         startRun(lane, k.raw as unknown as ClaimFromServer)
       } else if (k.kind === 'conflict' && c.mode === 'conflicts') {
         const t = k.conflict
         startJob(lane, k.id, 'conflict', `conflict ${t.repo}#${t.prNumber} (${t.headRef} at ${t.headSha.slice(0, 7)})`, (signal, log) =>
-          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, model, log, signal }),
+          (deps.resolveConflict ?? resolveConflict)(t, { repoDir: lane.local.repoDir, agent, model: jobModel, log, signal }),
         )
       } else if (k.kind === 'audit' && c.mode === 'audit') {
         startJob(lane, k.id, 'audit', `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal, log) =>
-          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, model, reviewModel: k.audit.reviewModel, log, signal }),
+          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, agent, model: jobModel, reviewModel: model(k.audit.reviewModel) ?? null, log, signal }),
         )
       } else if (k.kind === 'fresh_eyes' && deps.freshEyes) {
         // Any lane of the app runs it: the test needs no clone. Never log the target (it can hold passwords).
@@ -834,8 +871,12 @@ export function createHostReadings(o: {
   }
 }
 
-export async function runDaemon(opts: { configPath?: string } = {}): Promise<void> {
+export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent } = {}): Promise<void> {
   const cfg = loadWorkerConfig(opts.configPath)
+  // `mushi work --daemon --agent` wins over worker.json's `agent`.
+  const agent: LocalAgent = opts.agent ?? cfg.agent ?? 'cursor'
+  // A Cursor account and "Switch account" are Cursor's: a Claude Code worker checks `claude auth status` only.
+  const cursorAccount = agent === 'cursor' ? cfg.cursorAccount : undefined
   const cli = loadConfig()
   const key = readWorkerKey(cli.apiKey)
   const endpoint = cfg.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? cli.endpoint
@@ -865,7 +906,13 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
 
   const conf: CliConfig = { apiKey: key, endpoint }
   let wake: () => void = () => undefined
-  const readings = createHostReadings({ cursorAccount: cfg.cursorAccount, now: () => Date.now(), log: (l) => process.stdout.write(`${l}\n`) })
+  const readings = createHostReadings({
+    ...(cursorAccount ? { cursorAccount } : {}),
+    // The account slot of the readings (and the heartbeat's `cursor` field) holds whichever agent runs.
+    ...(agent === 'cursor' ? {} : { checkCursor: () => checkAgentSignIn(agent) }),
+    now: () => Date.now(),
+    log: (l) => process.stdout.write(`${l}\n`),
+  })
   // "Switch account" from the console. It counts the daemon's runs, which exist once the daemon does.
   const live = { agents: () => 0 }
   const cursorLogin = createCursorLogin({
@@ -884,9 +931,9 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
     readings: () => readings.read(),
     recheck: () => readings.recheck(),
     notReady,
-    ...(cfg.cursorAccount ? { cursorAccount: cfg.cursorAccount } : {}),
-    setCursorAccount: (a) => readings.setAccount(a),
-    cursorLogin,
+    ...(cursorAccount ? { cursorAccount } : {}),
+    agent,
+    ...(agent === 'cursor' ? { setCursorAccount: (a: string) => readings.setAccount(a), cursorLogin } : {}),
     now: () => Date.now(),
     log: (l) => process.stdout.write(`${l}\n`),
     host: { hostId, hostname: nodeHostIO.hostname.split('.')[0]!.slice(0, 80) || 'host', platform, version: MUSHI_CLI_VERSION },
@@ -896,7 +943,7 @@ export async function runDaemon(opts: { configPath?: string } = {}): Promise<voi
   })
   live.agents = daemon.agents
   onInterrupt((signal) => daemon.shutdown(signal))
-  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}; heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
+  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}, agent ${agentSpec(agent).label} (${agentSpec(agent).bin}); heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
 
   while (!daemon.stopped) {
     await daemon.tick().catch((err: unknown) => process.stdout.write(`worker: tick failed: ${err instanceof Error ? err.message : String(err)}\n`))

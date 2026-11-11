@@ -14,6 +14,7 @@
  *               the header's main button.
  */
 
+import { AGENT_OUT_OF_USAGE_BUCKET } from '../../lib/agentOutOfUsage'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Section } from '../ui'
 import { IconAlertTriangle, IconCheck, IconReleases } from '../icons'
@@ -29,7 +30,10 @@ import type { FixAttempt } from './types'
 const RETRY_REPEATS = new Set(['needs_human', 'already_fixed', 'not_actionable', 'wrong_repo'])
 
 /** Where a cause is fixed when it is a setting, not a retry. */
-function causeFix(cause: string): { label: string; to: string } | null {
+function causeFix(cause: string, agentsOut: boolean): { label: string; to: string } | null {
+  // Out of credits now: the remedy is on Spend credits (another agent, or the
+  // date they come back). Once they are back, these retry like any failure.
+  if (cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut) return { label: 'See what to do', to: '/credits#agent-credits' }
   if (cause.endsWith('_key_rejected')) return { label: 'Fix the key', to: cause.startsWith('github') ? '/integrations/config#platform-card-github' : '/settings?tab=byok' }
   return null
 }
@@ -47,7 +51,7 @@ interface StoppedReason {
 }
 
 /** Stopped reports grouped by why, biggest first. */
-function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
+function stoppedReasons(fixes: FixAttempt[], agentsOut: boolean): StoppedReason[] {
   const byCause = new Map<string, FixAttempt[]>()
   for (const f of fixes) {
     if (!needsAttention(f)) continue
@@ -56,12 +60,14 @@ function stoppedReasons(fixes: FixAttempt[]): StoppedReason[] {
   }
   return [...byCause.entries()]
     .map(([cause, list]) => {
-      const fix = causeFix(cause)
+      const fix = causeFix(cause, agentsOut)
       const repeats = RETRY_REPEATS.has(cause)
       const retryable = repeats || fix ? [] : list.filter((f) => f.retryable === true)
       const noRetry = repeats
         ? 'A retry would stop the same way: the agent says this is not a code change.'
-        : fix
+        : cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut
+          ? "A retry goes to the same account, which is out of credits. Fix them with Claude Code on your own computer, or wait until the credits come back."
+          : fix
           ? 'A retry fails the same way until the key works.'
           : retryable.length === 0
             ? 'None of these can be retried right now.'
@@ -102,13 +108,15 @@ interface Props {
   onShowCause: (cause: string) => void
   /** Open the retry confirm for these reports. */
   onRetry: (fixes: FixAttempt[], label: string) => void
+  /** The fix agents are out of credits now (lib/agentCredits.ts): no Retry for the refused runs. */
+  agentsOut?: boolean
 }
 
-export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry }: Props) {
+export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy, onQueue, onShowCause, onRetry, agentsOut = false }: Props) {
   const ready = readyFixes(fixes, pipeline)
   const queued = queuedFixIds(pipeline)
   const toQueue = ready.filter((f) => !queued.has(f.id))
-  const reasons = stoppedReasons(fixes)
+  const reasons = stoppedReasons(fixes, agentsOut)
   const listed = reasons.reduce((n, r) => n + r.fixes.length, 0)
   // The reasons come from the attempts loaded below (the newest 200), so they
   // can cover fewer reports than the status line's "Stopped 48" (it read 47).

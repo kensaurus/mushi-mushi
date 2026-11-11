@@ -111,7 +111,8 @@ describe('SetupProgressRail', () => {
   it('with a key made earlier, offers to make one on the spot instead of a snippet that cannot work', () => {
     const onMintKey = vi.fn()
     render(project(true, false), { onMintKey })
-    expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('npm install @mushi-mushi/')
+    // An app with no connected repo gets the Script tag (works on every host, Lovable first; 2026-11-11).
+    expect(host.querySelector('[data-testid="setup-next-step"]')?.textContent).toContain('<script async')
     act(() => button('Make a key and fill it in')!.click())
     expect(onMintKey).toHaveBeenCalled()
     expect(button('Copy without a key')).toBeTruthy()

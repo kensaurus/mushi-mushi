@@ -56,6 +56,11 @@ describe('the worker config', () => {
     expect(() => validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/clone'), lane('b', '/home/u/clone/')] })).toThrow(/same clone/)
     expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a'), lane('b', '/home/u/b')] }).lanes).toHaveLength(2)
   })
+  it('takes an optional agent, cursor or claude, and refuses any other', () => {
+    expect(validateWorkerConfig({ version: 1, agent: 'claude', lanes: [lane('a', '/home/u/a')] }).agent).toBe('claude')
+    expect(validateWorkerConfig({ version: 1, lanes: [lane('a', '/home/u/a')] }).agent).toBeUndefined()
+    expect(() => validateWorkerConfig({ version: 1, agent: 'codex', lanes: [lane('a', '/home/u/a')] })).toThrow(/agent must be one of cursor, claude/)
+  })
   it('takes an optional Cursor account (an email), kept local', () => {
     expect(validateWorkerConfig({ version: 1, cursorAccount: 'worker.account@example.com', lanes: [lane('a', '/home/u/a')] }).cursorAccount).toBe('worker.account@example.com')
     expect(() => validateWorkerConfig({ version: 1, cursorAccount: '$(id)', lanes: [lane('a', '/home/u/a')] })).toThrow(/cursorAccount/)

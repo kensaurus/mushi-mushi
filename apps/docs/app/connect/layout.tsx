@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { DOCS_SITE, OG_CARD_IMAGE } from '../../lib/structured-data'
 
-const TITLE = 'Connect your AI client'
+const TITLE = 'Connect your AI code editor'
 const DESCRIPTION =
   'Pick your AI coding client and connect the Mushi Mushi MCP server: Cursor, VS Code, Windsurf, Cline, Claude, Zed and more. Most install in one click.'
 /** /connect is an app route, not MDX, so the catch-all's canonical logic never reaches it. */

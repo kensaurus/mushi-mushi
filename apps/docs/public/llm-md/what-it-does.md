@@ -13,14 +13,21 @@ The main job is simple: a user says your app is broken, and Mushi Mushi tells yo
 why and hands your AI editor the fix. But most bugs never get reported. People
 just leave.
 
-On my own apps that is exactly what happened. In 60 days people reported 32 bugs.
-More than a thousand came from my own side: checks like the ones below, AI code
-audits, Sentry errors and bugs I filed myself. Only one of the fixes that merged
-started from a user's report. The [live numbers](/proof) count the two separately.
+On my own 9 apps that is exactly what happened. In the 60 days to 2026-11-11,
+people reported 34 bugs. 2,031 came from my own side: checks like the ones
+below, AI code audits, Sentry errors and bugs I filed myself. Of the 523 fixes
+that merged, two started from a person's report. The [live numbers](/proof)
+count the two separately.
 
-Each card says the problem it solves, what it does, and what it needs. Most are
-off until you switch them on, and some need your own key (Firecrawl, Cursor or
-Anthropic) or a paid plan; the console tells you before you switch one on.
+**The main job needs none of this.** The report button, the plain-English
+diagnosis and the fix prompt work on the free plan with no key of your own.
+So does a one-time [free check of your live site](/check).
+
+Everything below is extra. Each card says the problem it solves, what it does,
+and what it needs. The tag on each card says the kind of thing you need:
+connecting an account you already have, a paid key from another service, or a
+computer of yours that stays on. Most are off until you switch them on, and the
+console tells you before you switch one on.
 
 ## Where to go next
 

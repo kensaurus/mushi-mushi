@@ -4,17 +4,37 @@
  *          a stranger's live site shows its first visitors, from public pages
  *          only.
  *
- *          - Firecrawl `/v2/scrape` (markdown + links, basic formats only, no
- *            PDF parsing: 1 credit a page) of the home page and up to 3
- *            same-origin pages linked from it: pages that answer 4xx/5xx,
- *            error screens (`errorPageReason`, shared with the Home
- *            thumbnail), a missing title, description or language.
+ *          It leads with what a visitor would see broken (ADR 0056), then
+ *          content a visitor reads, then security; `sortFindings` orders them
+ *          by severity, then by that kind.
+ *
+ *          - Firecrawl `/v2/scrape` (markdown + links + rawHtml, basic formats
+ *            only, no PDF parsing: 1 credit a page) of the home page and up
+ *            to 3 same-origin pages linked from it: pages that answer
+ *            4xx/5xx, error screens (`errorPageReason`, shared with the Home
+ *            thumbnail), "page not found" screens at HTTP 200, a page that
+ *            renders almost no text (a blank app shell), the starter
+ *            template's title, description or share image ("Lovable App",
+ *            "Vite + React"), a missing title, description, share image or
+ *            language, and http:// files on an https page (mixed content).
+ *            Firecrawl's scrape reports no browser console, so errors on
+ *            load are judged only from what the page shows.
  *          - One plain fetch of the home page (never Firecrawl): HTTPS and the
  *            http -> https redirect, four security headers, and whether the
  *            first 3 same-origin scripts point at source maps (presence only;
  *            a .map file is never requested).
- *          - Up to 20 same-origin links from the home page, HEAD then GET,
- *            5 s each: 404/410/5xx or no answer at all.
+ *          - Up to 20 same-origin links from the home page, then up to 10
+ *            more from the other pages while time allows, HEAD then GET, 5 s
+ *            each: 404/410/5xx or no answer at all (`isBrokenStatus`, shared
+ *            with the site audit).
+ *          - Up to 10 images the pages load (<img src> and the home page's
+ *            og:image), HEAD then GET: 404/410/5xx, no answer, or a web page
+ *            served where the picture should be. Images may be on another
+ *            origin (a CDN): the visitor's browser loads them from there too.
+ *
+ *          When no page could be read at all (the plain fetch and the render
+ *          both failed), the result says why in `summary.unreachable` and has
+ *          no findings: that is a failed check, never an empty pass.
  *
  *          Never logs in, posts a form or follows a sign-in, account, admin or
  *          API link: those paths are skipped (`isSensitivePath`). Every
@@ -27,6 +47,7 @@
 
 import { errorPageReason } from './home-thumbnail.ts'
 import { BlockedUrlError, checkPublicUrl, guardedFetch, type DnsResolver } from './public-url-guard.ts'
+import { htmlImageSrcs, isBrokenStatus, isUnreadableRender } from './site-audit.ts'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -50,19 +71,37 @@ export interface PageResult {
   links: string[]
   /** Set when the page could not be read at all. */
   error?: string
+  /** Firecrawl rendered this page in a browser (false or unset: plain fetch only). */
+  rendered?: boolean
+  /** Firecrawl's own render had no title, description or lang: it did not really read the page. */
+  renderUnreadable?: boolean
+  /** The rendered HTML (Firecrawl rawHtml, capped), or the plain fetch's HTML when not rendered. */
+  html?: string
+  /** The server's own HTML for the home page (the plain fetch), when it was rendered too. */
+  staticHtml?: string
+  ogImage?: string | null
+  /** Firecrawl's `metadata.error` for the page. */
+  loadError?: string | null
 }
+
+/** Why no page of the site could be read at all. */
+export type UnreachableReason = 'dns' | 'tls' | 'timeout' | 'refused' | 'blocked' | 'no_answer'
 
 export interface CheckSummary {
   pages: Array<{ path: string; status: number | null; error?: string }>
   headers: Record<string, boolean>
   https: 'ok' | 'not_redirected' | 'no_https' | 'unknown'
   linksChecked: number
+  /** Images that answered (or plainly failed); unset on reports stored before images were checked. */
+  imagesChecked?: number
   scriptsChecked: number
   scriptsWithSourceMaps: number
   /** Firecrawl rendered the home page (false: the report rests on the plain fetch). */
   rendered: boolean
   /** Parts that did not finish inside the deadline or could not run. */
   incomplete: string[]
+  /** Set when no page could be read: the check failed, it did not pass. */
+  unreachable?: { reason: UnreachableReason }
 }
 
 export interface CheckResult {
@@ -73,7 +112,12 @@ export interface CheckResult {
 export const CHECK_DEADLINE_MS = 25_000
 export const MAX_SUBPAGES = 3
 export const MAX_LINKS = 20
+/** Links from the other pages, checked after them while time allows. */
+export const MAX_SUBPAGE_LINKS = 10
+export const MAX_IMAGES = 10
 export const MAX_SCRIPTS = 3
+/** Fewer visible characters than this on a rendered page: a blank screen. */
+export const BLANK_TEXT_CHARS = 40
 const LINK_TIMEOUT_MS = 5_000
 const HTML_CAP_BYTES = 1_500_000
 const SCRIPT_CAP_BYTES = 8_000_000
@@ -87,6 +131,34 @@ export const SECURITY_HEADERS = [
 ] as const
 
 const SEVERITY_ORDER: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
+
+/**
+ * What each rule is about, for the order inside one severity (ADR 0056):
+ * what a visitor sees broken first, then what they read, then security.
+ */
+export type FindingKind = 'breakage' | 'content' | 'security'
+export const RULE_KIND: Record<string, FindingKind> = {
+  page_error_status: 'breakage',
+  error_screen: 'breakage',
+  page_not_found_screen: 'breakage',
+  blank_page: 'breakage',
+  broken_links: 'breakage',
+  broken_images: 'breakage',
+  mixed_content: 'breakage',
+  no_https: 'breakage',
+  placeholder_metadata: 'content',
+  missing_title: 'content',
+  missing_share_image: 'content',
+  missing_description: 'content',
+  missing_lang: 'content',
+  source_maps_published: 'security',
+  http_not_redirected: 'security',
+  missing_csp: 'security',
+  missing_hsts: 'security',
+  missing_nosniff: 'security',
+  missing_referrer_policy: 'security',
+}
+const KIND_ORDER: Record<FindingKind, number> = { breakage: 0, content: 1, security: 2 }
 
 // ── Pure helpers ────────────────────────────────────────────────────────────
 
@@ -165,20 +237,103 @@ export function decodeEntities(s: string): string {
     .trim()
 }
 
-/** Title, meta description and <html lang> from raw HTML. */
-export function readHtmlMeta(html: string): { title: string | null; description: string | null; language: string | null } {
+/** Title, meta description, og:image and <html lang> from raw HTML. */
+export function readHtmlMeta(html: string): { title: string | null; description: string | null; language: string | null; ogImage: string | null } {
   const head = html.slice(0, 200_000)
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1]
-  let description: string | null = null
+  const contentOf = (tag: string) => /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag)?.slice(1).find((v) => v !== undefined) ?? null
+  let description: string | null | undefined
+  let ogImage: string | null | undefined
   for (const tag of head.match(/<meta\b[^>]*>/gi) ?? []) {
-    if (/\bname\s*=\s*["']?description["']?/i.test(tag)) {
-      description = /\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag)?.slice(1).find((v) => v !== undefined) ?? null
-      break
-    }
+    if (description === undefined && /\bname\s*=\s*["']?description["']?/i.test(tag)) description = contentOf(tag)
+    // og:image itself, never og:image:width or og:image:alt.
+    else if (ogImage === undefined && /\b(?:property|name)\s*=\s*["']?og:image["']?(?=[\s/>])/i.test(tag)) ogImage = contentOf(tag)
+    if (description !== undefined && ogImage !== undefined) break
   }
   const language = /<html\b[^>]*\blang\s*=\s*["']?([A-Za-z0-9-]+)/i.exec(head)?.[1] ?? null
   const clean = (v: string | null | undefined) => (v && decodeEntities(v) ? decodeEntities(v) : null)
-  return { title: clean(title), description: clean(description), language: clean(language) }
+  return { title: clean(title), description: clean(description), language: clean(language), ogImage: clean(ogImage) }
+}
+
+/** The words a visitor would read in a rendered page's markdown: no image or link syntax, no URLs. */
+export function visibleText(markdown: string): string {
+  return markdown
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[#>*_`|~=\\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const NOT_FOUND_TEXT = /\b404\b|\bpage (?:was )?not found\b|\bcould not be found\b|\bcouldn['’]t be found\b|\b(?:page|route) (?:does not|doesn['’]t) exist\b/i
+
+/**
+ * A short rendered page that says "page not found" (single-page apps answer
+ * every path with HTTP 200 and let the router show this). Pages over 400
+ * visible characters are not judged: they are content that mentions a 404.
+ */
+export function notFoundScreen(markdown: string): boolean {
+  const text = visibleText(markdown)
+  return text.length > 0 && text.length < 400 && NOT_FOUND_TEXT.test(text)
+}
+
+/**
+ * Starter-template titles and descriptions (Lovable, Bolt, Vite, Create React
+ * App, Create Next App, v0, editors' "Document"), compared whole, any case.
+ * Lovable's template (checked 2026-11-11) ships description "Lovable
+ * Generated Project" and og:image on lovable.dev.
+ */
+const PLACEHOLDER_TITLE = /^(?:lovable app|lovable generated project|vite \+ (?:react|vue|svelte|preact|lit|solid|qwik)(?: \+ ts)?|vite app|react app|create next app|my bolt app|v0 app|my v0 project|welcome to astro\.?|document|untitled(?: document)?|welcome to nginx!?)$/i
+const PLACEHOLDER_DESCRIPTION = /^(?:lovable generated project|generated by create next app|web site created using create-react-app|created with v0)$/i
+const PLACEHOLDER_IMAGE_HOST = /(^|\.)lovable\.dev$/i
+
+export function placeholderParts(p: Pick<PageResult, 'title' | 'description' | 'ogImage'>): string[] {
+  const out: string[] = []
+  if (p.title && PLACEHOLDER_TITLE.test(p.title.trim())) out.push(`title "${p.title.trim().slice(0, 60)}"`)
+  if (p.description && PLACEHOLDER_DESCRIPTION.test(p.description.trim())) out.push(`description "${p.description.trim().slice(0, 60)}"`)
+  if (p.ogImage) {
+    try {
+      const u = new URL(p.ogImage)
+      if (PLACEHOLDER_IMAGE_HOST.test(u.hostname)) out.push(`share image from ${u.hostname}`)
+    } catch {
+      // not a URL
+    }
+  }
+  return out
+}
+
+/** Tags whose http:// file the browser refuses to load on an https page (scripts, styles, frames). */
+const ACTIVE_TAGS = new Set(['script', 'iframe', 'frame', 'object', 'embed', 'link'])
+
+/**
+ * http:// files an https page loads: `active` (script, stylesheet, frame,
+ * object: the browser blocks them) and `passive` (img, audio, video, source,
+ * icon: shown with a "Not secure" warning, or upgraded). Links (<a href>) and
+ * XML namespaces are not files the page loads.
+ */
+export function mixedContent(html: string): { active: string[]; passive: string[] } {
+  const active = new Set<string>()
+  const passive = new Set<string>()
+  for (const m of html.matchAll(/<(img|script|iframe|frame|source|video|audio|track|embed|object|link)\b[^>]*>/gi)) {
+    const tag = m[1].toLowerCase()
+    const text = m[0]
+    let isActive = ACTIVE_TAGS.has(tag)
+    if (tag === 'link') {
+      const rel = /[\s"']rel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(text)
+      const rels = (rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? '').toLowerCase().split(/\s+/)
+      if (rels.includes('stylesheet')) isActive = true
+      else if (rels.includes('icon')) isActive = false
+      else continue
+    }
+    const attr = tag === 'object' ? 'data' : tag === 'link' ? 'href' : 'src'
+    const v = new RegExp(`[\\s"']${attr}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(text)
+    const url = decodeEntities(v?.[1] ?? v?.[2] ?? v?.[3] ?? '')
+    if (!/^http:\/\//i.test(url)) continue
+    ;(isActive ? active : passive).add(url.slice(0, 120))
+  }
+  return { active: [...active], passive: [...passive] }
 }
 
 /** `<script src>` values from raw HTML, in order. */
@@ -226,7 +381,8 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       where: list(errorStatus.map((p) => `${pathOf(p.url)} (${p.statusCode})`)),
     })
   }
-  const screens = pages.filter((p) => !(typeof p.statusCode === 'number' && p.statusCode >= 400) && errorPageReason(undefined, p.markdown, { title: p.title }))
+  const answered = pages.filter((p) => !(typeof p.statusCode === 'number' && p.statusCode >= 400))
+  const screens = answered.filter((p) => errorPageReason(undefined, p.markdown, { title: p.title, error: p.loadError ?? undefined }))
   if (screens.length) {
     out.push({
       rule: 'error_screen',
@@ -237,7 +393,51 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       where: list(screens.map((p) => pathOf(p.url))),
     })
   }
-  const readable = pages.filter((p) => !p.error && !(typeof p.statusCode === 'number' && p.statusCode >= 400))
+  const notFound = answered.filter((p) => p.rendered && !screens.includes(p) && notFoundScreen(p.markdown))
+  if (notFound.length) {
+    out.push({
+      rule: 'page_not_found_screen',
+      severity: 'high',
+      title: `${plural(notFound.length, 'page says', 'pages say')} "page not found"`,
+      why: 'Your site links to these pages, but visitors who click land on a "not found" message. The server still answers "OK", so search engines may list the error page as if it were real.',
+      fix: 'Fix the link, or add the missing page. In a single-page app (React, Vite, Lovable, Bolt) the router decides this: check the path is listed in your routes, spelled the same way.',
+      where: list(notFound.map((p) => pathOf(p.url))),
+    })
+  }
+  // A blank screen is judged only from the browser render: every app shell
+  // is empty in the server's HTML. A render with no title, description or
+  // lang is a render Firecrawl failed to read (site audit, 2026-10-23).
+  const blank = answered.filter(
+    (p) => p.rendered && !p.renderUnreadable && !screens.includes(p) && !notFound.includes(p) && visibleText(p.markdown).length < BLANK_TEXT_CHARS,
+  )
+  if (blank.length) {
+    out.push({
+      rule: 'blank_page',
+      severity: 'high',
+      title: `${plural(blank.length, 'page shows', 'pages show')} almost nothing`,
+      why: 'We opened the page in a real browser and found almost no words on it, so visitors most likely see a blank or half-loaded screen. In apps built with React or Vite this usually means the JavaScript stopped with an error while starting.',
+      fix: 'Open the page in a private window, right-click, choose Inspect, then Console. A red error there is the cause: often a missing environment variable on your host, or a call to an API that failed. Paste that error into your AI tool to fix it.',
+      where: list(blank.map((p) => pathOf(p.url))),
+    })
+  }
+  const readable = answered.filter((p) => !p.error)
+  const placeholders = readable.flatMap((p) => {
+    const parts = placeholderParts(p)
+    return parts.length ? [{ page: p, parts }] : []
+  })
+  if (placeholders.length) {
+    const titled = placeholders.flatMap((x) => (x.parts[0]?.startsWith('title ') ? [x.page.title!.trim()] : []))
+    out.push({
+      rule: 'placeholder_metadata',
+      severity: 'medium',
+      title: titled.length
+        ? `Your site is still called "${titled[0].slice(0, 60)}"`
+        : 'Your site still uses the starter template\'s description or share image',
+      why: 'That is the text the app builder or template filled in. It is the name on the browser tab, the blue link in search results and the card people see when your link is shared, so the app looks unfinished to someone who has never heard of it.',
+      fix: 'Change the <title>, <meta name="description"> and og:image in your index.html (Lovable, Bolt and Vite keep them there; in Next.js set `metadata` in app/layout). Or ask your AI tool: "Replace the template title, description and share image in index.html with my app\'s real name, a one-sentence description and my own image."',
+      where: list(placeholders.map((x) => `${pathOf(x.page.url)} (${x.parts.join(', ')})`)),
+    })
+  }
   const noTitle = readable.filter((p) => !p.title)
   if (noTitle.length) {
     out.push({
@@ -298,7 +498,8 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
     if (headers['content-security-policy'] === false) {
       out.push({
         rule: 'missing_csp',
-        severity: 'medium',
+        // Hardening, not something a visitor sees broken (ADR 0056): below breakage.
+        severity: 'low',
         title: 'No Content-Security-Policy header',
         why: 'If someone gets a script into your page (a comment, a profile name), the browser runs it. A CSP tells the browser which scripts are yours.',
         fix: 'Start with `Content-Security-Policy: default-src \'self\'` in your host\'s headers file, then allow the domains your app really loads from.',
@@ -307,7 +508,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
     if (headers['strict-transport-security'] === false) {
       out.push({
         rule: 'missing_hsts',
-        severity: 'medium',
+        severity: 'low',
         title: 'No Strict-Transport-Security header',
         why: 'Without it, a visitor on public Wi-Fi can be pushed onto an unencrypted copy of your site before the redirect happens.',
         fix: 'Send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from your host.',
@@ -339,11 +540,74 @@ export function brokenLinkFinding(broken: Array<{ url: string; status: number | 
   if (!broken.length) return null
   return {
     rule: 'broken_links',
-    severity: 'medium',
-    title: `${plural(broken.length, 'link', 'links')} on your home page ${broken.length === 1 ? 'goes' : 'go'} nowhere`,
+    severity: 'high',
+    title: `${plural(broken.length, 'link', 'links')} on your site ${broken.length === 1 ? 'goes' : 'go'} nowhere`,
     why: 'Visitors click and land on an error page, and search engines count every dead link against you.',
     fix: 'Fix or remove each link below. If a page moved, redirect the old address to the new one.',
     where: list(broken.map((b) => `${pathOf(b.url)} (${b.status ?? 'no answer'})`)),
+  }
+}
+
+/** Same-origin images by path, others by host + path (they live on a CDN). */
+function imageLabel(url: string, origins: ReadonlySet<string>): string {
+  try {
+    const u = new URL(url)
+    return origins.has(u.origin) ? pathOf(url) : `${u.host}${u.pathname}`
+  } catch {
+    return url
+  }
+}
+
+export function brokenImageFinding(broken: Array<{ url: string; status: number | null; notAnImage?: boolean }>, origins: ReadonlySet<string>): Finding | null {
+  if (!broken.length) return null
+  return {
+    rule: 'broken_images',
+    severity: 'high',
+    title: `${plural(broken.length, 'image', 'images')} on your site ${broken.length === 1 ? 'does' : 'do'} not load`,
+    why: 'Visitors see an empty box or a broken-picture icon where the image should be. If it is your share image, the card people see when your link is shared has no picture.',
+    fix: 'Open each address below. A 404 means the file was renamed, moved or never deployed: put it back (in Vite, Lovable and Bolt the public/ folder) or update the address in the page. "A web page, not an image" means the address is wrong and your host answered with your app instead.',
+    where: list(broken.map((b) => `${imageLabel(b.url, origins)} (${b.notAnImage ? 'a web page, not an image' : b.status ?? 'no answer'})`)),
+  }
+}
+
+/** The home page names no og:image: shared links show no picture. */
+export function shareImageFinding(home: PageResult | undefined): Finding | null {
+  if (!home || home.error || (typeof home.statusCode === 'number' && home.statusCode >= 400) || home.ogImage) return null
+  return {
+    rule: 'missing_share_image',
+    severity: 'low',
+    title: 'Links to your site show no preview picture',
+    why: 'When someone shares your address in iMessage, WhatsApp, Slack or X, the card shows a picture only if the page names one. Without it the link looks bare and fewer people click.',
+    fix: 'Add <meta property="og:image" content="https://your-site.com/og.png"> to the page head, pointing at a 1200 x 630 image of your app.',
+    where: [pathOf(home.url)],
+  }
+}
+
+/** http:// files on https pages: blocked scripts and styles first. */
+export function mixedContentFinding(pages: readonly PageResult[]): Finding | null {
+  const active = new Set<string>()
+  const passive = new Set<string>()
+  for (const p of pages) {
+    if (!p.url.startsWith('https:')) continue
+    for (const html of [p.html, p.staticHtml]) {
+      if (!html) continue
+      const m = mixedContent(html)
+      m.active.forEach((u) => active.add(u))
+      m.passive.forEach((u) => passive.add(u))
+    }
+  }
+  if (!active.size && !passive.size) return null
+  return {
+    rule: 'mixed_content',
+    severity: active.size ? 'high' : 'medium',
+    title: active.size
+      ? `Your https pages load ${plural(active.size, 'script or style', 'scripts or styles')} over plain http`
+      : `Your https pages load ${plural(passive.size, 'file', 'files')} over plain http`,
+    why: active.size
+      ? 'Browsers refuse to run an http:// script or style on an https page, so the part of your app that needs it does not work or looks broken. Nothing tells the visitor why.'
+      : 'Browsers show an http:// image or video on an https page with a "Not secure" warning, or try https and show nothing if that fails.',
+    fix: 'Change each address below to https:// (or to a path on your own site). If the file is not available over https, host a copy yourself.',
+    where: list([...active, ...passive]),
   }
 }
 
@@ -359,8 +623,83 @@ export function sourceMapFinding(scripts: string[]): Finding | null {
   }
 }
 
+/** Severity first, then breakage before content before security; stable otherwise. */
 export function sortFindings(findings: Finding[]): Finding[] {
-  return [...findings].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
+  const kind = (f: Finding) => KIND_ORDER[RULE_KIND[f.rule] ?? 'content']
+  return [...findings].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || kind(a) - kind(b))
+}
+
+/** One plain sentence (stored as the check's error, at most 300 characters) and what to try. */
+export const UNREACHABLE_TEXT: Record<UnreachableReason, { error: string; tryThis: string; certain: boolean }> = {
+  dns: {
+    error: 'Your address does not lead to any server: its domain name did not resolve.',
+    tryThis: 'Check the spelling first. If it is right, open your domain provider (Namecheap, GoDaddy, Cloudflare, …): make sure the domain has not expired and that it points at your host with the A or CNAME record your host gave you. A domain you just connected can take a few hours to start working.',
+    certain: true,
+  },
+  tls: {
+    error: 'Your site answered, but its HTTPS certificate is broken, so browsers show a security warning instead of your app.',
+    tryThis: 'Open your host\'s domain settings and re-issue the certificate (Vercel, Netlify and Cloudflare do it for free once the domain points at them). Then open the site in a private window: the warning must be gone.',
+    certain: true,
+  },
+  timeout: {
+    error: 'Your site did not answer in time. It may be down, asleep or very slow right now.',
+    tryThis: 'Open it yourself in a private window. If it loads slowly, a free-tier host may have been waking it up: run the check again in a minute. If it never loads, read your host\'s status page and the log of your last deploy.',
+    certain: false,
+  },
+  refused: {
+    error: 'A server exists at this address, but it refused the connection.',
+    tryThis: 'Your host is not serving the site. Check that the last deploy succeeded and that the domain is attached to the right project at your host.',
+    certain: true,
+  },
+  blocked: {
+    error: 'This address sent us on to a private or internal address, so we stopped.',
+    tryThis: 'Open the address yourself and see where you end up. A redirect to localhost or an internal name is usually a setting left over from development.',
+    certain: true,
+  },
+  no_answer: {
+    error: 'Nothing answered at this address.',
+    tryThis: 'Open it yourself in a private window. If it works for you, run the check again in a few minutes; if it does not, your host\'s dashboard will show why.',
+    certain: false,
+  },
+}
+
+function errText(e: unknown, depth = 0): string {
+  if (e == null || depth > 3) return ''
+  const x = e as { name?: unknown; message?: unknown; cause?: unknown }
+  const own = typeof x.message === 'string' ? `${typeof x.name === 'string' ? x.name : ''} ${x.message}` : String(e)
+  return `${own} ${errText(x.cause, depth + 1)}`
+}
+
+/**
+ * Why nothing could be read, from the plain fetch's error, Firecrawl's error
+ * (its `code`, e.g. SCRAPE_DNS_RESOLUTION_ERROR) and a DNS lookup. With a DNS
+ * resolver, `guardedFetch` reports a name that does not exist as a blocked
+ * address, so `dnsMissing` is what tells those apart.
+ */
+export function unreachableReason(signals: { direct?: unknown; render?: unknown; dnsMissing?: boolean }): UnreachableReason {
+  const text = `${errText(signals.direct)} ${errText(signals.render)}`
+  if (signals.dnsMissing || /SCRAPE_DNS_RESOLUTION_ERROR|dns error|failed to lookup|getaddrinfo|ENOTFOUND|name or service not known|nodename nor servname|NXDOMAIN/i.test(text)) return 'dns'
+  if (/SCRAPE_SSL_ERROR|certificate|\bTLS\b|\bSSL\b|handshake/i.test(text)) return 'tls'
+  if (/connection refused|ECONNREFUSED|connection reset|ECONNRESET/i.test(text)) return 'refused'
+  if (signals.direct instanceof BlockedUrlError) return 'blocked'
+  if (/TimeoutError|AbortError|SCRAPE_TIMEOUT|timed? ?out/i.test(text)) return 'timeout'
+  return 'no_answer'
+}
+
+/** True when DNS says the name has no address at all (NXDOMAIN or no records). */
+async function dnsMissing(hostname: string, resolver: DnsResolver | null | undefined): Promise<boolean> {
+  if (!resolver) return false
+  const timers: ReturnType<typeof setTimeout>[] = []
+  const lookup = (type: 'A' | 'AAAA') =>
+    Promise.race([resolver(hostname, type), new Promise<never>((_, reject) => timers.push(setTimeout(() => reject(new Error('dns lookup timed out')), 3_000)))])
+  const answers = await Promise.allSettled([lookup('A'), lookup('AAAA')])
+  timers.forEach(clearTimeout)
+  // Same test as public-url-guard's resolvesPublic: NotFound or "no data" means no such name.
+  return answers.every((a) =>
+    a.status === 'fulfilled'
+      ? a.value.length === 0
+      : (a.reason as { name?: string })?.name === 'NotFound' || /NXDOMAIN|no data|not found/i.test(String((a.reason as Error)?.message ?? '')),
+  )
 }
 
 // ── Network ─────────────────────────────────────────────────────────────────
@@ -383,14 +722,17 @@ function firstString(v: unknown): string | null {
   return null
 }
 
-/** One Firecrawl scrape: 1 credit (markdown + links, no PDF parsing). */
+/** Firecrawl formats: all basic (1 credit a page). No json, query, summary or highlights (+4 each). */
+export const FIRECRAWL_FORMATS = ['markdown', 'links', 'rawHtml'] as const
+
+/** One Firecrawl scrape: 1 credit (markdown + links + rawHtml, no PDF parsing). */
 export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSignal, timeoutMs: number): Promise<PageResult> {
   const res = await (deps.fetchImpl ?? fetch)('https://api.firecrawl.dev/v2/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.firecrawlKey}` },
     body: JSON.stringify({
       url,
-      formats: ['markdown', 'links'],
+      formats: [...FIRECRAWL_FORMATS],
       onlyMainContent: false,
       parsers: [],
       timeout: timeoutMs,
@@ -399,24 +741,39 @@ export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSign
     signal,
   })
   if (!res.ok) {
-    await res.body?.cancel().catch(() => {})
-    throw new Error(res.status === 402 ? 'FIRECRAWL_NO_CREDITS' : `FIRECRAWL_HTTP_${res.status}`)
+    if (res.status === 402) {
+      await res.body?.cancel().catch(() => {})
+      throw new Error('FIRECRAWL_NO_CREDITS')
+    }
+    // Firecrawl names why a page failed (SCRAPE_DNS_RESOLUTION_ERROR,
+    // SCRAPE_SSL_ERROR, SCRAPE_TIMEOUT): kept for an unreachable site's reason.
+    const body = (await readCappedText(res, 4_000).catch(() => '')) || ''
+    const code = /"code"\s*:\s*"([A-Z_]{3,60})"/.exec(body)?.[1] ?? /\b(SCRAPE_[A-Z_]{3,50})\b/.exec(body)?.[1]
+    throw new Error(`FIRECRAWL_HTTP_${res.status}${code ? ` ${code}` : ''}`)
   }
-  const json = (await res.json()) as { data?: { markdown?: string; links?: unknown; metadata?: Record<string, unknown> } }
+  const json = (await res.json()) as { data?: { markdown?: string; links?: unknown; rawHtml?: unknown; metadata?: Record<string, unknown> } }
   const meta = json.data?.metadata ?? {}
   // Where Firecrawl ended up after redirects must still be a public address.
   const landed = firstString(meta.url) ?? firstString(meta.sourceURL) ?? url
   const landedCheck = checkPublicUrl(landed)
   if (!landedCheck.ok) throw new Error('REDIRECTED_TO_PRIVATE')
   const status = typeof meta.statusCode === 'number' ? meta.statusCode : null
+  const title = firstString(meta.title)
+  const description = firstString(meta.description) ?? firstString(meta.ogDescription)
+  const language = firstString(meta.language)
   return {
     url: landedCheck.url.href,
     statusCode: status,
-    title: firstString(meta.title),
-    description: firstString(meta.description) ?? firstString(meta.ogDescription),
-    language: firstString(meta.language),
+    title,
+    description,
+    language,
     markdown: typeof json.data?.markdown === 'string' ? json.data.markdown : '',
     links: Array.isArray(json.data?.links) ? (json.data!.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+    rendered: true,
+    renderUnreadable: isUnreadableRender({ title, description, language }),
+    html: typeof json.data?.rawHtml === 'string' ? json.data.rawHtml.slice(0, HTML_CAP_BYTES) : '',
+    ogImage: firstString(meta.ogImage) ?? firstString(meta['og:image']),
+    loadError: firstString(meta.error),
   }
 }
 
@@ -469,7 +826,17 @@ async function scriptHasSourceMap(res: Response): Promise<boolean> {
   }
 }
 
-async function checkLink(url: string, deps: CheckDeps, deadline: AbortSignal): Promise<{ url: string; status: number | null; broken: boolean }> {
+interface Probe {
+  url: string
+  /** The answer's status; null when nothing answered (or the request was not made). */
+  status: number | null
+  broken: boolean
+  /** An image address that answered with a web page (an SPA's index.html). */
+  notAnImage?: boolean
+}
+
+/** HEAD (then GET for hosts that refuse HEAD) one link or image; the body is never read. */
+async function probe(url: string, deps: CheckDeps, deadline: AbortSignal, image = false): Promise<Probe> {
   const headers = { 'User-Agent': USER_AGENT }
   try {
     let { response } = await guardedFetch(url, { method: 'HEAD', headers, signal: within(deadline, LINK_TIMEOUT_MS), fetchImpl: deps.fetchImpl, resolver: deps.resolver })
@@ -479,7 +846,9 @@ async function checkLink(url: string, deps: CheckDeps, deadline: AbortSignal): P
     }
     await response.body?.cancel().catch(() => {})
     const s = response.status
-    return { url, status: s, broken: s === 404 || s === 410 || s >= 500 }
+    // A missing image on a single-page-app host comes back as the app's HTML with a 200.
+    const notAnImage = image && s >= 200 && s < 300 && /text\/html/i.test(response.headers.get('content-type') ?? '')
+    return { url, status: s, broken: isBrokenStatus(s) || notAnImage, ...(notAnImage ? { notAnImage } : {}) }
   } catch (err) {
     // A timeout is not proof the link is dead (the whole check is on a clock).
     const name = (err as { name?: string })?.name
@@ -487,6 +856,11 @@ async function checkLink(url: string, deps: CheckDeps, deadline: AbortSignal): P
     if (err instanceof BlockedUrlError) return { url, status: null, broken: false }
     return { url, status: null, broken: true }
   }
+}
+
+/** A probe that got an answer (or plainly failed); timeouts and refused addresses are not "checked". */
+function answered(p: Probe): boolean {
+  return p.status !== null || p.broken
 }
 
 async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -503,14 +877,36 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) 
   return out
 }
 
+/** http(s) image addresses of the pages (rendered HTML first), then the home page's og:image; deduped. */
+function imageAddresses(pages: readonly PageResult[]): string[] {
+  const out = new Set<string>()
+  for (const p of pages) {
+    for (const src of htmlImageSrcs(p.html || p.staticHtml || '', p.url)) if (/^https?:/i.test(src)) out.add(src)
+  }
+  const og = pages[0]?.ogImage
+  if (og) {
+    try {
+      const u = new URL(og, pages[0].url)
+      if (/^https?:$/.test(u.protocol)) out.add(u.href)
+    } catch {
+      // not a URL
+    }
+  }
+  return [...out]
+}
+
 /**
  * Run the whole check on `startUrl` (already through `checkPublicUrl` and the
- * DNS check). Never throws for a site problem: those are findings. Throws
- * only when Firecrawl refuses Mushi's own key, so the caller can say so.
+ * DNS check). Never throws for a site problem: those are findings, or
+ * `summary.unreachable` when no page could be read at all. Throws only when
+ * Firecrawl refuses Mushi's own key, so the caller can say so.
  */
 export async function runProductionCheck(startUrl: string, deps: CheckDeps): Promise<CheckResult> {
+  const now = deps.now ?? Date.now
+  const startedAt = now()
+  const deadlineMs = deps.deadlineMs ?? CHECK_DEADLINE_MS
   const deadlineCtl = new AbortController()
-  const timer = setTimeout(() => deadlineCtl.abort(new DOMException('deadline', 'TimeoutError')), deps.deadlineMs ?? CHECK_DEADLINE_MS)
+  const timer = setTimeout(() => deadlineCtl.abort(new DOMException('deadline', 'TimeoutError')), deadlineMs)
   const deadline = deadlineCtl.signal
   const incomplete: string[] = []
   const start = new URL(startUrl)
@@ -535,6 +931,7 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
     if (home.status === 'rejected' && /FIRECRAWL_(HTTP_40[13]|HTTP_429|NO_CREDITS)/.test(String((home.reason as Error)?.message))) {
       throw home.reason
     }
+    if (httpProbe.status === 'fulfilled') await httpProbe.value.response.body?.cancel().catch(() => {})
 
     // HTTPS: the plain https fetch answered, and http:// lands on https://.
     let https: CheckSummary['https'] = 'unknown'
@@ -544,7 +941,6 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
       https = notTheSite ? 'unknown' : 'no_https'
       if (notTheSite) incomplete.push('the plain fetch of the home page')
     } else if (httpProbe.status === 'fulfilled') {
-      await httpProbe.value.response.body?.cancel().catch(() => {})
       https = httpProbe.value.finalUrl.startsWith('https:') ? 'ok' : 'not_redirected'
     } else {
       https = 'ok' // nothing answers on port 80: nobody lands on plain http
@@ -560,34 +956,68 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
 
     const pages: PageResult[] = []
     let homeLinks: string[] = []
-    const directMeta = direct.status === 'fulfilled' && direct.value.html ? readHtmlMeta(direct.value.html) : null
+    const directHtml = direct.status === 'fulfilled' ? direct.value.html : ''
+    const directMeta = directHtml ? readHtmlMeta(directHtml) : null
     if (home.status === 'fulfilled') {
       origins.add(new URL(home.value.url).origin)
-      // The plain fetch's HTML is the server's own answer; prefer it for the
-      // home page's metadata and keep Firecrawl's when the HTML has none.
+      // The plain fetch's HTML is the server's own answer (what link previews
+      // and search engines read); prefer it for the home page's metadata and
+      // keep Firecrawl's when the HTML has none.
       pages.push({
         ...home.value,
         title: directMeta?.title ?? home.value.title,
         description: directMeta?.description ?? home.value.description,
         language: directMeta?.language ?? home.value.language,
+        ogImage: directMeta?.ogImage ?? home.value.ogImage ?? null,
+        staticHtml: directHtml,
       })
       homeLinks = home.value.links
     } else {
       incomplete.push('the rendered home page')
-      if (direct.status === 'fulfilled' && directMeta) {
-        pages.push({ url: direct.value.finalUrl, statusCode: direct.value.response.status, ...directMeta, markdown: '', links: [] })
+      if (direct.status === 'fulfilled') {
+        // Whatever the server answered is a page that was read, HTML or not:
+        // its status is the report (a 5xx is a finding, never "nothing found").
+        const meta = directMeta ?? { title: null, description: null, language: null, ogImage: null }
+        pages.push({ url: direct.value.finalUrl, statusCode: direct.value.response.status, ...meta, markdown: '', links: [], html: directHtml })
       }
     }
-    if (!homeLinks.length && direct.status === 'fulfilled') homeLinks = readAnchorHrefs(direct.value.html)
-    const homeBase = pages[0]?.url ?? httpsUrl.href
+
+    // Nothing could be read at all: a failed check that says why, never an
+    // empty pass (2026-11-11: an address that does not resolve read "done").
+    if (!pages.length) {
+      const reason = unreachableReason({
+        direct: direct.status === 'rejected' ? direct.reason : undefined,
+        render: home.status === 'rejected' ? home.reason : undefined,
+        dnsMissing: await dnsMissing(start.hostname, deps.resolver),
+      })
+      return {
+        findings: [],
+        summary: {
+          pages: [],
+          headers: securityHeaders,
+          https,
+          linksChecked: 0,
+          imagesChecked: 0,
+          scriptsChecked: 0,
+          scriptsWithSourceMaps: 0,
+          rendered: false,
+          incomplete,
+          unreachable: { reason },
+        },
+      }
+    }
+
+    if (!homeLinks.length && directHtml) homeLinks = readAnchorHrefs(directHtml)
+    const homeBase = pages[0].url
 
     const candidates = samePageLinks(homeLinks, homeBase, origins)
     const subpages = pickSubpages(candidates, homeBase)
     const linkTargets = candidates.slice(0, MAX_LINKS).map((u) => u.href)
+    const homeImages = imageAddresses(pages).slice(0, MAX_IMAGES)
 
     const scripts =
       direct.status === 'fulfilled'
-        ? readScriptSrcs(direct.value.html)
+        ? readScriptSrcs(directHtml)
             .map((s) => {
               try {
                 return new URL(s, direct.value.finalUrl)
@@ -599,10 +1029,12 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
             .slice(0, MAX_SCRIPTS)
         : []
 
-    // 2. In parallel: sub-page renders, link checks, script source-map checks.
-    const [subResults, linkResults, scriptResults] = await Promise.all([
+    // 2. In parallel: sub-page renders, the home page's links and images, and
+    //    script source-map checks.
+    const [subResults, linkResults, imageResults, scriptResults] = await Promise.all([
       Promise.allSettled(subpages.map((u) => scrapePage(u.href, deps, within(deadline, 12_000), 10_000))),
-      mapLimit(linkTargets, 5, (u) => checkLink(u, deps, deadline)),
+      mapLimit(linkTargets, 5, (u) => probe(u, deps, deadline)),
+      mapLimit(homeImages, 4, (u) => probe(u, deps, deadline, true)),
       Promise.allSettled(
         scripts.map(async (u) => {
           const { response } = await guardedFetch(u.href, { headers: { 'User-Agent': USER_AGENT }, signal: within(deadline, 6_000), fetchImpl: deps.fetchImpl, resolver: deps.resolver })
@@ -622,10 +1054,42 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
     const withMaps = scriptResults.flatMap((r) => (r.status === 'fulfilled' && r.value ? [r.value] : []))
     if (scriptResults.some((r) => r.status === 'rejected')) incomplete.push('the script check')
 
+    // 3. The other pages' own links and images, while the clock allows one
+    //    more round (one cap for links, one shared with the home page's images).
+    const seenLinks = new Set([...linkTargets, homeBase, ...pages.map((p) => p.url)])
+    const moreLinks: string[] = []
+    for (const p of pages.slice(1)) {
+      for (const u of samePageLinks(p.links, p.url, origins)) {
+        if (moreLinks.length >= MAX_SUBPAGE_LINKS) break
+        if (!seenLinks.has(u.href)) {
+          seenLinks.add(u.href)
+          moreLinks.push(u.href)
+        }
+      }
+    }
+    const moreImages = imageAddresses(pages).filter((u) => !homeImages.includes(u)).slice(0, Math.max(0, MAX_IMAGES - homeImages.length))
+    let moreLinkResults: Probe[] = []
+    let moreImageResults: Probe[] = []
+    if (moreLinks.length || moreImages.length) {
+      if (deadlineMs - (now() - startedAt) > LINK_TIMEOUT_MS + 1_000) {
+        ;[moreLinkResults, moreImageResults] = await Promise.all([
+          mapLimit(moreLinks, 5, (u) => probe(u, deps, deadline)),
+          mapLimit(moreImages, 4, (u) => probe(u, deps, deadline, true)),
+        ])
+      }
+      const unanswered = [...moreLinkResults, ...moreImageResults].filter((p) => !answered(p)).length
+      if (moreLinkResults.length + moreImageResults.length === 0 || unanswered > 0) incomplete.push('the links and images on the other pages')
+    }
+    const links = [...linkResults, ...moreLinkResults]
+    const images = [...imageResults, ...moreImageResults]
+
     const findings = [
       ...pageFindings(pages),
       ...transportFindings(https, securityHeaders),
-      brokenLinkFinding(linkResults.filter((l) => l.broken)),
+      brokenLinkFinding(links.filter((l) => l.broken)),
+      brokenImageFinding(images.filter((l) => l.broken), origins),
+      mixedContentFinding(pages),
+      shareImageFinding(pages[0]),
       sourceMapFinding(withMaps),
     ].filter((f): f is Finding => f !== null)
 
@@ -635,7 +1099,8 @@ export async function runProductionCheck(startUrl: string, deps: CheckDeps): Pro
         pages: pages.map((p) => ({ path: pathOf(p.url), status: p.statusCode, ...(p.error ? { error: p.error } : {}) })),
         headers: securityHeaders,
         https,
-        linksChecked: linkResults.length,
+        linksChecked: links.filter(answered).length,
+        imagesChecked: images.filter(answered).length,
         scriptsChecked: scripts.length,
         scriptsWithSourceMaps: withMaps.length,
         rendered: home.status === 'fulfilled',

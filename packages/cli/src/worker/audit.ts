@@ -29,6 +29,7 @@ import { closeSync, constants as fsConstants, existsSync, fstatSync, mkdirSync, 
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { agentEnv, clearWorktree, defaultBranch, failureTail, git, installCommand, installDeps, runProc, type Api } from '../commands/work.js'
+import { agentRun, agentSpec, type LocalAgent } from '../commands/work-agents.js'
 
 /** One model call; the 2026-10-26 loop needed a hard stop at 15 min. */
 const ASK_TIMEOUT_MS = 15 * 60_000
@@ -307,6 +308,8 @@ function saveAuditState(lane: string, s: AuditState): void {
 interface AuditRunOptions {
   repoDir: string
   laneName: string
+  /** The local agent (worker.json `agent`), read-only here; default cursor. */
+  agent?: LocalAgent
   model?: string
   reviewModel: string | null
   log: (line: string) => void
@@ -334,13 +337,17 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
       return 'error'
     }
   }
-  const ask = async (model: string | undefined, prompt: string) =>
-    runProc('cursor-agent', ['-p', '--mode', 'ask', '--trust', '--output-format', 'text', '--workspace', wt, ...(model ? ['--model', model] : []), prompt], {
+  const agent = o.agent ?? 'cursor'
+  const ask = async (model: string | undefined, prompt: string) => {
+    const inv = agentRun(agent, { mode: 'ask', workspace: wt, model, prompt })
+    return runProc(inv.cmd, inv.args, {
       cwd: wt,
       env: agentEnv(process.env, empty),
       timeoutMs: ASK_TIMEOUT_MS,
       signal: o.signal,
+      ...(inv.input !== undefined ? { input: inv.input } : {}),
     })
+  }
 
   let filed = 0
   let held = 0
@@ -371,7 +378,7 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
     const proposed = await ask(o.model, proposePrompt(screen, state.pass))
     if (o.signal?.aborted) return { result: 'stopped', detail: `stopped (lost the lease) while reading ${screen}` }
     if (proposed.timedOut) return { result: 'timeout', failureKind: 'code', detail: `the model did not answer about ${screen} within ${ASK_TIMEOUT_MS / 60_000} min` }
-    if (proposed.code !== 0) return { result: 'failed', failureKind: 'infra', detail: `cursor-agent exited ${proposed.code}: ${failureTail(proposed, 200)}` }
+    if (proposed.code !== 0) return { result: 'failed', failureKind: 'infra', detail: `${agentSpec(agent).bin} exited ${proposed.code}: ${failureTail(proposed, 200)}` }
     const proposals = parseProposals(proposed.stdout)
 
     let reproduced = 0

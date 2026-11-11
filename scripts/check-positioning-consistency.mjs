@@ -102,8 +102,9 @@ function mustContainHero(rel, label) {
   }
 }
 mustContain('README.md', V2.hero, 'v2 hero (MUSHI_TAGLINE_V2.hero)')
+// The landing H1 is JSX in index.mdx; marketing-ui's Hero.tsx was removed on
+// 2026-11-11 (nothing rendered it since PublicHomePage went in #380).
 mustContainHero('apps/docs/content/index.mdx', 'v2 hero on docs landing')
-mustContainHero('packages/marketing-ui/src/Hero.tsx', 'v2 hero in marketing-ui Hero')
 
 // 5. Primary-buyer anchor — every positioning surface names the buyer.
 for (const f of ['VISION.md', 'AGENTS.md', 'README.md']) {
