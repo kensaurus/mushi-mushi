@@ -1737,6 +1737,15 @@
 .responsive-table[data-overflow-left="true"][data-sticky-lead="3"] table tbody td:nth-child(3) {
   box-shadow: 6px 0 10px -4px color-mix(in oklch, var(--color-fg) 18%, transparent);
 }
+/* Phones: the pinned lead columns (summary is 34rem in the triage table) are
+   wider than the viewport, so they cover the sort headers and the scrolled
+   columns. Below `sm`, unpin them and let the whole row scroll. */
+@media (max-width: 639.98px) {
+  .responsive-table[data-sticky-lead="3"] table thead th:nth-child(-n+3),
+  .responsive-table[data-sticky-lead="3"] table tbody td:nth-child(-n+3) {
+    position: static;
+  }
+}
 
 /* Row kebab — visible on touch; hover-reveal on fine pointers (NN/g #7). */
 @media (hover: hover) and (pointer: fine) {
