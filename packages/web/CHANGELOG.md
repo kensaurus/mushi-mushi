@@ -1,5 +1,11 @@
 # @mushi-mushi/web
 
+## 1.33.7
+
+### Patch Changes
+
+- 7f3dd9a: The widget's footer mark now uses the product's full name: "Bug reports by Mushi Mushi" (and the same in Japanese, Spanish, Thai and Chinese), matching the terms and the console settings page.
+
 ## 1.33.6
 
 ### Patch Changes
