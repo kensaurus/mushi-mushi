@@ -62,38 +62,49 @@ import {
 
 /**
  * Minimal chainable Supabase query-builder stub. Every filter method returns the
- * same object; it is both awaitable (resolves to `result`) and exposes
- * `maybeSingle()` (resolves to `result`). That covers both the `.maybeSingle()`
- * subscription/project lookups and the directly-awaited usage-count query.
+ * same object; it is both awaitable (resolves to `awaited`) and exposes
+ * `maybeSingle()` (resolves to `single`). That covers the `.maybeSingle()`
+ * project/subscription lookups, the awaited team app list and the
+ * directly-awaited usage counts. `.in()` calls are recorded.
  */
-function makeQuery(result: unknown, shadowResult?: unknown) {
+function makeQuery(single: unknown, awaited: unknown, shadowResult?: unknown, ins?: Array<[string, unknown]>) {
   const q: Record<string, unknown> = {}
   let shadow = false
-  for (const m of ['select', 'in', 'order', 'limit', 'not', 'gte', 'lt']) {
+  for (const m of ['select', 'order', 'limit', 'not', 'gte', 'lt']) {
     q[m] = () => q
+  }
+  q.in = (col: string, val: unknown) => {
+    ins?.push([col, val])
+    return q
   }
   // `.eq('metadata->>shadow', 'true')` selects the shadow-only count.
   q.eq = (col: string, val: unknown) => {
     if (col === 'metadata->>shadow' && val === 'true') shadow = true
     return q
   }
-  q.maybeSingle = async () => result
-  q.then = (resolve: (v: unknown) => unknown) => resolve(shadow && shadowResult !== undefined ? shadowResult : result)
+  q.maybeSingle = async () => single
+  q.then = (resolve: (v: unknown) => unknown) => resolve(shadow && shadowResult !== undefined ? shadowResult : awaited)
   return q
 }
+
+const TEAM_APPS = ['proj-a', 'proj-b', 'proj-c']
 
 function makeDb(opts: {
   sub?: unknown
   project?: unknown
   count: { count: number | null; error: { message: string } | null }
   shadow?: { count: number | null; error: { message: string } | null }
+  usageIns?: Array<[string, unknown]>
 }) {
+  // Every app belongs to one Stripe-billed team with three apps.
+  const project = opts.project ?? { organization_id: 'org-1', organizations: { billing_mode: 'stripe', plan_id: 'free_cloud' } }
   return {
     from: (table: string) => {
-      if (table === 'billing_subscriptions') return makeQuery({ data: opts.sub ?? null })
-      if (table === 'projects') return makeQuery({ data: opts.project ?? null })
-      if (table === 'usage_events') return makeQuery(opts.count, opts.shadow ?? { count: 0, error: null })
-      return makeQuery({ data: null })
+      if (table === 'billing_subscriptions') return makeQuery({ data: opts.sub ?? null, error: null }, null)
+      if (table === 'projects')
+        return makeQuery({ data: project, error: null }, { data: TEAM_APPS.map((id) => ({ id })), error: null })
+      if (table === 'usage_events') return makeQuery(opts.count, opts.count, opts.shadow ?? { count: 0, error: null }, opts.usageIns)
+      return makeQuery({ data: null, error: null }, { data: null, error: null })
     },
   } as unknown as Parameters<typeof checkDiagnosisQuota>[0]
 }
@@ -135,6 +146,26 @@ describe('checkDiagnosisQuota — counting works', () => {
     // The included quota resets with the calendar month, not the yearly renewal.
     expect(v.periodResetsAt).not.toBe('2027-10-10T00:00:00Z')
     expect(Date.parse(v.periodResetsAt) - Date.now()).toBeLessThanOrEqual(32 * 86_400_000)
+  })
+})
+
+describe("checkDiagnosisQuota — the quota is the team's", () => {
+  it('counts diagnoses across every app in the organization, not only the calling app', async () => {
+    const usageIns: Array<[string, unknown]> = []
+    const db = makeDb({ sub: { status: 'active' }, count: { count: 499, error: null }, usageIns })
+    const v = await checkDiagnosisQuota(db, 'proj-b')
+    expect(usageIns).toContainEqual(['project_id', TEAM_APPS])
+    expect(v.used).toBe(499)
+    expect(v.limit).toBe(500)
+  })
+
+  it('fails closed (retryable, uncached) when the team plan cannot be read', async () => {
+    const db = {
+      from: () => makeQuery({ data: null, error: { message: 'down' } }, { data: null, error: { message: 'down' } }),
+    } as unknown as Parameters<typeof checkDiagnosisQuota>[0]
+    const v = await checkDiagnosisQuota(db, 'proj-plan-read-error')
+    expect(v.allowed).toBe(false)
+    expect(v.reason).toBe('QUOTA_CHECK_UNAVAILABLE')
   })
 })
 

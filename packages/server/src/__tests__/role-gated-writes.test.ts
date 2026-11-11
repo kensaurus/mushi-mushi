@@ -90,7 +90,8 @@ function seed() {
       project_settings: [{ project_id: P, linear_access_token_ref: 'vault://fake', quota_alert_email: null }],
       project_plugins: [],
       project_retention_policies: [{ project_id: P, reports_retention_days: 365, legal_hold: true }],
-      billing_subscriptions: [{ project_id: P, status: 'active', monthly_spend_cap_usd_override: 50 }],
+      // A plan belongs to the team (organization_id is NOT NULL on the table).
+      billing_subscriptions: [{ project_id: P, organization_id: ORG, status: 'active', monthly_spend_cap_usd_override: 50 }],
       report_groups: [
         { id: G1, project_id: P, report_count: 1 },
         { id: G2, project_id: P, report_count: 1 },

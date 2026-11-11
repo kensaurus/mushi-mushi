@@ -10,8 +10,13 @@
  *    aggregator pushes to Stripe Meter).
  *  - When over included quota AND plan has NO overage (free_cloud, enterprise
  *    without overage SKU) → `allowed=false`, HTTP 402.
- *  - Hard spend cap: when the project's total overage spend this period
+ *  - Hard spend cap: when the team's total overage spend this period
  *    exceeds the cap (plan default or per-sub override), `allowed=false`.
+ *
+ * Plans belong to the team (organization), not to one app: the plan comes
+ * from `_shared/org-billing.ts` and usage is counted across every app in the
+ * organization, so one Studio subscription gives the whole team 3,000
+ * diagnoses a month (VISION.md §2.2).
  *
  * The check is hot-pathed on every `POST /v1/reports`, so we cache the
  * verdict per project for `CACHE_TTL_MS` to avoid an N+1 against
@@ -20,8 +25,9 @@
  */
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
-import { getPlan, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
+import { getPlan, type PricingPlan } from './plans.ts'
 import { diagnosisOverageBillable } from './billing-rules.ts'
+import { countOrgUsage, resolveProjectBilling } from './org-billing.ts'
 
 const CACHE_TTL_MS = 60_000
 
@@ -55,67 +61,29 @@ function periodWindow(): { start: Date; end: Date } {
   return { start, end }
 }
 
-/** Plans a complimentary org's plan replaces, per gate. */
-const COMP_OVERRIDES_HOBBY: ReadonlyArray<string> = ['hobby']
-const COMP_OVERRIDES_FREE: ReadonlyArray<string> = ['free_cloud', 'hobby']
-
 export function invalidateQuotaCache(projectId?: string): void {
   if (projectId) cache.delete(projectId)
   else cache.clear()
 }
 
 /**
- * The plan a project bills under, from its subscription row and its
- * `projects → organizations(billing_mode, plan_id)` row. Subscription wins;
- * a complimentary org's plan applies when there is no active sub or the
- * sub resolved to one of `compOverrides`. The ingest gate passes Hobby only
- * (its rule since 2026-05-08); the diagnosis gate and the codebase index
- * cap pass the free plans.
- */
-export async function planFromProjectRows(
-  sub: { status?: string | null; plan_id?: string | null } | null,
-  projectRow: unknown,
-  compOverrides: ReadonlyArray<string> = COMP_OVERRIDES_HOBBY,
-): Promise<PricingPlan> {
-  let plan = await resolvePlanFromSubscription(sub)
-  const orgRow =
-    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
-      ?.organizations ?? null
-  if (orgRow && (!sub || compOverrides.includes(plan.id)) && orgRow.billing_mode === 'complimentary') {
-    plan = await getPlan(orgRow.plan_id)
-  }
-  return plan
-}
-
-/**
- * Resolve a project's plan with the same two reads checkIngestQuota uses
- * (active subscription; project → organization). A read error throws so a
- * caller never mistakes "could not read" for the free plan.
+ * The plan a project's team bills under (org-billing.ts: complimentary org →
+ * its plan; else the org's live subscription; else organizations.plan_id;
+ * else Free). Shared by the codebase index cap and the gates below. A read
+ * error throws so a caller never mistakes "could not read" for the free plan.
  */
 export async function resolveProjectPlan(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
 ): Promise<PricingPlan> {
-  const [subRes, projectRes] = await Promise.all([
-    db
-      .from('billing_subscriptions')
-      .select('status, plan_id, current_period_end')
-      .eq('project_id', projectId)
-      .in('status', ['active', 'trialing', 'past_due'])
-      .order('current_period_end', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    db
-      .from('projects')
-      .select('organization_id, organizations(billing_mode, plan_id)')
-      .eq('id', projectId)
-      .maybeSingle(),
-  ])
-  if (subRes.error) throw new Error(`billing_subscriptions read failed: ${subRes.error.message}`)
-  if (projectRes.error) throw new Error(`projects read failed: ${projectRes.error.message}`)
-  return planFromProjectRows(subRes.data, projectRes.data, COMP_OVERRIDES_FREE)
+  return (await resolveProjectBilling(db, projectId)).plan
 }
 
+/**
+ * Report ingest gate. The plan and the count are the team's: every app in
+ * the organization shares `included_reports_per_month` (NULL on every plan
+ * since the diagnoses meter, so the count is skipped).
+ */
 export async function checkIngestQuota(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
@@ -128,68 +96,31 @@ export async function checkIngestQuota(
   const { start, end } = periodWindow()
   const periodResetsAt = end.toISOString()
 
-  // Cold-path round trips, parallelized.
-  //
-  // Until 2026-05-08 the gateway resolved the plan in up to four
-  // *serial* trips on cache miss: billing_subscriptions →
-  // (conditionally) projects → (conditionally) organizations →
-  // usage_events. The conditional org lookups fired on every Hobby
-  // ingest (i.e. the most common path), so /v1/reports paid two extra
-  // round-trips for the case complimentary orgs need.
-  //
-  // We collapse that to *one parallel batch*:
-  //   - the billing_subscriptions probe (unchanged contract);
-  //   - a single projects → organizations embedded select that
-  //     returns the org's billing_mode + plan_id in the same trip,
-  //     so the comp-org fallback no longer costs extra hops;
-  //   - the usage_events count, fired unconditionally because we
-  //     want it for every plan with a non-null `included_reports_per_month`
-  //     (i.e. all plans except enterprise). On the rare enterprise
-  //     ingest the count is wasted, but the query is index-only
-  //     (`idx_usage_events_project_event` covers (project_id,
-  //     event_name, occurred_at)) and `head: true` returns no rows.
-  //
-  // Cold-path latency is now O(1 round-trip) instead of O(3-4 serial
-  // round-trips). The 60s verdict cache below still handles the
-  // steady-state hot path so most ingests pay zero round trips.
-  const [
-    { data: sub },
-    { data: projectRow },
-    { count: usageCount, error: countErr },
-  ] = await Promise.all([
-    db
-      .from('billing_subscriptions')
-      .select('status, plan_id, current_period_end')
-      .eq('project_id', projectId)
-      .in('status', ['active', 'trialing', 'past_due'])
-      .order('current_period_end', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    // Embedded select uses the FK projects.organization_id → organizations.id
-    // (declared in 20260428000000_organizations.sql). PostgREST resolves
-    // the relationship by FK, so the alias `organizations` is implicit.
-    db
-      .from('projects')
-      .select('organization_id, organizations(billing_mode, plan_id)')
-      .eq('id', projectId)
-      .maybeSingle(),
-    db
-      .from('usage_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', projectId)
-      .eq('event_name', 'reports_ingested')
-      .gte('occurred_at', start.toISOString())
-      .lt('occurred_at', end.toISOString()),
-  ])
-
-  const plan = await planFromProjectRows(sub, projectRow)
+  let billing: Awaited<ReturnType<typeof resolveProjectBilling>>
+  try {
+    billing = await resolveProjectBilling(db, projectId, { includeProjectIds: true })
+  } catch (err) {
+    // Same posture as a failed count below: ingest is never refused because
+    // a billing read blipped. Not cached, so the next report re-reads.
+    log.warn('Quota plan read failed; allowing ingest', {
+      projectId,
+      err: err instanceof Error ? err.message : String(err),
+    })
+    const free = await getPlan('free_cloud')
+    return {
+      allowed: true,
+      overage: false,
+      used: 0,
+      limit: free.included_reports_per_month,
+      plan: planRef(free),
+      periodResetsAt,
+      retryAfterSeconds: null,
+    }
+  }
+  const { plan, liveSub: sub } = billing
   const periodResetsActual = sub?.current_period_end ?? periodResetsAt
 
-  // Unlimited plan (e.g. enterprise) → fast path. The usage count we
-  // ran in parallel is discarded; that's fine because (a) it's a
-  // head-only count on an indexed range, and (b) enterprise ingests
-  // are <1% of traffic by volume, so the wasted query is negligible
-  // compared to the wall-clock latency win on the 99% path.
+  // Unlimited ingest (every plan today) → no count needed.
   if (plan.included_reports_per_month === null) {
     return finalize(projectId, {
       allowed: true,
@@ -201,6 +132,11 @@ export async function checkIngestQuota(
       retryAfterSeconds: null,
     })
   }
+
+  const { count: usageCount, error: countErr } = await countOrgUsage(db, billing.projectIds, 'reports_ingested', {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  })
 
   if (countErr) {
     log.warn('Quota usage count failed; allowing ingest', { projectId, err: countErr.message })
@@ -215,10 +151,9 @@ export async function checkIngestQuota(
     })
   }
 
-  const used = usageCount ?? 0
   return finalize(
     projectId,
-    decideQuota({ plan, used, hasSubscription: !!sub, periodResetsAt: periodResetsActual, periodEnd: end }),
+    decideQuota({ plan, used: usageCount, hasSubscription: !!sub, periodResetsAt: periodResetsActual, periodEnd: end }),
   )
 }
 
@@ -395,9 +330,11 @@ export function decideDiagnosisQuota(input: {
 // ── Diagnosis quota gate ────────────────────────────────────────────────────
 //
 // Called by classify-report BEFORE the Stage-2 Sonnet invocation.
-// Determines whether the project may consume a diagnosis this period.
-// Hard spend caps are enforced here so classify-report never calls the LLM
-// when the project is over cap.
+// Determines whether the project's team may consume a diagnosis this period
+// (diagnoses are pooled across the organization's apps). Hard spend caps are
+// enforced here so classify-report never calls the LLM when the team is over
+// cap. Verdicts are cached per project for 60 s, so a team can overshoot its
+// quota by what its other apps diagnose inside that window.
 
 export interface DiagnosisQuotaVerdict {
   allowed: boolean
@@ -430,7 +367,7 @@ export function invalidateDiagnosisCache(projectId?: string): void {
 }
 
 /**
- * Check whether a project may produce a new diagnosis this billing period.
+ * Check whether a project's team may produce a new diagnosis this billing period.
  *
  * This is the classify-level gate — it counts completed `diagnoses` events
  * (excluding Phase-1 shadow rows) and enforces:
@@ -449,61 +386,55 @@ export async function checkDiagnosisQuota(
   const { start, end } = periodWindow()
   const periodResetsAt = end.toISOString()
 
-  const diagnosesInPeriod = () =>
-    db
-      .from('usage_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', projectId)
-      .eq('event_name', 'diagnoses')
-      .gte('occurred_at', start.toISOString())
-      .lt('occurred_at', end.toISOString())
+  // The plan, the subscription and the count are the team's: the plan's
+  // diagnoses are shared by every app in the organization (VISION.md §2.2).
+  let billing: Awaited<ReturnType<typeof resolveProjectBilling>>
+  try {
+    billing = await resolveProjectBilling(db, projectId, { includeProjectIds: true })
+  } catch (err) {
+    // Spend-safety: same fail-closed, uncached, retryable answer as a failed
+    // count below. Guessing Free could block a paying team; guessing paid
+    // could run uncapped.
+    log.error('Diagnosis quota plan read failed; failing closed (retryable)', {
+      projectId,
+      err: err instanceof Error ? err.message : String(err),
+    })
+    const free = await getPlan('free_cloud')
+    return {
+      allowed: false,
+      overage: false,
+      reason: 'QUOTA_CHECK_UNAVAILABLE',
+      used: 0,
+      limit: free.included_diagnoses_per_month,
+      spendCapUsd: null,
+      plan: planRef(free),
+      periodResetsAt,
+    }
+  }
+  const { plan, liveSub: sub } = billing
 
-  const [
-    { data: sub },
-    { data: projectRow },
-    { count: allCount, error: allErr },
-    { count: shadowCount, error: shadowErr },
-  ] = await Promise.all([
-      db
-        .from('billing_subscriptions')
-        .select('status, plan_id, current_period_end, monthly_spend_cap_usd_override, overage_subscription_item_id')
-        .eq('project_id', projectId)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .order('current_period_end', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      db
-        .from('projects')
-        .select('organization_id, organizations(billing_mode, plan_id)')
-        .eq('id', projectId)
-        .maybeSingle(),
-      // Real diagnoses = all − Phase-1 shadow rows. A single
-      // `.not('metadata->>shadow','eq','true')` dropped every row WITHOUT a
-      // shadow key (NULL <> 'true' is NULL in SQL), so it counted 0 of 116
-      // real diagnoses and the quota and spend cap never applied. Same rule
-      // as billing-usage-counts.ts, so the gate and Billing agree.
-      diagnosesInPeriod(),
-      diagnosesInPeriod().eq('metadata->>shadow', 'true'),
-    ])
-  const diagErr = allErr ?? shadowErr
-  const diagCount = Math.max(0, (allCount ?? 0) - (shadowCount ?? 0))
-
-  const plan = await planFromProjectRows(sub, projectRow, COMP_OVERRIDES_FREE)
+  // Real diagnoses = all − Phase-1 shadow rows (countOrgUsage). A single
+  // `.not('metadata->>shadow','eq','true')` dropped every row WITHOUT a
+  // shadow key, so the quota and spend cap never applied. Same rule as
+  // billing-usage-counts.ts, so the gate and Billing agree.
+  const { count: diagCount, error: diagErr } = await countOrgUsage(
+    db,
+    billing.projectIds,
+    'diagnoses',
+    { startIso: start.toISOString(), endIso: end.toISOString() },
+    { excludeShadow: true },
+  )
 
   // Annual subscriptions (no overage item) stop at the included quota, which
   // resets with the calendar-month window, not at the yearly renewal date.
-  const overageBillable = diagnosisOverageBillable(
-    sub as { overage_subscription_item_id?: string | null } | null,
-  )
+  const overageBillable = diagnosisOverageBillable(sub)
   const periodResetsActual = overageBillable
-    ? (sub as { current_period_end?: string | null } | null)?.current_period_end ?? periodResetsAt
+    ? sub?.current_period_end ?? periodResetsAt
     : periodResetsAt
 
-  // Resolve effective spend cap: per-sub override wins, then plan default.
-  const subCapOverride =
-    (sub as { monthly_spend_cap_usd_override?: number | null } | null)
-      ?.monthly_spend_cap_usd_override ?? null
-  const spendCapUsd = subCapOverride ?? plan.monthly_spend_cap_usd ?? null
+  // Effective spend cap: the team's override (on its subscription) wins, then
+  // the plan default.
+  const spendCapUsd = sub?.monthly_spend_cap_usd_override ?? plan.monthly_spend_cap_usd ?? null
 
   if (diagErr) {
     // Spend-safety: a transient count error must NOT fail open. Failing open
@@ -529,12 +460,11 @@ export async function checkDiagnosisQuota(
     }
   }
 
-  const used = diagCount ?? 0
   return finalizeDiagnosis(
     projectId,
     decideDiagnosisQuota({
       plan,
-      used,
+      used: diagCount,
       hasSubscription: !!sub,
       spendCapUsd,
       periodResetsAt: periodResetsActual,

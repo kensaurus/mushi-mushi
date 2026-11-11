@@ -134,6 +134,7 @@ export interface BillingProject {
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
+  /** The team's diagnoses this month, every app pooled (a plan is the team's). */
   diagnoses_used?: number | null
   limit_diagnoses?: number | null
   diagnoses_usage_pct?: number | null

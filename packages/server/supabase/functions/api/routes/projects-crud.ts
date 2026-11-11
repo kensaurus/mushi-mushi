@@ -18,6 +18,7 @@ import { emitProductEvent } from '../../_shared/product-events.ts';
 import { dbError, enumerateAccessibleProjectIds } from '../shared.ts';
 import { resolvePlanForScope } from '../../_shared/entitlements.ts';
 import { appLimitDenial } from '../../_shared/plan-app-limit.ts';
+import { moveBillingAnchors } from '../../_shared/org-billing.ts';
 import { insertProjectWithFreeSlug } from '../../_shared/project-slug.ts';
 import { failedFixPreviews, loadRecentFixTruths } from '../../_shared/fix-report-truth-load.ts';
 import { projectCapabilities } from '../../_shared/project-capabilities.ts';
@@ -1254,6 +1255,30 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
         },
         400,
       );
+    }
+
+    // The team's plan names the app it was bought from, and its billing rows
+    // cascade with that app. Move them to another app in the team first; the
+    // team's last app cannot go while the team still pays (cancel first).
+    if (project.organization_id) {
+      let anchors: Awaited<ReturnType<typeof moveBillingAnchors>>;
+      try {
+        anchors = await moveBillingAnchors(db, project.organization_id, projectId);
+      } catch (err) {
+        return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+      }
+      if (anchors === 'last_app_pays') {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'LAST_APP_HAS_PLAN',
+              message: "This is the last app in a team with a paid plan. Cancel the plan under Billing → Manage first, then delete the app.",
+            },
+          },
+          409,
+        );
+      }
     }
 
     // A published diagram page lives in S3, outside the cascade: remove it

@@ -72,6 +72,7 @@ import { registerFreshEyesRoutes } from '../api/routes/fresh-eyes.ts'
 import { registerProductionCheckRoutes } from '../api/routes/production-check.ts'
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
 import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
+import { registerBillingChangePlanRoutes } from '../api/routes/billing-change-plan.ts'
 
 ensureSentry('api-ext')
 
@@ -121,6 +122,8 @@ registerFreshEyesRoutes(app)
 registerProductionCheckRoutes(app)
 registerPublicScoreboardRoutes(app)
 registerLandingVisitRoutes(app)
+// Plan change for paying teams (forwarded from api; api size budget).
+registerBillingChangePlanRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

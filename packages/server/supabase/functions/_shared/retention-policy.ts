@@ -7,19 +7,18 @@
  *   - api/routes/admin-ops.ts   — GET /v1/admin/retention-status, which shows
  *                                 the owner that window and what expires next.
  *
- * Precedence (same as _shared/entitlements.ts for plan resolution):
+ * Precedence:
  *   1. project_retention_policies: legal_hold, then reports_retention_days.
- *   2. A live billing subscription, keyed on the organization (or on the
- *      project for rows that predate organizations).
- *   3. organizations.plan_id.
- *   4. The free fallback.
+ *   2. The team's plan from _shared/org-billing.ts (the resolver every plan
+ *      gate shares): a live subscription on the organization, else
+ *      organizations.plan_id, else the free fallback.
  *
  * Step 3 was missing until 2026-09-21. The founder's org is on `pro` (90 days)
  * with no Stripe row, so every dogfood project fell through to the 7-day free
  * window and the daily sweep deleted real end-user reports.
  */
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { getPlan, resolvePlanFromSubscription } from './plans.ts'
+import { resolveProjectBilling } from './org-billing.ts'
 
 /** Used only when a plan row has no retention_days at all. */
 export const FALLBACK_RETENTION_DAYS = 7
@@ -36,11 +35,6 @@ export interface ProjectRetention {
 interface RetentionPolicyRow {
   reports_retention_days: number | null
   legal_hold: boolean
-}
-
-interface SubscriptionRow {
-  status: string
-  plan_id: string | null
 }
 
 export async function resolveProjectRetention(
@@ -70,57 +64,15 @@ export async function resolveProjectRetention(
     }
   }
 
-  const { data: project } = await db
-    .from('projects')
-    .select('organization_id')
-    .eq('id', projectId)
-    .maybeSingle<{ organization_id: string | null }>()
-  const organizationId = project?.organization_id ?? null
-
-  const subscriptionQuery = db
-    .from('billing_subscriptions')
-    .select('status, plan_id')
-    .in('status', ['active', 'trialing', 'past_due'])
-    .order('current_period_end', { ascending: false })
-    .limit(1)
-  const { data: sub } = await (organizationId
-    ? subscriptionQuery.eq('organization_id', organizationId)
-    : subscriptionQuery.eq('project_id', projectId)
-  ).maybeSingle<SubscriptionRow>()
-
-  if (sub) {
-    const plan = await resolvePlanFromSubscription(sub)
-    return {
-      retention_days: plan.retention_days ?? FALLBACK_RETENTION_DAYS,
-      plan_id: plan.id,
-      source: 'plan',
-      legal_hold: false,
-    }
-  }
-
-  const { data: org } = organizationId
-    ? await db
-        .from('organizations')
-        .select('plan_id')
-        .eq('id', organizationId)
-        .maybeSingle<{ plan_id: string | null }>()
-    : { data: null }
-
-  if (org?.plan_id) {
-    const plan = await getPlan(org.plan_id)
-    return {
-      retention_days: plan.retention_days ?? FALLBACK_RETENTION_DAYS,
-      plan_id: plan.id,
-      source: 'plan',
-      legal_hold: false,
-    }
-  }
-
-  const plan = await resolvePlanFromSubscription(null)
+  // The team's plan (org-billing.ts: complimentary org → its plan; else the
+  // org's live subscription; else organizations.plan_id; else Free). A read
+  // error throws: the sweep must never delete on a guessed short window.
+  const billing = await resolveProjectBilling(db, projectId)
+  const fromPlan = billing.liveSub !== null || billing.orgPlanId !== null
   return {
-    retention_days: plan.retention_days ?? FALLBACK_RETENTION_DAYS,
-    plan_id: plan.id,
-    source: 'fallback',
+    retention_days: billing.plan.retention_days ?? FALLBACK_RETENTION_DAYS,
+    plan_id: billing.plan.id,
+    source: fromPlan ? 'plan' : 'fallback',
     legal_hold: false,
   }
 }

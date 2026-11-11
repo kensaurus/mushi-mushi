@@ -1567,13 +1567,13 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `billing.plan`
 
-**Summary** — Subscription tier — determines the included LLM credits, MAU cap, and feature gates.
+**Summary** — The team's plan — sets the apps, seats, diagnoses a month (shared by every app in the team) and feature gates.
 
-**How it works** — Plan changes go through Stripe Checkout / Customer Portal — Mushi Mushi mirrors the new plan id back via webhook. Downgrades are queued to the end of the current period; upgrades take effect immediately and are pro-rated.
+**How it works** — A plan belongs to the team, not to one app: buying it from any app's card covers every app in the team. Plan changes go through Stripe Checkout and Change plan; Mushi Mushi mirrors the new plan back via webhook onto the subscription and organizations.plan_id. Changes take effect immediately and are pro-rated.
 
 **Default** — `free`
 
-**Where it lives** — table `billing_subscriptions.plan_id` · endpoint `(Stripe webhook → stripe-webhooks edge function)` · read by `_shared/entitlements.ts requireFeature (api feature gates)`, `_shared/quota.ts (api report ingest, classify-report quota gate)`
+**Where it lives** — table `billing_subscriptions.plan_id` · endpoint `(Stripe webhook → stripe-webhooks edge function)` · read by `_shared/org-billing.ts (the one team plan resolver)`, `_shared/entitlements.ts requireFeature (api feature gates)`, `_shared/quota.ts (api report ingest, classify-report quota gate)`
 
 **When to change** — Upgrade when you're consistently hitting the cap on the dashboard. Downgrade only after one full month under the next-tier-down's cap.
 
@@ -1585,7 +1585,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Hard USD ceiling on overage charges. When projected spend hits the cap, new diagnoses pause gracefully — no surprise invoice.
 
-**How it works** — Stored on billing_subscriptions.monthly_spend_cap_usd_override and enforced in classify-report before Stage-2 runs. Overrides the plan default (Builder $50, Studio $200). Clear the field to revert to the plan default.
+**How it works** — Stored on the team's subscription (billing_subscriptions.monthly_spend_cap_usd_override) and enforced in classify-report before Stage-2 runs, on the team's pooled overage. Setting it on any app's card caps the whole team. Overrides the plan default (Builder $50, Studio $200). Clear the field to revert to the plan default.
 
 **Default** — `plan default`
 

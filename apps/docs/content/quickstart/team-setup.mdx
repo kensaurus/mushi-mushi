@@ -187,8 +187,8 @@ overage. Reports are always kept, even when diagnoses pause. See
      approval.
 3. On a paid plan, check the **Monthly spend cap** under **Team → Billing**.
    This caps overage on your bill. It is separate from the AI budget above.
-   The plan's diagnoses and this cap belong to the app you upgraded; another
-   app in the team keeps 100 diagnoses a month until you upgrade it too.
+   The plan's diagnoses and this cap are the team's: every app in the team
+   shares them.
 
 **Check it worked:** after the first few reports, open **Team → AI spend**.
 You should see each call with its model, cost and which key paid. See

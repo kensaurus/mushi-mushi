@@ -38,6 +38,7 @@ import { jwtAuth } from '../../_shared/auth.ts'
 import { log } from '../../_shared/logger.ts'
 import { requireSuperAdmin } from '../../_shared/super-admin.ts'
 import { accessibleProjectIds } from '../../_shared/project-access.ts'
+import { orgCustomer } from '../../_shared/org-billing.ts'
 import { normalizeLegalName, perAppLeaderboard, testerProfileUpdate } from '../../_shared/tester-profile.ts'
 import {
   REDEMPTION_CATALOG,
@@ -66,8 +67,8 @@ const CREDITABLE_PLAN_STATUSES = ['active', 'trialing', 'past_due']
 /**
  * The Stripe customer of a paid plan in an organization the user owns or
  * administers, newest period first; null when there is none. Plans and
- * customers are per project and organization (`billing_subscriptions`,
- * `billing_customers`), never per user.
+ * customers belong to the organization (one Stripe customer per team), never
+ * to a user.
  */
 export async function paidPlanCustomerFor(
   db: ReturnType<typeof getServiceClient>,
@@ -82,19 +83,15 @@ export async function paidPlanCustomerFor(
   if (orgIds.length === 0) return null
   const { data: subs } = await db
     .from('billing_subscriptions')
-    .select('project_id')
+    .select('organization_id')
     .in('organization_id', orgIds)
     .in('status', CREDITABLE_PLAN_STATUSES)
     .order('current_period_end', { ascending: false })
     .limit(5)
-  for (const sub of (subs ?? []) as Array<{ project_id: string | null }>) {
-    if (!sub.project_id) continue
-    const { data: customer } = await db
-      .from('billing_customers')
-      .select('stripe_customer_id')
-      .eq('project_id', sub.project_id)
-      .maybeSingle()
-    if (customer?.stripe_customer_id) return customer.stripe_customer_id as string
+  for (const sub of (subs ?? []) as Array<{ organization_id: string | null }>) {
+    if (!sub.organization_id) continue
+    const customer = await orgCustomer(db, sub.organization_id)
+    if (customer?.stripe_customer_id) return customer.stripe_customer_id
   }
   return null
 }

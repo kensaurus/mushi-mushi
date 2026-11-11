@@ -1348,7 +1348,7 @@ export const TDD_TOOL_CATALOG: ToolSpec[] = [
     name: 'get_usage',
     title: 'Usage & billing summary',
     description:
-      'Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?".',
+      'Read-only diagnoses quota and billing summary for the team that owns the current project (a plan belongs to the team, so diagnoses are counted across every app in it): diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the team is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?".',
     scope: 'mcp:read',
     hints: { readOnly: true, idempotent: true, openWorld: false },
     useCase: 'How many diagnoses do I have left this month?',

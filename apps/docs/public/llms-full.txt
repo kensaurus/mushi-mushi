@@ -2293,8 +2293,8 @@ overage. Reports are always kept, even when diagnoses pause. See
      approval.
 3. On a paid plan, check the **Monthly spend cap** under **Team → Billing**.
    This caps overage on your bill. It is separate from the AI budget above.
-   The plan's diagnoses and this cap belong to the app you upgraded; another
-   app in the team keeps 100 diagnoses a month until you upgrade it too.
+   The plan's diagnoses and this cap are the team's: every app in the team
+   shares them.
 
 **Check it worked:** after the first few reports, open **Team → AI spend**.
 You should see each call with its model, cost and which key paid. See
@@ -2600,7 +2600,7 @@ developers are below.
 
 A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-**More than one app? Read this.** You upgrade from one app's card on the Billing page, and the subscription is attached to that app. The plan's diagnoses, its overage and its spend cap belong to that app. Every other app in the team keeps 100 diagnoses a month, with a hard stop, until you upgrade that app as well. The app limit, seats, history, plugins and the widget without a Mushi Mushi mark apply to the whole team.
+**More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
 
 **What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
@@ -2716,15 +2716,15 @@ Diagnoses are counted per calendar month (UTC) on every plan, so the count start
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on the app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap belongs to that app. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the app never costs more than its base fee.
+Yes. Open **Billing → Spending cap** on any app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap covers the whole team. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the team never pays more than the base fee.
 
 ### Who receives usage alert emails?
 
-By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
+By default, the **team owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) of the team's diagnoses per billing month.
 
 ### Is usage per app or per team?
 
-**Diagnoses and the spend cap are per app; the app limit is per team.** Each app has its own diagnosis counter. The plan's diagnoses and its spend cap belong to the app you upgraded: another app in the same team keeps 100 diagnoses a month until you upgrade it too. So the most one upgraded app can cost in a calendar month is its base fee plus its cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), and an app you have not upgraded is never billed. The plan's app limit counts the apps in your team.
+**Per team.** A plan belongs to the team: its diagnoses are one shared allowance for every app in the team, counted together each month, and the app limit, seats and spend cap are the team's too. So the most a team can be billed in a calendar month is the base fee plus the cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), however many apps it has.
 
 ### Can I downgrade mid-cycle?
 
@@ -3311,13 +3311,14 @@ To let a client see only their own app, put that app in **its own team**:
 1. In the console's team switcher, choose **Create team** and name it after the
    client. One account can own several teams.
 2. Create the client's app inside that team.
-3. Upgrade that app to Studio, then invite the client as a **Viewer** under
+3. Upgrade that team to Studio, then invite the client as a **Viewer** under
    **Team → Team members**. Invitations need Studio; a team on Free or Builder
    has one seat, yours.
 
-A new team starts on the Free plan (one app, 100 diagnoses a month). Plans are
-bought per app (see [What it costs](#what-it-costs)), so a separate team for a
-client costs the same as keeping their app in your main team.
+A new team starts on the Free plan (one app, 100 diagnoses a month). A plan is
+bought per team (see [What it costs](#what-it-costs)), so a separate team for a
+client is a separate plan: it costs more than keeping their app in your main
+team, where one plan covers every app.
 
 If the client does not need the console at all, skip the invitation. Forward
 them the report or connect a shared Slack channel, and keep every app in one
@@ -3343,39 +3344,32 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 | Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
 | Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
-**Eight client apps fit in one Studio team**: Studio allows 10 apps, for $79 a
-month or $790 a year. Read the next part before you budget.
+**Eight client apps fit on Studio: $79 a month for the team** (or $790 a year):
+up to 10 apps, 3,000 diagnoses a month shared by all of them, and 5 seats.
 
-**The plan's diagnoses go to the app you upgrade, not to the whole team.** You
-upgrade from one app's card on the Billing page, and the subscription is
-attached to that app. That app gets 3,000 diagnoses a month. Every other app in
-the team keeps 100 diagnoses a month and stops there until the 1st (its reports
-are still kept) unless you upgrade that app too.
+A plan belongs to the team, not to one app. You upgrade from any app's card on
+the Billing page and every app in the team is on Studio. The 3,000 diagnoses
+are one allowance for the whole team, counted together: a busy app can use
+more of it and a quiet app less.
 
-| What you want | Per month |
-| --- | --- |
-| 8 apps: one busy app with 3,000 diagnoses, seven quiet apps with 100 each | $79 |
-| 8 apps, each with 3,000 diagnoses | 8 × $79 = $632 |
-
-What the whole team gets from one Studio subscription: room for 10 apps, the 5
-seats, 180 days of history on every app, plugins, and no Mushi Mushi mark on
-any app's widget.
+What the whole team gets from one Studio subscription: room for 10 apps, 3,000
+diagnoses a month between them, the 5 seats, 180 days of history on every app,
+plugins, and no Mushi Mushi mark on any app's widget.
 
 **Seats.** Studio has 5 seats and you are one of them. Every member takes a
 seat, a client Viewer included. So does every invitation that has not been
 accepted yet, until it is accepted, revoked or expires after 7 days.
 
 **The most you can be billed.** On a monthly plan, each diagnosis past the
-included ones costs $0.03, up to a spend cap. The cap belongs to the upgraded
-app: $50 a month by default on Builder, $200 on Studio.
+team's included ones costs $0.03, up to a spend cap. The cap covers the whole
+team: $50 a month by default on Builder, $200 on Studio.
 
-- Worst case for one Studio app in a calendar month, at the default cap:
-  $79 + $200 = **$279**, plus any tax.
-- Want a fixed bill? Open **Team → Billing**, find the app's card and set its
-  **Spending cap** to **$0**. Diagnoses then pause at 3,000 until the 1st, and
-  that app never costs more than $79 a month.
+- Worst case for a Studio team in a calendar month, at the default cap:
+  $79 + $200 = **$279**, plus any tax, however many apps it has.
+- Want a fixed bill? Open **Team → Billing**, and on any app's card set the
+  **Spending cap** to **$0**. The team's diagnoses then pause at 3,000 until
+  the 1st, and the team never pays more than $79 a month.
 - Annual plans have no overage at all: they pause at the included diagnoses.
-- An app you have not upgraded is never billed.
 
 **The brand mark.** On Builder and Studio the widget carries no Mushi Mushi
 mark. On Free it shows a small "Bug reports by Mushi Mushi" link at the foot of
@@ -10131,7 +10125,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `get_two_way_comms_health` | Two-way communication health | Summarize SDK ↔ admin two-way reporter health for a host app: last SDK heartbeat, app version/platform last seen, unread reporter messages, recent reporter replies, and pending QA/TDD follow-ups. Use after wiring @mushi-mushi/web in a Vite/Capacitor app to confirm reports land in the console and admin/MCP replies reach the in-app widget. |
 | `list_qa_story_runs` | Recent QA story runs | Return the most recent runs for a given QA story, newest first. Each row includes status (passed/failed/error/running), latency_ms, created_at, error_message headline, and assertion_failures (up to 10). Optional projectId (project_id is accepted too) defaults to the configured project. An account-level key passes the project the story belongs to; a project-bound key refuses a different project. Use this to understand whether a story is currently healthy, what the last failure was, and whether a manual run has completed. |
 | `get_qa_story_run` | QA story run detail | Fetch the full detail for a single qa_story_run: status, error_message, assertion_failures, latency_ms, provider_session_url (Browserbase replay link when available), and screenshot URLs from qa_story_evidence. Optional projectId (project_id is accepted too) defaults to the configured project. An account-level key passes the project the story belongs to; a project-bound key refuses a different project. Use this to drill into a specific failing run and understand the exact error before deciding whether to improve the story script or fix the app. |
-| `get_usage` | Usage & billing summary | Read-only diagnoses quota and billing summary for the current project: diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the project is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?". |
+| `get_usage` | Usage & billing summary | Read-only diagnoses quota and billing summary for the team that owns the current project (a plan belongs to the team, so diagnoses are counted across every app in it): diagnoses used / limit / percentage, spend cap, period start/end, plan name, and whether the team is approaching or over its quota. Use this to answer "how many diagnoses do I have left?" or "am I close to my spend cap?". |
 | `list_skills` | List agent skills | List the agent skills in the catalog, optionally filtered by category or search text. Returns \{ skills: [\{ slug, title, description, category, chain_slugs }] }. Read-only. Use to find the right skill slug before start_skill_pipeline; use get_skill to read one skill's full instructions. |
 | `get_skill` | Get skill detail | Fetch one agent skill by slug, including the complete SKILL.md body and the resolved chain of sub-skills. Returns \{ slug, title, body, chain: [\{ slug, title }] }. Read-only. Use to read what a skill instructs before executing a pipeline step; use list_skills to discover slugs. |
 | `get_pipeline_run` | Get pipeline run detail | Fetch a skill pipeline run by id: \{ status, context_packet, steps: [\{ index, slug, status }] }. Read-only. Use to retrieve the context_packet when a pipeline was started from the console or another agent; then checkin_pipeline_step as you complete each step. Use start_skill_pipeline to begin a new run. |
@@ -15718,10 +15712,10 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Plans
 
-Diagnoses are counted per app. A paid plan is attached to the app you upgrade:
-that app gets the plan's diagnoses, and every other app in the team keeps 100
-a month until you upgrade it too. The app limit, seats, history and plugins
-apply to the whole team. [Pricing](/pricing) has the details.
+A plan belongs to your team, not to one app. Its diagnoses are shared by
+every app in the team, and so are the app limit, seats, history, plugins and
+the spend cap. Upgrade from any app's card and the whole team moves to the
+plan. [Pricing](/pricing) has the details.
 
 No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
 You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
@@ -15736,15 +15730,15 @@ team invites need Studio. Full details are on [pricing](/pricing).
 1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.
 2. Email confirmation (for email sign-up) → sign in → `/onboarding` wizard.
 3. Create your first app, then run `npx mushi-mushi` in its folder to install the SDK. The wizard makes the key for you.
-4. The Billing page in the console shows diagnoses used / limit per app, with an **Upgrade** button
-   (**Change plan** once you pay).
+4. The Billing page in the console shows your team's diagnoses used / limit, with an **Upgrade team** button
+   (**Change team plan** once you pay).
 5. Stripe Checkout → on success, your subscription becomes active. Overage on monthly plans bills through Stripe meter events.
 
 ## Why metered on diagnoses
 
 ## Spend controls
 
-Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default). The cap belongs to the upgraded app and is set in the console under Billing → Spending cap; set it to $0 for a fixed bill. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
+Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default). The cap covers the whole team and is set in the console under Billing → Spending cap; set it to $0 for a fixed bill. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
 
 ## Self-hosting
 
@@ -18776,7 +18770,7 @@ AI の診断は間違うことがあります。変更内容は、公開する�
 
 ## 料金
 
-| プラン | アプリ数 | 診断（月・アプリごと） | 料金 |
+| プラン | アプリ数 | 診断（月・チーム全体） | 料金 |
 | --- | --- | --- | --- |
 | Free | 1 本 | 100 件 | 無料 |
 | Builder | 3 本 | 1,000 件 | 月額 29 ドル |
@@ -18784,6 +18778,7 @@ AI の診断は間違うことがあります。変更内容は、公開する�
 
 - **無料プランはアプリ 1 本・月 100 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
 - 月 100 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。
+- プランはチーム単位です。どのアプリからアップグレードしても、チーム内のすべてのアプリが同じプランになり、月の診断件数もチーム全体で共有します。
 - 料金は米ドル建てです（Builder 月額 29 ドル、Studio 月額 79 ドル）。Stripe でカード決済され、円換算額はカード会社のレートで決まります。
 - サーバーを自分で運用する場合（セルフホスト）は無料です。
 

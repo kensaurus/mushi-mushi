@@ -57,13 +57,13 @@ const GROUPS: FeatureGroup[] = [
       {
         key: 'apps',
         label: 'Apps',
-        hint: 'Apps this team can watch. Each app gets its own widget, diagnoses and fixes.',
+        hint: 'Apps this team can watch. Each app gets its own widget; the plan and its diagnoses are shared by the whole team.',
         render: p => (p.max_projects == null ? 'No limit' : String(p.max_projects)),
       },
       {
         key: 'diagnoses',
         label: 'Diagnoses / month',
-        hint: 'Plain-English diagnoses of your bug reports. Reports are still captured past the limit.',
+        hint: 'Plain-English diagnoses of your bug reports, counted across every app in the team. Reports are still captured past the limit.',
         render: p =>
           p.included_diagnoses_per_month == null ? 'Unlimited' : p.included_diagnoses_per_month.toLocaleString(),
       },

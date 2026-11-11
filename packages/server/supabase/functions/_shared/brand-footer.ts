@@ -9,14 +9,14 @@
  *   `brandFooter` config, which is a hard override on the client), so they
  *   land on "off" without a separate switch.
  *
- * Resolution mirrors _shared/entitlements.ts resolveActiveEntitlement()
- * (billing_subscriptions → organizations.plan_id → free_cloud) but takes a
- * project id instead of the Hono context, so the admin sdk-config routes
- * (which take :id) and the SDK runtime route share it.
+ * The plan is the project's team plan (_shared/org-billing.ts, the same
+ * resolver as every other plan gate), so one paid subscription removes the
+ * mark from every app in the team. Takes a project id, so the admin
+ * sdk-config routes (which take :id) and the SDK runtime route share it.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { getPlan, resolvePlanFromSubscription } from './plans.ts'
+import { resolveProjectBilling } from './org-billing.ts'
 import { log } from './logger.ts'
 
 const FREE_PLAN_IDS: ReadonlySet<string> = new Set(['free_cloud', 'hobby'])
@@ -33,30 +33,7 @@ export function brandFooterDefaultForPlan(planId: string | null | undefined): bo
  */
 export async function brandFooterDefaultForProject(db: SupabaseClient, projectId: string): Promise<boolean> {
   try {
-    const { data: project } = await db
-      .from('projects')
-      .select('organization_id')
-      .eq('id', projectId)
-      .maybeSingle()
-    const orgId = (project?.organization_id as string | null | undefined) ?? null
-
-    const subQuery = orgId
-      ? db.from('billing_subscriptions').select('status, plan_id').eq('organization_id', orgId)
-      : db.from('billing_subscriptions').select('status, plan_id').eq('project_id', projectId)
-    const { data: sub } = await subQuery
-      .in('status', ['active', 'trialing', 'past_due'])
-      .order('current_period_end', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (sub) {
-      const plan = await resolvePlanFromSubscription(sub as { status?: string | null; plan_id?: string | null })
-      return brandFooterDefaultForPlan(plan.id)
-    }
-
-    const { data: org } = orgId
-      ? await db.from('organizations').select('plan_id').eq('id', orgId).maybeSingle()
-      : { data: null }
-    const plan = await getPlan(((org as { plan_id?: string | null } | null)?.plan_id) ?? 'free_cloud')
+    const { plan } = await resolveProjectBilling(db, projectId)
     return brandFooterDefaultForPlan(plan.id)
   } catch (err) {
     log.warn('brand-footer: plan lookup failed, defaulting to off', {

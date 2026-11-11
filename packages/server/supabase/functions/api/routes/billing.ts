@@ -4,6 +4,14 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { adminOrApiKey } from '../../_shared/auth.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { countPeriodUsage, llmCostByProjectSince, llmCostSince } from '../../_shared/billing-usage-counts.ts';
+import {
+  countOrgUsage,
+  orgCustomer,
+  organizationIdForProject,
+  orgProjectIds,
+  planIdForOrganization,
+  resolveProjectBilling,
+} from '../../_shared/org-billing.ts';
 import { log } from '../../_shared/logger.ts';
 import { diagnosisOverageBillable } from '../../_shared/billing-rules.ts';
 import { assertTargetProjectAccess, callerProjectIds, requireProjectAdmin } from '../shared.ts';
@@ -90,56 +98,53 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const periodEnd = new Date(periodStart);
     periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
 
-    const projectIds = projectRows.map((p) => p.id);
     const orgIds = Array.from(
       new Set(projectRows.map((p) => p.organization_id).filter((x): x is string => Boolean(x))),
     );
 
+    // The plan, the subscription, the customer and the quota are the team's
+    // (the active app's organization): one Studio plan covers every app in
+    // the team and its diagnoses are pooled (VISION.md §2.2).
+    let billing: Awaited<ReturnType<typeof resolveProjectBilling>> | null = null;
+    let cust: Awaited<ReturnType<typeof orgCustomer>> = null;
+    try {
+      billing = activeProject ? await resolveProjectBilling(db, activeProject.id, { includeProjectIds: true }) : null;
+      cust = billing?.organizationId ? await orgCustomer(db, billing.organizationId) : null;
+    } catch (err) {
+      log.error('billing/stats: team billing read failed', { err: err instanceof Error ? err.message : String(err) });
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: "Could not read this team's plan. Retry in a moment." } },
+        500,
+      );
+    }
+
     const [
       { data: subs },
-      { data: customers },
       usageCounts,
       llmCostUsdRaw,
-      { data: orgs },
       plans,
     ] = await Promise.all([
-      db
-        .from('billing_subscriptions')
-        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end, monthly_spend_cap_usd_override, overage_subscription_item_id')
-        .in('project_id', projectIds),
-      db
-        .from('billing_customers')
-        .select('project_id, stripe_customer_id, default_payment_ok')
-        .in('project_id', projectIds),
-      // Count-only, for the active project (the only one this route
-      // reports). The old read pulled every usage_events row for every
-      // project unbounded: PostgREST capped it at 1000 rows, so a busy month
-      // under-reported. Counting rows matches the quota gate (quota.ts).
-      activeProject
-        ? countPeriodUsage(db, activeProject.id, periodStart.toISOString())
-        : Promise.resolve(null),
+      // Past-due / unpaid banners: any team the caller can see.
+      orgIds.length > 0
+        ? db.from('billing_subscriptions').select('organization_id, status').in('organization_id', orgIds)
+        : Promise.resolve({ data: [] as Array<{ organization_id: string; status: string }> }),
+      // Count-only, across the active app's team. The old read pulled every
+      // usage_events row for every project unbounded: PostgREST capped it at
+      // 1000 rows, so a busy month under-reported. Counting rows matches the
+      // quota gate (quota.ts).
+      billing ? countPeriodUsage(db, billing.projectIds, periodStart.toISOString()) : Promise.resolve(null),
       activeProject
         ? llmCostSince(db, activeProject.id, periodStart.toISOString())
         : Promise.resolve(0),
-      orgIds.length > 0
-        ? db.from('organizations').select('id, plan_id, billing_mode').in('id', orgIds)
-        : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
       listPlans(),
     ]);
 
-    const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
-    for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
-
     let pastDueProjects = 0;
     let unpaidProjects = 0;
-    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean; monthly_spend_cap_usd_override?: number | null; overage_subscription_item_id?: string | null }>();
-    for (const s of subs ?? []) {
-      subByProject.set(s.project_id, s);
+    for (const s of (subs ?? []) as Array<{ status: string }>) {
       if (s.status === 'past_due') pastDueProjects += 1;
       if (s.status === 'unpaid') unpaidProjects += 1;
     }
-    const customerByProject = new Map<string, { stripe_customer_id?: string; default_payment_ok?: boolean }>();
-    for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
 
     if (usageCounts instanceof Error) {
       log.error('billing/stats: usage counts failed', { err: usageCounts.message });
@@ -148,8 +153,6 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         500,
       );
     }
-    const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number; diagnoses: number }>();
-    if (activeProject && usageCounts) usageByProject.set(activeProject.id, usageCounts);
 
     const llmCostUsdMonth = Math.round(llmCostUsdRaw * 10000) / 10000;
 
@@ -160,25 +163,18 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
     const freeLimitDiagnoses = freeCloud?.included_diagnoses_per_month ?? 50;
 
-    if (!activeProject) {
+    if (!activeProject || !billing) {
       return c.json({
         ok: true,
         data: { ...empty, projectCount: projectRows.length, freeLimitReports, freeLimitDiagnoses, pastDueProjects, unpaidProjects },
       });
     }
 
-    const sub = subByProject.get(activeProject.id) ?? null;
-    const cust = customerByProject.get(activeProject.id) ?? null;
-    const u = usageByProject.get(activeProject.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, diagnoses: 0 };
-    const orgInfo = activeProject.organization_id ? orgById.get(activeProject.organization_id) ?? null : null;
-    const isComplimentary = orgInfo?.billing_mode === 'complimentary';
-    const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
-    const planId = subPlanActive
-      ? (sub!.plan_id ?? 'free_cloud')
-      : isComplimentary
-        ? orgInfo!.plan_id
-        : 'free_cloud';
-    const plan = await getPlan(planId);
+    const sub = billing.liveSub;
+    const u = usageCounts ?? { reports: 0, fixes: 0, fixesSucceeded: 0, diagnoses: 0 };
+    const isComplimentary = billing.billingMode === 'complimentary';
+    const subPlanActive = sub !== null;
+    const plan = billing.plan;
     const limit = plan.included_reports_per_month;
     const diagnosesLimit = plan.included_diagnoses_per_month ?? null;
     const usagePct = limit ? Math.round((u.reports / limit) * 100) : null;
@@ -191,26 +187,21 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     const approachingQuota = usagePct != null && usagePct >= 80 && !overQuota;
     // Annual subscriptions carry no overage item: diagnoses stop at the limit.
     const diagnosisOverage =
-      !!plan.overage_unit_amount_decimal_diagnoses && diagnosisOverageBillable(subPlanActive ? sub : null);
+      !!plan.overage_unit_amount_decimal_diagnoses && diagnosisOverageBillable(sub);
     const overDiagnosisQuota =
       !isComplimentary &&
       diagnosesLimit !== null &&
       u.diagnoses >= diagnosesLimit &&
       !diagnosisOverage;
     const approachingDiagnosisQuota = diagnosesUsagePct != null && diagnosesUsagePct >= 80 && !overDiagnosisQuota;
-    // Effective spend cap: subscription override takes priority, then plan default.
-    const monthlySpendCapUsd =
-      (sub as unknown as { monthly_spend_cap_usd_override?: number | null } | null)?.monthly_spend_cap_usd_override ??
-      plan.monthly_spend_cap_usd ??
-      null;
+    // Effective spend cap: the team's override (on its subscription), then the plan default.
+    const monthlySpendCapUsd = sub?.monthly_spend_cap_usd_override ?? plan.monthly_spend_cap_usd ?? null;
 
     const subscriptionStatus = subPlanActive
       ? sub!.status
-      : isComplimentary && plan.id !== 'free_cloud' && plan.id !== 'hobby'
-        ? 'active'
-        : plan.id === 'free_cloud' || plan.id === 'hobby'
-          ? 'free'
-          : sub?.status ?? null;
+      : plan.id === 'free_cloud' || plan.id === 'hobby'
+        ? 'free'
+        : 'active';
 
     const periodEndIso = subPlanActive && sub?.current_period_end
       ? sub.current_period_end
@@ -222,7 +213,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         projectId: activeProject.id,
         projectName: activeProject.name,
         organizationId: activeProject.organization_id ?? null,
-        billingMode: (orgInfo?.billing_mode as 'stripe' | 'complimentary' | undefined) ?? 'stripe',
+        billingMode: billing.billingMode,
         planId: plan.id,
         planDisplayName: plan.display_name,
         subscriptionStatus,
@@ -310,13 +301,16 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       db
         .from('billing_subscriptions')
         .select(
-          'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id, monthly_spend_cap_usd_override',
+          'project_id, organization_id, status, plan_id, stripe_price_id, stripe_subscription_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id, monthly_spend_cap_usd_override',
         )
-        .in('project_id', projectIds),
+        // A plan belongs to the team: read it by organization, so every app
+        // in the team shows the plan, whichever app it was bought from.
+        .in('organization_id', orgIds),
       db
         .from('billing_customers')
-        .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
-        .in('project_id', projectIds),
+        .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email, updated_at')
+        .in('organization_id', orgIds)
+        .order('updated_at', { ascending: false }),
       db
         .from('usage_events')
         .select('project_id, event_name, quantity, occurred_at')
@@ -341,10 +335,10 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
       // Billing page can show "$ spent on LLM this month" alongside report
       // quota. Reads the persisted cost_usd column written by telemetry.ts.
       llmCostByProjectSince(db, projectIds, periodStart.toISOString()),
-      // Pull org-level billing posture so projects whose org is on a
-      // complimentary plan (Mushi staff, sponsored, beta) render the right
-      // tier without a Stripe subscription row. The fallback hierarchy is:
-      // billing_subscriptions → org.plan_id (when complimentary) → 'hobby'.
+      // Org-level billing posture and plan: the plan resolves per team
+      // (_shared/org-billing.ts planIdForOrganization: complimentary → its
+      // plan; else the live subscription; else organizations.plan_id; else
+      // Free).
       orgIds.length > 0
         ? db
             .from('organizations')
@@ -357,17 +351,45 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         .in('project_id', projectIds),
     ]);
 
-    // Pick the most recent active sub per project (a project may have a
-    // canceled sub + a fresh active one; we always render the active one).
-    const subByProject = new Map<string, any>();
+    // One subscription per team: a live one wins over an ended one, then the
+    // most recent period (a team may have a canceled sub + a fresh active one).
+    const isLive = (status: string | null | undefined) => ['active', 'trialing', 'past_due'].includes(status ?? '');
+    const subByOrg = new Map<string, any>();
     for (const s of subs ?? []) {
-      const cur = subByProject.get(s.project_id);
-      const isMoreRecent =
-        !cur || new Date(s.current_period_end ?? 0) > new Date(cur.current_period_end ?? 0);
-      if (isMoreRecent) subByProject.set(s.project_id, s);
+      const cur = subByOrg.get(s.organization_id);
+      const better =
+        !cur ||
+        (isLive(s.status) && !isLive(cur.status)) ||
+        (isLive(s.status) === isLive(cur.status) &&
+          new Date(s.current_period_end ?? 0) > new Date(cur.current_period_end ?? 0));
+      if (better) subByOrg.set(s.organization_id, s);
     }
-    const customerByProject = new Map<string, any>();
-    for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
+    // One Stripe customer per team (newest row first from the query).
+    const customerByOrg = new Map<string, any>();
+    for (const cu of customers ?? []) {
+      if (!customerByOrg.has(cu.organization_id)) customerByOrg.set(cu.organization_id, cu);
+    }
+
+    // Diagnoses are pooled per team: count every app in the team, including
+    // apps this caller cannot see, exactly (head counts, shadow rows out),
+    // as the quota gate does.
+    const teamDiagnosesByOrg = new Map<string, number>();
+    try {
+      await Promise.all(
+        orgIds.map(async (orgId) => {
+          const ids = await orgProjectIds(db, orgId);
+          const r = await countOrgUsage(db, ids, 'diagnoses', { startIso: periodStart.toISOString() }, { excludeShadow: true });
+          if (r.error) throw new Error(r.error.message);
+          teamDiagnosesByOrg.set(orgId, r.count);
+        }),
+      );
+    } catch (err) {
+      log.error('billing: team diagnosis count failed', { err: err instanceof Error ? err.message : String(err) });
+      return c.json(
+        { ok: false, error: { code: 'DB_ERROR', message: "Could not count this month's diagnoses. Retry in a moment." } },
+        500,
+      );
+    }
 
     // org_id → { plan_id, billing_mode } so the per-project loop can decide
     // whether to honour the org-level complimentary tier.
@@ -456,8 +478,9 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
     const items = await Promise.all(
       projects.map(async (p) => {
-        const sub = subByProject.get(p.id) ?? null;
-        const cust = customerByProject.get(p.id) ?? null;
+        const sub = p.organization_id ? subByOrg.get(p.organization_id) ?? null : null;
+        const cust = p.organization_id ? customerByOrg.get(p.organization_id) ?? null : null;
+        const teamDiagnoses = p.organization_id ? teamDiagnosesByOrg.get(p.organization_id) ?? 0 : 0;
         const u = usageByProject.get(p.id) ?? {
           reports: 0,
           fixes: 0,
@@ -468,17 +491,15 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
         const orgInfo = p.organization_id ? orgById.get(p.organization_id) ?? null : null;
         const isComplimentary = orgInfo?.billing_mode === 'complimentary';
 
-        // Resolution order:
-        //   1. real Stripe subscription (active/trialing/past_due)
-        //   2. complimentary org → org.plan_id wins (no Stripe needed)
-        //   3. fallback free_cloud
-        const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
-        const planId = subPlanActive
-          ? sub.plan_id
-          : isComplimentary
-            ? orgInfo!.plan_id
-            : 'free_cloud';
-        const plan = await getPlan(planId);
+        // The team's plan, by the rule every gate shares (org-billing.ts).
+        const subPlanActive = !isComplimentary && isLive(sub?.status);
+        const plan = await getPlan(
+          planIdForOrganization({
+            billingMode: orgInfo?.billing_mode,
+            orgPlanId: orgInfo?.plan_id,
+            liveSub: subPlanActive ? sub : null,
+          }),
+        );
         const limit = plan.included_reports_per_month;
         const diagnosesLimit = plan.included_diagnoses_per_month ?? null;
 
@@ -576,14 +597,16 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
             !plan.overage_price_lookup_key,
           // Used by the QuotaBanner to render at >=80% / >=100%.
           usage_pct: limit ? Math.round((u.reports / limit) * 100) : null,
-          // Phase 2 — diagnoses metering fields.
-          diagnoses_used: u.diagnoses,
+          // Phase 2 — diagnoses metering fields. The quota is the team's:
+          // `diagnoses_used` is every app in the team this month (pooled), while
+          // `usage.diagnoses` stays this app's own share.
+          diagnoses_used: teamDiagnoses,
           limit_diagnoses: diagnosesLimit,
-          diagnoses_usage_pct: diagnosesLimit ? Math.round((u.diagnoses / diagnosesLimit) * 100) : null,
+          diagnoses_usage_pct: diagnosesLimit ? Math.round((teamDiagnoses / diagnosesLimit) * 100) : null,
           over_diagnosis_quota:
             !isComplimentary &&
             diagnosesLimit !== null &&
-            u.diagnoses >= diagnosesLimit &&
+            teamDiagnoses >= diagnosesLimit &&
             !(
               plan.overage_unit_amount_decimal_diagnoses &&
               diagnosisOverageBillable(
@@ -612,8 +635,10 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
   // =================================================================================
   // PUT /v1/admin/billing/spend-cap
-  // Set or clear the per-subscription monthly spend cap (USD). The cap stored here
-  // overrides the plan-level default in classify-report's diagnosis quota gate.
+  // Set or clear the team's monthly spend cap (USD). It is stored on the team's
+  // subscription (billing_subscriptions.monthly_spend_cap_usd_override; one
+  // subscription per team), so setting it from any app's card caps the whole
+  // team's overage. It overrides the plan default in the diagnosis quota gate.
   // Accepts JWT and API keys with mcp:write scope so CLI `mushi billing cap` works.
   // =================================================================================
   app.put('/v1/admin/billing/spend-cap', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
@@ -648,32 +673,37 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
     );
     if (capForbidden) return capForbidden;
 
-    const { error } = await db
-      .from('billing_subscriptions')
-      .update({ monthly_spend_cap_usd_override: capRaw ?? null })
-      .eq('project_id', projectId);
+    let capOrg: string | null;
+    try {
+      capOrg = await organizationIdForProject(db, projectId);
+    } catch (err) {
+      return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+    }
+
+    // The team's live subscription(s). `.select()` returns the rows touched,
+    // so a team with no paid plan is caught without a second read.
+    const { data: capped, error } = capOrg
+      ? await db
+          .from('billing_subscriptions')
+          .update({ monthly_spend_cap_usd_override: capRaw ?? null })
+          .eq('organization_id', capOrg)
+          .in('status', ['active', 'trialing', 'past_due'])
+          .select('stripe_subscription_id')
+      : { data: [] as Array<{ stripe_subscription_id: string }>, error: null };
 
     if (error) {
       return c.json({ ok: false, error: error.message }, 500);
     }
 
-    // Detect silent no-op: if no subscription row exists (free-tier project),
-    // the UPDATE touches 0 rows. Return a clear error instead of silently
-    // claiming success while the override never persisted.
-    const { count } = await db
-      .from('billing_subscriptions')
-      .select('project_id', { count: 'exact', head: true })
-      .eq('project_id', projectId);
-
-    if ((count ?? 0) === 0) {
+    if ((capped?.length ?? 0) === 0) {
       return c.json(
         {
           ok: false,
           error: {
             code: 'NO_SUBSCRIPTION',
             message:
-              'This project has no paid subscription. The spend cap applies to metered ' +
-              'billing on paid plans (Indie / Pro). Upgrade first, then set a cap.',
+              'This team has no paid plan. The spend cap applies to metered ' +
+              'billing on paid plans (Builder / Studio). Upgrade first, then set a cap.',
           },
         },
         409,

@@ -40,6 +40,7 @@ import {
   type WalletDebitDeadLetter,
 } from './kensaurus-wallet.ts';
 import { decideHostedLlmCharge } from './hosted-llm-charge.ts';
+import { resolveProjectBilling } from './org-billing.ts';
 import { reportError } from './sentry.ts';
 
 const log = rootLog.child('hosted-llm-billing');
@@ -218,10 +219,10 @@ const planCache = new Map<string, { planId: string | null; at: number }>();
 const PLAN_TTL_MS = 60_000;
 
 /**
- * Which pricing plan the project is on, for revenue attribution in the ledger
- * metadata. Mirrors quota.ts's resolution order (subscription first, then the
- * owning organization) without importing the quota gate — this is metadata,
- * never a decision, so a miss is recorded as `null` rather than retried.
+ * Which pricing plan the project's team is on, for revenue attribution in the
+ * ledger metadata. Same resolver as the quota gate (_shared/org-billing.ts);
+ * this is metadata, never a decision, so a miss is recorded as `null` rather
+ * than retried.
  */
 async function resolvePlanId(projectId: string): Promise<string | null> {
   const hit = planCache.get(projectId);
@@ -229,25 +230,7 @@ async function resolvePlanId(projectId: string): Promise<string | null> {
 
   let planId: string | null = null;
   try {
-    const admin = getServiceClient();
-    const { data: sub } = await admin
-      .from('billing_subscriptions')
-      .select('status, plan_id')
-      .eq('project_id', projectId)
-      .maybeSingle();
-    const subRow = sub as { status?: string | null; plan_id?: string | null } | null;
-    if (subRow?.plan_id && (subRow.status === 'active' || subRow.status === 'trialing')) {
-      planId = subRow.plan_id;
-    } else {
-      const { data: project } = await admin
-        .from('projects')
-        .select('organization_id, organizations(plan_id)')
-        .eq('id', projectId)
-        .maybeSingle();
-      planId =
-        (project as { organizations?: { plan_id?: string | null } | null } | null)?.organizations
-          ?.plan_id ?? null;
-    }
+    planId = (await resolveProjectBilling(getServiceClient(), projectId)).plan.id;
   } catch (err) {
     log.warn('Plan attribution lookup failed (non-fatal)', {
       projectId,

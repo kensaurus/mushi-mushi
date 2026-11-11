@@ -603,7 +603,7 @@ export const AGENCY_FAQ: readonly FaqEntry[] = [
   },
   {
     q: 'Which is cheaper for eight client sites?',
-    a: 'It depends on what you count. On 2026-11-11, BugHerd Standard was $50 a month with unlimited projects and 5 members, and Marker.io Starter was $39 a month billed annually for up to 10 projects and 3 members. Mushi Mushi Studio is $79 a month for a team of up to 10 apps and 5 seats, but its 3,000 diagnoses belong to the one app you upgrade; the other apps keep 100 a month each unless you upgrade them too.',
+    a: 'It depends on what you count. On 2026-11-11, BugHerd Standard was $50 a month with unlimited projects and 5 members, and Marker.io Starter was $39 a month billed annually for up to 10 projects and 3 members. Mushi Mushi Studio is $79 a month for a team of up to 10 apps and 5 seats, with 3,000 diagnoses a month shared by all of them.',
   },
   {
     q: 'What does Mushi Mushi do that these three do not?',

@@ -4,6 +4,7 @@ import type { Variables } from '../types.ts'
 import { getServiceClient, getUserClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
+import { resolveOrgPlan } from '../../_shared/org-billing.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { dbError } from '../shared.ts';
@@ -201,18 +202,10 @@ async function checkSeatCap(
   db: ReturnType<typeof getServiceClient>,
   orgId: string,
 ): Promise<{ status: number; body: { ok: false; error: { code: string; message: string; details?: Record<string, unknown> } } } | null> {
-  const { data: org } = await db
-    .from('organizations')
-    .select('plan_id')
-    .eq('id', orgId)
-    .maybeSingle();
-  if (!org?.plan_id) return null;
-
-  const { data: plan } = await db
-    .from('pricing_plans')
-    .select('seat_limit, display_name')
-    .eq('id', org.plan_id)
-    .maybeSingle();
+  // The team's plan from the one resolver every plan gate shares
+  // (_shared/org-billing.ts): a paid Stripe subscription lifts the cap the
+  // moment its webhook lands, not only after organizations.plan_id is set.
+  const plan = await resolveOrgPlan(db, orgId);
   if (!plan?.seat_limit) return null; // NULL = unlimited
 
   const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
@@ -642,17 +635,10 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
     const memberCount = members.length;
     const pendingInvites = invites.length;
 
-    let seatLimit: number | null = null;
-    let planDisplayName: string | null = null;
-    if (org?.plan_id) {
-      const { data: plan } = await db
-        .from('pricing_plans')
-        .select('seat_limit, display_name')
-        .eq('id', org.plan_id)
-        .maybeSingle();
-      seatLimit = (plan as { seat_limit?: number | null } | null)?.seat_limit ?? null;
-      planDisplayName = (plan as { display_name?: string | null } | null)?.display_name ?? null;
-    }
+    // Same resolver as checkSeatCap, so the summary and the invite gate agree.
+    const seatPlan = await resolveOrgPlan(db, orgId);
+    const seatLimit: number | null = seatPlan.seat_limit ?? null;
+    const planDisplayName: string | null = seatPlan.display_name ?? null;
 
     const seatsUsed = memberCount + pendingInvites;
     const seatsRemaining = seatLimit === null ? null : Math.max(0, seatLimit - seatsUsed);
@@ -684,7 +670,7 @@ export function registerOrganizationRoutes(app: Hono<{ Variables: Variables }>):
         activeLast7d,
         expiringSoonInvites,
         atSeatCap,
-        planId: (org as { plan_id?: string | null } | null)?.plan_id ?? null,
+        planId: seatPlan.id,
         planDisplayName,
         currentUserRole: role,
         canManage,

@@ -23,7 +23,9 @@ describe('plan credit redemption', () => {
     expect(helper).toContain("from('organization_members')")
     expect(helper).toContain("in('role', ['owner', 'admin'])")
     expect(helper).toContain("from('billing_subscriptions')")
-    expect(helper).toContain("from('billing_customers')")
+    // One Stripe customer per team: looked up by the subscription's organization.
+    expect(helper).toContain('orgCustomer(db, sub.organization_id)')
+    expect(helper).not.toContain("eq('project_id'")
   })
 
   it('refunds the points and fails the redemption when there is no paid plan, before any credit', () => {

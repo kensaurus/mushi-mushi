@@ -53,13 +53,14 @@ To let a client see only their own app, put that app in **its own team**:
 1. In the console's team switcher, choose **Create team** and name it after the
    client. One account can own several teams.
 2. Create the client's app inside that team.
-3. Upgrade that app to Studio, then invite the client as a **Viewer** under
+3. Upgrade that team to Studio, then invite the client as a **Viewer** under
    **Team → Team members**. Invitations need Studio; a team on Free or Builder
    has one seat, yours.
 
-A new team starts on the Free plan (one app, 100 diagnoses a month). Plans are
-bought per app (see [What it costs](#what-it-costs)), so a separate team for a
-client costs the same as keeping their app in your main team.
+A new team starts on the Free plan (one app, 100 diagnoses a month). A plan is
+bought per team (see [What it costs](#what-it-costs)), so a separate team for a
+client is a separate plan: it costs more than keeping their app in your main
+team, where one plan covers every app.
 
 If the client does not need the console at all, skip the invitation. Forward
 them the report or connect a shared Slack channel, and keep every app in one
@@ -85,39 +86,32 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 | Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
 | Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
-**Eight client apps fit in one Studio team**: Studio allows 10 apps, for $79 a
-month or $790 a year. Read the next part before you budget.
+**Eight client apps fit on Studio: $79 a month for the team** (or $790 a year):
+up to 10 apps, 3,000 diagnoses a month shared by all of them, and 5 seats.
 
-**The plan's diagnoses go to the app you upgrade, not to the whole team.** You
-upgrade from one app's card on the Billing page, and the subscription is
-attached to that app. That app gets 3,000 diagnoses a month. Every other app in
-the team keeps 100 diagnoses a month and stops there until the 1st (its reports
-are still kept) unless you upgrade that app too.
+A plan belongs to the team, not to one app. You upgrade from any app's card on
+the Billing page and every app in the team is on Studio. The 3,000 diagnoses
+are one allowance for the whole team, counted together: a busy app can use
+more of it and a quiet app less.
 
-| What you want | Per month |
-| --- | --- |
-| 8 apps: one busy app with 3,000 diagnoses, seven quiet apps with 100 each | $79 |
-| 8 apps, each with 3,000 diagnoses | 8 × $79 = $632 |
-
-What the whole team gets from one Studio subscription: room for 10 apps, the 5
-seats, 180 days of history on every app, plugins, and no Mushi Mushi mark on
-any app's widget.
+What the whole team gets from one Studio subscription: room for 10 apps, 3,000
+diagnoses a month between them, the 5 seats, 180 days of history on every app,
+plugins, and no Mushi Mushi mark on any app's widget.
 
 **Seats.** Studio has 5 seats and you are one of them. Every member takes a
 seat, a client Viewer included. So does every invitation that has not been
 accepted yet, until it is accepted, revoked or expires after 7 days.
 
 **The most you can be billed.** On a monthly plan, each diagnosis past the
-included ones costs $0.03, up to a spend cap. The cap belongs to the upgraded
-app: $50 a month by default on Builder, $200 on Studio.
+team's included ones costs $0.03, up to a spend cap. The cap covers the whole
+team: $50 a month by default on Builder, $200 on Studio.
 
-- Worst case for one Studio app in a calendar month, at the default cap:
-  $79 + $200 = **$279**, plus any tax.
-- Want a fixed bill? Open **Team → Billing**, find the app's card and set its
-  **Spending cap** to **$0**. Diagnoses then pause at 3,000 until the 1st, and
-  that app never costs more than $79 a month.
+- Worst case for a Studio team in a calendar month, at the default cap:
+  $79 + $200 = **$279**, plus any tax, however many apps it has.
+- Want a fixed bill? Open **Team → Billing**, and on any app's card set the
+  **Spending cap** to **$0**. The team's diagnoses then pause at 3,000 until
+  the 1st, and the team never pays more than $79 a month.
 - Annual plans have no overage at all: they pause at the included diagnoses.
-- An app you have not upgraded is never billed.
 
 **The brand mark.** On Builder and Studio the widget carries no Mushi Mushi
 mark. On Free it shows a small "Bug reports by Mushi Mushi" link at the foot of
