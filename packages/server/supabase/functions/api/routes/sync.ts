@@ -66,17 +66,28 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
     const projectId = c.get('projectId') as string
     const projectName = c.get('projectName') as string
 
-    // Fetch a lightweight stats snapshot alongside the identity info.
-    const [totalResult, openResult] = await Promise.all([
+    // Fetch a lightweight stats snapshot alongside the identity info, and the
+    // repos the project is linked to (primary first): `mushi work` refuses a
+    // clone that is none of them, so one project's reports never get "fixed"
+    // in another app's repo (found 2026-11-11).
+    const [totalResult, openResult, reposResult] = await Promise.all([
       db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', projectId),
       db.from('reports').select('id', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .in('status', ['new', 'triaged', 'in_progress']),
+      db.from('project_repos').select('repo_url, is_primary, created_at')
+        .eq('project_id', projectId)
+        .order('is_primary', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: true })
+        .limit(50),
     ])
-    const countErr = totalResult.error ?? openResult.error
+    const countErr = totalResult.error ?? openResult.error ?? reposResult.error
     if (countErr) {
       return c.json({ ok: false, error: { code: 'DB_ERROR', message: countErr.message } }, 500)
     }
+    const repoUrls = ((reposResult.data ?? []) as Array<{ repo_url: string | null }>)
+      .map((r) => (typeof r.repo_url === 'string' ? r.repo_url.trim() : ''))
+      .filter((u) => u.length > 0)
 
     return c.json({
       ok: true,
@@ -86,6 +97,8 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         // The key's own scopes, so a client can tell an SDK key (report:write)
         // from an MCP/CLI key before calling a route that needs mcp:read.
         scopes: (c.get('apiKeyScopes') as string[] | undefined) ?? [],
+        // The project's linked repos, primary first; empty when none is linked.
+        repo_urls: repoUrls,
         stats: {
           total_reports: totalResult.count ?? 0,
           open_reports: openResult.count ?? 0,

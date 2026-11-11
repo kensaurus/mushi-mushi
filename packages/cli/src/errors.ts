@@ -28,6 +28,7 @@ export type CliErrorCode =
   | 'E_FILE_NOT_FOUND'       // Local file/dir missing
   | 'E_FILE_PERMISSION'      // File read/write blocked by perms
   | 'E_INVALID_INPUT'        // User-supplied flag/arg failed validation
+  | 'E_WRONG_REPO'           // The clone is not a repo the key's project is linked to
   | 'E_NOT_INTERACTIVE'      // Wizard requires a TTY but stdin is piped
   | 'E_INTERRUPTED'          // SIGINT/SIGTERM during a long-running op
   | 'E_FRESHNESS_STALE'      // SDK / CLI version is past its support window
@@ -40,6 +41,7 @@ const EXIT_CODE_MAP: Record<CliErrorCode, number> = {
   E_PROJECT_MISSING: 2,
   E_ENDPOINT_INVALID: 2,
   E_INVALID_INPUT: 2,
+  E_WRONG_REPO: 2,
   E_NOT_INTERACTIVE: 2,
   E_NETWORK: 3,
   E_TIMEOUT: 3,
