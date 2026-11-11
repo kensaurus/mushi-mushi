@@ -200,6 +200,7 @@ describe('telemetry retention (owner-approved 2026-11-11)', () => {
     }
     expect(sql).toContain("cron.schedule('mushi-telemetry-retention', '53 5 * * *', $cmd$select mushi.prune_telemetry();$cmd$)")
     expect(sql).toContain('revoke all on function mushi.prune_telemetry(integer, integer, integer) from public, anon, authenticated;')
-    expect(sql).not.toMatch(/vacuum\s+full/i)
+    // Statements only (the header comment says it does not run one).
+    expect(sql.replace(/--[^\n]*/g, '')).not.toMatch(/vacuum\s+full/i)
   })
 })
