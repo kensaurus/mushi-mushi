@@ -160,5 +160,32 @@ describe('FixCiFeedback', () => {
     await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
     await act(async () => button('Re-run tests')!.click())
     expect(host.querySelector('[role="alert"]')!.textContent).toMatch(/Actions: write/)
+    expect(button('Re-run tests')!.disabled).toBe(true)
+    expect(button('Re-run tests')!.title).toMatch(/Actions: write/)
+  })
+
+  it('a transient Re-run error (409) leaves the button usable', async () => {
+    mocks.apiFetchMutate.mockResolvedValue({ ok: false, error: { code: 'CI_RUNNING', message: 'conflict' } })
+    await render({ ciConclusion: 'cancelled', ciInfra: verdict({}) })
+    await act(async () => button('Re-run tests')!.click())
+    expect(button('Re-run tests')!.disabled).toBe(false)
+  })
+
+  it('CI repair refused (both rounds used) disables Send to CI repair with the reason', async () => {
+    const refusal = 'Not queued. Both follow-up rounds were already used on this PR.'
+    mocks.apiFetch.mockImplementation(async (_path: string, opts?: { method?: string }) => {
+      if ((opts?.method ?? 'GET').toUpperCase() === 'POST') return { ok: true, data: { results: [{ id: 'fix-1', ok: false, message: refusal }] } }
+      return { ok: true, data: ciOverviewFixture() }
+    })
+    await render({ ciConclusion: 'failure' })
+    await act(async () => button('Send to CI repair')!.click())
+    const confirm = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Send to CI repair' && b.hasAttribute('data-primary'))!
+    await act(async () => confirm.click())
+    await act(async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+    })
+    expect(host.textContent).toContain(refusal)
+    expect(button('Send to CI repair')!.disabled).toBe(true)
+    expect(button('Send to CI repair')!.title).toBe(refusal)
   })
 })

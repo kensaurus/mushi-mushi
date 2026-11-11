@@ -74,6 +74,9 @@ export function FixCiFeedback({
   const [failingChecks, setFailingChecks] = useState<string[]>([])
   const [repairing, setRepairing] = useState(false)
   const [confirmRepair, setConfirmRepair] = useState(false)
+  // A refusal the server will repeat on every click (no Actions write, repair rounds used up) disables the button (69fcafcb).
+  const [rerunRefused, setRerunRefused] = useState<string | null>(null)
+  const [repairRefused, setRepairRefused] = useState<string | null>(null)
 
   const reading = readFixCi({ check_run_conclusion: conclusion, check_run_status: status, ci_infra: infra })
   const repo = repoFromPrUrl(prUrl)
@@ -147,7 +150,9 @@ export function FixCiFeedback({
     const res = await apiFetchMutate<CiRerunResult>(`/v1/admin/fixes/${fixId}/ci/rerun`, { method: 'POST', body: '{}' })
     setRerunning(false)
     if (!res.ok) {
-      setError(rerunErrorText(res.error?.code, res.error?.message))
+      const text = rerunErrorText(res.error?.code, res.error?.message)
+      setError(text)
+      if (res.error?.code === 'GITHUB_ACTIONS_WRITE_MISSING' || res.error?.code === 'GITHUB_ACTIONS_READ_MISSING') setRerunRefused(text)
       return
     }
     setInfra(null)
@@ -165,7 +170,10 @@ export function FixCiFeedback({
       const out = await runPipelineAction('ci_repair', [fixId])
       const first = out[0]
       if (first?.ok) setNotice(first.message)
-      else setError(first?.message ?? 'Could not send this to CI repair')
+      else if (first) {
+        setError(first.message)
+        setRepairRefused(first.message)
+      } else setError('Could not send this to CI repair')
     } finally {
       setRepairing(false)
       setConfirmRepair(false)
@@ -220,8 +228,8 @@ export function FixCiFeedback({
             <button
               type="button"
               onClick={() => void handleRerun()}
-              disabled={rerunning || rerunBlocked}
-              title={rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined}
+              disabled={rerunning || rerunBlocked || rerunRefused !== null}
+              title={rerunRefused ?? (rerunBlocked ? 'Tests are still waiting or running; re-run once they stop.' : undefined)}
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {rerunning ? 'Re-running tests…' : 'Re-run tests'}
@@ -234,7 +242,8 @@ export function FixCiFeedback({
             <button
               type="button"
               onClick={() => setConfirmRepair(true)}
-              disabled={repairing}
+              disabled={repairing || repairRefused !== null}
+              title={repairRefused ?? undefined}
               className="font-medium text-accent hover:underline disabled:opacity-50"
             >
               {repairing ? 'Sending to CI repair…' : 'Send to CI repair'}
