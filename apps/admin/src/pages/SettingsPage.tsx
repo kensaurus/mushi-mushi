@@ -304,7 +304,7 @@ function SettingsPageBody({
         helpUseCases={
           copy?.help?.useCases ?? [
             'Send new bugs to a Slack channel with Triage and Fix buttons',
-            'Turn Sentry errors into Mushi reports automatically',
+            'Turn Sentry errors into Mushi Mushi reports automatically',
             'Use your own Anthropic or OpenAI key so AI usage bills your account',
           ]
         }

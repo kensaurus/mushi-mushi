@@ -141,12 +141,12 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         title: 'Protect `main` from auto-merging fix PRs',
         status: githubAppInstalled ? 'recommended' : 'optional',
         description:
-          'Add a rule on `main` that requires at least one reviewer and a passing CI check. Mushi opens PRs as drafts, but a protected base branch is the belt-and-suspenders that stops a fast-clicked merge.',
+          'Add a rule on `main` that requires at least one reviewer and a passing CI check. Mushi Mushi opens PRs as drafts, but a protected base branch is the belt-and-suspenders that stops a fast-clicked merge.',
         ctaLabel: 'Open branch protection settings',
         ctaHref: protectionUrl,
         snippetLanguage: 'yaml',
         snippet: [
-          '# GitHub branch protection -- minimum rules for Mushi fix PRs',
+          '# GitHub branch protection -- minimum rules for Mushi Mushi fix PRs',
           '# Repo Settings -> Branches -> Add rule (or use the new Rulesets API)',
           'branch_name_pattern: main',
           'rules:',
@@ -189,7 +189,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         title: 'Ship a Vercel preview on every fix PR',
         status: vercelProjectSlug ? 'ready' : 'recommended',
         description: vercelProjectSlug
-          ? 'Connected -- each Mushi PR will get a unique preview URL that lands as a comment on the PR. Reviewers can click straight into the fix.'
+          ? 'Connected -- each Mushi Mushi PR will get a unique preview URL that lands as a comment on the PR. Reviewers can click straight into the fix.'
           : 'Connect this repo to Vercel so each `mushi/fix-*` branch gets a preview deployment. Reviewers can verify the fix in a browser before approving.',
         ctaLabel: vercelProjectSlug ? 'Open Vercel git settings' : 'Connect to Vercel',
         ctaHref: vercelHref,
@@ -226,10 +226,10 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
       },
       {
         key: 'required-checks',
-        title: 'Require Mushi triage to pass before merge',
+        title: 'Require Mushi Mushi triage to pass before merge',
         status: 'optional',
         description:
-          'Advanced: add `mushi/triage` as a required status check so a merge can only happen once Mushi has classified the report and confirmed the fix relates to it. Useful for teams that want a paper trail on every change.',
+          'Advanced: add `mushi/triage` as a required status check so a merge can only happen once Mushi Mushi has classified the report and confirmed the fix relates to it. Useful for teams that want a paper trail on every change.',
         ctaLabel: 'Configure required checks',
         ctaHref: requiredChecksUrl,
       },
@@ -242,7 +242,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-fg">Deployment readiness</h3>
           <p className="text-2xs text-fg-muted mt-0.5 leading-relaxed">
-            What to enable on your repo so every Mushi fix PR is reviewed and
+            What to enable on your repo so every Mushi Mushi fix PR is reviewed and
             shipped safely. Each item is opt-in — pick the ones that match your
             release process.
           </p>

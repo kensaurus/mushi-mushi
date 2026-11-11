@@ -867,7 +867,7 @@ export function FixesPage() {
         projectScope={projectName}
 
         helpTitle={copy?.help?.title ?? 'About drafted fixes'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'When Mushi Mushi finds a reproducible bug, it drafts a fix on a branch and opens a pull request for you to review before merge.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Track each draft PR from report to merge',
           'See model used, token spend, and trace link per attempt',
@@ -981,7 +981,10 @@ export function FixesPage() {
         <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
       )}
 
-      {emptyAsksForGithub ? null : (
+      {/* Merge queue, release-train timing and "Decide for me" are controls
+          over fixes: with none on record there is nothing for them to act
+          on, and a new user read them as required setup (re-audit 2026-11-11). */}
+      {emptyAsksForGithub || fixes.length === 0 ? null : (
         <MergeQueuePanel projectId={activeProjectId ?? null} refreshKey={queueRefresh} onMerged={loadFixes} />
       )}
 
@@ -1190,7 +1193,7 @@ export function FixesPage() {
       {bulkMergeConfirm && selectedMergeable.length > 0 ? (
         <ConfirmDialog
           title={`Merge ${selectedMergeable.length} ${pluralize(selectedMergeable.length, 'PR', 'PRs')}`}
-          body={`Merge when ready: Mushi updates each branch with your default branch, waits for CI and for an Opus "merge" on the final commit, then squash-merges, one PR per repo at a time, so a merge never leaves the next PR behind. A merge conflict goes to a Cursor agent when review follow-ups are on. Each merged fix marks its report Fixed and tells the reporter. You can leave this page.${selectedFixes.length > selectedMergeable.length ? ` ${selectedFixes.length - selectedMergeable.length} selected ${pluralize(selectedFixes.length - selectedMergeable.length, 'fix has', 'fixes have')} no open PR and ${pluralize(selectedFixes.length - selectedMergeable.length, 'is', 'are')} skipped.` : ''}`}
+          body={`Merge when ready: Mushi Mushi updates each branch with your default branch, waits for CI and for an Opus "merge" on the final commit, then squash-merges, one PR per repo at a time, so a merge never leaves the next PR behind. A merge conflict goes to a Cursor agent when review follow-ups are on. Each merged fix marks its report Fixed and tells the reporter. You can leave this page.${selectedFixes.length > selectedMergeable.length ? ` ${selectedFixes.length - selectedMergeable.length} selected ${pluralize(selectedFixes.length - selectedMergeable.length, 'fix has', 'fixes have')} no open PR and ${pluralize(selectedFixes.length - selectedMergeable.length, 'is', 'are')} skipped.` : ''}`}
           details={
             <ul className="max-h-40 overflow-y-auto space-y-0.5">
               {selectedMergeable.map((f) => (

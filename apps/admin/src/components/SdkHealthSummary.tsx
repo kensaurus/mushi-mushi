@@ -99,6 +99,11 @@ export interface SdkHealthSummaryProps {
   /** Called after a successful "Send test report" so the parent can refetch
    *  and the new ingest immediately appears. */
   onTestReportSent?: () => void
+  /**
+   * The page already has its one "Send test report" button (the Bugs empty
+   * state's first-diagnosis card): do not show a second one here.
+   */
+  hideTestCta?: boolean
 }
 
 type CardStatus =
@@ -140,13 +145,27 @@ function absTime(input: string | null | undefined): string {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
+/**
+ * Where the two values are named, in words a first-time user can act on.
+ * The slug table's fallback is a guess ("Next.js / web"), so for it both
+ * common spellings are given instead of one that may be wrong for the app.
+ */
+function envNamesInWords(env: ProjectMushiEnvVars): string {
+  if (env.stackLabel === 'Next.js / web') {
+    return 'NEXT_PUBLIC_MUSHI_PROJECT_ID and NEXT_PUBLIC_MUSHI_API_KEY on Next.js, VITE_MUSHI_PROJECT_ID and VITE_MUSHI_API_KEY on Vite'
+  }
+  return `${env.projectIdVar} and ${env.apiKeyVar}`
+}
+
+/** The call that starts the SDK, by its real name, for the "never checked in" advice. */
+const SDK_START_ADVICE =
+  'The SDK is never started. Your app has to render <MushiProvider> (React, React Native) or call Mushi.init() (other frameworks) when it loads. The Script tag starts it by itself.'
+
 export function diagnoseKey(
   k: SdkHealthApiKey,
   adminHost: string | null,
   env: ProjectMushiEnvVars = mushiEnvVarsForProjectSlug(null),
 ): KeyDiagnostic {
-  const envPair = formatEnvVarPair(env)
-  const envHint = env.envFileHint ? ` in ${env.envFileHint}` : ' in your build env'
   if (!k.is_active) {
     return {
       status: 'inactive',
@@ -159,7 +178,7 @@ export function diagnoseKey(
       status: 'never',
       label: 'Never used',
       description:
-        `The SDK using this key has not authenticated yet. Most common cause: ${envPair} are missing${envHint} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
+        `Your app has not used this key yet. Usual cause: the project id and key are not in the build of your live app (${envNamesInWords(env)}), so the report button stays off.`,
     }
   }
   const age = Date.now() - new Date(k.last_seen_at).getTime()
@@ -174,7 +193,7 @@ export function diagnoseKey(
     return {
       status: 'endpoint-mismatch',
       label: 'Mismatch',
-      description: `Your SDK is reaching ${k.last_seen_endpoint_host}, but this admin reads from ${adminHost}. Check ${env.endpointVar ?? 'your Mushi API endpoint env var'} in your build env — a stale staging or localhost endpoint is the most common cause.`,
+      description: `Your SDK is reaching ${k.last_seen_endpoint_host}, but this admin reads from ${adminHost}. Check ${env.endpointVar ?? 'your Mushi Mushi API endpoint env var'} in your build env — a stale staging or localhost endpoint is the most common cause.`,
     }
   }
   if (age < SDK_HEALTHY_MS) {
@@ -563,7 +582,7 @@ function buildPlaybook(
 ): Record<CardStatus, { title: string; checks: string[]; cta: string | null }> {
   const envPair = formatEnvVarPair(env)
   const envWhere = env.envFileHint ?? 'your CI/build env'
-  const endpointVar = env.endpointVar ?? 'your Mushi API endpoint env var'
+  const endpointVar = env.endpointVar ?? 'your Mushi Mushi API endpoint env var'
   const isExpo = env.projectIdVar.startsWith('EXPO_PUBLIC_')
   const ghRepo = expoReporterGithubRepo(projectSlug) ?? 'your-repo'
   const neverChecks =
@@ -578,9 +597,9 @@ function buildPlaybook(
           'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real TestFlight / Play build.',
         ]
       : [
-          `${env.projectIdVar} or ${env.apiKeyVar} are missing in ${envWhere} (${env.stackLabel}) — without them, isEnabled() returns false and the SDK never heartbeats.`,
-          'initMushi() is never called from your app entry — usually deferred from providers or app shell after first paint.',
-          'Send test report below proves ingest only — it does not mark SDK installed; you still need a heartbeat from a real app build.',
+          `The project id and key are not in the build of your live app. They are named ${envNamesInWords(env)}. Set both where the app is built (${envWhere}, or your host's environment variables), then deploy again. Without both, the report button stays off.`,
+          SDK_START_ADVICE,
+          'A test report only shows that Mushi Mushi can receive reports. It does not show that the SDK is in your app: for that, open your live app once after deploying.',
         ]
   return {
     healthy: {
@@ -645,6 +664,7 @@ export function SdkHealthSummary({
   reportCount,
   compact = false,
   onTestReportSent,
+  hideTestCta = false,
 }: SdkHealthSummaryProps) {
   const postTestReport = useSendTestReport()
   const [sending, setSending] = useState(false)
@@ -732,7 +752,7 @@ export function SdkHealthSummary({
               <span className="shrink-0 font-medium text-fg-muted">This project reads from</span>
               <code
                 className="min-w-0 truncate font-mono text-fg"
-                title="Backend host for this Mushi project"
+                title="Backend host for this Mushi Mushi project"
               >
                 {adminHost}
               </code>
@@ -818,7 +838,7 @@ export function SdkHealthSummary({
       )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-edge-subtle/40 px-3 py-2.5">
-        {playbook.cta && (
+        {playbook.cta && !hideTestCta && (
           <Btn
             size="sm"
             variant="primary"
@@ -946,6 +966,8 @@ export interface SdkConnectivityEmptyStateProps {
   headline?: string
   /** Called after a test report is sent so the parent can refetch. */
   onTestReportSent?: () => void
+  /** The page already shows a "Send test report" button: leave this card's out. */
+  hideTestCta?: boolean
 }
 
 /**
@@ -967,6 +989,7 @@ export function SdkConnectivityEmptyState({
   adminHost,
   headline = 'Why this is empty',
   onTestReportSent,
+  hideTestCta = false,
 }: SdkConnectivityEmptyStateProps) {
   const syntheticKey: SdkHealthApiKey = {
     id: `setup-${projectId}`,
@@ -997,6 +1020,7 @@ export function SdkConnectivityEmptyState({
         reportCount={0}
         compact
         onTestReportSent={onTestReportSent}
+        hideTestCta={hideTestCta}
       />
       <p className="text-2xs text-fg-faint">
         For per-key detail (which API key is active, when each was last seen, where it was last

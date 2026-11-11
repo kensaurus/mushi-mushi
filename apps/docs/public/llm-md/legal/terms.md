@@ -114,14 +114,17 @@ on Free. We may change Free limits with 30 days' notice on the pricing page.
   through **Stripe**; we never see your full card number.
 - Plans bill **monthly** or **annually** in advance, in US dollars, plus any
   tax we must collect.
-- **Overage** on Builder and Studio is metered per diagnosis at the rate shown on
-  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio).
+- **Overage** on monthly Builder and Studio plans is metered per diagnosis at the rate shown on
+  the pricing page and capped by a **spend cap** ($50 on Builder, $200 on Studio
+  by default, set per subscribed app). Annual plans have no overage.
   When the cap is reached the pipeline stops, like Free, until the next period
   or until you raise the cap in **Billing**. You get email alerts at 50 %,
   80 %, and 100 % of your included diagnoses.
-- **Upgrades** take effect immediately and are prorated. **Downgrades** and
-  cancellations take effect at the end of the current period; you keep the
-  higher plan until then.
+- **Plan changes** made with **Change plan** (Builder ↔ Studio, monthly ↔
+  annual), upgrades and downgrades alike, take effect immediately and are
+  prorated: unused time is credited and the new plan is charged for the rest
+  of the period. **Cancellations** take effect at the end of the current
+  period; you keep the plan until then.
 - **No refunds** for partial months or years except where the law requires
   one. If we terminate your paid plan under section 12 for a reason that is
   not your breach, we refund the unused portion.
@@ -151,7 +154,7 @@ agree that:
 - **Fix output is yours** to the extent we can grant it, with no attribution
   required. The same output may be produced for other users because models are
   not exclusive.
-- **Mushi Mushi's marks** — the names "Mushi Mushi", "Mushi Mushi", "Mushi Mushi Bounties", the
+- **Mushi Mushi's marks** — the names "Mushi Mushi" and "Mushi Mushi Bounties", the
   logo, and the 虫々 mark — are ours. Open-source use of the code does not
   include the marks; the "Bug reports by Mushi Mushi" widget mark may be shown only
   as the SDK renders it.
@@ -216,12 +219,12 @@ If you join Bounties as a tester, this section also applies:
   reports. Developer decisions on acceptance are final; use the feedback to
   improve your next report.
 - **Redemption.** 1,000 points redeem for US$10 in gift cards (delivered by
-  Tremendous) or US$13 in Mushi Mushi Pro credit. Redemption thresholds and
+  Tremendous) or US$13 in Mushi Mushi plan credit. Redemption thresholds and
   catalogue are shown in your wallet.
 - **KYC.** Once your gift-card redemptions reach **US$400 in a calendar
   year**, further redemptions are held until you complete a
   tax-identification form (W-9 or W-8BEN). Gift-card redemptions are capped
-  at **US$599 per calendar year**. Pro credit is not subject to this gate.
+  at **US$599 per calendar year**. Plan credit is not subject to this gate.
 - **Sanctions.** Bounties is not available in jurisdictions under US OFAC
   sanctions. We may cancel redemptions we cannot lawfully pay.
 - **Testing rules.** Test only apps listed on the marketplace, stay within

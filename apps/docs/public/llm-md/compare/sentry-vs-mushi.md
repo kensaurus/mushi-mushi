@@ -41,9 +41,10 @@ case for an app built with Cursor, Claude Code or Lovable.
 ## Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]
 
 Keep Sentry where it is. Point a Sentry issue-alert webhook at Mushi Mushi and every
-error lands in the same queue as user reports, deduped and diagnosed; with the
-outbound Sentry plugin (Builder and above, or self-hosted), Mushi Mushi resolves the
-linked Sentry issue when the fix merges. The setup is three steps
+error lands in the same queue as user reports, deduped and diagnosed. Once you
+add a Sentry auth token under **Integrations → Sentry**, Mushi Mushi also resolves
+the linked Sentry issue when the fix merges. Both work on every plan, Free
+included. The setup is three steps
 on the [Sentry plugin page](/plugins/sentry), and there is a
 [migration guide](/migrations/sentry-to-mushi) for the enrich-or-standalone
 decision.

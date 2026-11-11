@@ -112,6 +112,7 @@ describe('reporter chip spacing', () => {
           createElement(ReportDetailHeader, {
             report: report({ reporter_display_name: appUserId, end_user_id: 'eu-1', status: 'classified' }),
             reporterShort: 'abc123',
+            showInternals: true,
           }),
         ),
       ),
@@ -129,6 +130,26 @@ describe('reporter chip spacing', () => {
     expect(value?.className).toMatch(/\bgap-1\b/)
     // Copied text and screen readers get real spaces, not "userb850e61a·".
     expect(value?.textContent).toBe('Signed-in user b850e61a · view all')
+  })
+})
+
+describe('reporter chip outside operator accounts', () => {
+  it('reads "A signed-in user", with no piece of the id', () => {
+    const appUserId = 'b850e61a-1d1c-4b2e-9a8e-2f0c5de9d7a1'
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(ReportDetailHeader, {
+            report: report({ reporter_display_name: appUserId, end_user_id: 'eu-1', status: 'classified' }),
+            reporterShort: 'abc123',
+          }),
+        ),
+      ),
+    )
+    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter')
+    expect(label?.nextElementSibling?.textContent).toBe('A signed-in user · view all')
   })
 })
 

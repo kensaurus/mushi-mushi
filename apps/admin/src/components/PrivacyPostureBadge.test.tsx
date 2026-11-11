@@ -98,7 +98,23 @@ describe('PrivacyPostureBadge', () => {
     render();
     expect(state.paths).toEqual([`/v1/admin/privacy-status?project_id=${projectId}`]);
     expect(state.deps).toEqual([[projectId]]);
-    expect(container.textContent).toContain('BYOK');
+    expect(container.textContent).toContain('Your own AI key');
+    expect(container.textContent).not.toMatch(/BYOK|LLM/);
+  });
+
+  it('says plainly that an account with no key of its own runs on Mushi Mushi\'s key, without a warning', () => {
+    state.projectId = '11111111-1111-4111-8111-111111111111';
+    state.page = {
+      data: { byok_configured: false, llm_provider: 'platform', storage_provider: null, region: null, retention_days: null, last_audit_at: null },
+      loading: false,
+      error: null,
+      errorMessage: null,
+    };
+    render();
+    expect(container.textContent).toContain("Mushi Mushi's AI key");
+    expect(container.querySelector('button')?.getAttribute('title')).toBe("AI runs on Mushi Mushi's key");
+    expect(container.textContent).not.toMatch(/BYOK|LLM|your own API key/);
+    expect(container.innerHTML).not.toContain('bg-warn');
   });
 
   it('shows an unknown chip when the key check failed', () => {
@@ -117,8 +133,8 @@ describe('PrivacyPostureBadge', () => {
       errorMessage: null,
     };
     render();
-    expect(container.textContent).toContain('Key unknown');
-    expect(container.textContent).not.toContain('Platform key');
+    expect(container.textContent).toContain('AI key unknown');
+    expect(container.textContent).not.toContain("Mushi Mushi's AI key");
   });
 
   it('still reports a real failure', () => {
@@ -130,7 +146,7 @@ describe('PrivacyPostureBadge', () => {
       errorMessage: 'Request failed',
     };
     render();
-    expect(container.textContent).toContain('Privacy unavailable');
+    expect(container.textContent).toContain('AI key not checked');
   });
 
   // The rail flyout is portaled and only mounted on hover, so the rail link
@@ -156,7 +172,7 @@ describe('PrivacyPostureBadge', () => {
     const desc = descId ? document.getElementById(descId) : null;
     expect(desc).not.toBeNull();
     expect(link?.contains(desc)).toBe(true);
-    expect(desc?.textContent).toContain('Mushi platform API key');
-    expect(desc?.textContent).toContain('Platform key in use');
+    expect(desc?.textContent).toContain("runs on Mushi Mushi's key, at no cost to you");
+    expect(desc?.textContent).toContain("AI runs on Mushi Mushi's key");
   });
 });

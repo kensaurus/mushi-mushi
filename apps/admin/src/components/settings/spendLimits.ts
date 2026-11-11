@@ -33,7 +33,7 @@ export const SPEND_LIMITS: readonly SpendLimitMeta[] = [
     field: 'autofix_max_spend_usd',
     label: 'Auto-fix spend limit, last 30 days ($)',
     help:
-      'Mushi stops starting fixes on its own once its fixes have cost this much in the last 30 days. Fixes you start yourself still run. Leave empty for no limit.',
+      'Mushi Mushi stops starting fixes on its own once its fixes have cost this much in the last 30 days. Fixes you start yourself still run. Leave empty for no limit.',
     unit: 'usd',
     placeholder: 'No limit',
   },
@@ -41,7 +41,7 @@ export const SPEND_LIMITS: readonly SpendLimitMeta[] = [
     field: 'autofix_max_dispatches_per_day',
     label: 'Automatic fixes per day',
     help:
-      'How many fixes Mushi may start on its own each day (UTC). Fixes you start yourself do not count. Leave empty for no limit.',
+      'How many fixes Mushi Mushi may start on its own each day (UTC). Fixes you start yourself do not count. Leave empty for no limit.',
     unit: 'count',
     placeholder: 'No limit',
   },
@@ -49,7 +49,7 @@ export const SPEND_LIMITS: readonly SpendLimitMeta[] = [
     field: 'autofix_approval_cost_threshold_usd',
     label: 'Ask me before fixes that may cost more than ($)',
     help:
-      'A high or critical fix estimated above this amount waits for your approval before Mushi opens a pull request. This applies to every fix, including ones you start. Leave empty to never ask.',
+      'A high or critical fix estimated above this amount waits for your approval before Mushi Mushi opens a pull request. This applies to every fix, including ones you start. Leave empty to never ask.',
     unit: 'usd',
     placeholder: 'Never ask',
   },

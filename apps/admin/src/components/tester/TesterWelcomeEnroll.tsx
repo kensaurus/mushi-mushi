@@ -32,7 +32,7 @@ export function TesterWelcomeEnroll() {
     try {
       const ok = await enroll({ marketingOptIn: marketing, acceptedTerms: true })
       if (ok) {
-        toast.success('Welcome to Mushi Bounties — pick an app and start testing.')
+        toast.success('Welcome to Mushi Mushi Bounties — pick an app and start testing.')
       } else {
         toast.error('Could not activate your tester account. Try again in a moment.')
       }
@@ -50,7 +50,7 @@ export function TesterWelcomeEnroll() {
         </h1>
         <p className="max-w-xl text-sm text-fg-muted text-pretty">
           You&apos;re signed in — activate your free tester profile to browse apps, submit reports,
-          and redeem points for gift cards or Mushi Pro credit.
+          and redeem points for gift cards or Mushi Mushi Pro credit.
         </p>
       </div>
 
@@ -70,7 +70,7 @@ export function TesterWelcomeEnroll() {
           <span>
             I agree to the{' '}
             <a href="https://kensaur.us/mushi-mushi/docs/legal/terms#15-mushi-bounties-tester-program" target="_blank" rel="noreferrer" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-              Mushi Bounties tester terms
+              Mushi Mushi Bounties tester terms
             </a>
           </span>
         </label>

@@ -133,7 +133,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
 
   return (
     <Section title="Connected sources">
-      <p className="mb-3 text-xs text-fg-muted">Optional. Each one lets Mushi read one more thing it checks. Read-only unless you turn on more, and any release action still needs your approval each time.</p>
+      <p className="mb-3 text-xs text-fg-muted">Optional. Each one lets Mushi Mushi read one more thing it checks. Read-only unless you turn on more, and any release action still needs your approval each time.</p>
       {error && <PageLoadError error={error} resource="connected sources" endpoint={path} onRetry={reload} />}
       {canManage === false && <p className="mb-2 text-xs text-fg-muted">Adding, checking and removing sources: {ORG_ADMIN_ONLY_HINT}</p>}
       {loading && !data && <Loading text="Reading connectors…" />}
@@ -256,7 +256,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
       {confirmRemove && (
         <ConfirmDialog
           title={`Remove ${confirmRemove.name}?`}
-          body="Mushi stops reading this source and deletes its stored credential. To connect it again you will need the credential from the provider."
+          body="Mushi Mushi stops reading this source and deletes its stored credential. To connect it again you will need the credential from the provider."
           confirmLabel="Remove source"
           tone="danger"
           loading={busy}

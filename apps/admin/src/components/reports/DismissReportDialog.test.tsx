@@ -99,7 +99,7 @@ describe('DismissReportDialog', () => {
     expect(onDismissed).toHaveBeenCalledTimes(1)
   })
 
-  it('offers a false alarm only when Mushi filed the report, and stores it', async () => {
+  it('offers a false alarm only when Mushi Mushi filed the report, and stores it', async () => {
     apiFetch.mockResolvedValue({ ok: true, data: null })
     await render({ id: 'r1', source: 'widget' })
     expect(reasonValues()).not.toContain('false_alarm')
@@ -111,7 +111,7 @@ describe('DismissReportDialog', () => {
       select.value = 'false_alarm'
       select.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    expect(document.body.textContent).toContain("Closed as a false alarm: nobody is told. Mushi's check was wrong.")
+    expect(document.body.textContent).toContain("Closed as a false alarm: nobody is told. Mushi Mushi's check was wrong.")
     await act(async () => button('Dismiss')?.click())
     expect(apiFetch).toHaveBeenCalledWith(
       '/v1/admin/reports/r1',

@@ -106,7 +106,7 @@ export async function initMushiSelf(options?: {
           betaMode: {
             enabled: true,
             appName: 'Mushi Admin',
-            message: 'This is the Mushi admin console. Found a bug? Report it here and it goes straight to the team.',
+            message: 'This is the Mushi Mushi admin console. Found a bug? Report it here and it goes straight to the team.',
             contactEmail: 'kensaurus@gmail.com',
           },
           minDescriptionLength: 12,

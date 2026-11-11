@@ -59,7 +59,7 @@ export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
     steps.push({
       id: 'mint-key',
       title: 'Mint an API key',
-      why: 'Your app has no way to send bugs to Mushi until it has a key.',
+      why: 'Your app has no way to send bugs to Mushi Mushi until it has a key.',
       to: connectTo,
       ctaLabel: 'Mint key',
     })
@@ -105,7 +105,7 @@ export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
     steps.push({
       id: 'connect-repo',
       title: 'Connect the GitHub repo',
-      why: 'With a repo connected, Mushi can draft fix PRs instead of just describing bugs.',
+      why: 'With a repo connected, Mushi Mushi can draft fix PRs instead of just describing bugs.',
       to: `/integrations/config?project=${p.id}`,
       ctaLabel: 'Connect repo',
     })
@@ -121,7 +121,7 @@ export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
   if (p.active_key_count === 0 || !hasEverConnected(p)) {
     return {
       tone: 'inactive',
-      verdict: `${p.name} isn't connected yet — Mushi can't see this app until the SDK is installed.`,
+      verdict: `${p.name} isn't connected yet — Mushi Mushi can't see this app until the SDK is installed.`,
       steps,
     }
   }

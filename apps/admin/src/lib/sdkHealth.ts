@@ -12,6 +12,7 @@ import { useCallback, useRef, useState } from 'react'
 import { apiFetchMutate } from './supabase'
 import { useCiSecretSync } from './useCiSecretSync'
 import { useSdkUpgrade } from './useSdkUpgrade'
+import { webEnvNames } from './hostingEnvHint'
 
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
 
@@ -23,6 +24,47 @@ export interface SdkHealthProblem {
   fix: { kind: SdkHealthFixKind; label: string } | null
   /** What already exists for it (an open upgrade PR), shown instead of a second fix. */
   link?: { label: string; href: string }
+  /** Asked, not asserted: the console cannot tell whether it applies. Left out of Fix all. */
+  question?: boolean
+}
+
+/**
+ * The server flags missing GitHub Actions secrets for any app that has never
+ * checked in. That is only a fault when GitHub Actions builds the app: a
+ * store build (Expo, Capacitor), or a workflow that deploys the site. A web
+ * app that Vercel or Netlify builds never reads them (re-audit 2026-11-11: a
+ * Next.js app on Vercel was told "GitHub Actions is missing the Mushi keys.
+ * VITE_..."). The console cannot see the repo's workflows, so for anything
+ * not known to be a native app it asks, and names the values the way the
+ * app's own bundler does, or not at all when that is unknown.
+ */
+export function presentSdkHealthProblems(
+  problems: readonly SdkHealthProblem[],
+  view: { nativeApp: boolean; bundler: 'vite' | 'next' | null },
+): SdkHealthProblem[] {
+  if (view.nativeApp) return [...problems]
+  const asked = problems.some((p) => p.id === 'ci_secrets_missing')
+  return problems.map((p) => {
+    if (p.id === 'ci_secrets_missing') {
+      const names = view.bundler ? webEnvNames(view.bundler).join(' and ') : 'your project id and SDK key'
+      return {
+        ...p,
+        severity: 'info' as const,
+        question: true,
+        title: 'Does GitHub Actions build this app?',
+        detail: `If Vercel, Netlify or another host builds it, GitHub needs nothing: set ${names} in that host's settings instead (Set up shows where). If a GitHub Actions workflow builds or deploys it, the keys are missing there.`,
+        fix: p.fix ? { ...p.fix, label: 'It does: write the keys to GitHub' } : null,
+      }
+    }
+    if (p.id === 'never_seen' && asked) {
+      const intro = p.detail.split(' The missing CI keys above')[0]!
+      return {
+        ...p,
+        detail: `${intro} Check that the SDK is installed and its key and project id are set where the app builds, deploy, then open the app once.`,
+      }
+    }
+    return p
+  })
 }
 
 interface SdkHealthNote {
@@ -55,7 +97,7 @@ export function sdkHealthHref(projectId: string): string {
 const FIX_ORDER: readonly SdkHealthFixKind[] = ['sync_ci_secrets', 'install_task', 'upgrade_pr', 'csp_task']
 
 export function fixAllPlan(problems: readonly SdkHealthProblem[]): SdkHealthFixKind[] {
-  const kinds = new Set(problems.flatMap((p) => (p.fix ? [p.fix.kind] : [])))
+  const kinds = new Set(problems.flatMap((p) => (p.fix && !p.question ? [p.fix.kind] : [])))
   return FIX_ORDER.filter((k) => kinds.has(k))
 }
 
@@ -65,7 +107,7 @@ export const FIX_ACTION_TEXT: Record<SdkHealthFixKind, string> = {
     'Create a new SDK key and write it, with the project id and endpoint, to GitHub Actions. Older CI keys are revoked once GitHub accepts the new one. Apps already in the store keep the old key until their next build, so they stop sending bug reports until you ship one.',
   install_task: 'File a task for your fix agent to add the SDK to the app.',
   upgrade_pr: 'Open a PR that bumps the @mushi-mushi packages.',
-  csp_task: "File a task for your fix agent to allow the Mushi API in the site's security policy.",
+  csp_task: "File a task for your fix agent to allow the Mushi Mushi API in the site's security policy.",
 }
 
 export interface TaskState {

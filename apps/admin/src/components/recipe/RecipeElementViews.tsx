@@ -154,7 +154,7 @@ function conclusionTone(c: string | null, status: string | null): BadgeTone {
 
 function CiPanel({ view }: { view: CiView }) {
   if (view.runs.length === 0) {
-    return <p className="text-xs text-fg-secondary">Not checked yet. CI builds appear after Mushi's first daily read of your GitHub repo.</p>
+    return <p className="text-xs text-fg-secondary">Not checked yet. CI builds appear after Mushi Mushi's first daily read of your GitHub repo.</p>
   }
   return (
     <div className="space-y-2">
@@ -325,7 +325,7 @@ function EnvPanel({ view }: { view: EnvView }) {
       </TableShell>
       {unchecked.length > 0 && (
         <p className="text-xs text-fg-muted">
-          {unchecked.map((c) => c.label).join(', ')}: not checked. GitHub did not list these names, so Mushi probably lacks the secrets permission. Reconnect GitHub with secrets read access in Settings.
+          {unchecked.map((c) => c.label).join(', ')}: not checked. GitHub did not list these names, so Mushi Mushi probably lacks the secrets permission. Reconnect GitHub with secrets read access in Settings.
         </p>
       )}
       {view.truncated && <p className="text-2xs text-fg-muted">More undeclared names exist than are shown.</p>}

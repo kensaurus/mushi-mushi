@@ -47,7 +47,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
   // Plain names: a new user on Set up read "Authentication (GoTrue)" and
   // "LLM pipeline and report ingest" (first-time user test, 2026-10-28).
   const [checks, setChecks] = useState<Check[]>([
-    { id: 'supabase', label: cloud ? "Mushi's database" : 'Your Supabase database', description: 'Where your bugs and settings are kept', status: 'pending' },
+    { id: 'supabase', label: cloud ? "Mushi Mushi's database" : 'Your Supabase database', description: 'Where your bugs and settings are kept', status: 'pending' },
     { id: 'auth', label: 'Sign-in', description: 'Logging in and signing up', status: 'pending' },
     { id: 'edge', label: 'Bug intake and AI', description: 'Receives bug reports and runs the AI', status: 'pending' },
   ])

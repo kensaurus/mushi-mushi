@@ -210,7 +210,7 @@ export function CliAuthPage() {
           </p>
           {pollTrouble && (
             <p className="mt-2 text-xs text-fg-muted" role="status">
-              Can&apos;t reach Mushi to confirm right now. Your approval stands; still checking.
+              Can&apos;t reach Mushi Mushi to confirm right now. Your approval stands; still checking.
             </p>
           )}
         </div>

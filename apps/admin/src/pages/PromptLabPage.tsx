@@ -256,7 +256,7 @@ export function PromptLabPage() {
         title="AI prompts"
 
         helpTitle="About AI prompts"
-        helpWhatIsIt="An advanced page (a Lab) for the instructions Mushi gives the AI at each step: the fast filter, the diagnosis, grading, the fix writer and more. Each step shows the version in use and the version being tested, with their grades from Triage grading."
+        helpWhatIsIt="An advanced page (a Lab) for the instructions Mushi Mushi gives the AI at each step: the fast filter, the diagnosis, grading, the fix writer and more. Each step shows the version in use and the version being tested, with their grades from Triage grading."
         helpUseCases={[
           'Test a sharper diagnosis prompt on a share of reports before it replaces the one in use',
           'Change category rules without redeploying: prompts are read from the database',

@@ -198,7 +198,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
       {confirmClear && budget !== null && (
         <ConfirmDialog
           title="Remove the monthly budget?"
-          body={`Mushi stops AI calls when this month's spend reaches the budget. Without one (now ${fmtSpend(budget)} / month), AI spend is not capped until you set a budget again.`}
+          body={`Mushi Mushi stops AI calls when this month's spend reaches the budget. Without one (now ${fmtSpend(budget)} / month), AI spend is not capped until you set a budget again.`}
           confirmLabel="Remove budget"
           tone="danger"
           loading={saving}
@@ -220,7 +220,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
             Projected to {isOverBudget100 ? 'exceed' : 'reach ≥80% of'} your{' '}
             {fmtSpend(budget!)} budget — forecast is{' '}
             <strong>{fmtSpend(linearForecast)}</strong> ({Math.round(pctOfBudget!)}%). When this
-            month&apos;s spend reaches the budget, Mushi stops AI calls until next month.
+            month&apos;s spend reaches the budget, Mushi Mushi stops AI calls until next month.
           </span>
         </div>
       )}

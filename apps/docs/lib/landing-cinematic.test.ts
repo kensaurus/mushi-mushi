@@ -31,6 +31,7 @@ import {
   LANDING_COMPARISON_ROWS,
   LANDING_TRUST_LINKS,
   LANDING_FAQ,
+  LANDING_FAQ_GROUPS,
 } from './landing-copy'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { ADMIN_DEMO_BASE } from '../data/admin-screenshots'
@@ -156,7 +157,16 @@ describe('landing cinematic copy SSOT', () => {
     expect(loaderUrl).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@mushi-mushi\/web@\d+\/dist\/mushi\.loader\.global\.js$/)
     expect(read('content', 'quickstart', 'web.mdx')).toContain(loaderUrl)
     expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-project="YOUR_PROJECT_ID"')
-    expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-key="YOUR_API_KEY"')
+    // One placeholder name everywhere: the one the console's Script tag tab prints.
+    expect(LANDING_INSTALL_LOVABLE.prompt).toContain('data-key="YOUR_SDK_KEY"')
+    expect(read('..', 'admin', 'src', 'lib', 'sdkSnippets.ts')).toContain("const API_KEY_PLACEHOLDER = 'YOUR_SDK_KEY'")
+    const guide = read('content', 'quickstart', 'lovable-bolt.mdx')
+    expect(guide).toContain('data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"')
+    expect(`${guide}${JSON.stringify(LANDING_INSTALL_LOVABLE)}`).not.toContain('YOUR_API_KEY')
+    // The landing line is an example, and its button says so.
+    expect(LANDING_INSTALL_LOVABLE.copyLabel).toBe('Copy example')
+    expect(LANDING_INSTALL_LOVABLE.setupLead).toBe('This is an example. Your real line is waiting after sign-up.')
+    expect(read('components', 'landing', 'LandingInstallStrip.tsx')).toContain('L.copyLabel')
     // No terminal step: Lovable and Bolt have none.
     expect(LANDING_INSTALL_LOVABLE.prompt).not.toMatch(/\bnpx\b|\bnpm (?:i|install)\b|terminal/)
     expect(LANDING_INSTALL_LOVABLE.guide.href).toBe('/quickstart/lovable-bolt')
@@ -207,6 +217,34 @@ describe('landing cinematic copy SSOT', () => {
     expect(LANDING_SAMPLE_LINK.href).toBe('/demo/diagnosis')
     expect(LANDING_SAMPLE_LINK.label).toMatch(/sample/i)
     expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
+  })
+
+  it('groups the FAQ, no coding first, and answers "what does it collect" and "how do I remove it"', () => {
+    expect(LANDING_FAQ_GROUPS.map((g) => g.label)).toEqual(['No coding', 'Developers'])
+    for (const item of LANDING_FAQ) expect(['no-code', 'developers']).toContain(item.group)
+    const noCode = LANDING_FAQ.filter((i) => i.group === 'no-code').map((i) => i.q)
+    expect(noCode[0]).toBe('Do I need to know how to code?')
+    const collect = LANDING_FAQ.find((i) => i.q === 'What does it collect from my users?')
+    const remove = LANDING_FAQ.find((i) => i.q === 'How do I remove it?')
+    expect(collect?.group).toBe('no-code')
+    expect(remove?.group).toBe('no-code')
+    // Each links the guide section that has the detail, and that section exists.
+    const guide = read('content', 'quickstart', 'lovable-bolt.mdx')
+    expect(collect?.more?.href).toBe('/quickstart/lovable-bolt#what-it-collects-from-your-users')
+    expect(remove?.more?.href).toBe('/quickstart/lovable-bolt#how-to-remove-it')
+    expect(guide).toContain('## What it collects from your users')
+    expect(guide).toContain('## How to remove it')
+    // True of the code: Free keeps reports 14 days (_shared/plans.ts), and the
+    // screenshot blacks out password and card boxes (ALWAYS_REDACT_SELECTORS).
+    expect(collect?.a).toMatch(/deleted after 14 days/)
+    expect(read('..', '..', 'packages', 'server', 'supabase', 'functions', '_shared', 'plans.ts')).toMatch(/max_projects: 1,\s+retention_days: 14,/)
+    expect(read('..', '..', 'packages', 'web', 'src', 'capture', 'screenshot.ts')).toContain('input[type="password"],input[autocomplete^="cc-"]')
+    // The structured data is still one flat list of every question, grouped only on screen.
+    const faq = read('components', 'landing', 'LandingFaq.tsx')
+    expect(faq).toContain('<JsonLd data={faqJsonLd(shown)} />')
+    expect(faq).toContain('LANDING_FAQ_GROUPS.flatMap')
+    // A no-code reader is not told it only works in a code editor.
+    expect(LANDING_WHAT_THIS_IS.boundary).toMatch(/Lovable or Bolt/)
   })
 
   it('turns what a visitor types into an address /check accepts', () => {

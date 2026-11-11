@@ -33,7 +33,7 @@ export function ReportsSentryImport({ onClose, onImported }: Props) {
           <h2 className="text-sm font-semibold text-fg">Import open Sentry issues</h2>
           <p className="text-2xs text-fg-muted leading-snug">
             Each issue becomes a bug here with its Sentry link. Open one for the plain-English diagnosis, then
-            Fix it. When the fix merges, Mushi resolves the issue in Sentry.
+            Fix it. When the fix merges, Mushi Mushi resolves the issue in Sentry.
           </p>
         </div>
         <Btn type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close Sentry import">

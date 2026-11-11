@@ -52,7 +52,7 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
   if (view.packages.length === 0) {
     return (
       <p className="text-xs text-fg-muted">
-        Not checked yet — no app has reported its Mushi SDK version. It shows up after your app
+        Not checked yet — no app has reported its Mushi Mushi SDK version. It shows up after your app
         checks in or sends its first report.
       </p>
     )

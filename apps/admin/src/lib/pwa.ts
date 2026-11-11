@@ -89,7 +89,7 @@ export const PUSH_UNSUPPORTED_COPY: Record<Exclude<PushSupport, { supported: tru
   no_push: 'This browser does not support Web Push.',
   no_notification: 'This browser does not support notifications.',
   ios_not_standalone:
-    'On iPhone and iPad, push only works from the Home Screen app: tap Share, then "Add to Home Screen", open Mushi from there, and tap this button again.',
+    'On iPhone and iPad, push only works from the Home Screen app: tap Share, then "Add to Home Screen", open Mushi Mushi from there, and tap this button again.',
 }
 
 // ── keys ────────────────────────────────────────────────────────────────────

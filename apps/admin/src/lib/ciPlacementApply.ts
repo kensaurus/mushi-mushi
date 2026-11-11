@@ -28,7 +28,7 @@ export const GITHUB_INSTALLATIONS_URL = 'https://github.com/settings/installatio
 export async function applyPlacementNow(body: PlacementChangeBody): Promise<ApplyResult> {
   const req = await apiFetch<{ id: string; payloadSha256: string }>('/v1/admin/ci/placement/requests', { method: 'POST', body: JSON.stringify(body) })
   if (!req.ok || !req.data) {
-    return { ok: false, step: 'request', code: req.error?.code ?? null, message: req.error?.message ?? 'Mushi could not save the change.', requestId: null }
+    return { ok: false, step: 'request', code: req.error?.code ?? null, message: req.error?.message ?? 'Mushi Mushi could not save the change.', requestId: null }
   }
   const id = encodeURIComponent(req.data.id)
   const approved = await apiFetch<unknown>(`/v1/admin/ci/placement/requests/${id}/approve`, {
@@ -36,7 +36,7 @@ export async function applyPlacementNow(body: PlacementChangeBody): Promise<Appl
     body: JSON.stringify({ payloadSha256: req.data.payloadSha256 }),
   })
   if (!approved.ok) {
-    return { ok: false, step: 'approve', code: approved.error?.code ?? null, message: approved.error?.message ?? 'Mushi could not approve the change.', requestId: req.data.id }
+    return { ok: false, step: 'approve', code: approved.error?.code ?? null, message: approved.error?.message ?? 'Mushi Mushi could not approve the change.', requestId: req.data.id }
   }
   const ran = await apiFetch<{ detail?: string }>(`/v1/admin/ci/placement/requests/${id}/execute`, { method: 'POST' })
   if (!ran.ok) {

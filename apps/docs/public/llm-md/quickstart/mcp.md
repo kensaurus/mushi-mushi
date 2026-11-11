@@ -149,7 +149,6 @@ Add to `.cursor/mcp.json` in your repo root:
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -159,10 +158,16 @@ Add to `.cursor/mcp.json` in your repo root:
 ```
 
   
-    Mint a key on **Manage apps → Generate API key** (preset **MCP read-only** or
-    **MCP read + write**), or use **Connect → Add to Cursor**. The card that shows
-    a new key once also offers a ready-made `.cursor/mcp.json` snippet.
+    This local setup is the one that needs a key. Mint it on **Manage apps →
+    Generate API key** (preset **MCP read-only** or **MCP read + write**), or use
+    **Connect → Add to Cursor**. The card that shows a new key once also offers a
+    ready-made `.cursor/mcp.json` snippet. If you signed in through the browser
+    (the three steps at the top), you need no key at all.
   
+
+Self-hosting? Add one more line to `env`, pointing at your own server:
+`"MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api"`.
+On Mushi Mushi Cloud, leave it out.
 
 ## Manual setup: Claude Desktop
 
@@ -176,7 +181,6 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
-        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
       }
@@ -184,6 +188,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   }
 }
 ```
+
+As above, add `MUSHI_API_ENDPOINT` only when you self-host.
 
 ## Hosted Streamable HTTP transport (no subprocess)
 
@@ -196,7 +202,7 @@ one place a static API key header is the right tool:
 {
   "mcpServers": {
     "mushi-hosted": {
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp",
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/",
       "headers": {
         "X-Mushi-Api-Key": "mushi_…",
         "X-Mushi-Project-Id": "YOUR_PROJECT_ID"

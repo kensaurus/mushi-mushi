@@ -113,7 +113,7 @@ function HostChecks({ host }: { host: WorkerHost }) {
   const t = host.status as HostTelemetry
   const testId = `worker-host-${host.id}`
   if (!t.checks && !t.slots) {
-    return <p className="text-2xs text-fg-faint">This machine's Mushi CLI does not report its checks or what each agent space runs. Update it there (npm i -g @mushi-mushi/cli) to see them.</p>
+    return <p className="text-2xs text-fg-faint">This machine's Mushi Mushi CLI does not report its checks or what each agent space runs. Update it there (npm i -g @mushi-mushi/cli) to see them.</p>
   }
   const cur = t.checks?.cursor
   const gh = t.checks?.gh

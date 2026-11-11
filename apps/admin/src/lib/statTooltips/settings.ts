@@ -15,8 +15,8 @@ export function byokTooltip(stats: SettingsStats, opts: Opts = {}): MetricToolti
   const takeaway =
     stats.byokKeysConfigured === 0
       ? plain
-        ? 'No custom API keys yet — Mushi uses platform keys until you add Anthropic, OpenAI, or Firecrawl keys.'
-        : 'No BYOK keys configured — agents use Mushi platform keys until you add Anthropic, OpenAI, or Firecrawl keys.'
+        ? 'No custom API keys yet — Mushi Mushi uses platform keys until you add Anthropic, OpenAI, or Firecrawl keys.'
+        : 'No BYOK keys configured — agents use Mushi Mushi platform keys until you add Anthropic, OpenAI, or Firecrawl keys.'
       : `${stats.byokKeysPassing} passing, ${stats.byokKeysFailing} failing, ${stats.byokKeysUntested} untested of ${stats.byokKeysConfigured} configured key${stats.byokKeysConfigured === 1 ? '' : 's'}.`
 
   return metricTip(
@@ -87,7 +87,7 @@ export function classifierTooltip(stats: SettingsStats, opts: Opts = {}): Metric
   const model = stats.stage2Model?.replace('claude-', '') ?? 'default'
   const takeaway = stats.autofixEnabled
     ? plain
-      ? `Classification uses ${model}; auto-fix is on — Mushi can open PRs when GitHub is connected.`
+      ? `Classification uses ${model}; auto-fix is on — Mushi Mushi can open PRs when GitHub is connected.`
       : `Stage-2 classifier uses ${model}; autofix is enabled — dispatched fixes can open PRs when repo is connected.`
     : plain
       ? `Classification uses ${model}; auto-fix is off — reports get a plain-English read but no draft PR.`

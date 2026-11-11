@@ -9,6 +9,11 @@
  *   one per (project, client, access) per page session, labelled
  *   "MCP · <client> · <date> · read+write", read+write by default with an
  *   optional read-only choice (lib/mcpConnect.ts, REPORT A7).
+ * - Claude Code (`oauthDefault`) is keyless first: the URL-only command the
+ *   docs give, signed in from Claude Code with OAuth. The key command is a
+ *   second action, "For CI or headless use", whose label says a key is made
+ *   (re-audit 2026-11-11: Connect minted a key and put it in a --header while
+ *   the docs said OAuth with no header).
  * - Writes the published @mushi-mushi/mcp version (sdk_versions catalog) into
  *   stdio configs, not the version this console was built with.
  * - Used by the ConnectStudio client grid and
@@ -29,7 +34,15 @@
  */
 
 import { useId, useState } from 'react'
-import type { McpClientDef, McpBuildInput, McpBuildResult } from '@mushi-mushi/mcp/clients'
+import {
+  buildOAuthInstall,
+  MCP_OAUTH_CLIENT_IDS,
+  type McpBuildInput,
+  type McpBuildResult,
+  type McpClientDef,
+  type McpOAuthClientId,
+} from '@mushi-mushi/mcp/clients'
+import { RESOLVED_MCP_HTTP_URL, RESOLVED_MCP_OAUTH_URL } from '../lib/env'
 import { useToast } from '../lib/toast'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { getOrMintMcpKey, getPublishedMcpPinSpec, scopesForAccess, type McpAccess } from '../lib/mcpConnect'
@@ -69,6 +82,16 @@ interface ClientConnectButtonProps {
   size?: 'sm' | 'md'
   /** If true, immediately shows the config block without a button (e.g. already expanded). */
   expanded?: boolean
+  /**
+   * The hosted MCP URL that runs the client's OAuth sign-in. Defaults to this
+   * console's; a self-hosted one equals `mcpHttpUrl` and has no sign-in, so
+   * the key install stays the only one there.
+   */
+  mcpOAuthUrl?: string
+}
+
+function isOAuthClientId(id: string): id is McpOAuthClientId {
+  return (MCP_OAUTH_CLIENT_IDS as readonly string[]).includes(id)
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -85,6 +108,7 @@ export function ClientConnectButton({
   variant = 'primary',
   size = 'md',
   expanded = false,
+  mcpOAuthUrl = RESOLVED_MCP_OAUTH_URL,
 }: ClientConnectButtonProps) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
@@ -92,13 +116,26 @@ export function ClientConnectButton({
   const [showBlock, setShowBlock] = useState(expanded)
   const [access, setAccess] = useState<McpAccess>('read_write')
   const accessId = useId()
+  // OAuth sign-in first, when this console's hosted MCP URL can run it.
+  const oauthFirst =
+    client.oauthDefault === true && isOAuthClientId(client.id) && !preMintedKey && mcpOAuthUrl !== RESOLVED_MCP_HTTP_URL
+  /** Which install the open block shows: the OAuth one, or the one with a key. */
+  const [withKey, setWithKey] = useState(false)
   // A keyless client (Lovable) signs in with OAuth on first use: no key is minted.
   const mints = !preMintedKey && Boolean(projectId) && client.keyless !== true
   const mintScopes = scopes ?? scopesForAccess(access)
 
+  function showOAuthInstall() {
+    if (!isOAuthClientId(client.id)) return
+    setWithKey(false)
+    setResult(buildOAuthInstall(client.id, { mcpOAuthUrl }))
+    setShowBlock(true)
+  }
+
   async function handleConnect() {
     setLoading(true)
     try {
+      setWithKey(true)
       let apiKey = preMintedKey ?? (client.keyless ? '' : undefined)
       const pinPromise = getPublishedMcpPinSpec()
       if (!apiKey && projectId && !client.keyless) {
@@ -158,13 +195,13 @@ export function ClientConnectButton({
           variant={variant}
           loading={loading}
           disabled={loading}
-          onClick={() => void handleConnect()}
+          onClick={() => (oauthFirst ? showOAuthInstall() : void handleConnect())}
         >
           {buttonLabel}
         </Btn>
       )}
 
-      {!showBlock && mints && accessChoice && !scopes && (
+      {!showBlock && mints && accessChoice && !scopes && !oauthFirst && (
         <label htmlFor={accessId} className="mt-1.5 flex items-center gap-1.5 text-2xs text-fg-muted">
           <input
             id={accessId}
@@ -198,6 +235,36 @@ export function ClientConnectButton({
           {result.kind === 'command' && (
             <>
               <ConfigCopySection label="Run in your terminal" text={result.text} />
+              {oauthFirst && !withKey && (
+                <div className="mt-2 space-y-1.5" data-testid="oauth-install-next">
+                  <p className="text-xs text-fg-secondary">
+                    Then in {client.label} type <code className="mushi-code-inline font-mono">/mcp</code>, pick{' '}
+                    <code className="mushi-code-inline font-mono">mushi</code> and choose Authenticate. Your browser
+                    opens, you sign in and pick the projects it may see. No key is created or copied.
+                  </p>
+                  {mints && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-2xs text-fg-muted">For CI or headless use (no browser to sign in with):</span>
+                      <Btn
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        loading={loading}
+                        disabled={loading}
+                        onClick={() => void handleConnect()}
+                      >
+                        Create a key and show the command with it
+                      </Btn>
+                    </div>
+                  )}
+                </div>
+              )}
+              {oauthFirst && withKey && (
+                <p className="mt-2 text-2xs text-fg-muted">
+                  A key was created for this command and is part of it. Keep it out of shared logs; revoke it under
+                  Projects, Keys.
+                </p>
+              )}
               <Btn
                 type="button"
                 size="sm"

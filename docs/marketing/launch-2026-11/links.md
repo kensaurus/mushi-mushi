@@ -52,8 +52,9 @@ for a different asset.
 | `x.heldpr-<yyyymmdd>` | X | weekly held-PR post | `/docs/proof` |
 | `bsky.heldpr-<yyyymmdd>` | Bluesky | weekly held-PR post | `/docs/proof` |
 | `linkedin.heldpr-<yyyymmdd>` | LinkedIn | weekly held-PR post | `/docs/proof` |
-| `zenn.lovable-check` | Zenn | JA how-to | `/docs/check`, `/docs/quickstart/lovable-bolt` |
-| `qiita.lovable-check` | Qiita | JA how-to | `/docs/check`, `/docs/quickstart/lovable-bolt` |
+| `zenn.lovable-check` | Zenn | JA how-to | `/docs/check`, `/docs/quickstart/lovable-bolt`, `/docs/ja` |
+| `qiita.lovable-check` | Qiita | JA how-to | `/docs/check`, `/docs/quickstart/lovable-bolt`, `/docs/ja` |
+| `ja-page` | Docs `/docs/ja` | The Japanese page's own links | `/docs/check` |
 | `reddit.vibecoding` | Reddit r/vibecoding | contribution post (link only if asked, or in a comment) | `/docs/check` |
 | `reddit.lovable` | Reddit r/lovable | answers in threads | `/docs/check` |
 | `x.vibecoding-approval` | X Vibe Coding community | r/vibecoding tool-approval request | `/docs/check` |

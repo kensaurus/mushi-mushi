@@ -106,7 +106,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
 
       {showSpend && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs text-fg-muted">
-          <dt>Mushi AI spend (30 days)</dt>
+          <dt>Mushi Mushi AI spend (30 days)</dt>
           <dd className="text-right text-fg">{spendText(card)}</dd>
           <dt>Monthly AI budget</dt>
           <dd className="text-right text-fg">{budgetText(card)}</dd>

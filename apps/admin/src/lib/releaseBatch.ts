@@ -122,7 +122,7 @@ export function batchSentence(repos: RepoBatch[]): { sentence: string; tone: Ton
   if (riding) parts.push(`${fix(riding)} ${open.length ? 'riding or ready' : 'ready for the next train'}`)
   if (waiting) parts.push(`${fix(waiting)} waiting`)
   if (!parts.length) return { sentence: 'No fixes are waiting to ship.', tone: 'neutral' }
-  const tail = migrations ? ` The batch changes the database (${migrations} migration file${migrations === 1 ? '' : 's'}); Mushi does not run them.` : ''
+  const tail = migrations ? ` The batch changes the database (${migrations} migration file${migrations === 1 ? '' : 's'}); Mushi Mushi does not run them.` : ''
   const s = parts.join(', ')
   return { sentence: `${s[0].toUpperCase()}${s.slice(1)}.${tail}`, tone: migrations ? 'warn' : open.length || riding ? 'ok' : 'info' }
 }

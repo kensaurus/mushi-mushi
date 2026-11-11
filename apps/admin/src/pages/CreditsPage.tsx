@@ -77,9 +77,9 @@ export function CreditsPage() {
       <PageHeaderBar
         title="Spend credits"
         icon={<IconCost />}
-        description="Credits that expire, and every way Mushi can spend them finding and fixing your bugs."
+        description="Credits that expire, and every way Mushi Mushi can spend them finding and fixing your bugs."
         helpTitle="About Spend credits"
-        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
+        helpWhatIsIt="Cursor and Firecrawl credits that lapse at the end of a period are worth more spent. This page lists each place Mushi Mushi can spend them on your apps, with a switch for each: Cursor fixes open bugs, answers review findings and runs skills that improve an app round by round; Firecrawl checks your live sites for broken pages that become bug reports."
         helpHowToUse="Turn on what you want, top to bottom. Every fix still opens a draft pull request for you to review, inside each app's auto-fix limits. The full settings for each switch are linked from its row."
       />
       {/* First: one countdown per expiring key, and the one switch that matters. */}

@@ -229,8 +229,8 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
       confidence: null,
       needsLook: false,
       why: n === 0
-        ? 'Mushi looked for look-alike reports and found none, so the diagnosis rests on this report alone.'
-        : `Mushi found ${plural(n, 'earlier report', 'earlier reports')} with the same shape and used them as context.`,
+        ? 'Mushi Mushi looked for look-alike reports and found none, so the diagnosis rests on this report alone.'
+        : `Mushi Mushi found ${plural(n, 'earlier report', 'earlier reports')} with the same shape and used them as context.`,
       source: 'stage2_analysis.mcp_tool_calls',
     })
   }
@@ -314,7 +314,7 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
   if (view.kind === 'stage1_only') {
     return [{ ...base, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
-  return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi is still reading this report.' }]
+  return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi Mushi is still reading this report.' }]
 }
 
 export function checkNodes(report: ReportDetail): DiagnosisNode[] {
@@ -399,7 +399,7 @@ export function fixNodes(report: ReportDetail, diagnosisReady: boolean): Diagnos
   const needsPerson = verdict === 'needs_human'
   if (status === 'verified') next = { title: 'Verified in production', detail: 'loop closed', why: 'The fix shipped and the bug did not come back.', state: 'done' }
   else if (status === 'dismissed') next = { title: closedLabel ? `Closed: ${closedLabel}` : 'Closed', detail: 'decision', why: 'Someone closed this report, so nothing runs on it. Reopen it from the triage bar if it comes back.', state: 'done' }
-  else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi reopens the report if it does.', state: 'open' }
+  else if (status === 'fixed' || latest?.state === 'done') next = { title: 'Check it in production', detail: 'next step', why: 'The fix merged. Watch for the bug to come back; Mushi Mushi reopens the report if it does.', state: 'open' }
   else if (latest?.state === 'ok') next = { title: 'Review and merge the pull request', detail: 'next step', why: 'Read the diff and the CI result, then merge from the Fixes page or GitHub.', state: 'open' }
   else if (latest?.state === 'failed' && needsPerson) next = { title: 'A person decides this one', detail: 'next step', why: 'The agent said this needs a decision, not a code change. Decide it yourself, or close it as "Not a code bug" in the triage bar; a retry would stop the same way.', state: 'open' }
   else if (latest?.state === 'failed' && verdict === 'already_fixed') next = { title: 'Check it is fixed, then close it', detail: 'next step', why: 'The agent found the bug already fixed in the code. If your app agrees, close the report as fixed; if not, send it again with what you still see.', state: 'open' }

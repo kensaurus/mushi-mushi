@@ -98,16 +98,16 @@ export function BackendModePanel() {
         <ModeCard
           active={draftMode === 'cloud'}
           onClick={() => setDraftMode('cloud')}
-          title="Mushi Cloud"
+          title="Mushi Mushi Cloud"
           badge="Paid"
-          description="Reports, triage and fixes run on Mushi's servers. Nothing to set up."
+          description="Reports, triage and fixes run on Mushi Mushi's servers. Nothing to set up."
         />
         <ModeCard
           active={draftMode === 'self-hosted'}
           onClick={() => setDraftMode('self-hosted')}
           title="Self-hosted"
           badge="Free"
-          description="Run the Mushi backend on your own Supabase project."
+          description="Run the Mushi Mushi backend on your own Supabase project."
         />
       </div>
 
@@ -135,8 +135,8 @@ export function BackendModePanel() {
       )}
 
       {draftMode === 'cloud' && current.mode !== 'cloud' && (
-        <Callout tone="warn" label="Switching to Mushi Cloud">
-          New reports go to Mushi Cloud. Make sure you have a Cloud account for this project first.
+        <Callout tone="warn" label="Switching to Mushi Mushi Cloud">
+          New reports go to Mushi Mushi Cloud. Make sure you have a Cloud account for this project first.
         </Callout>
       )}
 
@@ -153,7 +153,7 @@ export function BackendModePanel() {
 /** "Mushi Cloud" or "Self-hosted (https://…)", for the row status line. */
 export function currentBackendLabel(): string {
   const current = checkEnv()
-  return current.mode === 'cloud' ? 'Mushi Cloud' : `Self-hosted (${current.supabaseUrl})`
+  return current.mode === 'cloud' ? 'Mushi Mushi Cloud' : `Self-hosted (${current.supabaseUrl})`
 }
 
 interface ModeCardProps {

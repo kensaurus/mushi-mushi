@@ -7,7 +7,7 @@ describe('close reasons', () => {
     expect(QUICK_CLOSE_REASONS.map((r) => r.value)).toEqual(['not_reproducible', 'wont_fix', 'working_as_intended', 'spam'])
   })
 
-  it('offers a false alarm only for a report Mushi filed', () => {
+  it('offers a false alarm only for a report Mushi Mushi filed', () => {
     for (const source of ['site_audit', 'site_watch', 'security_advisory', 'fresh_eyes', 'code_audit']) {
       expect(closeReasonsFor(source).map((r) => r.value)).toContain('false_alarm')
     }
@@ -20,7 +20,7 @@ describe('close reasons', () => {
     expect(closeReasonNotice('not_reproducible')).toBe('The reporter sees “We couldn\'t reproduce it. Reply if it happens again.”')
     expect(closeReasonNotice('', 10)).toBe('Each reporter sees “Closed.”')
     expect(closeReasonNotice('spam', 2)).toBe('Closed as spam: reporters are not told.')
-    expect(closeReasonNotice('false_alarm')).toBe("Closed as a false alarm: nobody is told. Mushi's check was wrong.")
+    expect(closeReasonNotice('false_alarm')).toBe("Closed as a false alarm: nobody is told. Mushi Mushi's check was wrong.")
   })
 })
 

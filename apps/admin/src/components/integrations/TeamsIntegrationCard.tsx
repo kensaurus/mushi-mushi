@@ -342,7 +342,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe, 
             <ol className="list-decimal list-inside space-y-0.5 text-fg-muted">
               <li>Right-click the Teams channel → <em>Manage channel</em> → <em>Connectors</em></li>
               <li>Search for <strong>&ldquo;Incoming Webhook&rdquo;</strong> and click <em>Configure</em></li>
-              <li>Name it &ldquo;Mushi&rdquo;, then click <em>Create</em></li>
+              <li>Name it &ldquo;Mushi Mushi&rdquo;, then click <em>Create</em></li>
               <li>Copy the webhook URL and paste it above</li>
             </ol>
           </div>
@@ -352,7 +352,7 @@ export function TeamsIntegrationCard({ projectId, teamsConfigured, latestProbe, 
       {confirmRemove && (
         <ConfirmDialog
           title="Remove the Teams webhook?"
-          body="Mushi stops posting to this Teams channel. The URL can't be shown again, so you'll need to copy it from Teams to reconnect."
+          body="Mushi Mushi stops posting to this Teams channel. The URL can't be shown again, so you'll need to copy it from Teams to reconnect."
           confirmLabel="Remove webhook"
           cancelLabel="Keep it"
           tone="danger"

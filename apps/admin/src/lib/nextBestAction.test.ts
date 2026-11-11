@@ -87,7 +87,7 @@ describe('computeNextAction with the setup checklist open', () => {
   }
 
   it('leaves setup steps to the checklist instead of repeating them', () => {
-    expect(computeNextAction(NEEDS_SDK, QUIET, '/reports')?.title).toBe('Install the Mushi widget in your app')
+    expect(computeNextAction(NEEDS_SDK, QUIET, '/reports')?.title).toBe('Install the Mushi Mushi widget in your app')
     expect(computeNextAction(NEEDS_SDK, QUIET, '/reports', { setupGuideOpen: true })).toBeNull()
   })
 

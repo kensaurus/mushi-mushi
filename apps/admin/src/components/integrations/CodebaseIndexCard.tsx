@@ -96,7 +96,7 @@ function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[
       mono: true,
       tone: 'info',
       copyable: !!stats.repo_url,
-      hint: 'GitHub repository indexed by the Mushi RAG sweeper.',
+      hint: 'GitHub repository indexed by the Mushi Mushi RAG sweeper.',
     },
     {
       label: 'Branch',
@@ -561,7 +561,7 @@ function AutofixToggleRow({
           </Badge>
         </div>
         <p className="text-2xs text-fg-secondary leading-snug mt-0.5">
-          Whether Mushi starts fixes for sorted bugs. Turn it off to pause every fix button without
+          Whether Mushi Mushi starts fixes for sorted bugs. Turn it off to pause every fix button without
           removing your GitHub or AI keys.
         </p>
         {enabled != null && !canToggle && (

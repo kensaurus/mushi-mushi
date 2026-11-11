@@ -308,7 +308,6 @@ export function PublicIntegrationsPage() {
         subject
           ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
           : `mailto:${CONTACT_EMAIL}`,
-      screenshots: (filename) => `${import.meta.env.BASE_URL}screenshots/${filename}`,
     },
   }
 
@@ -388,7 +387,7 @@ export function PublicIntegrationsPage() {
               {inboundCount} sources in. {outboundCount} destinations out.
             </h1>
             <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-editorial-ink-muted">
-              Mushi is the layer between your existing observability stack and your
+              Mushi Mushi is the layer between your existing observability stack and your
               team&rsquo;s workflow tools. Wire an inbound adapter to receive alerts from
               Datadog, Sentry, or Crashlytics — then route triaged reports out to
               Jira, Slack, or PagerDuty without changing how your team operates.

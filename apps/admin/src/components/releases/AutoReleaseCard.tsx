@@ -90,7 +90,7 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="text-sm font-semibold text-fg">Release automatically when you ship</h3>
           <p className="text-2xs text-fg-secondary leading-snug">
-            When you ship, Mushi drafts a release from the reports fixed since the last one and publishes it. Each
+            When you ship, Mushi Mushi drafts a release from the reports fixed since the last one and publishes it. Each
             reporter hears their bug is live. Nothing happens when no report was fixed.
           </p>
           <details className="text-2xs text-fg-faint leading-snug">
@@ -98,7 +98,7 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
             <p className="mt-1">
               A GitHub release is published, a production deploy succeeds, or your CI sends
               <code className="mx-1 font-mono">release.published</code>to
-              <code className="mx-1 font-mono">/v1/ingest/recipe/events</code>. GitHub events need the Mushi GitHub
+              <code className="mx-1 font-mono">/v1/ingest/recipe/events</code>. GitHub events need the Mushi Mushi GitHub
               App on the repo with the Releases and Deployments events. A CI event needs an agent key with{' '}
               <code className="font-mono">mcp:write</code> kept in CI secrets; the public SDK key records the event but
               never releases.
@@ -127,7 +127,7 @@ export function AutoReleaseCard({ projectId }: { projectId: string }) {
         >
           <p className="text-2xs text-fg-secondary leading-snug">
             The automatic release <span className="font-mono">{blocking.version}</span> has been a draft since{' '}
-            {new Date(blocking.createdAt).toLocaleString()} because its publish did not finish. Mushi releases nothing
+            {new Date(blocking.createdAt).toLocaleString()} because its publish did not finish. Mushi Mushi releases nothing
             else automatically until you publish or delete it under Drafts.
           </p>
         </Callout>

@@ -125,7 +125,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
     <Section title="Accounts and resilience">
       <p className="mb-3 text-xs text-fg-muted">
         Every account your apps depend on, who owns it, and who else can get in if that person cannot. Names and contacts only: never
-        passwords, keys or recovery codes. Everything here is what you declare; Mushi cannot see a provider's own settings.
+        passwords, keys or recovery codes. Everything here is what you declare; Mushi Mushi cannot see a provider's own settings.
       </p>
       {error && <PageLoadError error={error} resource="accounts and resilience" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading the register…" />}
@@ -263,7 +263,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
       {confirmRemove && (
         <ConfirmDialog
           title={`Remove ${confirmRemove.name} from the register?`}
-          body="Its owner, 2FA, recovery and admin notes are deleted from Mushi. The account itself is not touched. To undo, add it again."
+          body="Its owner, 2FA, recovery and admin notes are deleted from Mushi Mushi. The account itself is not touched. To undo, add it again."
           confirmLabel="Remove"
           tone="danger"
           loading={busy}

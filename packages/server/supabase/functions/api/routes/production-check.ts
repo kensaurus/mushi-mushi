@@ -40,7 +40,7 @@ import { sendTransactionalEmail } from '../../_shared/email.ts'
 import { renderEmailHtml, renderEmailText, type EmailDoc } from '../../_shared/email-layout.ts'
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
 import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
-import { checkPublicUrl, resolvesPublic, runtimeResolver, sameAddressVariants } from '../../_shared/public-url-guard.ts'
+import { checkPublicUrl, resolvesPublic, runtimeResolver, sameAddressVariants, UNREACHABLE_ADDRESS } from '../../_shared/public-url-guard.ts'
 import { UNREACHABLE_TEXT, runProductionCheck, severityCounts, type CheckResult, type UnreachableReason } from '../../_shared/production-check.ts'
 
 const plog = log.child('production-check')
@@ -193,7 +193,7 @@ export function buildReportEmail(
           { kind: 'p', text: `Mushi Mushi read the public pages of ${host} the way a first-time visitor sees them: ${counts}.` },
           {
             kind: 'findings',
-            rows: shown.map((f) => ({ severity: f.severity, title: f.title, detail: `How to fix: ${f.fix}` })),
+            rows: shown.map((f) => ({ severity: f.severity, title: f.title, detail: f.prompt ? `Paste into Lovable, Bolt or your AI editor: ${f.prompt}` : `How to fix: ${f.fix}` })),
             ...(n > shown.length ? { more: `And ${n - shown.length} more in the full report.` } : {}),
           },
           { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
@@ -334,7 +334,7 @@ export function registerProductionCheckRoutes(app: Hono<{ Variables: Variables }
       plog.warn('DNS lookup failed; hostname rules only', { err: String(err).slice(0, 200) }),
     )
     if (!dnsOk) {
-      return c.json({ ok: false, error: { code: 'NOT_PUBLIC', message: 'That address does not lead to a public website we can reach.' } }, 400)
+      return c.json({ ok: false, error: { code: 'NOT_PUBLIC', message: UNREACHABLE_ADDRESS } }, 400)
     }
     let email: string | null = null
     if (typeof body?.email === 'string' && body.email.trim()) {

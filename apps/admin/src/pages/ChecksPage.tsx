@@ -113,7 +113,7 @@ export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTon
     if (unread > 0) {
       return {
         tone: 'warn',
-        sentence: `Mushi could not read ${unread === cards.length ? 'your checks' : pluralizeWithCount(unread, 'check')} right now, so ${unread === 1 ? 'its' : 'their'} state is unknown. Reload in a minute.${restText}`,
+        sentence: `Mushi Mushi could not read ${unread === cards.length ? 'your checks' : pluralizeWithCount(unread, 'check')} right now, so ${unread === 1 ? 'its' : 'their'} state is unknown. Reload in a minute.${restText}`,
       }
     }
     if (ready.length < cards.length) return { tone: 'neutral', sentence: 'Reading your checks…' }
@@ -203,7 +203,7 @@ export function ChecksPage() {
         icon={<IconShieldCheck />}
         description="Every automatic check on this app, failing ones first."
         helpTitle="About Checks"
-        helpWhatIsIt="Each card is one automatic check Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, a first-time user test, and how well the AI graded, learned from and prompted each fix."
+        helpWhatIsIt="Each card is one automatic check Mushi Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, a first-time user test, and how well the AI graded, learned from and prompted each fix."
         helpHowToUse="Red means the check failed, amber that it found something to fix, green that its last run passed. Pale green means it watches on its own and has nothing open. Grey is not set up, not run yet, or could not be read: never a pass. Open a card to see that check. A Pro pill means the check needs a plan upgrade."
       />
 

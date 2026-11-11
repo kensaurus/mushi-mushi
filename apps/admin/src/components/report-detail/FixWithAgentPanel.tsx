@@ -92,7 +92,7 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         which === 'fix' ? 'Fix prompt copied' : 'MCP prompt copied',
         which === 'fix'
           ? 'Paste it into your coding agent (Claude Code, Cursor, Codex, Windsurf). No setup needed.'
-          : 'Paste it into an agent that has the Mushi MCP server connected.',
+          : 'Paste it into an agent that has the Mushi Mushi MCP server connected.',
       )
       setTimeout(() => setCopied(null), 1500)
     } catch {
@@ -153,7 +153,7 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
             {report.project_id && (
               <div className="mt-2.5 border-t border-edge-subtle pt-2.5">
                 <p className="mb-1.5 text-2xs text-fg-muted">
-                  Optional: connect Mushi to Claude Code once, so the agent can look up other reports and mark this one
+                  Optional: connect Mushi Mushi to Claude Code once, so the agent can look up other reports and mark this one
                   fixed when its PR is open. Skip this if you already did.
                 </p>
                 <ClientConnectButton
@@ -205,7 +205,7 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         <div id="fix-lane-mcp" className="mt-2">
           <ContainedBlock tone="muted">
             <p className="text-2xs leading-relaxed text-fg-muted">
-              For agents with the Mushi MCP server connected. The agent loads the full context itself and marks the
+              For agents with the Mushi Mushi MCP server connected. The agent loads the full context itself and marks the
               report fixed when its PR is open, which needs a read and write key.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">

@@ -56,7 +56,7 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
       <div className="text-2xs text-fg-muted">
         <p className="flex items-center gap-1 font-medium">
           <IconInfo size={12} className="shrink-0" />
-          Why Mushi thinks so
+          Why Mushi Mushi thinks so
         </p>
         {group.evidence.length === 1 ? (
           <p className="mt-0.5 wrap-break-word pl-4">{group.evidence[0]}</p>
@@ -83,7 +83,7 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
       ))}
       {group.fixable.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2" aria-label="Fix with a pull request">
-          <p className="text-2xs text-fg-muted">Or let Mushi open it as a draft pull request for you to review:</p>
+          <p className="text-2xs text-fg-muted">Or let Mushi Mushi open it as a draft pull request for you to review:</p>
           {group.fixable.map((f) => (
             <CiCostFixButton key={f.key} fixable={f} initialJob={jobs.get(costFixKey(f.autofix)) ?? null} />
           ))}
@@ -227,7 +227,7 @@ export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOv
       </div>
       <div className="min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest steps</h3>
-        <p className="mb-1.5 text-2xs text-fg-muted">Typical time is the median over the runs Mushi holds.</p>
+        <p className="mb-1.5 text-2xs text-fg-muted">Typical time is the median over the runs Mushi Mushi holds.</p>
         {steps.length === 0 ? <p className="text-xs text-fg-muted">No step timings yet.</p> : <SlowStepsTable steps={steps} />}
       </div>
     </div>

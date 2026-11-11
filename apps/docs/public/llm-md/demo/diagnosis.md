@@ -19,10 +19,10 @@ When a real user reports a bug, Mushi Mushi writes a diagnosis like this one. It
 needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
 month.
 
-- **Claude Code or Cursor:** [install in three steps](/#install), then ask your AI
-  "Get the latest Mushi Mushi report and fix it."
-- **Lovable or Bolt:** paste one script tag through your prompt.
-  [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+- **Lovable or Bolt:** sign up, copy one line and ask your builder to add it. No
+  terminal, about 5 minutes. [Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+- **Claude Code or Cursor:** [connect your editor, paste one prompt](/#install), then
+  ask your AI "Get the latest Mushi Mushi report and fix it."
 
 ## One the model wrote
 

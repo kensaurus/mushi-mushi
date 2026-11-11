@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { AGENT_OUT_OF_USAGE_BUCKET, isAgentOutOfUsageError } from './agentOutOfUsage'
-import { agentCreditsTitle, creditsBackLine } from './agentCredits'
+import { agentCreditsTitle, CLAUDE_FOLLOWUPS_COMMAND, CLAUDE_WORK_COMMAND, CLAUDE_WORK_NEEDS, creditsBackLine } from './agentCredits'
 import { fixCauseLabel, failureHeadline, retryCandidates } from './fixReportTruth'
 import { fixFailureBucket } from './pdcaAct'
 import { creditCountdowns } from './creditPlan'
@@ -46,6 +46,12 @@ describe('the out-of-credits words', () => {
     expect(creditsBackLine(state)).toBe('Cursor\'s credits come back on Nov 19 (key "kensaurus").')
   })
 
+  it('gives commands that run with no global install, and what they need', () => {
+    expect(CLAUDE_WORK_COMMAND).toBe('npx @mushi-mushi/cli@latest work --agent claude --repo-dir .')
+    expect(CLAUDE_FOLLOWUPS_COMMAND).toBe('npx @mushi-mushi/cli@latest work --agent claude --followups --repo-dir .')
+    expect(CLAUDE_WORK_NEEDS.map((n) => n.command)).toEqual(['claude auth login', 'gh auth login', 'npx @mushi-mushi/cli@latest login'])
+  })
+
   it('Spend credits says "out of credits", not "room for 440 more fixes"', () => {
     const key = { id: 'k1', label: 'kenji.sakuramoto', keyHint: null, enabled: false, creditsExpireAt: '2026-11-21T23:59:59Z', dailyLimit: 40, dispatchedToday: 0, state: 'active' }
     const now = new Date('2026-11-11T09:00:00Z')
@@ -67,16 +73,39 @@ describe('where the key goes when the app is live', () => {
     expect(g.prompt).toContain('data-project="p-1" data-key="mushi_k"')
   })
 
-  it('names the env vars for Vercel and Netlify, never the values', () => {
+  it('gives Vercel and Netlify the names the snippet reads, with the real values once a key is made', () => {
     const v = hostGuide('vercel', { projectId: 'p-1', apiKey: 'mushi_k', bundler: 'next' })
     expect(v.envNames).toEqual(['NEXT_PUBLIC_MUSHI_PROJECT_ID', 'NEXT_PUBLIC_MUSHI_API_KEY'])
-    expect(JSON.stringify(v)).not.toContain('mushi_k')
-    expect(hostGuide('netlify', { projectId: 'p', apiKey: 'k' }).envNames).toEqual(webEnvNames(null))
+    expect(v.envBlock).toBe('NEXT_PUBLIC_MUSHI_PROJECT_ID=p-1\nNEXT_PUBLIC_MUSHI_API_KEY=mushi_k')
+    expect(v.steps.join(' ')).toContain('vercel env add NEXT_PUBLIC_MUSHI_PROJECT_ID production')
+    // No key on the page: names only, and where the value comes from. Never a placeholder to paste.
+    const noKey = hostGuide('vercel', { projectId: 'p-1', apiKey: null, bundler: 'next' })
+    expect(noKey.envBlock).toBeUndefined()
+    expect(noKey.lead).toContain('Make a key and fill it in')
+    expect(JSON.stringify(noKey)).not.toContain('YOUR_SDK_KEY')
+    expect(hostGuide('netlify', { projectId: 'p', apiKey: 'k', bundler: 'vite' }).envNames).toEqual(webEnvNames('vite'))
     // With the Script tag nothing goes in the host's settings.
     const tag = hostGuide('vercel', { projectId: 'p', apiKey: 'k', scriptTag: true })
     expect(tag.envNames).toBeUndefined()
     expect(tag.lead).toContain("nothing goes in Vercel's settings")
-    expect(webEnvNames(null)).toEqual(['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY'])
+    expect(webEnvNames('vite')).toEqual(['VITE_MUSHI_PROJECT_ID', 'VITE_MUSHI_API_KEY'])
+  })
+
+  it('asks for the React setup instead of guessing Vite (re-audit 2026-11-11: Next.js on Vercel got VITE_ names)', () => {
+    for (const host of ['vercel', 'netlify', 'other'] as const) {
+      const ask = hostGuide(host, { projectId: 'p', apiKey: 'k', bundler: null, askSetup: true })
+      expect(ask.askSetup).toBe(true)
+      expect(ask.envNames).toBeUndefined()
+      expect(JSON.stringify(ask)).not.toMatch(/VITE_|NEXT_PUBLIC_/)
+      expect(ask.lead).toContain('Next.js or Vite')
+    }
+  })
+
+  it('says nothing goes in the host settings when the snippet holds its values inline', () => {
+    const inline = hostGuide('vercel', { projectId: 'p', apiKey: 'k', bundler: null })
+    expect(inline.envNames).toBeUndefined()
+    expect(inline.lead).toContain("nothing goes in Vercel's settings")
+    expect(JSON.stringify(inline)).not.toMatch(/VITE_MUSHI|NEXT_PUBLIC_MUSHI/)
   })
 })
 

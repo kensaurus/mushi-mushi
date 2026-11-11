@@ -150,7 +150,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-fg">Your code on GitHub</h3>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Mushi reads the repository to explain bugs and opens each fix as a draft pull request you review.
+            Mushi Mushi reads the repository to explain bugs and opens each fix as a draft pull request you review.
             You choose which repositories it can see.
           </p>
         </div>
@@ -170,7 +170,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
 
       {phase.kind === 'done' && (
         <p className="text-xs text-fg-secondary" role="status">
-          Connected <strong>{phase.repo.fullName}</strong> (branch {phase.repo.defaultBranch}). Mushi is reading it now; fixes will open
+          Connected <strong>{phase.repo.fullName}</strong> (branch {phase.repo.defaultBranch}). Mushi Mushi is reading it now; fixes will open
           as draft pull requests there.
         </p>
       )}
@@ -193,7 +193,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
       )}
 
       {phase.kind === 'loading' && (
-        <p className="text-xs text-fg-muted" role="status">Reading the repositories the Mushi GitHub App can see…</p>
+        <p className="text-xs text-fg-muted" role="status">Reading the repositories the Mushi Mushi GitHub App can see…</p>
       )}
 
       {(phase.kind === 'picking' || phase.kind === 'saving') && (
@@ -206,7 +206,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
           )}
           {phase.list.repos.length === 0 ? (
             <div className="rounded-sm border border-edge-subtle p-3 text-xs text-fg-secondary space-y-2">
-              <p>The Mushi GitHub App cannot see any repository yet. On GitHub, choose the repositories it may use, then come back.</p>
+              <p>The Mushi Mushi GitHub App cannot see any repository yet. On GitHub, choose the repositories it may use, then come back.</p>
               <div className="flex flex-wrap gap-2">
                 {phase.list.manageUrl && (
                   <a className="text-xs underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">Choose repositories on GitHub</a>
@@ -257,7 +257,7 @@ export function GitHubConnectCard({ projectId, returnTo, currentRepoUrl, onConne
               <span>
                 Not in the list?{' '}
                 <a className="underline underline-offset-2" href={phase.list.manageUrl} target="_blank" rel="noreferrer">
-                  Let the Mushi GitHub App see more repositories
+                  Let the Mushi Mushi GitHub App see more repositories
                 </a>
                 , then come back here.
               </span>

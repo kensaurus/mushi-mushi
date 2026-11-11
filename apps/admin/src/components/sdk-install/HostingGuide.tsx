@@ -4,8 +4,8 @@
  *          audit 2026-11-11, finding 5): the step that decides whether the
  *          report button reaches the LIVE app. Lovable and Bolt get the
  *          paste-ready prompt (and the Script tag tab); Vercel, Netlify and
- *          EAS get the env var names and where they go. Logic in
- *          lib/hostingEnvHint.ts.
+ *          EAS get the env var names, their values once a key is on the
+ *          page, and where they go. Logic in lib/hostingEnvHint.ts.
  */
 
 import { useState } from 'react'
@@ -15,9 +15,12 @@ import { HOST_LABEL, HOSTS, hostGuide, type Host } from '../../lib/hostingEnvHin
 
 interface Props {
   projectId: string
-  /** The full key when the page holds it; else the placeholder the snippet shows. */
-  apiKey: string
+  /** The full key when the page holds it; null until one is made. */
+  apiKey: string | null
+  /** What the snippet above reads its values from; null when it holds them inline. */
   bundler?: 'vite' | 'next' | null
+  /** React tab with no setup picked yet: the guide asks instead of guessing. */
+  askSetup?: boolean
   /** Lovable / Bolt: switch the snippet to the Script tag tab. */
   onUseScriptTag?: () => void
   /** Pre-pick a host (the user came from the landing's Lovable tab). */
@@ -26,10 +29,10 @@ interface Props {
   scriptTag?: boolean
 }
 
-export function HostingGuide({ projectId, apiKey, bundler, onUseScriptTag, initialHost = null, scriptTag = false }: Props) {
+export function HostingGuide({ projectId, apiKey, bundler, askSetup = false, onUseScriptTag, initialHost = null, scriptTag = false }: Props) {
   const [host, setHost] = useState<Host | null>(initialHost)
   const [copied, setCopied] = useState(false)
-  const guide = host ? hostGuide(host, { projectId, apiKey, bundler, scriptTag }) : null
+  const guide = host ? hostGuide(host, { projectId, apiKey, bundler, askSetup, scriptTag }) : null
 
   function copy(text: string) {
     void navigator.clipboard.writeText(text).then(() => {
@@ -65,7 +68,9 @@ export function HostingGuide({ projectId, apiKey, bundler, onUseScriptTag, initi
           {guide.prompt && (
             <CodePanel label={`Paste into ${HOST_LABEL[host!]}`} language="html" code={guide.prompt} onCopy={() => copy(guide.prompt!)} copied={copied} />
           )}
-          {guide.envNames && (
+          {guide.envBlock ? (
+            <CodePanel label="Names and values" language="bash" code={guide.envBlock} onCopy={() => copy(guide.envBlock!)} copied={copied} />
+          ) : guide.envNames && (
             <ul className="space-y-0.5" aria-label="Environment variable names">
               {guide.envNames.map((n) => (
                 <li key={n}>
@@ -74,11 +79,13 @@ export function HostingGuide({ projectId, apiKey, bundler, onUseScriptTag, initi
               ))}
             </ul>
           )}
-          <ol className="list-decimal space-y-0.5 pl-5 text-2xs text-fg-secondary">
-            {guide.steps.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ol>
+          {guide.steps.length > 0 && (
+            <ol className="list-decimal space-y-0.5 pl-5 text-2xs text-fg-secondary">
+              {guide.steps.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ol>
+          )}
           {guide.link && (
             <a href={guide.link.href} target="_blank" rel="noreferrer" className="text-2xs text-brand underline underline-offset-2">
               {guide.link.label} ↗

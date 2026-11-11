@@ -31,6 +31,7 @@ import {
 } from '../../lib/tokens'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { FixWithAgentPanel } from './FixWithAgentPanel'
+import { modelLine } from '../../lib/reportInternals'
 import type { ReportDetail } from './types'
 
 /** Below this, we hedge instead of asserting a root cause. */
@@ -39,9 +40,12 @@ const LOW_CONFIDENCE = 0.7
 export function DiagnosisFixHero({
   report,
   cursorWorkspace,
+  showInternals = false,
 }: {
   report: ReportDetail
   cursorWorkspace?: string
+  /** Operator accounts: show which model wrote the diagnosis. */
+  showInternals?: boolean
 }) {
   const conf = report.confidence
   const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
@@ -97,7 +101,7 @@ export function DiagnosisFixHero({
         </div>
 
         {stage2 ? (
-          <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} />
+          <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} showInternals={showInternals} />
         ) : isConfident ? (
           <p className="text-sm leading-relaxed text-fg-secondary">{summary}</p>
         ) : (
@@ -149,15 +153,17 @@ function Stage2DiagnosisBody({
   diagnosis,
   summary,
   streaming,
+  showInternals,
 }: {
   diagnosis: Stage2Diagnosis
   summary: string | null
   streaming: boolean
+  showInternals: boolean
 }) {
   const meta = [
     diagnosis.component ? `Component: ${diagnosis.component}` : null,
     diagnosis.confidence != null ? `${Math.round(diagnosis.confidence * 100)}% confidence` : null,
-    diagnosis.model ? `Model: ${diagnosis.model}` : null,
+    modelLine(diagnosis.model, showInternals),
   ].filter((x): x is string => Boolean(x))
 
   return (

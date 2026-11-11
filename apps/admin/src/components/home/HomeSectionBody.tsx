@@ -9,6 +9,7 @@ import type { ReactNode } from 'react'
 import { Btn, EmptySectionMessage } from '../ui'
 import type { HomeSection } from '../../lib/projectHome'
 import { semanticBannerTone } from '../../lib/tokens'
+import { homeConnectHref } from '../../lib/homeConnectHref'
 
 interface Props<T> {
   section: HomeSection<T>
@@ -35,7 +36,7 @@ export function HomeSectionBody<T>({ section, what, notConnectedText, children }
           <EmptySectionMessage text={notConnectedText} />
         </div>
         {section.connect && (
-          <Btn size="sm" variant="ghost" to={section.connect.to}>
+          <Btn size="sm" variant="ghost" to={homeConnectHref(section.connect)}>
             {section.connect.label}
           </Btn>
         )}

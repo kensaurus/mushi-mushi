@@ -34,6 +34,7 @@ import { isReportClassified } from '../../lib/reportDiagnosis'
 import { humanizeFixError } from '../../lib/humanizeFixError'
 import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import type { ReportDetail, ReportFixAttempt } from './types'
+import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
 
 type StoryState = StageStamp
 
@@ -55,6 +56,8 @@ interface StoryNode {
 interface Props {
   report: ReportDetail
   dispatchState: DispatchState
+  /** Operator accounts: show the model and its latency on the first step. */
+  showInternals?: boolean
 }
 
 /**
@@ -68,8 +71,8 @@ const STEP_NAME: Partial<Record<PdcaStageId, string>> = {
   act: 'Fix live',
 }
 
-export function ReportPdcaStory({ report, dispatchState }: Props) {
-  const nodes = buildStoryNodes(report, dispatchState)
+export function ReportPdcaStory({ report, dispatchState, showInternals = false }: Props) {
+  const nodes = buildStoryNodes(report, dispatchState, showInternals)
   return (
     // The heading sits outside the list: an <ol> may only hold <li>, and a
     // <header> inside it broke the list for screen readers (REPORT A14).
@@ -192,6 +195,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
 export function buildStoryNodes(
   report: ReportDetail,
   dispatchState: DispatchState,
+  showInternals = false,
 ): Record<PdcaStageId, StoryNode> {
   const fix: ReportFixAttempt | undefined = report.fix_attempts?.[0]
   const judge = report.judge_eval ?? null
@@ -222,8 +226,10 @@ export function buildStoryNodes(
     details: [
       report.severity ? `severity: ${report.severity}` : null,
       report.confidence != null ? `conf ${(report.confidence * 100).toFixed(0)}%` : null,
-      report.stage1_model || null,
-      report.stage1_latency_ms != null ? `${report.stage1_latency_ms}ms` : null,
+      // "precomputed" and "0ms" are how the pipeline ran, not what a builder
+      // needs; the sample report is named as one instead.
+      isSampleModel(report.stage1_model) ? SAMPLE_EXPLANATION_LABEL : showInternals ? report.stage1_model || null : null,
+      showInternals && report.stage1_latency_ms != null ? `${report.stage1_latency_ms}ms` : null,
     ],
   }
 
@@ -252,7 +258,7 @@ export function buildStoryNodes(
         : 'Fix dispatched — draft PR opened'
     }
     if (liveStatus === 'completed' && dispatchState.prUrl) return 'Fix dispatched — PR opened just now'
-    if (inFlight) return 'Auto-fix agent is drafting the PR right now'
+    if (inFlight) return 'The fix agent is drafting the PR right now'
     if (fixStatus === 'failed') {
       return `Last attempt stopped — ${humanizeFixError(fix?.error)?.title ?? fix?.error ?? 'see fixes page'}`
     }
@@ -295,7 +301,9 @@ export function buildStoryNodes(
     }
     if (ciConclusion) return `Fix CI: ${ciConclusion.replace(/_/g, ' ')}`
     if (fix?.pr_url) return 'CI is running on the PR'
-    return 'No judge or CI signal yet — runs once a fix is dispatched'
+    return showInternals
+      ? 'No judge or CI signal yet — runs once a fix is dispatched'
+      : 'Not checked yet. The checks run once a fix is dispatched.'
   })()
   const check: StoryNode = {
     id: 'check',

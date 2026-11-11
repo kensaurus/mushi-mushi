@@ -478,7 +478,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
                 <PackageRow name="react-native"         version={__SDK_RN_VERSION__}    hint="React Native bindings"  npmName="@mushi-mushi/react-native" />
               </PackageGroup>
               <PackageGroup id="Tooling">
-                <PackageRow name="cli"                  version={__SDK_CLI_VERSION__}   hint="Mushi CLI"              npmName="@mushi-mushi/cli" />
+                <PackageRow name="cli"                  version={__SDK_CLI_VERSION__}   hint="Mushi Mushi CLI"              npmName="@mushi-mushi/cli" />
                 <PackageRow name="mcp"                  version={__SDK_MCP_VERSION__}   hint="MCP server"             npmName="@mushi-mushi/mcp" />
                 <PackageRow name="node"                 version={__SDK_NODE_VERSION__}  hint="Node.js SDK"            npmName="@mushi-mushi/node" />
                 <PackageRow name="capacitor"            version={__SDK_CAPACITOR_VERSION__} hint="Capacitor plugin"   npmName="@mushi-mushi/capacitor" />

@@ -111,7 +111,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
       <PageHeaderBar
         title="App blueprint"
         helpTitle="What is the app blueprint?"
-        helpWhatIsIt="What this app is made of — database, design system, pages, automated checks, CI builds, what is live, environment variables and connected tools — and whether each one works. Mushi hands this to every diagnosis so a fix respects your own design and database."
+        helpWhatIsIt="What this app is made of — database, design system, pages, automated checks, CI builds, what is live, environment variables and connected tools — and whether each one works. Mushi Mushi hands this to every diagnosis so a fix respects your own design and database."
         helpHowToUse="Start with the card marked Needs attention or Check failed: its text says what is wrong and what to do. Not checked yet is never a pass. Not set up is optional. To declare design tokens, deploy targets and budgets, add a file named mushi.recipe.json at your repo root."
         helpFlowPath="/recipe"
       >

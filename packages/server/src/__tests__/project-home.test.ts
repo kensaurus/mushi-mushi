@@ -48,7 +48,7 @@ describe('siteSignal', () => {
     const s = siteSignal({ watch: null, brokenPages: 0, medianLatencyMs: null, now: NOW })
     expect(s.status).toBe('not_connected')
     expect(s.light).toBe('off')
-    expect(s.connect?.to).toBe('/credits')
+    expect(s.connect?.to).toBe('/inventory?tab=discovery#site-watch')
   })
 
   it('is red with the broken page count, before any other state', () => {

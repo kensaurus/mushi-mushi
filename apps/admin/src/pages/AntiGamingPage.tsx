@@ -520,7 +520,7 @@ export function AntiGamingPage() {
       {withheldCount > 0 && (
         <Section title={`Withheld tester redemptions (${withheldCount})`} icon={<IconRewards />}>
           <p className="text-2xs text-fg-muted mb-3">
-            Mushi Bounties gift-card redemptions paused by the anti-fraud engine (velocity cap
+            Mushi Mushi Bounties gift-card redemptions paused by the anti-fraud engine (velocity cap
             exceeded or an anti-fraud flag). Review each one and approve or deny.
           </p>
           <div className="space-y-2">

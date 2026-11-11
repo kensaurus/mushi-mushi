@@ -87,7 +87,7 @@ describe('gate labels', () => {
     for (const gate of ['ci_drift', 'deploy_drift', 'env_drift', 'design_drift', 'code_health', 'portfolio_radar', 'portfolio_radar_ci']) {
       expect(gateLabel(gate), gate).not.toBe(gate)
     }
-    expect(gateLabel('radar')).toBe('Mushi setup checks')
+    expect(gateLabel('radar')).toBe('Mushi Mushi setup checks')
     expect(gateLabel('store_review')).toBe('Store review checklist')
     expect(gateLabel('not_a_gate')).toBe('not_a_gate')
   })

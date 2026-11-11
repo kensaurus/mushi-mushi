@@ -9,15 +9,21 @@ export const CONNECT_SKILLS = {
     'Skills are playbooks your editor can read on demand — bug triage, fix-and-ship, QA, security audit, and more.',
   whatAreSkillsTitle: 'What are skills?',
   whatAreSkillsBody:
-    'SKILL.md playbooks live in GitHub repos and sync into Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
+    'SKILL.md playbooks live in GitHub repos and sync into Mushi Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
   learnMoreHref: 'https://kensaur.us/mushi-mushi/docs/sdks/skills',
   learnMoreLabel: 'Learn about skills →',
 } as const
 
 export const LOGIN_HERO = {
-  /** The landing's own promise, so a visitor who clicked "Start free" reads the same thing here. */
-  cloudTagline: `${MUSHI_TAGLINE_V2.hero} ${MUSHI_TAGLINE_V2.heroOffer}`,
-  /** Under the sign-up form: the three doubts a stranger has before trusting a new tool. */
-  signupReassurance: 'Free for one app, no card. Open source, so you can read every line it runs.',
-  selfHostTagline: 'Sign in to your self-hosted Mushi console.',
+  /**
+   * The landing's headline, so a visitor who clicked "Start free" reads the
+   * same thing here. Not the offer line after it ("...with a reviewer that
+   * says no"): it means nothing to someone who has not seen the product yet.
+   */
+  cloudTagline: MUSHI_TAGLINE_V2.hero,
+  /** Directly under the title on sign-up: the price, and the one thing that happens next. */
+  signupNext: 'Free for one app, no card. Next: copy one line and paste it into Lovable, Bolt or your code.',
+  /** Under the sign-up form: the last doubt a stranger has before trusting a new tool. */
+  signupReassurance: 'Open source, so you can read every line it runs.',
+  selfHostTagline: 'Sign in to your self-hosted Mushi Mushi console.',
 } as const

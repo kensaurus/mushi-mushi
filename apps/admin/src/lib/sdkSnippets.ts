@@ -328,9 +328,10 @@ export function renderSnippet(
   cfg: SdkPreviewConfig = DEFAULT_SDK_CONFIG,
   projectSlug?: string | null,
   /**
-   * The app's bundler, read from its repository. React apps on Vite or Next
-   * then read the id and key from env vars (with the `.env.local` lines),
-   * the way those apps keep config; unknown keeps the inline snippet.
+   * The app's bundler: read from its repository, or picked by the user under
+   * the React tab. React apps on Vite or Next then read the id and key from
+   * env vars (with the `.env.local` lines), the way those apps keep config.
+   * Unknown keeps the inline snippet: it is never guessed to be Vite.
    */
   bundler?: 'vite' | 'next' | null,
 ): string {
@@ -383,16 +384,41 @@ ${attrs.join('\n')}
   {/* Attach the reporter to an existing DOM element */}
   <MushiAttach selector="${cfg.attachToSelector.trim() || '#report-button'}" />`
         : ''
-    if (bundler === 'vite' || bundler === 'next') {
+    if (bundler === 'next') {
       // Snippet text, not env reads: the source path is built from parts so
       // the env-source-parity scan does not take it for a console env var.
-      const prefix = bundler === 'vite' ? 'VITE_' : 'NEXT_PUBLIC_'
-      const source = bundler === 'vite' ? ['import', 'meta', 'env'].join('.') : ['process', 'env'].join('.')
-      const read = (name: string) => `${source}.${prefix}MUSHI_${name}`
+      // Same two files as apps/docs/content/quickstart/react.mdx: the
+      // provider uses React context, so it lives in a client component.
+      const read = (name: string) => `${['process', 'env'].join('.')}.NEXT_PUBLIC_MUSHI_${name}!`
       return `// .env.local (keep it out of git):
-// ${prefix}MUSHI_PROJECT_ID=${projectId}
-// ${prefix}MUSHI_API_KEY=${key}
-${bundler === 'next' ? "'use client'\n" : ''}import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+// NEXT_PUBLIC_MUSHI_PROJECT_ID=${projectId}
+// NEXT_PUBLIC_MUSHI_API_KEY=${key}
+
+// app/providers.tsx
+'use client'
+import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider config={{
+      projectId: ${read('PROJECT_ID')},
+      apiKey: ${read('API_KEY')},
+${extras}    }}>${triggerUsage}
+      {children}
+    </MushiProvider>
+  )
+}
+
+// app/layout.tsx: wrap the page in it
+// import { Providers } from './providers'
+// <body><Providers>{children}</Providers></body>`
+    }
+    if (bundler === 'vite') {
+      const read = (name: string) => `${['import', 'meta', 'env'].join('.')}.VITE_MUSHI_${name}`
+      return `// .env.local (keep it out of git):
+// VITE_MUSHI_PROJECT_ID=${projectId}
+// VITE_MUSHI_API_KEY=${key}
+import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
 
 function App() {
   return (
@@ -586,9 +612,9 @@ export const mushi = new MushiNodeClient({
   environment: process.env.NODE_ENV ?? 'production',
 })
 
-// Capture unhandledRejection + uncaughtException as Mushi reports.
+// Capture unhandledRejection + uncaughtException as Mushi Mushi reports.
 // Node's process-terminating crash behaviour is NOT overridden — you
-// still get the crash, Mushi just also fires a report before it happens.
+// still get the crash, Mushi Mushi just also fires a report before it happens.
 attachUnhandledHook({ client: mushi })`
   }
 
@@ -655,7 +681,7 @@ import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
 
 const app = new Hono()
 
-// Wrap your own onError handler — Mushi runs first, then calls yours.
+// Wrap your own onError handler — Mushi Mushi runs first, then calls yours.
 app.onError(
   mushiHonoErrorHandler({ client: mushi }, (err, c) =>
     c.text('Internal Server Error', 500),

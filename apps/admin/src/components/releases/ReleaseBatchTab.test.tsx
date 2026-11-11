@@ -85,7 +85,7 @@ describe('ReleaseBatchTab', () => {
 
   it('leads with one sentence and says the batch changes the database', async () => {
     await render()
-    expect(q('batch-status')!.textContent).toContain('1 fix ready for the next train, 1 fix waiting. The batch changes the database (1 migration file); Mushi does not run them.')
+    expect(q('batch-status')!.textContent).toContain('1 fix ready for the next train, 1 fix waiting. The batch changes the database (1 migration file); Mushi Mushi does not run them.')
   })
 
   it('each member shows rides or waits, the verdict at its commit, CI and why', async () => {
@@ -108,7 +108,7 @@ describe('ReleaseBatchTab', () => {
     expect(q('batch-gates')!.textContent).toContain('1/2Its own CI is green')
     const mig = q('batch-migrations')!
     expect(mig.textContent).toContain('supabase/migrations/20261027_add_col.sql')
-    expect(mig.textContent).toContain('Mushi does not run them')
+    expect(mig.textContent).toContain('Mushi Mushi does not run them')
     expect(mig.textContent).toMatch(/could not read the changes of #\d+, so this list may be incomplete/)
   })
 
@@ -132,7 +132,7 @@ describe('ReleaseBatchTab', () => {
     expect(q('batch-repo-kensaurus/glot.it')!.textContent).toContain('CI running')
     expect(q('batch-repo-kensaurus/yen-yen')!.textContent).toContain('merges each fix on its own')
     expect(q('batch-repo-kensaurus/yen-yen')!.textContent).toContain('yen-yen')
-    expect(q('batch-partial')!.textContent).toContain('Mushi could not read CI results')
+    expect(q('batch-partial')!.textContent).toContain('Mushi Mushi could not read CI results')
   })
 
   it('empty, loading and error states', async () => {

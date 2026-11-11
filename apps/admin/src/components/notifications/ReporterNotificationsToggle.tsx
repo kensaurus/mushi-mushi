@@ -42,7 +42,7 @@ export function ReporterNotificationsToggle({ enabled, onChanged }: Props) {
     if (!check.ok) {
       setOutcome({
         ok: true,
-        text: "Saved, but Mushi couldn't confirm it. Reload the page to check.",
+        text: "Saved, but Mushi Mushi couldn't confirm it. Reload the page to check.",
         at: new Date().toISOString(),
       })
       onChanged()

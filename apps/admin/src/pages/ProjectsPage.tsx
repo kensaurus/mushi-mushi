@@ -604,7 +604,7 @@ export function ProjectsPage() {
         helpTitle={copy?.help?.title ?? 'About managing apps'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.'
+          'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [

@@ -144,7 +144,7 @@ export function FirecrawlPanel() {
   const configured = Boolean(poolKey || legacyKey || cfg?.configured);
   const status = providerStatusView('firecrawl', allKeys, legacyKeys, {
     providerName: NAME,
-    emptyDetail: "No key of your own. Web tools use Mushi's shared key when the server has one.",
+    emptyDetail: "No key of your own. Web tools use Mushi Mushi's shared key when the server has one.",
   });
   const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
 
@@ -152,7 +152,7 @@ export function FirecrawlPanel() {
     <>
       <SettingsList
         title="Firecrawl (web pages)"
-        description="Optional. Lets Mushi read public web pages, such as library docs, when it researches a bug or suggests a library update. Results are cached for a day."
+        description="Optional. Lets Mushi Mushi read public web pages, such as library docs, when it researches a bug or suggests a library update. Results are cached for a day."
       >
         <SettingsRow
           icon={<BrandIcon brand="firecrawl" size={18} decorative />}

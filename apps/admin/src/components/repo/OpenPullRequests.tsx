@@ -86,7 +86,7 @@ function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): 
 }
 
 const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
-  { id: 'mergeable', title: 'Mergeable now', hint: 'Required checks passed; a Mushi fix also has an Opus "merge" on its latest commit.' },
+  { id: 'mergeable', title: 'Mergeable now', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
   { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or Opus said fix first. Open the fix to send it back.' },
   { id: 'hold', title: 'Hold', hint: 'Opus said hold: a person decides. The fix page shows the findings.' },
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },

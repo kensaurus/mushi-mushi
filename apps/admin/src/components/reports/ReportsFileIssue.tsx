@@ -25,7 +25,7 @@ const ISSUE_KINDS = [
 type IssueKind = (typeof ISSUE_KINDS)[number]['id']
 
 const SEVERITIES = [
-  { id: '', label: 'Let Mushi decide' },
+  { id: '', label: 'Let Mushi Mushi decide' },
   { id: 'critical', label: 'Critical: people cannot use the app' },
   { id: 'high', label: 'High: a main task is blocked or wrong' },
   { id: 'medium', label: 'Medium: annoying, there is a way around it' },
@@ -106,7 +106,7 @@ export function ReportsFileIssue({ projectId, projectName, onClose, onFiled }: P
         <div>
           <h2 className="text-sm font-semibold text-fg">Report an issue in {projectName ?? 'this app'}</h2>
           <p className="text-xs text-fg-muted">
-            Write it the way a user would. Mushi explains it and, with a worker lane chosen, opens a fix PR.
+            Write it the way a user would. Mushi Mushi explains it and, with a worker lane chosen, opens a fix PR.
           </p>
         </div>
         <Btn type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Close report form">
@@ -154,7 +154,7 @@ export function ReportsFileIssue({ projectId, projectName, onClose, onFiled }: P
       </div>
       {fixLanes.length > 0 && (
         <SelectField label="Fix it on (optional)" value={laneId} onChange={(e) => setLaneId(e.target.value)}>
-          <option value="">Let Mushi pick (cloud or any lane)</option>
+          <option value="">Let Mushi Mushi pick (cloud or any lane)</option>
           {fixLanes.map((l) => (
             <option key={l.id} value={l.id}>
               Local worker lane {l.name}

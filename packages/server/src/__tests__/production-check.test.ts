@@ -30,6 +30,11 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   RULE_KIND,
   UNREACHABLE_TEXT,
+  brokenImageFinding,
+  brokenLinkFinding,
+  isHandoffPage,
+  namedList,
+  sourceMapFinding,
   isSensitivePath,
   mixedContent,
   mixedContentFinding,
@@ -48,6 +53,7 @@ import {
   transportFindings,
   type PageResult,
 } from '../../supabase/functions/_shared/production-check.ts'
+import { UNREACHABLE_ADDRESS, checkPublicUrl } from '../../supabase/functions/_shared/public-url-guard.ts'
 
 const GOOD_HTML = `<!doctype html><html lang="en"><head>
 <title>Acme &amp; Co</title>
@@ -92,6 +98,7 @@ describe('pageFindings', () => {
     for (const f of findings) {
       expect(f.why.length).toBeGreaterThan(20)
       expect(f.fix.length).toBeGreaterThan(20)
+      expect(f.prompt?.length ?? 0).toBeGreaterThan(20)
     }
   })
 
@@ -442,5 +449,138 @@ describe('a site no page of which could be read', () => {
     const result = await runProductionCheck('https://acme.app/', { firecrawlKey: 'fc', fetchImpl: fetchImpl as unknown as typeof fetch, resolver: null })
     expect(result.summary.linksChecked).toBe(0)
     expect(result.findings.some((f) => f.rule === 'broken_links')).toBe(false)
+  })
+})
+
+describe('prompts for an AI builder, and the blank-page rule (2026-11-12)', () => {
+  const rendered = (p: Partial<PageResult> & { url: string }) => page({ rendered: true, renderUnreadable: false, ...p })
+  const EMPTY = '[](https://acme.app/) ![logo](/logo.svg)'
+  // More than BLANK_TEXT_CHARS visible characters: a page with real words on it.
+  const BODY = 'Pair two phones with a short code so your partner can direct the shot, live.'
+  // The page that was wrongly reported: kensaur.us/help-her-take-photo/open, an
+  // app-link handoff with a title and a smart app banner, and no words.
+  const HANDOFF_HTML =
+    '<!DOCTYPE html><html lang="en"><head><title>help her take photo – Pose Cam</title><meta name="apple-itunes-app" content="app-id=6762513666"/></head><body><div id="root"></div></body></html>'
+
+  it('every rule hands over a prompt to paste, beside the developer steps', () => {
+    const origins = new Set(['https://acme.app'])
+    const all = [
+      ...pageFindings([
+        rendered({ url: 'https://acme.app/', markdown: EMPTY, title: 'Lovable App' }),
+        page({ url: 'https://acme.app/pricing', statusCode: 404 }),
+        page({ url: 'https://acme.app/app', markdown: 'Application error: a client-side exception has occurred (see the browser console for more information).' }),
+        rendered({ url: 'https://acme.app/gone', markdown: '404 Oops! Page not found Return to Home' }),
+        rendered({ url: 'https://acme.app/empty', markdown: EMPTY }),
+        page({ url: 'https://acme.app/about', title: null, description: null, language: null }),
+      ]),
+      ...transportFindings('no_https', {}),
+      ...transportFindings('not_redirected', { 'content-security-policy': false, 'strict-transport-security': false, 'x-content-type-options': false, 'referrer-policy': false }),
+      brokenLinkFinding([{ url: 'https://acme.app/old', status: 404 }]),
+      brokenImageFinding([{ url: 'https://acme.app/hero.png', status: 404 }], origins),
+      mixedContentFinding([page({ url: 'https://acme.app/', html: '<script src="http://cdn.old.com/a.js"></script>' })]),
+      shareImageFinding(page({ url: 'https://acme.app/' })),
+      sourceMapFinding(['https://acme.app/assets/app.js']),
+    ].filter((f) => f !== null)
+    // Every rule the check knows is in this fixture, so none can ship without a prompt.
+    expect(new Set(all.map((f) => f.rule))).toEqual(new Set(Object.keys(RULE_KIND)))
+    for (const f of all) {
+      expect(f.prompt, f.rule).toBeTruthy()
+      expect(f.prompt!.length, f.rule).toBeGreaterThan(40)
+      expect(f.prompt!.length, f.rule).toBeLessThan(420)
+      // Words for a person and their AI builder: no "right-click, Inspect".
+      expect(f.prompt, f.rule).not.toMatch(/Inspect|right-click|private window/i)
+      expect(f.fix.length, f.rule).toBeGreaterThan(20)
+    }
+    const by = Object.fromEntries(all.map((f) => [f.rule, f.prompt!]))
+    expect(by.blank_page).toBe(
+      'The page / on my published site shows a blank screen. Find the error that stops it loading and fix it. If a setting or key is missing on the published site, tell me which one and where to add it.',
+    )
+    expect(by.page_error_status).toContain('/pricing (error 404)')
+    expect(by.error_screen).toContain('The page /app ')
+    expect(by.page_not_found_screen).toContain('/gone')
+    expect(by.nearly_empty_page).toContain('The page /empty ')
+    expect(by.missing_title).toContain('/about')
+    expect(by.broken_links).toContain('/old')
+    expect(by.broken_images).toContain('/hero.png')
+    expect(by.mixed_content).toContain('http://cdn.old.com/a.js')
+  })
+
+  it('names at most five places in a prompt, then counts the rest', () => {
+    expect(namedList(['/a'])).toBe('/a')
+    expect(namedList(['/a', '/b'])).toBe('/a and /b')
+    expect(namedList(['/a', '/b', '/c'])).toBe('/a, /b and /c')
+    expect(namedList(['/1', '/2', '/3', '/4', '/5', '/6', '/7'])).toBe('/1, /2, /3, /4, /5 and 2 more')
+    const many = Array.from({ length: 9 }, (_, i) => ({ url: `https://acme.app/p${i}`, status: 404 }))
+    expect(brokenLinkFinding(many)!.prompt).toContain('/p0, /p1, /p2, /p3, /p4 and 4 more')
+  })
+
+  it('an app-link or redirect page that is empty on purpose is not reported', () => {
+    const home = rendered({ url: 'https://kensaur.us/help-her-take-photo/', markdown: BODY })
+    const open = rendered({ url: 'https://kensaur.us/help-her-take-photo/open', markdown: '', title: 'help her take photo – Pose Cam', html: HANDOFF_HTML })
+    const rules = pageFindings([home, open]).map((f) => f.rule)
+    expect(rules).not.toContain('blank_page')
+    expect(rules).not.toContain('nearly_empty_page')
+    for (const html of [
+      '<meta http-equiv="refresh" content="0; url=/home">',
+      '<meta property="al:ios:url" content="acme://open">',
+      '<a href="acme://open?code=1">Open the app</a>',
+      '<a href="intent://open#Intent;scheme=acme;end">Open</a>',
+      '<script>window.location.replace("/home")</script>',
+      '<script>location.href = "acme://open"</script>',
+    ]) {
+      expect(isHandoffPage(html), html).toBe(true)
+    }
+    for (const html of [
+      '<div id="root"></div><script type="module" src="/assets/index.js"></script>',
+      '<a href="https://acme.app/pricing">Pricing</a><a href="mailto:hi@acme.app">Mail</a>',
+      '<script>if (location.href === "x") {}</script>',
+      undefined,
+    ]) {
+      expect(isHandoffPage(html), String(html)).toBe(false)
+    }
+  })
+
+  it('an empty sub-page with no such sign is "check it is meant to", never "fix first"; an empty home page still is', () => {
+    const home = rendered({ url: 'https://acme.app/', markdown: BODY })
+    const shell = '<div id="root"></div><script type="module" src="/assets/index.js"></script>'
+    const sub = pageFindings([home, rendered({ url: 'https://acme.app/dashboard-preview', markdown: EMPTY, html: shell })])
+    expect(sub.some((f) => f.rule === 'blank_page')).toBe(false)
+    expect(sub.find((f) => f.rule === 'nearly_empty_page')).toMatchObject({ severity: 'medium', where: ['/dashboard-preview'] })
+    expect(sub.find((f) => f.rule === 'nearly_empty_page')!.title).toBe('1 page shows almost nothing: check it is meant to')
+    // A handoff sign without a title is still worth a look.
+    const untitled = pageFindings([home, rendered({ url: 'https://acme.app/open', markdown: '', title: null, html: HANDOFF_HTML })])
+    expect(untitled.find((f) => f.rule === 'nearly_empty_page')).toMatchObject({ severity: 'medium' })
+    // The home page: a handoff sign does not excuse a blank front door.
+    const blankHome = pageFindings([rendered({ url: 'https://acme.app/', markdown: EMPTY, html: HANDOFF_HTML }), rendered({ url: 'https://acme.app/x', markdown: EMPTY, html: shell })])
+    expect(blankHome.find((f) => f.rule === 'blank_page')).toMatchObject({ severity: 'high', where: ['/'], title: 'Your home page shows almost nothing' })
+    expect(blankHome.find((f) => f.rule === 'nearly_empty_page')).toMatchObject({ severity: 'medium', where: ['/x'] })
+    expect(RULE_KIND.nearly_empty_page).toBe('breakage')
+  })
+})
+
+describe('what a person reads when the address cannot be checked', () => {
+  const message = (raw: string) => {
+    const r = checkPublicUrl(raw)
+    return r.ok ? null : r.message
+  }
+
+  it('a misspelled or incomplete address gets the "check the spelling" line', () => {
+    expect(UNREACHABLE_ADDRESS).toBe(
+      "We couldn't reach that address. Check the spelling, or paste the link you share with your users (for example https://my-app.lovable.app).",
+    )
+    for (const raw of ['myapp', 'my app.com', 'https://my_app', 'http://']) expect(message(raw), raw).toBe(UNREACHABLE_ADDRESS)
+  })
+
+  it('a local or private address gets its own true line, and never the rule that refused it', () => {
+    for (const raw of ['localhost', 'http://192.168.1.20', 'http://10.0.0.5/app', 'my-mac.local', 'http://[::1]/']) {
+      expect(message(raw), raw).toMatch(/^That is a private or local address, so only you can open it\./)
+    }
+    expect(message('localhost:3000')).toMatch(/port number/)
+    expect(message('my-app.com:8080')).toMatch(/port number/)
+    for (const raw of ['myapp', 'localhost', 'http://169.254.169.254/', 'localhost:3000', 'http://user:pw@my-app.com']) {
+      expect(message(raw), raw).not.toMatch(/DNS|metadata|RFC|169\.254|suffix|loopback|link-local|credential/i)
+      expect(message(raw), raw).toContain('https://my-app.lovable.app')
+    }
+    expect(message('https://my-app.lovable.app')).toBeNull()
   })
 })

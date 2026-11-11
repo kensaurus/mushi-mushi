@@ -173,7 +173,7 @@ export function KnownHolesCard({ projectId }: { projectId: string }) {
         <p className="text-xs text-fg-muted">Not set up on this server yet: the known-vulnerabilities migration has not been applied.</p>
       )}
       {data?.available && !data.lastRun && (
-        <p className="text-xs text-fg-muted">Not checked yet. Mushi checks daily at 05:25 UTC, or press Check now.</p>
+        <p className="text-xs text-fg-muted">Not checked yet. Mushi Mushi checks daily at 05:25 UTC, or press Check now.</p>
       )}
       {data?.available && data.lastRun && (
         <div className="flex flex-col gap-3">

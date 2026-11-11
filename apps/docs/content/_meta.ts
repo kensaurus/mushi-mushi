@@ -39,6 +39,9 @@ export default {
   // Conversion surface — same sidebar-off treatment as the landing (see `index`).
   pricing: { title: 'Pricing', theme: { sidebar: false } },
   glossary: 'Glossary',
+  // One page in Japanese for solo developers in Japan (re-audit 2026-11-11).
+  // A plain page, not an i18n route: the rest of the docs stay English.
+  ja: '日本語',
 
   '-- Set it up': { type: 'separator', title: 'Set it up' },
   quickstart: 'Quickstart',

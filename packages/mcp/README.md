@@ -43,8 +43,8 @@ Restart the editor and ask *"what's broken in prod?"*. For Cursor and Claude, `s
 
 | Variable | Where to find it |
 | --- | --- |
-| `MUSHI_API_KEY` | Console → **Connect** or **MCP**: mint an `mcp:read` or `mcp:write` key. Not the SDK key from Setup → Verify, and not an AI key from Settings |
-| `MUSHI_PROJECT_ID` | Console → Projects → the UUID under your project's name |
+| `MUSHI_API_KEY` | Console → **Connect** or **Editor agents**: mint an `mcp:read` or `mcp:write` key. Not the SDK key from Set up → Test it, and not an AI key from Settings |
+| `MUSHI_PROJECT_ID` | Console → **Manage apps** → the UUID under your app's name |
 | `MUSHI_API_ENDPOINT` | Optional. Only for self-hosting, e.g. `http://localhost:54321/functions/v1/api` |
 | `MUSHI_FEATURES` | Optional. Tool groups to expose (see below) |
 

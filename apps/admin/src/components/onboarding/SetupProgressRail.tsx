@@ -22,7 +22,7 @@ import { Btn } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { buildSetupRail, heartbeatSentence, type SetupRail, type SetupRailStep, type TimeToFirstDiagnosis } from '../../lib/setupRail'
 import { DEFAULT_SDK_CONFIG, installCommand, renderSnippet } from '../../lib/sdkSnippets'
-import { detectWebBundler, resolveDefaultSdkFramework } from '../../lib/sdkInstallDefaults'
+import { detectWebBundler, resolveDefaultSdkFramework, snippetBundler } from '../../lib/sdkInstallDefaults'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import type { OnboardingTabId } from './types'
 
@@ -150,8 +150,8 @@ function NextStepPanel({
       <div className={panel} data-testid="setup-next-step">
         <p className="text-xs text-fg-secondary">
           {rail.testDiagnosedAt
-            ? 'Mushi has only seen a test bug so far. Report one with the bug button in your app to check it end to end.'
-            : 'Reports from your app reach Mushi and get a plain-English diagnosis.'}
+            ? 'Mushi Mushi has only seen a test bug so far. Report one with the bug button in your app to check it end to end.'
+            : 'Reports from your app reach Mushi Mushi and get a plain-English diagnosis.'}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {rail.firstReportId ? (
@@ -171,7 +171,7 @@ function NextStepPanel({
   if (next.id === 'project') {
     return (
       <div className={panel} data-testid="setup-next-step">
-        <p className="text-xs text-fg-secondary">Name your app. Mushi makes its key for you.</p>
+        <p className="text-xs text-fg-secondary">Name your app. Mushi Mushi makes its key for you.</p>
         <Btn size="sm" variant="primary" className="mt-2" onClick={() => onTab('steps')}>
           Create your app
         </Btn>
@@ -230,7 +230,8 @@ function SnippetStep({
   const stack = usePageData<{ repo: string | null; packageJson: string | null }>(`/v1/admin/projects/${project.project_id}/github/stack`)
   const packageJson = stack.data?.packageJson ?? null
   const framework = resolveDefaultSdkFramework(project.project_slug, packageJson)
-  const bundler = framework === 'react' ? detectWebBundler(packageJson) : null
+  // Only what the repo says: an unknown React setup keeps the inline snippet.
+  const bundler = snippetBundler(framework, detectWebBundler(packageJson))
   const code = `${installCommand(framework)}\n\n${renderSnippet(framework, project.project_id, apiKey, DEFAULT_SDK_CONFIG, project.project_slug, bundler)}`
   const copy = () => {
     void navigator.clipboard.writeText(code).then(
@@ -247,7 +248,7 @@ function SnippetStep({
           once, so a key made earlier is not here to fill in (2026-10-28). */}
       <p className="text-xs text-fg-secondary">
         {apiKey
-          ? 'Paste this into your app and load any page. Mushi hears from your app here within a minute.'
+          ? 'Paste this into your app and load any page. Mushi Mushi hears from your app here within a minute.'
           : 'This snippet needs a key, and a key is shown only once. Make a new one and it fills in below; your other keys keep working.'}
       </p>
       {apiKey ? null : (

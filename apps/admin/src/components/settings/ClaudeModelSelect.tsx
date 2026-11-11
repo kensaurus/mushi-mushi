@@ -112,10 +112,10 @@ export function ClaudeModelSelect({
             <span className="text-fg-muted">Model list read from your Anthropic key.</span>
           )}
           {live.data?.source === 'none' && (
-            <span className="text-fg-muted">No Anthropic key for this app yet: showing Mushi&apos;s built-in list.</span>
+            <span className="text-fg-muted">No Anthropic key for this app yet: showing Mushi Mushi&apos;s built-in list.</span>
           )}
           {live.data?.source === 'error' && (
-            <span className="text-fg-muted">Anthropic&apos;s model list did not load: showing Mushi&apos;s built-in list.</span>
+            <span className="text-fg-muted">Anthropic&apos;s model list did not load: showing Mushi Mushi&apos;s built-in list.</span>
           )}
         </div>
       </div>

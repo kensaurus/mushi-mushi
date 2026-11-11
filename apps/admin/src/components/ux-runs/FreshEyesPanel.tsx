@@ -179,7 +179,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
       <div className="flex flex-col gap-1">
         <h2 className="text-sm font-semibold text-fg">Run a first-time user test</h2>
         <p className="max-w-3xl text-xs text-fg-secondary">
-          An AI that has never seen your app opens it and tries to do one thing, reading only what is on screen. Mushi times every step and shows you where it got stuck.
+          An AI that has never seen your app opens it and tries to do one thing, reading only what is on screen. Mushi Mushi times every step and shows you where it got stuck.
         </p>
       </div>
 
@@ -237,7 +237,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         <span className="text-2xs text-fg-muted">
           {mode === 'look' && 'The visitor reads and clicks but never sends a form, and nothing becomes a report. It stops at the sign-up page.'}
           {mode === 'file' && 'Same visit; what stops the visitor (errors, dead ends, a step that needs a terminal or an inbox) is filed as a bug report.'}
-          {mode === 'account' && 'Each visitor signs up with its own test account, made for this test and deleted after a day. Only for Mushi itself.'}
+          {mode === 'account' && 'Each visitor signs up with its own test account, made for this test and deleted after a day. Only for Mushi Mushi itself.'}
         </span>
       </div>
 

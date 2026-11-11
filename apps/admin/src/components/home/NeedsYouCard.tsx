@@ -94,7 +94,7 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [] }: 
             <>
               {all.length === 0 ? (
                 <p className="text-sm text-fg-secondary" data-testid="home-needs-you-clear">
-                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi will list it here when something does.'}
+                  {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi Mushi will list it here when something does.'}
                 </p>
               ) : (
                 <ol className="divide-y divide-edge-subtle" data-testid="home-needs-you">

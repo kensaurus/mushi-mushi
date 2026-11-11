@@ -277,7 +277,7 @@ export function McpPage() {
           helpTitle={copy?.help?.title ?? 'About editor agents'}
           helpWhatIsIt={
             copy?.help?.whatIsIt ??
-            'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+            'MCP lets your coding assistant call Mushi Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
           }
           helpUseCases={
             copy?.help?.useCases ?? [
@@ -340,7 +340,7 @@ export function McpPage() {
         helpTitle={copy?.help?.title ?? 'About editor agents'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+          'MCP lets your coding assistant call Mushi Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [

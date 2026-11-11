@@ -93,7 +93,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'cordova-to-capacitor',
     title: 'Cordova → Capacitor',
     summary:
-      'Replace Cordova with Capacitor in place. Plugin map, build pipeline swap, splash/icon regeneration, and Mushi widget reconfiguration.',
+      'Replace Cordova with Capacitor in place. Plugin map, build pipeline swap, splash/icon regeneration, and Mushi Mushi widget reconfiguration.',
     category: 'mobile',
     effort: 'Days',
     risk: 'Med',
@@ -105,7 +105,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'cordova-to-react-native',
     title: 'Cordova → React Native',
     summary:
-      'Two-hop migration: stabilise on Capacitor first, then port screen-by-screen to React Native. Preserves the Mushi project the whole way.',
+      'Two-hop migration: stabilise on Capacitor first, then port screen-by-screen to React Native. Preserves the Mushi Mushi project the whole way.',
     category: 'mobile',
     effort: 'Weeks',
     risk: 'High',
@@ -117,7 +117,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'react-native-cli-to-expo',
     title: 'React Native CLI ↔ Expo',
     summary:
-      'Both directions. Add Expo modules to a bare CLI app via install-expo-modules, or eject Expo with `expo prebuild`. Mushi works on both.',
+      'Both directions. Add Expo modules to a bare CLI app via install-expo-modules, or eject Expo with `expo prebuild`. Mushi Mushi works on both.',
     category: 'mobile',
     effort: 'Days',
     risk: 'Low',
@@ -129,7 +129,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'native-to-hybrid',
     title: 'Native iOS / Android → Hybrid',
     summary:
-      'When and how to wrap an existing native app shell with Capacitor or React Native, keeping the platform Mushi SDKs in place.',
+      'When and how to wrap an existing native app shell with Capacitor or React Native, keeping the platform Mushi Mushi SDKs in place.',
     category: 'mobile',
     effort: 'Weeks',
     risk: 'High',
@@ -154,7 +154,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'nextjs-pages-to-app-router',
     title: 'Next.js Pages → App Router',
     summary:
-      'Page-by-page move to App Router with the right Mushi `<MushiProvider>` placement and the CSP-aware integration for static export.',
+      'Page-by-page move to App Router with the right Mushi Mushi `<MushiProvider>` placement and the CSP-aware integration for static export.',
     category: 'web',
     effort: 'Days',
     risk: 'Med',
@@ -177,7 +177,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'spa-to-ssr',
     title: 'SPA → SSR (Next.js / Nuxt / SvelteKit)',
     summary:
-      'Move from a Vite SPA to a server-rendered framework. Mushi env-var prefix mapping (VITE_ → NEXT_PUBLIC_), provider placement, and hydration safety.',
+      'Move from a Vite SPA to a server-rendered framework. Mushi Mushi env-var prefix mapping (VITE_ → NEXT_PUBLIC_), provider placement, and hydration safety.',
     category: 'web',
     effort: 'Weeks',
     risk: 'Med',
@@ -190,7 +190,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'sentry-to-mushi',
     title: 'Sentry + Mushi Mushi (enrich or standalone)',
     summary:
-      'Keep Sentry. Mushi runs alongside it and adds plain-English diagnosis and paste-ready fixes to your errors, or works standalone. Never a rip-out.',
+      'Keep Sentry. Mushi Mushi runs alongside it and adds plain-English diagnosis and paste-ready fixes to your errors, or works standalone. Never a rip-out.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
@@ -236,7 +236,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'logrocket-feedback-to-mushi',
     title: 'LogRocket Feedback → Mushi Mushi',
     summary:
-      'Collect bug reports with Mushi and keep LogRocket for session replay. Each report carries the LogRocket session URL in its metadata.',
+      'Collect bug reports with Mushi Mushi and keep LogRocket for session replay. Each report carries the LogRocket session URL in its metadata.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
@@ -248,7 +248,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'bugherd-to-mushi',
     title: 'BugHerd → Mushi Mushi',
     summary:
-      'Sidebar feedback widget → Mushi floating button. Pixel-pin comments → Mushi\'s element picker and screenshot markup.',
+      'Sidebar feedback widget → Mushi Mushi floating button. Pixel-pin comments → Mushi Mushi\'s element picker and screenshot markup.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',
@@ -260,7 +260,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'pendo-feedback-to-mushi',
     title: 'Pendo Feedback → Mushi Mushi',
     summary:
-      'Pendo retired classic Feedback on 2026-08-01. Move feedback to Mushi: `pendo.identify` → `setUser`, `pendo.track` → `track`; keep Pendo for analytics and guides.',
+      'Pendo retired classic Feedback on 2026-08-01. Move feedback to Mushi Mushi: `pendo.identify` → `setUser`, `pendo.track` → `track`; keep Pendo for analytics and guides.',
     category: 'competitor',
     effort: 'Hours',
     risk: 'Low',

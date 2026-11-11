@@ -289,7 +289,7 @@ export function SsoPage() {
                     onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   />
                   <p className="col-span-2 text-xs text-fg-secondary">
-                    Mushi saves the issuer and client ID for your support ticket. Don&rsquo;t paste the client
+                    Mushi Mushi saves the issuer and client ID for your support ticket. Don&rsquo;t paste the client
                     secret here: give it to Supabase support directly when they ask for it.
                   </p>
                 </>
@@ -308,8 +308,8 @@ export function SsoPage() {
             </Btn>
             <p className="text-2xs text-fg-faint">
               {form.providerType === 'saml'
-                ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
-                : 'OIDC providers are stored for audit but Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting saves the issuer and client ID so you can quote them in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
+                ? 'On submit, Mushi Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
+                : 'OIDC providers are stored for audit but Mushi Mushi cannot auto-register them — Supabase\u2019s GoTrue Admin API does not yet expose an OIDC endpoint. Submitting saves the issuer and client ID so you can quote them in a Supabase support ticket. For a fully self-service flow today, use SAML 2.0.'}
             </p>
           </Card>
 

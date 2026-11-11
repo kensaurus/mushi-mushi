@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare
 
 ---
 title: Compare
-description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam and PostHog, plus Sentry alternatives for solo founders. Every number links to its source.
+description: Honest, dated comparisons of Mushi Mushi with Sentry, Jam, PostHog and agency feedback tools. Every number links to its source.
 ---
 
 # Compare Mushi Mushi with the tools you already know
@@ -26,6 +26,10 @@ together.
 - **[Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders)** —
   Sentry, Bugsnag, Rollbar, highlight.io, PostHog and Mushi Mushi: free caps,
   self-host, AI fixes, and a "pick this if" for each.
+- **[Marker.io, BugHerd and Userback vs Mushi Mushi for agencies](/compare/agency-feedback-tools)** —
+  client seats, per-project access, boards and video, where those three are
+  ahead, next to what Mushi Mushi adds once the app is live. Facts read on
+  2026-11-11.
 - **[Your Lovable app broke in production](/use-cases/lovable-app-broke-in-production)** —
   not a comparison: a debugging checklist for code you did not write.
 

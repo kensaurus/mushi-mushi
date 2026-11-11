@@ -65,7 +65,7 @@ export function ReleasesSnapshotStrip({ stats, statsFetchedAt, statsValidating, 
       ]}
       empty={{
         title: 'No releases yet',
-        sentence: 'Once a fix merges, Mushi drafts release notes from it and credits the people who reported the bug.',
+        sentence: 'Once a fix merges, Mushi Mushi drafts release notes from it and credits the people who reported the bug.',
         action: onDraft ? { label: 'Draft release notes', onClick: onDraft } : { label: 'Draft release notes', to: '/releases?tab=draft' },
       }}
     />

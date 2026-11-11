@@ -22,7 +22,7 @@ function ManifestLine({ manifest }: { manifest: RecipeManifestStatus }) {
   if (!manifest.present) {
     return (
       <span className="text-xs text-fg-secondary">
-        Not added yet. This page is built from what Mushi already sees. To declare design tokens, deploy targets and budgets, add a file named{' '}
+        Not added yet. This page is built from what Mushi Mushi already sees. To declare design tokens, deploy targets and budgets, add a file named{' '}
         <span className="font-mono">mushi.recipe.json</span> at your repo root.
       </span>
     )

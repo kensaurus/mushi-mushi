@@ -22,11 +22,11 @@ describe('fixesMeter (1c802df2)', () => {
     expect(m.value).toBe('4')
     expect(m.value).not.toContain('/')
     expect(m.pct).toBeNull()
-    expect(m.detail).toBe('Fix PRs from Mushi merged this period, from any agent')
+    expect(m.detail).toBe('Fix PRs from Mushi Mushi merged this period, from any agent')
   })
 
   it("names the server agent's runs only when there are some", () => {
-    expect(fixesMeter({ fixesSucceeded: 1, fixesAttempted: 3 }).detail).toBe("3 started by Mushi's server agent this period")
+    expect(fixesMeter({ fixesSucceeded: 1, fixesAttempted: 3 }).detail).toBe("3 started by Mushi Mushi's server agent this period")
   })
 })
 

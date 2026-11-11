@@ -85,7 +85,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
 
 function buildEnvLocal(projectId: string, apiKey: string): string {
   return [
-    '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
+    '# Mushi Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
     `MUSHI_API_ENDPOINT=${RESOLVED_EXTERNAL_API_URL}`,
     `MUSHI_API_KEY=${apiKey}`,
     `MUSHI_PROJECT_ID=${projectId}`,
@@ -95,7 +95,7 @@ function buildEnvLocal(projectId: string, apiKey: string): string {
 
 function buildSdkEnv(projectId: string, apiKey: string, env: ProjectMushiEnvVars): string {
   const lines = [
-    `# Mushi bug-capture SDK — paste into ${env.envFileHint ?? '.env.local'} (gitignored).`,
+    `# Mushi Mushi bug-capture SDK — paste into ${env.envFileHint ?? '.env.local'} (gitignored).`,
     `${env.projectIdVar}=${projectId}`,
     `${env.apiKeyVar}=${apiKey}`,
   ]
@@ -108,7 +108,7 @@ function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | 
   const env = mushiEnvVarsForProjectSlug(slug)
   const file = env.envFileHint ?? 'apps/admin/.env.local'
   const lines = [
-    `# Mushi admin dogfood — paste into ${file} and restart the Vite dev server.`,
+    `# Mushi Mushi admin dogfood — paste into ${file} and restart the Vite dev server.`,
     `${env.projectIdVar}=${projectId}`,
     `${env.apiKeyVar}=${apiKey}`,
   ]
@@ -122,7 +122,7 @@ function buildAdminDogfoodEnv(projectId: string, apiKey: string, slug: string | 
 function buildExpoEnvLocal(projectId: string, apiKey: string, env: ProjectMushiEnvVars): string {
   const file = env.envFileHint ?? 'apps/mobile/.env.local'
   const lines = [
-    `# Mushi reporter SDK — paste into ${file} (gitignored).`,
+    `# Mushi Mushi reporter SDK — paste into ${file} (gitignored).`,
     `# EXPO_PUBLIC_* is baked at bundle time; OTA cannot inject it.`,
     `${env.projectIdVar}=${projectId}`,
     `${env.apiKeyVar}=${apiKey}`,

@@ -287,7 +287,7 @@ export function CiPage() {
         icon={<IconGauge />}
         description="Where your tests run, how long they wait, and what slows them down."
         helpTitle="About CI runners"
-        helpWhatIsIt="Every fix Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why your fixes take as long as they do to land."
+        helpWhatIsIt="Every fix Mushi Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why your fixes take as long as they do to land."
         helpHowToUse="Start with the queue: a long Waiting column means too few machines. A job marked “Test machine stopped” was not a code failure; re-run it. Speed it up lists changes with the evidence behind each one."
       >
         <UpdatedAgo at={data?.refreshedAt ?? data?.generatedAt ?? null} validating={(live.syncing || page.isValidating) && !page.loading} />
@@ -332,7 +332,7 @@ export function CiPage() {
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>{notice}</span>
                   <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
-                    How to give Mushi access ↗
+                    How to give Mushi Mushi access ↗
                   </a>
                 </span>
               </Callout>
@@ -344,7 +344,7 @@ export function CiPage() {
       {data && empty && (
         <EmptyState
           title="No CI jobs seen yet"
-          description="Mushi shows runners once GitHub reports a job for this app's repositories, or once a machine that runs your tests reports in: run these two commands on it."
+          description="Mushi Mushi shows runners once GitHub reports a job for this app's repositories, or once a machine that runs your tests reports in: run these two commands on it."
           hints={['mushi runner key', 'mushi runner hooks install --dir <runner dir>']}
           action={
             <Btn size="sm" variant="ghost" href={docsUrl('/operating/ci-runners')}>

@@ -95,6 +95,37 @@ function ConnectAction({ tab }: { tab: TabId }) {
   )
 }
 
+/**
+ * The Lovable or Bolt example line. Same look as <CopyCommand prompt>, but the
+ * button says "Copy example": the line carries placeholders, and the person's
+ * real one (project ID and key filled in) is on their setup page.
+ */
+function ExamplePrompt({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <div className="landing-oneclick__cmd">
+      <div className="landing-oneclick__cmd-row landing-oneclick__cmd-row--prompt">
+        <code>{text}</code>
+        <button
+          type="button"
+          onClick={copy}
+          className="landing-oneclick__copy"
+          data-mushi-cta="landing-copy-lovable-prompt"
+          data-mushi-location="hero-install"
+        >
+          <span aria-live="polite">{copied ? 'Copied' : L.copyLabel}</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Check({ children }: { children: string }) {
   return (
     <p className="landing-install-box__check">
@@ -167,12 +198,11 @@ export function LandingInstallStrip() {
           <div className="landing-install-box__body">
             <h3 className="landing-install-box__title">{lovable ? L.steps.setup : LANDING_INSTALL.steps.setup}</h3>
             {lovable ? <p className="landing-install-box__desc">{L.setupLead}</p> : null}
-            <CopyCommand
-              cmd={lovable ? L.prompt : LANDING_SETUP_PROMPT}
-              prompt
-              ctaId={lovable ? 'landing-copy-lovable-prompt' : 'landing-copy-setup-prompt'}
-              location="hero-install"
-            />
+            {lovable ? (
+              <ExamplePrompt text={L.prompt} />
+            ) : (
+              <CopyCommand cmd={LANDING_SETUP_PROMPT} prompt ctaId="landing-copy-setup-prompt" location="hero-install" />
+            )}
             <Check>{lovable ? L.setupCheck : LANDING_INSTALL.setupCheck}</Check>
           </div>
         </li>

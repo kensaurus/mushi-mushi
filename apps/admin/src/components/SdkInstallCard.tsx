@@ -31,7 +31,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ConnectionStatus } from './ConnectionStatus'
-import { Card } from './ui'
+import { Card, CodeValue, SegmentedControl } from './ui'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
   DEFAULT_SDK_CONFIG,
@@ -41,7 +41,13 @@ import {
   type Framework,
   type SdkPreviewConfig,
 } from '../lib/sdkSnippets'
-import { detectWebBundler, resolveDefaultSdkFramework } from '../lib/sdkInstallDefaults'
+import {
+  detectWebBundler,
+  REACT_SETUP_OPTIONS,
+  resolveDefaultSdkFramework,
+  snippetBundler,
+  type ReactSetup,
+} from '../lib/sdkInstallDefaults'
 import { usePageData } from '../lib/usePageData'
 import { fromRemoteConfig, toRemoteConfig } from './sdk-install/sdk-install-config-mappers'
 import { SdkInstallConfigurator } from './sdk-install/SdkInstallConfigurator'
@@ -62,14 +68,18 @@ export function SdkInstallCard({
   showConnectionStatus = false,
 }: SdkInstallCardProps) {
   // The app's own package.json (its connected repo) picks the tab and, for
-  // Vite or Next, an env-var snippet. Best effort: no repo, no access or a
-  // failed read leave the generic React snippet.
+  // Vite or Next, an env-var snippet. Best effort: with no repo, no access or
+  // a failed read the React tab asks "Next.js or Vite?" and shows the inline
+  // snippet until answered. It never assumes Vite (re-audit 2026-11-11).
   const repoStack = usePageData<{ repo: string | null; packageJson: string | null; reason: string | null }>(
     projectId && !linkedPackageJson ? `/v1/admin/projects/${projectId}/github/stack` : null,
   )
   const packageJson = linkedPackageJson ?? repoStack.data?.packageJson ?? null
   const stackRepo = repoStack.data?.packageJson ? repoStack.data.repo : null
-  const bundler = useMemo(() => detectWebBundler(packageJson), [packageJson])
+  const detectedBundler = useMemo(() => detectWebBundler(packageJson), [packageJson])
+  // The user's answer wins over the repo read; null is "not asked yet".
+  const [pickedSetup, setPickedSetup] = useState<ReactSetup | null>(null)
+  const reactSetup: ReactSetup | null = pickedSetup ?? detectedBundler
   const detectedFramework = useMemo(
     () => resolveDefaultSdkFramework(projectSlug, packageJson),
     [projectSlug, packageJson],
@@ -98,8 +108,10 @@ export function SdkInstallCard({
   // above, and "Rotate key" mints + reveals a full paste-ready secret inline.
   const snippetKey = apiKey ?? rotatedKey ?? null
 
+  const bundler = snippetBundler(framework, reactSetup)
+  const askSetup = framework === 'react' && reactSetup === null
   const code = useMemo(
-    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, framework === 'react' ? bundler : null),
+    () => renderSnippet(framework, projectId, snippetKey, config, projectSlug, bundler),
     [framework, projectId, snippetKey, config, projectSlug, bundler],
   )
   const install = installCommand(framework)
@@ -115,7 +127,10 @@ export function SdkInstallCard({
 
   useEffect(() => {
     if (autoFrameworkApplied.current) return
-    if (detectedFramework !== 'react') {
+    // 'loader' is the "unknown stack" default, not a detection: the repo read
+    // can still land and name the real one (it used to test for 'react', the
+    // old default, so a detected React app stayed on the Script tag).
+    if (detectedFramework !== 'loader') {
       setFramework(detectedFramework)
       autoFrameworkApplied.current = true
     }
@@ -229,7 +244,7 @@ export function SdkInstallCard({
               said it tracked the SDK heartbeat, so "All systems healthy"
               showed before any SDK was installed (QA bug 140). */}
           <span className="text-2xs text-fg-muted">
-            Checks that Mushi&apos;s backend is reachable. Whether your app has checked in shows on each key
+            Checks that Mushi Mushi&apos;s backend is reachable. Whether your app has checked in shows on each key
             below (&ldquo;Never used&rdquo; until it does).
           </span>
         </div>
@@ -263,14 +278,31 @@ export function SdkInstallCard({
       {stackRepo && (
         <p className="text-2xs text-fg-muted" data-testid="sdk-stack-note">
           Matched to <span className="font-mono text-fg-secondary">{stackRepo}</span>:{' '}
-          {framework === 'react' && bundler === 'vite'
+          {framework === 'react' && detectedBundler === 'vite'
             ? 'React on Vite, so the snippet reads your key from .env.local.'
-            : framework === 'react' && bundler === 'next'
+            : framework === 'react' && detectedBundler === 'next'
               ? 'React on Next.js, so the snippet reads your key from .env.local.'
               : `the ${framework} tab is selected from its package.json.`}{' '}
-          Pick another tab if that is wrong.
+          Pick another tab or setup if that is wrong.
         </p>
       )}
+
+      {/* Fastest paths first, the no-coding one before the terminal one
+          (ADR 0056: Lovable / Bolt lead wherever install paths are listed). */}
+      <div className="space-y-1 text-xs text-fg-secondary" data-testid="sdk-install-fast-paths">
+        <p>
+          <span className="font-medium text-fg">No coding?</span> Use the Script tag below, or pick Lovable or Bolt
+          under &ldquo;Where does your app run?&rdquo; for one line to paste.
+        </p>
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span>
+            <span className="font-medium text-fg">Have a terminal?</span> Run this in your app&apos;s folder. It signs
+            you in, installs the SDK and writes both values to your env file:
+          </span>
+          <CodeValue value="npx mushi-mushi" inline />
+        </p>
+        <p className="text-fg-muted">Or do it by hand with the code below.</p>
+      </div>
 
       <div className="@container/sdk">
       {/* Compact (setup): snippet first, one column, widget settings folded
@@ -346,12 +378,35 @@ export function SdkInstallCard({
           autoFrameworkApplied={autoFrameworkApplied}
           code={code}
           install={install}
+          belowTabs={
+            framework === 'react' ? (
+              <div className="space-y-1" data-testid="sdk-react-setup">
+                <p className="text-xs text-fg-secondary">
+                  <span className="font-medium text-fg">Which React setup?</span>{' '}
+                  {askSetup
+                    ? 'Next.js and Vite read your key from differently named values. Pick yours and the code below changes to match.'
+                    : reactSetup === 'other'
+                      ? 'The code below holds your project and key itself.'
+                      : `The code below reads ${reactSetup === 'next' ? 'NEXT_PUBLIC_' : 'VITE_'}MUSHI_… values from .env.local.`}
+                </p>
+                <SegmentedControl<ReactSetup>
+                  value={reactSetup ?? ('' as ReactSetup)}
+                  options={REACT_SETUP_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+                  onChange={setPickedSetup}
+                  ariaLabel="React setup"
+                  size="sm"
+                  wrap
+                />
+              </div>
+            ) : null
+          }
         />
         {!isServerFramework(framework) && (
           <HostingGuide
             projectId={projectId}
-            apiKey={snippetKey ?? 'YOUR_SDK_KEY'}
+            apiKey={snippetKey}
             bundler={bundler}
+            askSetup={askSetup}
             scriptTag={framework === 'loader'}
             onUseScriptTag={() => {
               autoFrameworkApplied.current = true

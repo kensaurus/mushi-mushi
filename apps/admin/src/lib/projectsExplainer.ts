@@ -3,7 +3,7 @@
  */
 
 export const PROJECTS_EXPLAINER_SUMMARY =
-  'Each project is one app or environment Mushi watches. You need an API key heartbeat (SDK connected) and at least one ingested bug report before the full PDCA loop lights up.'
+  'Each project is one app or environment Mushi Mushi watches. You need an API key heartbeat (SDK connected) and at least one ingested bug report before the full PDCA loop lights up.'
 
 export interface ProjectsHealthSignalDefinition {
   id: string

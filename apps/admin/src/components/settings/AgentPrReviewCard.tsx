@@ -95,7 +95,7 @@ export function AgentPrReviewCard({ projectId }: { projectId: string | null }) {
         purpose={
           <>
             The review model below reads every pull request that Cursor or a GitHub cloud agent opens as a fix, with the bug
-            report and CI, and answers merge, fix first or hold. A hold stops merging from Mushi until a member chooses
+            report and CI, and answers merge, fix first or hold. A hold stops merging from Mushi Mushi until a member chooses
             to merge anyway, with a reason. It runs on your Anthropic key (usually $0.05 to $0.20 a review) and is
             skipped without one.
           </>

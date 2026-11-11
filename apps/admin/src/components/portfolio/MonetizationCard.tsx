@@ -57,7 +57,7 @@ export function MonetizationCard({ orgId }: { orgId: string }) {
   return (
     <Section title="Payments across apps">
       <p className="mb-3 text-xs text-fg-muted">
-        Read from RevenueCat and the stores once a day. Each item says why a purchase would fail and how to fix it. Mushi never holds balances or changes anything without your approval.
+        Read from RevenueCat and the stores once a day. Each item says why a purchase would fail and how to fix it. Mushi Mushi never holds balances or changes anything without your approval.
       </p>
       {error && <PageLoadError error={error} resource="payments" endpoint={path} onRetry={reload} />}
       {loading && !data && <Loading text="Reading what each app sells…" />}

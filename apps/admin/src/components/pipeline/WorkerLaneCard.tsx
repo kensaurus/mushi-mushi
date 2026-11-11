@@ -236,7 +236,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
 
       {modeHint && <p className="text-2xs text-fg-muted" data-testid={`${testId}-mode-hint`}>{modeHint}</p>}
       {c.mode === 'conflicts' && !lane.repo && (
-        <p className="text-2xs text-warn-foreground">This machine has not said which repository its clone is. Update the Mushi CLI there; until then the lane takes no conflicts.</p>
+        <p className="text-2xs text-warn-foreground">This machine has not said which repository its clone is. Update the Mushi Mushi CLI there; until then the lane takes no conflicts.</p>
       )}
       {c.mode === 'audit' && (
         <div className="flex max-w-md items-end gap-1.5">

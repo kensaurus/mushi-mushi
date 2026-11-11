@@ -106,7 +106,7 @@ describe('buildSetupRail', () => {
   })
 
   it('with no heartbeat says so plainly, without blaming a deploy', () => {
-    expect(heartbeatSentence(null)).toMatch(/^Mushi has not heard from your app yet\./)
+    expect(heartbeatSentence(null)).toMatch(/^Mushi Mushi has not heard from your app yet\./)
     expect(heartbeatSentence(null)).not.toMatch(/heartbeat/i)
     expect(heartbeatSentence(null)).not.toMatch(/deploy|removed|cold/i)
   })

@@ -89,7 +89,7 @@ describe('auditStatus', () => {
   it('never calls a failed read healthy', () => {
     expect(auditStatus({ ...STATS, topPriority: 'unknown', readError: 'timeout' })).toEqual({
       tone: 'warn',
-      sentence: 'Mushi could not count the open findings: timeout. The list below may still load.',
+      sentence: 'Mushi Mushi could not count the open findings: timeout. The list below may still load.',
     })
   })
 

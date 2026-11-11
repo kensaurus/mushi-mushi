@@ -22,7 +22,7 @@ const SCHEDULE_PRESETS = [
 const PROVIDER_EXPLAINERS: Record<string, string> = {
   firecrawl_actions: 'Runs in Firecrawl cloud — no browser setup needed. Add a Firecrawl key under Settings → Web tools.',
   browserbase: 'Runs in a Browserbase cloud Chromium instance — add a Browserbase key under Settings → Web tools.',
-  local: 'Runs on your machine via the Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
+  local: 'Runs on your machine via the Mushi Mushi CLI (`mushi qa run`). Not schedulable from the cloud — use for local dev only.',
 }
 
 export interface CreateStoryModalProps {

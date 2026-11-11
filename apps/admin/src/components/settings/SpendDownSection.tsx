@@ -126,7 +126,7 @@ export function SpendDownSection({ canManageShared, keysToken }: Props) {
     <section aria-label="Spend down expiring credits" className="space-y-2 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Spend down expiring credits</h4>
       <p className="text-xs text-fg-muted">
-        Before a key&apos;s credits expire, Mushi sends open bugs to Cursor on its own, best first, so the credits
+        Before a key&apos;s credits expire, Mushi Mushi sends open bugs to Cursor on its own, best first, so the credits
         fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
         every fix opens a draft pull request for you to review.{' '}
         <Link className="text-brand underline-offset-2 hover:underline" to="/credits">

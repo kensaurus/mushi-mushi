@@ -49,10 +49,10 @@ export interface CiCostFixJob {
 
 /** What the PR changes, for the confirm dialog. */
 export const CI_COST_FIX_CHANGE: Record<CiCostFixKind, string> = {
-  add_concurrency: 'Adds a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi refuses on a workflow that deploys or releases.',
+  add_concurrency: 'Adds a concurrency group, so a new push to a pull request cancels the run it replaces. Pushes, manual and scheduled runs always finish. Mushi Mushi refuses on a workflow that deploys or releases.',
   skip_drafts: 'Draft pull requests stop running this workflow; it runs when a pull request is marked ready for review. A job your branch requires keeps running on drafts and fails at a first step, "Draft PRs run no CI", so a draft can never merge untested.',
-  weekly_cron: 'Its schedule runs once a week instead of more often. Mushi refuses on a workflow that deploys or releases.',
-  ignore_docs_paths: 'A change to only docs (Markdown, docs/, the license or issue templates) stops running this workflow. Mushi refuses when the workflow produces a check your branch requires.',
+  weekly_cron: 'Its schedule runs once a week instead of more often. Mushi Mushi refuses on a workflow that deploys or releases.',
+  ignore_docs_paths: 'A change to only docs (Markdown, docs/, the license or issue templates) stops running this workflow. Mushi Mushi refuses when the workflow produces a check your branch requires.',
 }
 
 export function isCostFixInFlight(job: Pick<CiCostFixJob, 'status'> | null): boolean {
@@ -65,15 +65,15 @@ export function costFixErrorText(code: string | undefined, message: string | und
     case 'REPO_NOT_IN_PROJECT':
       return 'This repository is not connected to the project any more. Connect it on the Projects page.'
     case 'RATE_LIMITED':
-      return message ?? 'Mushi opened several fix pull requests in the last hour. Try again later.'
+      return message ?? 'Mushi Mushi opened several fix pull requests in the last hour. Try again later.'
     case 'COST_FIX_IN_PROGRESS':
-      return 'Mushi is already opening this fix. It shows here in a moment.'
+      return 'Mushi Mushi is already opening this fix. It shows here in a moment.'
     case 'MIGRATION_PENDING':
       return 'Fix pull requests are not set up on this server yet.'
     case 'FORBIDDEN':
       return 'Viewers cannot open pull requests. Ask an owner or admin of this project.'
     default:
-      return message ?? 'Mushi could not open the fix. Try again.'
+      return message ?? 'Mushi Mushi could not open the fix. Try again.'
   }
 }
 
@@ -86,13 +86,13 @@ export function costFixStatusText(job: CiCostFixJob): string {
     case 'no_change':
       return job.summary ?? 'Already applied: the workflow has this fix.'
     case 'refused':
-      return job.error ?? job.summary ?? 'Mushi will not make this change to the workflow.'
+      return job.error ?? job.summary ?? 'Mushi Mushi will not make this change to the workflow.'
     case 'failed':
-      return job.error ?? 'Mushi could not open the pull request.'
+      return job.error ?? 'Mushi Mushi could not open the pull request.'
     case 'pr_opened':
       if (job.closedAt && !job.mergedAt) return 'The pull request was closed without merging.'
       if (!job.mergedAt) return 'Draft pull request open. Review it, mark it ready and merge it.'
-      if (!job.measured) return 'Merged. Mushi measures the saving from the first full day after the merge.'
+      if (!job.measured) return 'Merged. Mushi Mushi measures the saving from the first full day after the merge.'
       return 'Merged.'
   }
 }

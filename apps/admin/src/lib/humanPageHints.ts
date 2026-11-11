@@ -75,7 +75,7 @@ export function driftWarnHint(count: number): string {
 }
 
 export function driftNeverScannedHint(): string {
-  return 'Run one scan so Mushi knows what your API and database should look like.'
+  return 'Run one scan so Mushi Mushi knows what your API and database should look like.'
 }
 
 export function driftStaleHint(): string {
@@ -103,7 +103,7 @@ export function codeHealthWarningsHint(count: number): string {
 }
 
 export function anomaliesNoMetricsHint(): string {
-  return 'Send error rate, latency, or conversion metrics — then Mushi can flag unusual jumps.'
+  return 'Send error rate, latency, or conversion metrics — then Mushi Mushi can flag unusual jumps.'
 }
 
 export function anomaliesCriticalHint(count: number): string {

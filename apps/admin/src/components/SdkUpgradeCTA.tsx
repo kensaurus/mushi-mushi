@@ -122,8 +122,8 @@ export function LockfileHelperDisclosure() {
       </summary>
       <div className="mt-2 space-y-2">
         <p>
-          Mushi edits only <CodeInline>package.json</CodeInline>. Save this workflow as{' '}
-          <CodeInline>{SDK_LOCKFILE_WORKFLOW_PATH}</CodeInline> on your default branch: Mushi then pushes the
+          Mushi Mushi edits only <CodeInline>package.json</CodeInline>. Save this workflow as{' '}
+          <CodeInline>{SDK_LOCKFILE_WORKFLOW_PATH}</CodeInline> on your default branch: Mushi Mushi then pushes the
           bump first, your workflow regenerates the lockfile with your package manager, and the PR opens after
           that, so a frozen install passes.{' '}
           <a href={SDK_LOCKFILE_DOCS_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-fg">

@@ -213,7 +213,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   const sentrySavedHint: RowStatusValue = !sentryDsnSaved
     ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
     : saved.sentry_webhook_secret_set !== true
-      ? { state: 'attention', detail: "Add the webhook secret below, or Mushi can't accept Sentry's deliveries." }
+      ? { state: 'attention', detail: "Add the webhook secret below, or Mushi Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
   // The shared verdict wins once the credentials and probes have been read;
   // the saved-value line fills in a detail the verdict leaves empty, and
@@ -241,7 +241,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       <SettingsList
         id="slack"
         title="Bug alerts"
-        description="Where Mushi tells you about new bugs."
+        description="Where Mushi Mushi tells you about new bugs."
       >
         <SettingsRow
           icon={<BrandIcon brand="slack" size={18} decorative />}
@@ -267,8 +267,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <p className="text-xs text-fg-muted">
             {slackInput.botSet || slackCanPost
-              ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi bot to the channel."
-              : "Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
+              ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi Mushi bot to the channel."
+              : "Mushi Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -329,7 +329,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         <SettingsRow
           icon={<BrandIcon brand="sentry" size={18} decorative />}
           title="Sentry"
-          purpose="Turns production errors and Sentry user feedback into Mushi reports."
+          purpose="Turns production errors and Sentry user feedback into Mushi Mushi reports."
           status={sentryStatus}
         >
           {/* The DSN carries the public key; mask it like the webhook secret below. */}
@@ -359,7 +359,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             column="sentry_webhook_secret"
             label="Sentry webhook secret"
             isSet={saved.sentry_webhook_secret_set === true}
-            consequence="Mushi rejects Sentry deliveries until you paste a new secret."
+            consequence="Mushi Mushi rejects Sentry deliveries until you paste a new secret."
             onRemoved={reload}
           />
           <Checkbox
@@ -380,7 +380,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         <SettingsRow
           icon={<BrandIcon brand="supabase" size={18} decorative />}
           title="Supabase project"
-          purpose="Diagnoses can read its schema, advisors, edge functions and logs. Mushi never writes to it."
+          purpose="Diagnoses can read its schema, advisors, edge functions and logs. Mushi Mushi never writes to it."
           status={supabaseStatus}
           action={
             <Btn size="sm" variant="ghost" to="/settings?tab=byok#key-supabase">
@@ -414,7 +414,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         <SettingsRow
           icon={<IconJudge size={16} />}
           title="AI models"
-          purpose="Mushi picks a model for each job. Change one only to trade cost for quality."
+          purpose="Mushi Mushi picks a model for each job. Change one only to trade cost for quality."
           action={
             <Btn size="sm" variant="ghost" aria-expanded={showModels} onClick={() => setShowModels(!showModels)}>
               {showModels ? 'Hide models' : 'Change models'}
@@ -467,7 +467,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             <SettingsRow
               icon={<IconGit size={16} />}
               title="Fix model"
-              purpose="The model Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
+              purpose="The model Mushi Mushi's own fix agent writes fixes with. Fixes cost the most of any AI call."
             >
               <ClaudeModelSelect
                 role="fix"
@@ -526,7 +526,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           title="Fix branch names"
           purpose={
             <>
-              The name of each branch Mushi opens for a fix. It must start with a type and{' '}
+              The name of each branch Mushi Mushi opens for a fix. It must start with a type and{' '}
               <code className="font-mono">{'MUSHI-{reportId}-'}</code>; after that you can use{' '}
               <code className="font-mono">{'{category}'}</code>, <code className="font-mono">{'{date}'}</code>,{' '}
               <code className="font-mono">{'{shortId}'}</code> and lowercase words.
@@ -598,7 +598,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <SettingsChangeHint current={settings.crawl_max_runs_per_day ?? 8} saved={saved.crawl_max_runs_per_day ?? 8} kind="number" />
         </SettingsRow>
-        <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi may write from your user stories.">
+        <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi Mushi may write from your user stories.">
           <RangeField
             label="Tests per day"
             min={1}
@@ -620,8 +620,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       <SettingsList id="widget" title="Feedback widget" description="The bug-report button inside your app.">
         <SettingsRow
           icon={<IconChat size={16} />}
-          title="“Bug reports by Mushi” line"
-          purpose="A small line at the foot of the widget that links to Mushi. On by default for Free, off for paid and self-hosted."
+          title="“Bug reports by Mushi Mushi” line"
+          purpose="A small line at the foot of the widget that links to Mushi Mushi. On by default for Free, off for paid and self-hosted."
         >
           <SelectField
             label="Show the line"

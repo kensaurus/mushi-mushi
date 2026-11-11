@@ -141,7 +141,7 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
   },
   marketplace_publish: {
     title: 'Marketplace publishing',
-    tagline: 'Publish your Mushi plugin or integration to the public marketplace.',
+    tagline: 'Publish your Mushi Mushi plugin or integration to the public marketplace.',
     bullets: [
       'One-click publish flow with semver versioning.',
       'Automated security scan before listing goes live.',

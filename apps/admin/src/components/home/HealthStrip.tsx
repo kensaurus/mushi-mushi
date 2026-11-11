@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_DOT, LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
+import { homeConnectHref } from '../../lib/homeConnectHref'
 
 export function HealthStrip({ section }: { section: HomeSection<HealthSignal[]> }) {
   return (
@@ -80,7 +81,7 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
           <span />
         )}
         {s.connect && (
-          <Btn size="sm" variant="ghost" to={s.connect.to}>
+          <Btn size="sm" variant="ghost" to={homeConnectHref(s.connect)}>
             {s.connect.label}
           </Btn>
         )}

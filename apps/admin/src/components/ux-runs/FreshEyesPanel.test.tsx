@@ -128,7 +128,7 @@ const button = (text: string) => [...host.querySelectorAll('button')].find((b) =
 const field = (label: string) => [...host.querySelectorAll('label')].find((l) => l.textContent?.includes(label))?.querySelector('input') as HTMLInputElement
 
 describe('Run now', () => {
-  it("starts from the app's own address and a plain goal: never Mushi's landing, goal or --mint-account", () => {
+  it("starts from the app's own address and a plain goal: never Mushi Mushi's landing, goal or --mint-account", () => {
     render(GLOT)
     expect(field('Start page').value).toBe('https://glot.it/')
     expect(field('What a new visitor came to do').value).toBe('sign up and start using the app')
@@ -174,7 +174,7 @@ describe('Run now', () => {
 
   it('with no computer of yours, says so with one setup action, and Run now is off', () => {
     render({ ...GLOT, runner: { state: 'none', hostname: null, lastSeenAt: null } })
-    expect(host.querySelector('[data-testid="fresh-eyes-runner"]')!.textContent).toContain('Set up Mushi on your computer once')
+    expect(host.querySelector('[data-testid="fresh-eyes-runner"]')!.textContent).toContain('Set up Mushi Mushi on your computer once')
     expect(host.textContent).toContain('mushi worker install')
     expect(host.querySelector('a[href="/pipeline?tab=workers"]')).not.toBeNull()
     expect(button('Run now')!.disabled).toBe(true)
@@ -182,7 +182,7 @@ describe('Run now', () => {
 
   it('names an old or offline computer and what to do', () => {
     render({ ...GLOT, runner: { state: 'outdated', hostname: 'alienware', lastSeenAt: null } })
-    expect(host.textContent).toContain('The Mushi on alienware is too old')
+    expect(host.textContent).toContain('The Mushi Mushi on alienware is too old')
     expect(button('Run now')!.disabled).toBe(true)
   })
 

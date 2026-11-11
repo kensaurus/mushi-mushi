@@ -93,7 +93,7 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged, 
     return (
       <PageStatus
         tone="neutral"
-        sentence="None of your keys has an expiry date yet. Add one to a Cursor key in Settings → AI keys and Mushi can spend it on your bugs before it lapses."
+        sentence="None of your keys has an expiry date yet. Add one to a Cursor key in Settings → AI keys and Mushi Mushi can spend it on your bugs before it lapses."
         ariaLabel="Expiring credits"
         data-testid="credit-countdowns"
       />

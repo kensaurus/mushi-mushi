@@ -183,7 +183,7 @@ describe('NextStep', () => {
     state.project = fresh
     state.work = QUIET
     render(createElement(NextStep, { variant: 'banner' }))
-    expect(banner()?.textContent).toContain('Install the Mushi widget')
+    expect(banner()?.textContent).toContain('Install the Mushi Mushi widget')
 
     render(
       createElement(NextStep, { variant: 'banner', key: 'b' }),

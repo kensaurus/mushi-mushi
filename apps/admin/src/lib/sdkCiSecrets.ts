@@ -98,7 +98,7 @@ export function sdkCiStatusMeta(
         chipLabel: 'Connected',
         headline: nativeEverSeen ? 'Native app is checking in' : 'CI secrets are set',
         subtitle: nativeEverSeen
-          ? 'Your store build includes Mushi env vars — new reports should appear within seconds.'
+          ? 'Your store build includes Mushi Mushi env vars — new reports should appear within seconds.'
           : 'Secrets are in GitHub Actions — waiting for the first heartbeat from a TestFlight or Play build.',
         label: 'Connected',
         description: nativeEverSeen
@@ -115,7 +115,7 @@ export function sdkCiStatusMeta(
       return {
         chipLabel: 'Setup needed',
         headline: 'SDK not connected yet',
-        subtitle: `Your app can't reach Mushi until ${envPair} are in ${envWhere} (${env.stackLabel}). Rebuild required.`,
+        subtitle: `Your app can't reach Mushi Mushi until ${envPair} are in ${envWhere} (${env.stackLabel}). Rebuild required.`,
         label: 'Setup needed',
         description: `Missing ${envPair} in ${envWhere}.`,
         severity: 'error',
@@ -123,7 +123,7 @@ export function sdkCiStatusMeta(
         playbookSteps: [
           `Add ${envPair} to ${envWhere} for your ${env.stackLabel} release workflow.`,
           hasGithubToken
-            ? 'Click Sync CI secrets — Mushi mints a key and writes vars via the GitHub API.'
+            ? 'Click Sync CI secrets — Mushi Mushi mints a key and writes vars via the GitHub API.'
             : 'Use Copy setup commands — you need a fine-grained GitHub PAT with Actions secrets: Read and write in Settings → GitHub.',
           'Trigger a new native build (CI push). OTA cannot inject keys into an already-installed store binary.',
         ],

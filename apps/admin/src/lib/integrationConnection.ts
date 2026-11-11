@@ -43,7 +43,7 @@ const HTTP_MEANING: Record<number, string> = {
   401: 'the credentials were rejected',
   403: 'the credentials lack a permission this needs',
   404: 'the account, project or URL was not found',
-  429: 'the service is rate limiting Mushi',
+  429: 'the service is rate limiting Mushi Mushi',
 }
 
 /**

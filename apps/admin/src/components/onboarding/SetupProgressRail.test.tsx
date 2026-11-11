@@ -117,7 +117,7 @@ describe('SetupProgressRail', () => {
     expect(onMintKey).toHaveBeenCalled()
     expect(button('Copy without a key')).toBeTruthy()
     expect(host.textContent).not.toMatch(/SDK tab/)
-    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi has not heard from your app yet/)
+    expect(host.querySelector('[data-testid="setup-heartbeat"]')?.textContent).toMatch(/^Mushi Mushi has not heard from your app yet/)
   })
 
   it('with the key just made, the snippet carries it and Copy snippet leads', () => {
@@ -148,7 +148,7 @@ describe('SetupProgressRail', () => {
     state.ttfd = { keyMintedAt: null, firstDiagnosisAt: null, ms: null, testDiagnosisAt: new Date().toISOString() }
     render(project(true, true, true))
     expect(host.textContent).toContain('Your app is wired up')
-    expect(host.textContent).toContain('Mushi has only seen a test bug so far')
+    expect(host.textContent).toContain('Mushi Mushi has only seen a test bug so far')
   })
 
   it('done: opens the first report from the app', () => {

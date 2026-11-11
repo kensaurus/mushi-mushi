@@ -19,7 +19,16 @@ import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import { routePathname } from '../reports/reportRowAttribution'
 import type { ReportDeployLive, ReportDetail } from './types'
 
-export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
+export function ReportDetailHeader({
+  report,
+  reporterShort,
+  showInternals = false,
+}: {
+  report: ReportDetail
+  reporterShort: string
+  /** Operator accounts: keep the reporter's short id beside the label. */
+  showInternals?: boolean
+}) {
   // Friendly display title: prefer the Stage-2 generated `title` (non-engineer
   // headline), fall back to technical summary, then raw description. Never
   // cut mid-word; the full text is on hover and behind "Show full".
@@ -33,7 +42,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
       ?? (report.environment as { url?: string } | null)?.url,
   )
   const glow = severityGlowClass(report.severity)
-  const reporter = reporterLabel(report, reporterShort)
+  const reporter = reporterLabel(report, reporterShort, { showIds: showInternals })
   return (
     <div
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
@@ -63,7 +72,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           )}
           {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
           {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
-            <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi">
+            <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi Mushi">
               via Sentry
             </Badge>
           )}

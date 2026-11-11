@@ -20,8 +20,8 @@ npx mushi-mushi              # wizard: picks the right SDK, installs it, writes 
 import { Mushi } from '@mushi-mushi/web';
 
 Mushi.init({
-  projectId: '00000000-0000-0000-0000-000000000000', // from the console's Projects page
-  apiKey: 'mushi_xxx',                               // report:write key from Setup → Verify
+  projectId: '00000000-0000-0000-0000-000000000000', // from the console's Manage apps page
+  apiKey: 'mushi_xxx',                               // report:write key from Set up → Test it
 });
 ```
 

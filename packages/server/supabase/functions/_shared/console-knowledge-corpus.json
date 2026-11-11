@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-10-28T05:51:32.849Z",
+  "generatedAt": "2026-11-11T07:42:17.475Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -240,10 +240,10 @@
       "doc_path": "pages/checks.md",
       "section": "main",
       "title": "Checks",
-      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi’s own health.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
+      "body": "# Checks\n\nEvery automatic check on this app in one place: scheduled tests, audits, user stories, design, content, AI triage quality and Mushi Mushi’s own health.\n\nRoute: /checks\nSection: Check\n\nKeywords: checks, verify, quality, health, audit, tests, qa\n\nUse this page when the user asks about: checks, verify, quality, health, audit, tests",
       "route_path": "/checks",
       "kind": "page",
-      "content_hash": "a1ba31267dab23965943097b86efb4c3734ab725d14a74bfe7a497fd708496b2"
+      "content_hash": "bae4ad12029c2bbcc3c49199524beab035cfac52178ee2e6c8d0027ac087303e"
     },
     {
       "doc_path": "pages/fullstack-audit.md",
@@ -275,11 +275,11 @@
     {
       "doc_path": "pages/health.md",
       "section": "main",
-      "title": "Mushi health",
-      "body": "# Mushi health\n\nIs Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.\n\nRoute: /health\nSection: Check\n\nKeywords: app health, health, mushi health, status, ai calls, llm, cron, background jobs, verification hub\n\nUse this page when the user asks about: app health, health, mushi health, status, ai calls, llm",
+      "title": "Mushi Mushi health",
+      "body": "# Mushi Mushi health\n\nIs Mushi Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.\n\nRoute: /health\nSection: Check\n\nKeywords: app health, health, mushi health, status, ai calls, llm, cron, background jobs, verification hub\n\nUse this page when the user asks about: app health, health, mushi health, status, ai calls, llm",
       "route_path": "/health",
       "kind": "page",
-      "content_hash": "f64618045404f58ea950471c1678cbb8fbff5890846182797b09e95c364452ee"
+      "content_hash": "387692fe403e73d572292de64ec3c0f992c1412855929826cf1acd42790c87dc"
     },
     {
       "doc_path": "pages/design.md",
@@ -375,10 +375,10 @@
       "doc_path": "pages/credits.md",
       "section": "main",
       "title": "Spend credits",
-      "body": "# Spend credits\n\nExpiring Cursor and Firecrawl credits, and a switch for every way Mushi can spend them finding and fixing bugs.\n\nRoute: /credits\nSection: Workspace\n\nKeywords: credits, spend credits, spend down, spend-down, expiring credits, cursor credits, firecrawl credits, usage, site watch, follow-ups, budget\n\nUse this page when the user asks about: credits, spend credits, spend down, spend-down, expiring credits, cursor credits",
+      "body": "# Spend credits\n\nExpiring Cursor and Firecrawl credits, and a switch for every way Mushi Mushi can spend them finding and fixing bugs.\n\nRoute: /credits\nSection: Workspace\n\nKeywords: credits, spend credits, spend down, spend-down, expiring credits, cursor credits, firecrawl credits, usage, site watch, follow-ups, budget\n\nUse this page when the user asks about: credits, spend credits, spend down, spend-down, expiring credits, cursor credits",
       "route_path": "/credits",
       "kind": "page",
-      "content_hash": "0bb8c5e4b71da5ac50e3cf671e62714670e134bbceb82e61fa82fc723f2825de"
+      "content_hash": "3eb22f1030639a7b1cd61c669174ad18a9cd81fc62adf065665fd94266573f45"
     },
     {
       "doc_path": "pages/settings.md",
@@ -456,10 +456,10 @@
       "doc_path": "pages/feedback.md",
       "section": "main",
       "title": "Help & support",
-      "body": "# Help & support\n\nAsk the Mushi team for help and read their replies to feedback you sent.\n\nRoute: /feedback\nSection: Workspace\n\nKeywords: support, feedback, help, contact, bug, request\n\nUse this page when the user asks about: support, feedback, help, contact, bug, request",
+      "body": "# Help & support\n\nAsk the Mushi Mushi team for help and read their replies to feedback you sent.\n\nRoute: /feedback\nSection: Workspace\n\nKeywords: support, feedback, help, contact, bug, request\n\nUse this page when the user asks about: support, feedback, help, contact, bug, request",
       "route_path": "/feedback",
       "kind": "page",
-      "content_hash": "700e5cdc6cee763b5f3c3e7305f9027609c68ffdbe480c65238fb47b693db7a1"
+      "content_hash": "55ca922711855d28545ed9f9d5bbeb44127515f7ae0519b4e874db33ab7a3007"
     },
     {
       "doc_path": "pages/feature-board.md",
@@ -618,10 +618,10 @@
       "doc_path": "pages/cli-auth.md",
       "section": "main",
       "title": "CLI sign-in",
-      "body": "# CLI sign-in\n\nApprove the Mushi CLI sign-in from your terminal.\n\nRoute: /cli-auth\nSection: Start\n\nKeywords: cli auth, cli, oauth, auth, terminal, login\n\nUse this page when the user asks about: cli auth, cli, oauth, auth, terminal, login",
+      "body": "# CLI sign-in\n\nApprove the Mushi Mushi CLI sign-in from your terminal.\n\nRoute: /cli-auth\nSection: Start\n\nKeywords: cli auth, cli, oauth, auth, terminal, login\n\nUse this page when the user asks about: cli auth, cli, oauth, auth, terminal, login",
       "route_path": "/cli-auth",
       "kind": "page",
-      "content_hash": "41003e2d12d89fe2a1ce299b8b6828dfe202da08fc1befec1d462d8a1d84627c"
+      "content_hash": "4b55e70afb4b97f1c088a0a84c704530493c41b88f7e0442e7440feef7d63d6a"
     },
     {
       "doc_path": "pages/docs-bridge.md",

@@ -136,7 +136,7 @@ export function GrowthPage() {
         <Card className="px-4 py-10">
           <EmptyState
             title="Operators only"
-            description="The company growth funnel is visible to Mushi operators. Your account can still see per-project activity."
+            description="The company growth funnel is visible to Mushi Mushi operators. Your account can still see per-project activity."
             hints={['Open Activity for the project-level view of sessions and users.']}
           />
         </Card>

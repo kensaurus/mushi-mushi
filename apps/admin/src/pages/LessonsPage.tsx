@@ -118,7 +118,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 // Ids are unchanged (?tab=clusters, ?tab=lessons, ?tab=query keep working).
 const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
   { id: 'clusters', label: 'Recurring patterns', description: 'Bugs that keep coming back with the same cause, each with a suggested rule.' },
-  { id: 'lessons',  label: 'Rules in use', description: 'Rules Mushi follows when it diagnoses and fixes a new report.' },
+  { id: 'lessons',  label: 'Rules in use', description: 'Rules Mushi Mushi follows when it diagnoses and fixes a new report.' },
   { id: 'query',    label: 'Try a change', description: 'Paste a change and see which rules would apply to it.' },
 ]
 
@@ -180,7 +180,7 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
           <p className="text-sm text-fg-muted">
-            Rules learned from bugs that kept coming back. Mushi follows them when it diagnoses and fixes a new report,
+            Rules learned from bugs that kept coming back. Mushi Mushi follows them when it diagnoses and fixes a new report,
             and your editor can read them with the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
           </p>
         </div>
@@ -378,7 +378,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-fg-muted">
-          Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi follows on every new report. Strong patterns are promoted for you every 6 hours.
+          Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report. Strong patterns are promoted for you every 6 hours.
         </p>
         <SegmentedControl
           value={statusFilter}
@@ -672,7 +672,7 @@ export function LessonsPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
 
         helpTitle={copy?.help?.title ?? 'About Lessons'}
-        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Rules learned from bugs that keep coming back: once 3 or more reports share one cause, Mushi suggests a rule, and a promoted rule guides every new diagnosis and fix.'}
+        helpWhatIsIt={copy?.help?.whatIsIt ?? 'Rules learned from bugs that keep coming back: once 3 or more reports share one cause, Mushi Mushi suggests a rule, and a promoted rule guides every new diagnosis and fix.'}
         helpUseCases={copy?.help?.useCases ?? [
           'Inject relevant lessons into PR review context via the lessons.query MCP tool',
           'Test what rules a diff would trigger using the Query Sim tab',

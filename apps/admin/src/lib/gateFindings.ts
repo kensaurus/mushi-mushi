@@ -192,7 +192,7 @@ export function describeSpendCaps(values: SpendCapValues): string[] {
     lines.push(`Monthly AI budget: $${values.monthly_llm_budget_usd}. Every AI call for this app (triage, fixes, chat) stops once this month's spend reaches it, until the 1st.`)
   }
   if (values.autofix_max_spend_usd != null) {
-    lines.push(`Auto-fix spend limit: $${values.autofix_max_spend_usd} per 30 days for fixes Mushi starts on its own.`)
+    lines.push(`Auto-fix spend limit: $${values.autofix_max_spend_usd} per 30 days for fixes Mushi Mushi starts on its own.`)
   }
   if (values.autofix_max_dispatches_per_day != null) {
     lines.push(`Automatic fixes per day: ${values.autofix_max_dispatches_per_day}.`)

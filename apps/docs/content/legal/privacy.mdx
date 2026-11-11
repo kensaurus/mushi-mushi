@@ -115,7 +115,7 @@ cannot reach them, email us and we will forward the request.
 | Sub-processor | What they process | Location | Notes |
 | --- | --- | --- | --- |
 | **Supabase** (on AWS) | Database, auth, storage, edge functions — everything at rest | AWS `ap-northeast-1` (Tokyo) today. Dedicated US and EU clusters are planned; when they ship, a project's data stays in the [region chosen at creation](/security/data-residency) | Row-level security, nightly RLS check |
-| **Anthropic**, **OpenAI**, **OpenRouter** | Report text and logs (after PII scrubbing), screenshots, and code snippets sent for diagnosis, fixes and reviews; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi Mushi's provider account. Hosted keys are used only when you have not added your own |
+| **Anthropic**, **OpenAI**, **OpenRouter** | Report text and logs (after PII scrubbing), screenshots, and code snippets sent for diagnosis, fixes and reviews; audio clips for voice transcription (OpenAI only) | US | **BYOK:** if you add your own model key, calls run against *your* provider account. Nothing is billed to or stored by Mushi Mushi's provider account. A diagnosis, fix or review call uses Mushi Mushi's own keys only when you have not added your own; the console's built-in assistant can run on Mushi Mushi's key even when you have added your own |
 | **Resend** | Email address and the content of transactional email (verification, usage alerts, invitations, lifecycle nudges) | US | No marketing list, no tracking pixels |
 | **AWS S3 + CloudFront** | Static docs and console files; screenshots when you pick S3 as [BYO storage](/security/byo-storage) | US / your bucket's region | Public assets only, unless you bring your own bucket |
 | **Sentry** | Console error telemetry (section 2), and error reports from Mushi Mushi's own edge functions (stack traces with project and report IDs) | US | The SDK in your app never reports to our Sentry |
@@ -137,9 +137,10 @@ Transfers to the US sub-processors above rely on the provider's **EU-US Data
 Privacy Framework** certification where it exists, and otherwise on **Standard
 Contractual Clauses** in the provider's data-processing terms.
 
-You can pick a residency region at project creation; see
-[Data residency](/security/data-residency) for what is live today and what is
-reserved.
+You can pick a region when you create a project, but today the choice is only
+recorded: every project's data is stored in Tokyo, whatever region it picked.
+Dedicated US and EU clusters are planned, not live. See
+[Data residency](/security/data-residency).
 
 ## 7. Retention
 

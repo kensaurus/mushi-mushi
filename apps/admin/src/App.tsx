@@ -241,16 +241,16 @@ function TesterRoute({ children }: { children: ReactNode }) {
       <div className="flex h-full min-h-0 items-center justify-center overflow-y-auto p-8">
         <div className="max-w-md text-center space-y-4">
           <p className="text-2xl">🪲</p>
-          <h1 className="text-lg font-semibold">Mushi Bounties requires Mushi Cloud</h1>
+          <h1 className="text-lg font-semibold">Mushi Mushi Bounties requires Mushi Mushi Cloud</h1>
           <p className="text-sm text-fg-muted">
             The tester marketplace and reward system are hosted features — they
-            require a Mushi Cloud account on Studio or higher.
+            require a Mushi Mushi Cloud account on Studio or higher.
           </p>
           <a
             href="https://kensaur.us/mushi-mushi/pricing"
             className="inline-block rounded-md bg-brand px-4 py-2 text-sm font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-opacity"
           >
-            Upgrade to Mushi Cloud →
+            Upgrade to Mushi Mushi Cloud →
           </a>
         </div>
       </div>

@@ -116,7 +116,7 @@ const GROUPS: FeatureGroup[] = [
       {
         key: 'self_hosted',
         label: 'Self-hosted option',
-        hint: 'Run Mushi in your own Supabase + AWS account.',
+        hint: 'Run Mushi Mushi in your own Supabase + AWS account.',
         render: p => Boolean(p.feature_flags?.self_hosted),
       },
     ],

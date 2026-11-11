@@ -76,7 +76,7 @@ describe('SetupGapsSection', () => {
 
   it('leads with the count to fix and lists gaps and unread checks with a link each', async () => {
     await render()
-    expect(q('setup-gaps-status')!.textContent).toContain('1 thing to fix before it breaks a fix or a reply. Mushi could not check 1 thing more.')
+    expect(q('setup-gaps-status')!.textContent).toContain('1 thing to fix before it breaks a fix or a reply. Mushi Mushi could not check 1 thing more.')
     const open = q('setup-gaps-open')!
     expect(open.querySelectorAll('li')).toHaveLength(2)
     const fix = q('setup-gap-github_access:kensaurus/glot.it')!.querySelector('a')!
@@ -90,7 +90,7 @@ describe('SetupGapsSection', () => {
   it('never says all fine while a check could not be read', async () => {
     state.data = response([gap('slack_bot_token', 'unknown'), gap('deploy_events', 'ok')])
     await render()
-    expect(q('setup-gaps-status')!.textContent).toContain('Nothing missing found, but Mushi could not check 1 thing.')
+    expect(q('setup-gaps-status')!.textContent).toContain('Nothing missing found, but Mushi Mushi could not check 1 thing.')
     state.data = response([gap('slack_bot_token', 'ok'), gap('deploy_events', 'ok')])
     await render()
     expect(q('setup-gaps-status')!.textContent).toContain('All 2 checks pass.')

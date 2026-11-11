@@ -13,7 +13,8 @@
  *            to 3 same-origin pages linked from it: pages that answer
  *            4xx/5xx, error screens (`errorPageReason`, shared with the Home
  *            thumbnail), "page not found" screens at HTTP 200, a page that
- *            renders almost no text (a blank app shell), the starter
+ *            renders almost no text (a blank app shell; "fix first" only
+ *            for the home page, see `isHandoffPage`), the starter
  *            template's title, description or share image ("Lovable App",
  *            "Vite + React"), a missing title, description, share image or
  *            language, and http:// files on an https page (mixed content).
@@ -56,7 +57,14 @@ export interface Finding {
   severity: Severity
   title: string
   why: string
+  /** The developer detail: what to change, in a code editor's words. */
   fix: string
+  /**
+   * One or two sentences to paste into an AI builder (Lovable, Bolt, Cursor,
+   * Claude Code), naming the pages from `where`. Every rule sets it; reports
+   * stored before 2026-11-12 have none, and readers fall back to `fix`.
+   */
+  prompt?: string
   /** Paths (or path + status) the finding is about, at most 20. */
   where?: string[]
 }
@@ -142,6 +150,7 @@ export const RULE_KIND: Record<string, FindingKind> = {
   error_screen: 'breakage',
   page_not_found_screen: 'breakage',
   blank_page: 'breakage',
+  nearly_empty_page: 'breakage',
   broken_links: 'breakage',
   broken_images: 'breakage',
   mixed_content: 'breakage',
@@ -367,6 +376,42 @@ function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
 }
 
+/** "/a", "/a and /b", "/a, /b, /c and 2 more": at most `max` named, for a prompt a person pastes. */
+export function namedList(items: readonly string[], max = 5): string {
+  const shown = items.slice(0, max)
+  const more = items.length - shown.length
+  if (more > 0) return `${shown.join(', ')} and ${more} more`
+  if (shown.length <= 1) return shown[0] ?? ''
+  return `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
+}
+
+/** "The page /open" or "The pages /a and /b", to start a prompt with. */
+function thePages(paths: readonly string[]): string {
+  return `The ${paths.length === 1 ? 'page' : 'pages'} ${namedList(paths)}`
+}
+
+/**
+ * Signs that a nearly empty page is empty on purpose: it passes the visitor on
+ * (meta refresh, a script that sets the address) or hands off to a phone app
+ * (smart app banner, App Links tags, a link with the app's own scheme).
+ */
+const HANDOFF_MARKERS = [
+  /<meta\b[^>]*http-equiv\s*=\s*["']?refresh/i,
+  /<meta\b[^>]*name\s*=\s*["']?(?:apple-itunes-app|google-play-app)\b/i,
+  /<meta\b[^>]*property\s*=\s*["']?al:(?:ios|android|web)\b/i,
+  /<meta\b[^>]*name\s*=\s*["']?twitter:app:/i,
+  /\bhref\s*=\s*["'](?:intent:\/\/|(?!https?:|mailto:|tel:|sms:|javascript:|data:|blob:|about:)[a-z][a-z0-9+.-]{1,30}:\/\/)/i,
+  /\blocation\.(?:replace|assign)\s*\(/,
+  /\blocation(?:\.href)?\s*=\s*[^=]/,
+]
+
+/** The page's HTML shows it redirects or opens a phone app (see HANDOFF_MARKERS). */
+export function isHandoffPage(html: string | undefined): boolean {
+  if (!html) return false
+  const head = html.slice(0, 300_000)
+  return HANDOFF_MARKERS.some((re) => re.test(head))
+}
+
 /** Status codes, error screens and page metadata of the scraped pages. */
 export function pageFindings(pages: readonly PageResult[]): Finding[] {
   const out: Finding[] = []
@@ -378,6 +423,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(errorStatus.length, 'page answers', 'pages answer')} with an error code`,
       why: 'Visitors and search engines get an error instead of your app.',
       fix: 'Open the page yourself. A 404 means the link or route is wrong; a 5xx means the server crashed, so read your host\'s logs for that time.',
+      prompt: `${thePages(errorStatus.map((p) => `${pathOf(p.url)} (error ${p.statusCode})`))} on my published site ${errorStatus.length === 1 ? 'answers' : 'answer'} with an error instead of loading. Find out why and fix it. If a link points at a page that does not exist, fix the link or add the page.`,
       where: list(errorStatus.map((p) => `${pathOf(p.url)} (${p.statusCode})`)),
     })
   }
@@ -390,6 +436,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(screens.length, 'page shows', 'pages show')} an error screen`,
       why: 'The server said everything is fine, but visitors see an error message where your app should be.',
       fix: 'Open the page in a private window with the browser console open. It is usually a missing environment variable or an API call that failed during start-up.',
+      prompt: `${thePages(screens.map((p) => pathOf(p.url)))} on my published site ${screens.length === 1 ? 'shows' : 'show'} an error message instead of the app. Find the error that stops ${screens.length === 1 ? 'it' : 'them'} loading and fix it. If a setting or key is missing on the published site, tell me which one and where to add it.`,
       where: list(screens.map((p) => pathOf(p.url))),
     })
   }
@@ -401,6 +448,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(notFound.length, 'page says', 'pages say')} "page not found"`,
       why: 'Your site links to these pages, but visitors who click land on a "not found" message. The server still answers "OK", so search engines may list the error page as if it were real.',
       fix: 'Fix the link, or add the missing page. In a single-page app (React, Vite, Lovable, Bolt) the router decides this: check the path is listed in your routes, spelled the same way.',
+      prompt: `My published site links to ${namedList(notFound.map((p) => pathOf(p.url)))}, but ${notFound.length === 1 ? 'that page says' : 'those pages say'} "page not found". Add the missing ${notFound.length === 1 ? 'page' : 'pages'} to the app's routes, or fix the links that point there.`,
       where: list(notFound.map((p) => pathOf(p.url))),
     })
   }
@@ -410,14 +458,34 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
   const blank = answered.filter(
     (p) => p.rendered && !p.renderUnreadable && !screens.includes(p) && !notFound.includes(p) && visibleText(p.markdown).length < BLANK_TEXT_CHARS,
   )
-  if (blank.length) {
+  // Only the home page is "fix first" (2026-11-12): a nearly empty page deeper
+  // in the site is often empty on purpose. An app-link handoff page (/open,
+  // with a title and a smart app banner) was reported as a blank screen. With
+  // a title and a sign that it passes visitors on (`isHandoffPage`) it is not
+  // reported; any other sub-page is "check it is meant to".
+  const blankHome = blank.filter((p) => p === pages[0])
+  const nearlyEmpty = blank.filter((p) => p !== pages[0] && !(p.title && isHandoffPage(p.html)))
+  if (blankHome.length) {
     out.push({
       rule: 'blank_page',
       severity: 'high',
-      title: `${plural(blank.length, 'page shows', 'pages show')} almost nothing`,
+      title: 'Your home page shows almost nothing',
       why: 'We opened the page in a real browser and found almost no words on it, so visitors most likely see a blank or half-loaded screen. In apps built with React or Vite this usually means the JavaScript stopped with an error while starting.',
       fix: 'Open the page in a private window, right-click, choose Inspect, then Console. A red error there is the cause: often a missing environment variable on your host, or a call to an API that failed. Paste that error into your AI tool to fix it.',
-      where: list(blank.map((p) => pathOf(p.url))),
+      prompt: `${thePages(blankHome.map((p) => pathOf(p.url)))} on my published site shows a blank screen. Find the error that stops it loading and fix it. If a setting or key is missing on the published site, tell me which one and where to add it.`,
+      where: list(blankHome.map((p) => pathOf(p.url))),
+    })
+  }
+  if (nearlyEmpty.length) {
+    const one = nearlyEmpty.length === 1
+    out.push({
+      rule: 'nearly_empty_page',
+      severity: 'medium',
+      title: `${plural(nearlyEmpty.length, 'page shows', 'pages show')} almost nothing: check ${one ? 'it is' : 'they are'} meant to`,
+      why: `We opened ${one ? 'this page' : 'these pages'} in a real browser and found almost no words. That is fine for a page that only passes people on, such as a redirect or a link that opens your phone app. For a page people are meant to read, it means they see a blank or half-loaded screen.`,
+      fix: 'Open each page in a private window. If it should show content, right-click, choose Inspect, then Console: a red error there is the cause. If it is a redirect or app-link page, nothing needs fixing.',
+      prompt: `${thePages(nearlyEmpty.map((p) => pathOf(p.url)))} on my published site ${one ? 'shows' : 'show'} almost nothing. If ${one ? 'it is meant to be a page' : 'they are meant to be pages'} people read, find what stops the content loading and fix it. If ${one ? 'it' : 'one'} only sends people on to another page or to the phone app, leave it as it is and tell me.`,
+      where: list(nearlyEmpty.map((p) => pathOf(p.url))),
     })
   }
   const readable = answered.filter((p) => !p.error)
@@ -435,6 +503,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
         : 'Your site still uses the starter template\'s description or share image',
       why: 'That is the text the app builder or template filled in. It is the name on the browser tab, the blue link in search results and the card people see when your link is shared, so the app looks unfinished to someone who has never heard of it.',
       fix: 'Change the <title>, <meta name="description"> and og:image in your index.html (Lovable, Bolt and Vite keep them there; in Next.js set `metadata` in app/layout). Or ask your AI tool: "Replace the template title, description and share image in index.html with my app\'s real name, a one-sentence description and my own image."',
+      prompt: 'My published site still shows the starter template\'s title, description or share image. Replace them in index.html with my app\'s real name, one sentence about what it does, and my own share image. Ask me for anything you need.',
       where: list(placeholders.map((x) => `${pathOf(x.page.url)} (${x.parts.join(', ')})`)),
     })
   }
@@ -446,6 +515,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(noTitle.length, 'page has', 'pages have')} no title`,
       why: 'The title is the name on the browser tab and the blue link in search results. Without it, people see your address instead.',
       fix: 'Add a <title> to each page (in Next.js: `export const metadata = { title: \'…\' }`).',
+      prompt: `${thePages(noTitle.map((p) => pathOf(p.url)))} on my published site ${noTitle.length === 1 ? 'has' : 'have'} no page title. Give ${noTitle.length === 1 ? 'it' : 'each one'} a short title that says what the page is, so it shows on the browser tab and in search results.`,
       where: list(noTitle.map((p) => pathOf(p.url))),
     })
   }
@@ -457,6 +527,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(noDescription.length, 'page has', 'pages have')} no description`,
       why: 'Search engines and link previews show the description under your title. Without one they pick a random sentence.',
       fix: 'Add <meta name="description" content="…"> with one plain sentence about the page.',
+      prompt: `${thePages(noDescription.map((p) => pathOf(p.url)))} on my published site ${noDescription.length === 1 ? 'has' : 'have'} no meta description. Add one plain sentence to ${noDescription.length === 1 ? 'it' : 'each'} that says what the page is for.`,
       where: list(noDescription.map((p) => pathOf(p.url))),
     })
   }
@@ -468,6 +539,7 @@ export function pageFindings(pages: readonly PageResult[]): Finding[] {
       title: `${plural(noLang.length, 'page does', 'pages do')} not say its language`,
       why: 'Screen readers and translation tools guess the language and can read your page out with the wrong voice.',
       fix: 'Set it once on the root element: <html lang="en">.',
+      prompt: 'My published site does not say which language it is written in. Add the lang attribute to the <html> tag, for example lang="en", using the language my pages are really written in.',
       where: list(noLang.map((p) => pathOf(p.url))),
     })
   }
@@ -484,6 +556,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
       title: 'Your site does not load over HTTPS',
       why: 'Browsers mark the site "Not secure", and anything typed into it (passwords, emails) can be read on the way.',
       fix: 'Turn on HTTPS at your host or domain provider; Vercel, Netlify and Cloudflare do it for free.',
+      prompt: 'My published site does not load over https://. Tell me, step by step, how to turn on HTTPS where this app is hosted.',
     })
   } else if (https === 'not_redirected') {
     out.push({
@@ -492,6 +565,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
       title: 'http:// does not send visitors to https://',
       why: 'Someone who types your address without https gets the unencrypted version.',
       fix: 'Turn on "Always use HTTPS" or "Force HTTPS" at your host.',
+      prompt: 'People who open my published site with http:// are not sent on to https://. Make the site redirect them. If that is a setting at my host, tell me where to switch it on.',
     })
   }
   if (https !== 'no_https') {
@@ -503,6 +577,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
         title: 'No Content-Security-Policy header',
         why: 'If someone gets a script into your page (a comment, a profile name), the browser runs it. A CSP tells the browser which scripts are yours.',
         fix: 'Start with `Content-Security-Policy: default-src \'self\'` in your host\'s headers file, then allow the domains your app really loads from.',
+        prompt: 'Add a Content-Security-Policy header to my published site that allows only the scripts, styles and images the app really loads, and check the app still works. If headers are set at my host, tell me where to add it.',
       })
     }
     if (headers['strict-transport-security'] === false) {
@@ -512,6 +587,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
         title: 'No Strict-Transport-Security header',
         why: 'Without it, a visitor on public Wi-Fi can be pushed onto an unencrypted copy of your site before the redirect happens.',
         fix: 'Send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from your host.',
+        prompt: 'Make my published site send the header "Strict-Transport-Security: max-age=31536000; includeSubDomains". If headers are set at my host, tell me where to add it.',
       })
     }
     if (headers['x-content-type-options'] === false) {
@@ -521,6 +597,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
         title: 'No X-Content-Type-Options header',
         why: 'Browsers may guess a file\'s type, so an uploaded file can end up running as a script.',
         fix: 'Send `X-Content-Type-Options: nosniff` on every response.',
+        prompt: 'Make my published site send the header "X-Content-Type-Options: nosniff" on every response. If headers are set at my host, tell me where to add it.',
       })
     }
     if (headers['referrer-policy'] === false) {
@@ -530,6 +607,7 @@ export function transportFindings(https: CheckSummary['https'], headers: Record<
         title: 'No Referrer-Policy header',
         why: 'Full page addresses (with ids or search terms in them) are sent to every site you link to.',
         fix: 'Send `Referrer-Policy: strict-origin-when-cross-origin`.',
+        prompt: 'Make my published site send the header "Referrer-Policy: strict-origin-when-cross-origin". If headers are set at my host, tell me where to add it.',
       })
     }
   }
@@ -544,6 +622,7 @@ export function brokenLinkFinding(broken: Array<{ url: string; status: number | 
     title: `${plural(broken.length, 'link', 'links')} on your site ${broken.length === 1 ? 'goes' : 'go'} nowhere`,
     why: 'Visitors click and land on an error page, and search engines count every dead link against you.',
     fix: 'Fix or remove each link below. If a page moved, redirect the old address to the new one.',
+    prompt: `${broken.length === 1 ? 'This link' : 'These links'} on my published site ${broken.length === 1 ? 'leads' : 'lead'} to an error page: ${namedList(broken.map((b) => pathOf(b.url)))}. Fix ${broken.length === 1 ? 'its address' : 'each address'} or remove the link.`,
     where: list(broken.map((b) => `${pathOf(b.url)} (${b.status ?? 'no answer'})`)),
   }
 }
@@ -566,6 +645,7 @@ export function brokenImageFinding(broken: Array<{ url: string; status: number |
     title: `${plural(broken.length, 'image', 'images')} on your site ${broken.length === 1 ? 'does' : 'do'} not load`,
     why: 'Visitors see an empty box or a broken-picture icon where the image should be. If it is your share image, the card people see when your link is shared has no picture.',
     fix: 'Open each address below. A 404 means the file was renamed, moved or never deployed: put it back (in Vite, Lovable and Bolt the public/ folder) or update the address in the page. "A web page, not an image" means the address is wrong and your host answered with your app instead.',
+    prompt: `${broken.length === 1 ? 'This image' : 'These images'} on my published site ${broken.length === 1 ? 'does' : 'do'} not load: ${namedList(broken.map((b) => imageLabel(b.url, origins)))}. Put ${broken.length === 1 ? 'the file' : 'each file'} back, or fix its address in the page.`,
     where: list(broken.map((b) => `${imageLabel(b.url, origins)} (${b.notAnImage ? 'a web page, not an image' : b.status ?? 'no answer'})`)),
   }
 }
@@ -579,6 +659,7 @@ export function shareImageFinding(home: PageResult | undefined): Finding | null 
     title: 'Links to your site show no preview picture',
     why: 'When someone shares your address in iMessage, WhatsApp, Slack or X, the card shows a picture only if the page names one. Without it the link looks bare and fewer people click.',
     fix: 'Add <meta property="og:image" content="https://your-site.com/og.png"> to the page head, pointing at a 1200 x 630 image of your app.',
+    prompt: 'Links to my published site show no preview picture. Add a share image (og:image) to the page head: a 1200 x 630 picture of the app. Ask me for the picture if you need one.',
     where: [pathOf(home.url)],
   }
 }
@@ -607,6 +688,7 @@ export function mixedContentFinding(pages: readonly PageResult[]): Finding | nul
       ? 'Browsers refuse to run an http:// script or style on an https page, so the part of your app that needs it does not work or looks broken. Nothing tells the visitor why.'
       : 'Browsers show an http:// image or video on an https page with a "Not secure" warning, or try https and show nothing if that fails.',
     fix: 'Change each address below to https:// (or to a path on your own site). If the file is not available over https, host a copy yourself.',
+    prompt: `My published site loads ${active.size + passive.size === 1 ? 'this file' : 'these files'} over http:// instead of https://, so browsers block ${active.size + passive.size === 1 ? 'it' : 'them'} or show a warning: ${namedList([...active, ...passive])}. Change each address to https://, or to a copy kept with the app.`,
     where: list([...active, ...passive]),
   }
 }
@@ -619,6 +701,7 @@ export function sourceMapFinding(scripts: string[]): Finding | null {
     title: 'Your scripts point to source maps',
     why: 'A source map turns your bundled JavaScript back into your original code, comments and all. If the .map files are public, anyone can read it, including any key you left in the frontend.',
     fix: 'Turn off production source maps (Vite: `build.sourcemap: false`; Next.js: `productionBrowserSourceMaps: false`), or upload them to your error tracker and delete them from the deploy.',
+    prompt: 'My published site ships source maps, so anyone can read my original code. Turn off source maps in the production build.',
     where: list(scripts.map(pathOf)),
   }
 }

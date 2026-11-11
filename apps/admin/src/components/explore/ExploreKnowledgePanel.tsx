@@ -157,7 +157,7 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
           </Btn>
         </div>
         <p className="text-2xs text-fg-faint">
-          Mushi reads the Markdown and text files in that folder of your connected GitHub repo. It needs GitHub access to that repo.
+          Mushi Mushi reads the Markdown and text files in that folder of your connected GitHub repo. It needs GitHub access to that repo.
         </p>
         {addError ? <p className="text-2xs text-danger" role="alert">{addError}</p> : null}
       </Card>

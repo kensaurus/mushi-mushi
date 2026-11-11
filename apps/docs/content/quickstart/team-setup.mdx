@@ -44,6 +44,11 @@ Plan on an hour for steps 1 to 6, and a day of real traffic before step 8.
 Only admins can edit integrations. A viewer cannot override a review hold
 (see step 7).
 
+A role applies to the whole team: every member, a Viewer included, can read
+every app in it. An invitation cannot be limited to one app. If someone should
+see only one app (a client, for example), put that app in its own team. See
+[You build apps for clients](/use-cases/agency-client-apps#who-can-see-what).
+
 **Check it worked:** each invitee opens the invite email, signs in, and sees
 the app. **Team → Members** lists them with the right role and no pending
 invitation.
@@ -166,19 +171,24 @@ overage. Reports are always kept, even when diagnoses pause. See
 **Do this:**
 
 1. Decide whether to bring your own AI key. Under **Settings → AI keys**, add
-   an Anthropic, OpenAI or Cursor key. Mushi Mushi then uses it for fix pull
-   requests and agent work, and you pay that vendor directly. A Cursor key is
-   what lets a cloud agent write fixes.
+   an Anthropic, OpenAI or Cursor key. Mushi Mushi then uses your Anthropic or
+   OpenAI key first for that app's AI work (the diagnosis, fix drafts and fix
+   grading), and you pay that vendor directly. A diagnosis on your own key
+   still counts toward your plan. The second AI that reviews each fix pull
+   request runs only on your own Anthropic or OpenAI key. A Cursor key is
+   what lets a Cursor cloud agent write fixes.
 2. Set spend limits under **Settings → General → Spend limits**:
    - **Monthly AI budget**: all AI calls for the app stop at this amount until
      the 1st of next month.
-   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes Mushi Mushi
+   - **Auto-fix spend limit** and **Automatic fixes per day**: cap fixes
      Mushi Mushi starts on its own. New projects start at $2 per 30 days and 3
      automatic fixes a day.
    - **Ask me before fixes that may cost more than**: expensive fixes wait for
      approval.
 3. On a paid plan, check the **Monthly spend cap** under **Team → Billing**.
    This caps overage on your bill. It is separate from the AI budget above.
+   The plan's diagnoses and this cap belong to the app you upgraded; another
+   app in the team keeps 100 diagnoses a month until you upgrade it too.
 
 **Check it worked:** after the first few reports, open **Team → AI spend**.
 You should see each call with its model, cost and which key paid. See

@@ -64,7 +64,7 @@ describe('portfolioView', () => {
     expect(radarLabel({ checkedAt: '2026-10-02T00:00:00Z', status: 'error', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 1 })).toMatchObject({ text: 'Risk checks failed', tone: 'danger' })
   })
 
-  it("a Mushi setup chore is named as a chore, never as the app's top problem", () => {
+  it("a Mushi Mushi setup chore is named as a chore, never as the app's top problem", () => {
     // Live 2026-10-27: every card read "Needs attention" with the same next
     // step, the no-spend-cap setup check, while the app had 33 open bugs.
     const c = card({
@@ -74,7 +74,7 @@ describe('portfolioView', () => {
     })
     expect(radarLabel(c.radar).text).toBe('No risks found')
     expect(needsALook(c)).toBe(false)
-    expect(appUrgency(c)).toMatchObject({ level: 'chores', chip: { text: 'Mushi setup' } })
+    expect(appUrgency(c)).toMatchObject({ level: 'chores', chip: { text: 'Mushi Mushi setup' } })
     const withBugs = appUrgency({ ...c, openReports: 33 })
     expect(withBugs).toMatchObject({ level: 'bugs', chip: { text: 'Bugs to fix' }, next: { text: 'Fix the worst of 33 open bugs', to: '/reports' } })
     expect(withBugs.next?.text).not.toMatch(/setup/i)
@@ -94,7 +94,7 @@ describe('portfolioView', () => {
       ruleId: 'spend_cap_unset',
       title: null,
       sampleMessage: "No monthly AI budget is set, so nothing limits this project's AI spend (triage, fixes and chat). Suggested: a $10 monthly AI budget.",
-      gateLabel: 'Mushi setup check',
+      gateLabel: 'Mushi Mushi setup check',
     })
     expect(spend).toBe("No monthly AI budget is set, so nothing limits this project's AI spend (triage, fixes and chat).")
     expect(spend).not.toContain('spend_cap_unset')
@@ -193,7 +193,7 @@ describe('cardStatusChips (chips instead of prose)', () => {
 
 describe('appUrgency', () => {
   it('names a failing part and sends the user to the page that fixes it', () => {
-    const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi could not read your CI builds.' }] }))
+    const u = appUrgency(card({ worst: 'error', needsLook: [{ element: 'ci', label: 'CI', state: 'error', reason: 'Mushi Mushi could not read your CI builds.' }] }))
     expect(u).toMatchObject({ level: 'broken', chip: { text: 'CI failing', tone: 'danger' }, next: { to: '/ci' } })
     // Acronyms keep their case inside the status sentence.
     expect(u.short).toBe('CI failing')

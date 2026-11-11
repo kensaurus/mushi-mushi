@@ -48,7 +48,8 @@ function report(overrides: Partial<ReportDetail>): ReportDetail {
 }
 
 function render(r: ReportDetail): string {
-  act(() => root.render(createElement(DiagnosisFixHero, { report: r })))
+  // Operator view: the model line is asserted below. The outside view has its own test.
+  act(() => root.render(createElement(DiagnosisFixHero, { report: r, showInternals: true })))
   return container.textContent ?? ''
 }
 
@@ -73,6 +74,17 @@ describe('DiagnosisFixHero', () => {
     expect(container.querySelectorAll('ol li')).toHaveLength(2)
     expect(text).toContain('Model: claude-sonnet-4-6')
     expect(text).toContain('82% confidence')
+  })
+
+  // Re-audit 2026-11-11: "Model: precomputed" on a builder's first sample report.
+  it('outside operator accounts hides the model name, and calls the sample a sample', () => {
+    const stage2 = { rootCause: 'The minutes prop is stale.', confidence: 0.82 }
+    act(() => root.render(createElement(DiagnosisFixHero, { report: report({ stage2_model: 'claude-sonnet-4-6', stage2_analysis: stage2 }) })))
+    expect(container.textContent).not.toContain('Model:')
+    expect(container.textContent).not.toContain('claude-sonnet-4-6')
+    act(() => root.render(createElement(DiagnosisFixHero, { report: report({ stage2_model: 'precomputed', stage2_analysis: stage2 }) })))
+    expect(container.textContent).toContain('Sample explanation (written in advance)')
+    expect(container.textContent).not.toContain('precomputed')
   })
 
   it('renders model text as text, never HTML', () => {

@@ -117,7 +117,7 @@ export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'Your editor can talk to Mushi' : `Agent access live on ${projectLabel}`}
+      title={plainBanner ? 'Your editor can talk to Mushi Mushi' : `Agent access live on ${projectLabel}`}
       subtitle={label}
       action={
         onTab ? (

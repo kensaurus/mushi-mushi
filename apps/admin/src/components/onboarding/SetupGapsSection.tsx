@@ -76,14 +76,14 @@ export function SetupGapsSection({ projectId }: { projectId: string | null }) {
   const status = setupGapsSentence(gaps)
 
   const help = (
-    <HelpPopover label="What is checked" title="What Mushi checks" align="end">
+    <HelpPopover label="What is checked" title="What Mushi Mushi checks" align="end">
       <ul className="list-disc space-y-1 pl-4 text-xs text-fg-secondary">
-        <li>What Mushi&apos;s GitHub access can do in each repo: push fix branches, open pull requests, re-run CI, write CI secrets.</li>
+        <li>What Mushi Mushi&apos;s GitHub access can do in each repo: push fix branches, open pull requests, re-run CI, write CI secrets.</li>
         <li>Whether the review follow-up key and the auto-fix Cursor keys still work.</li>
         <li>Whether a deploy was seen in the last 14 days, so reporters hear when their fix is live.</li>
         <li>Whether Slack still accepts the bot token.</li>
       </ul>
-      <p className="mt-2 text-xs text-fg-muted">Mushi only reads to check. It never writes to GitHub to find out whether it may write, so some lines say &ldquo;can&apos;t tell&rdquo;.</p>
+      <p className="mt-2 text-xs text-fg-muted">Mushi Mushi only reads to check. It never writes to GitHub to find out whether it may write, so some lines say &ldquo;can&apos;t tell&rdquo;.</p>
     </HelpPopover>
   )
 

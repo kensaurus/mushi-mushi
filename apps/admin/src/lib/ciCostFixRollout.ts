@@ -135,7 +135,7 @@ export function isBundleInFlight(b: Pick<CiCostFixBundle, 'status'> | null): boo
 
 /** One line for a repo after the request: its PR, why there is none, or why it did not start. */
 export function bundleResultText(result: CiBundleResult, bundle: CiCostFixBundle | null): string {
-  if (result.status === 'error') return result.error?.message ?? 'Mushi could not open this repo\'s pull request.'
+  if (result.status === 'error') return result.error?.message ?? 'Mushi Mushi could not open this repo\'s pull request.'
   if (result.status === 'skipped') return 'Nothing to open here: every fix you picked is already open or being opened.'
   if (!bundle || isBundleInFlight(bundle)) return 'Opening one draft pull request…'
   switch (bundle.status) {
@@ -144,9 +144,9 @@ export function bundleResultText(result: CiBundleResult, bundle: CiCostFixBundle
       return `Draft pull request open. Review it, mark it ready and merge it.${refused > 0 ? ` ${refused} ${refused === 1 ? 'fix was' : 'fixes were'} left out; the reasons are below and in the pull request.` : ''}`
     }
     case 'nothing_opened':
-      return 'No pull request: Mushi refused every fix here, or the workflows already have them. The reasons are below.'
+      return 'No pull request: Mushi Mushi refused every fix here, or the workflows already have them. The reasons are below.'
     case 'failed':
-      return bundle.items.find((i) => i.status === 'failed')?.error ?? 'Mushi could not open the pull request.'
+      return bundle.items.find((i) => i.status === 'failed')?.error ?? 'Mushi Mushi could not open the pull request.'
     default:
       return 'Opening one draft pull request…'
   }
@@ -158,11 +158,11 @@ export function bundleItemText(job: CiCostFixJob): string {
     case 'pr_opened':
       return job.summary ?? 'Changed.'
     case 'refused':
-      return `Not changed: ${job.error ?? job.summary ?? 'Mushi will not make this change.'}`
+      return `Not changed: ${job.error ?? job.summary ?? 'Mushi Mushi will not make this change.'}`
     case 'no_change':
       return job.summary ?? 'Already applied.'
     case 'failed':
-      return `Not changed: ${job.error ?? 'Mushi could not change this workflow.'}`
+      return `Not changed: ${job.error ?? 'Mushi Mushi could not change this workflow.'}`
     default:
       return 'Waiting…'
   }

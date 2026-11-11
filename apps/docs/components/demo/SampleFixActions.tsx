@@ -2,7 +2,10 @@
 
 /**
  * The fix-prompt actions on the sample diagnosis page, mirroring the console's
- * "Fix it with your coding agent" panel (apps/admin/src/components/report-detail/FixWithAgentPanel.tsx):
+ * "Fix it with your coding agent" panel (apps/admin/src/components/report-detail/FixWithAgentPanel.tsx),
+ * with the chat-builder button first (ADR 0056: Lovable or Bolt leads):
+ *   - Paste into Lovable or Bolt: the same prompt without the lines about
+ *     tests and a pull request (lib/sample-lovable-prompt.ts).
  *   - Copy fix prompt: the whole prompt (buildFixPrompt).
  *   - Open in Cursor: Cursor's prompt deeplink carrying the shorter,
  *     URL-capped copy (buildUrlFixPrompt), as the console does.
@@ -12,6 +15,7 @@
  * console's own builder and guarded by fixPrompt.sample.test.ts.
  */
 import { useState } from 'react'
+import { lovableFixPrompt } from '@/lib/sample-lovable-prompt'
 
 interface SampleFixActionsProps {
   fixPrompt: string
@@ -24,13 +28,14 @@ function cursorDeeplink(prompt: string): string {
 }
 
 export function SampleFixActions({ fixPrompt, urlFixPrompt }: SampleFixActionsProps) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<'lovable' | 'full' | null>(null)
   const [claudeOpen, setClaudeOpen] = useState(false)
+  const lovablePrompt = lovableFixPrompt(fixPrompt)
 
-  function copy() {
-    void navigator.clipboard?.writeText(fixPrompt).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+  function copy(which: 'lovable' | 'full') {
+    void navigator.clipboard?.writeText(which === 'lovable' ? lovablePrompt : fixPrompt).then(() => {
+      setCopied(which)
+      setTimeout(() => setCopied(null), 2000)
     })
   }
 
@@ -40,11 +45,20 @@ export function SampleFixActions({ fixPrompt, urlFixPrompt }: SampleFixActionsPr
         <button
           type="button"
           className="landing-hero-cta landing-hero-cta--primary"
-          onClick={copy}
+          onClick={() => copy('lovable')}
+          data-mushi-cta="sample-copy-lovable-prompt"
+          data-mushi-location="sample-diagnosis"
+        >
+          {copied === 'lovable' ? 'Copied. Now paste it into your chat' : 'Paste into Lovable or Bolt'}
+        </button>
+        <button
+          type="button"
+          className="landing-hero-cta landing-hero-cta--secondary"
+          onClick={() => copy('full')}
           data-mushi-cta="sample-copy-fix-prompt"
           data-mushi-location="sample-diagnosis"
         >
-          {copied ? 'Copied' : 'Copy fix prompt'}
+          {copied === 'full' ? 'Copied' : 'Copy fix prompt'}
         </button>
         <a
           className="landing-hero-cta landing-hero-cta--secondary"
@@ -67,8 +81,10 @@ export function SampleFixActions({ fixPrompt, urlFixPrompt }: SampleFixActionsPr
         </button>
       </div>
       <p className="sample-dx__note">
-        {(fixPrompt.length / 1000).toFixed(1)}k characters. Paste it into Claude Code, Cursor, Codex, Windsurf or
-        any other coding agent; it needs no Mushi Mushi setup. Open in Cursor carries a shorter copy, because a link can
+        <strong>Paste into Lovable or Bolt</strong> copies the prompt without the lines about tests and pull requests,
+        ready for your project&rsquo;s chat. <strong>Copy fix prompt</strong> copies all of it (
+        {(fixPrompt.length / 1000).toFixed(1)}k characters) for Claude Code, Cursor, Codex, Windsurf or any other
+        coding agent. Neither needs any Mushi Mushi setup. Open in Cursor carries a shorter copy, because a link can
         only hold so much.
       </p>
       {claudeOpen ? (

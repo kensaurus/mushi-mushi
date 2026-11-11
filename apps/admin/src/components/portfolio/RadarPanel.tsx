@@ -93,7 +93,7 @@ export function RadarPanel({ projectId }: { projectId: string }) {
         </div>
       )}
       <p className="mt-3 border-t border-edge-subtle pt-3 text-xs text-fg-muted">
-        Mushi's own setup checks (provider keys, spend caps and the AI budget, webhooks, index freshness) are on the{' '}
+        Mushi Mushi's own setup checks (provider keys, spend caps and the AI budget, webhooks, index freshness) are on the{' '}
         <Link to="/fullstack-audit" className={LINK_ACCENT}>Full-stack audit</Link> page.
       </p>
     </Section>

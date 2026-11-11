@@ -121,7 +121,7 @@ export function FixGateChecklist({ fixId }: Props) {
       )}
       {!loading && !error && !verification && (
         <p className="text-2xs text-fg-muted" data-testid="fix-gate-unchecked">
-          Not checked yet. Mushi checks a cloud agent&apos;s pull request once Opus has reviewed its latest commit.
+          Not checked yet. Mushi Mushi checks a cloud agent&apos;s pull request once Opus has reviewed its latest commit.
         </p>
       )}
 

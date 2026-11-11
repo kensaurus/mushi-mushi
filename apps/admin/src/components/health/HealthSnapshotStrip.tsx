@@ -29,8 +29,8 @@ function healthSentence(stats: HealthStats): string {
   const window = stats.window === '24h' ? 'the last 24 hours' : `the last ${stats.window}`
   const calls =
     stats.totalCalls === 0
-      ? `Mushi made no AI calls in ${window}`
-      : `Mushi made ${pluralizeWithCount(stats.totalCalls, 'AI call')} in ${window}, ${stats.errorRatePct}% failed`
+      ? `Mushi Mushi made no AI calls in ${window}`
+      : `Mushi Mushi made ${pluralizeWithCount(stats.totalCalls, 'AI call')} in ${window}, ${stats.errorRatePct}% failed`
   const jobs =
     stats.cronJobCount === 0
       ? 'no background jobs are scheduled'
@@ -43,7 +43,7 @@ function healthSentence(stats: HealthStats): string {
 export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
     <PageStatus
-      ariaLabel="Mushi health status"
+      ariaLabel="Mushi Mushi health status"
       tone={healthTone(stats)}
       sentence={
         <>
@@ -62,7 +62,7 @@ export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, st
         {
           label: statLabels?.calls ?? 'AI calls',
           value: stats.totalCalls,
-          hint: 'Calls to AI models Mushi made to diagnose and fix your bugs, in this window.',
+          hint: 'Calls to AI models Mushi Mushi made to diagnose and fix your bugs, in this window.',
           to: healthLinks.totalCalls,
         },
         {
@@ -76,7 +76,7 @@ export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, st
           label: statLabels?.cron ?? 'Background jobs on time',
           value: `${stats.cronHealthyCount}/${stats.cronJobCount}`,
           tone: stats.cronErrorCount > 0 ? 'danger' : stats.cronStaleCount > 0 ? 'warn' : 'ok',
-          hint: 'Mushi’s scheduled jobs (grading, clean-up, reports) whose last run succeeded on schedule.',
+          hint: 'Mushi Mushi’s scheduled jobs (grading, clean-up, reports) whose last run succeeded on schedule.',
           to: healthLinks.cron,
         },
       ]}

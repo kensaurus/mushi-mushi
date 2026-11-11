@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectWebBundler, resolveDefaultSdkFramework } from './sdkInstallDefaults'
+import { detectWebBundler, resolveDefaultSdkFramework, snippetBundler } from './sdkInstallDefaults'
 import { renderSnippet } from './sdkSnippets'
 
 describe('resolveDefaultSdkFramework', () => {
@@ -45,6 +45,21 @@ describe('renderSnippet for a React app on Vite or Next', () => {
     const next = renderSnippet('react', 'p-1', 'mushi_k', undefined, null, 'next')
     expect(next).toContain("'use client'")
     expect(next).toContain('apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY')
+    // Same two files as the React quickstart: a client provider, wrapped in the root layout.
+    expect(next).toContain('// NEXT_PUBLIC_MUSHI_PROJECT_ID=p-1')
+    expect(next).toContain('// app/providers.tsx')
+    expect(next).toContain('export function Providers({ children }')
+    expect(next).toContain('<Providers>{children}</Providers>')
+    expect(next).not.toMatch(/VITE_|import\.meta/)
+  })
+
+  it('renders env-var snippets only for a React app whose setup is known', () => {
+    expect(snippetBundler('react', 'next')).toBe('next')
+    expect(snippetBundler('react', 'vite')).toBe('vite')
+    // Unknown and "something else" keep the inline snippet: never a guessed VITE_.
+    expect(snippetBundler('react', null)).toBeNull()
+    expect(snippetBundler('react', 'other')).toBeNull()
+    expect(snippetBundler('vue', 'vite')).toBeNull()
   })
 
   it('keeps the inline snippet when the bundler is unknown', () => {

@@ -56,7 +56,7 @@ export function SentrySecretMissingPanel({ orgSlug, autoImportOn, canManage, onP
   return (
     <div className={`mx-3 mb-2 rounded-sm px-3 py-2 text-2xs space-y-2 ${CHIP_TONE.warnSubtle}`} data-testid="mushi-sentry-secret-missing">
       <p className="leading-snug">
-        <strong>Sentry alerts are being dropped.</strong> Sentry sends them to this app, but Mushi has no webhook
+        <strong>Sentry alerts are being dropped.</strong> Sentry sends them to this app, but Mushi Mushi has no webhook
         secret to check them with, so it rejects each one.
       </p>
       {canManage ? (
@@ -77,7 +77,7 @@ export function SentrySecretMissingPanel({ orgSlug, autoImportOn, canManage, onP
             <span className="inline-flex flex-wrap items-center gap-2">
               <span>
                 For alerts within seconds, copy the <strong>Client Secret</strong> of the integration that sends them
-                (Sentry makes it; Mushi can’t):
+                (Sentry makes it; Mushi Mushi can’t):
               </span>
               <a href={developerSettings} target="_blank" rel="noreferrer noopener" className="font-semibold underline hover:no-underline">
                 Open Sentry Developer Settings ↗

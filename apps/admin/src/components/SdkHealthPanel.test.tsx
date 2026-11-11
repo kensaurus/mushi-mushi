@@ -32,7 +32,7 @@ vi.mock('../lib/useSdkUpgrade', () => ({
 }))
 
 import { SdkHealthPanel } from './SdkHealthPanel'
-import { fixAllPlan, sdkHealthHref, type SdkHealthProblem } from '../lib/sdkHealth'
+import { fixAllPlan, presentSdkHealthProblems, sdkHealthHref, type SdkHealthProblem } from '../lib/sdkHealth'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -101,10 +101,11 @@ describe('SdkHealthPanel', () => {
     container.remove()
   })
 
-  async function mount(problems: SdkHealthProblem[], notes: Array<{ check: string; detail: string }> = []) {
+  // nativeApp: a store build runs in CI, so the missing-secrets row is stated, not asked.
+  async function mount(problems: SdkHealthProblem[], notes: Array<{ check: string; detail: string }> = [], nativeApp = true) {
     page.data = { problems, notes, installed: false, lastSeenAt: null, repoUrl: null, siteUrl: null, checkedAt: '2026-10-26T00:00:00Z' }
     act(() => {
-      root.render(createElement(MemoryRouter, null, createElement(SdkHealthPanel, { projectId: PROJECT })))
+      root.render(createElement(MemoryRouter, null, createElement(SdkHealthPanel, { projectId: PROJECT, nativeApp })))
     })
     await flush()
   }
@@ -113,6 +114,30 @@ describe('SdkHealthPanel', () => {
     await mount(ALL)
     for (const label of [/File CSP task/, /File install task/, /Write CI secrets/, /Open upgrade PR/]) expect(button(label)).toBeTruthy()
     expect(document.body.textContent).toContain('5 problems found.')
+  })
+
+  it('asks a web app whether GitHub Actions builds it, instead of calling missing secrets a failure', async () => {
+    const neverSeen: SdkHealthProblem = {
+      ...problem('never_seen', null),
+      detail: 'No build of this app has reached Mushi Mushi yet. The missing CI keys above are the likely cause: write them, then ship a new build.',
+    }
+    await mount([{ ...ALL[2]!, detail: 'VITE_MUSHI_API_KEY is not set in a/b.' }, ALL[1]!, ALL[3]!, neverSeen], [], false)
+    const row = document.querySelector('[data-testid="sdk-health-problem-ci_secrets_missing"]')!.textContent ?? ''
+    expect(row).toContain('Does GitHub Actions build this app?')
+    expect(row).toContain('If Vercel, Netlify or another host builds it, GitHub needs nothing')
+    // The bundler is unknown here, so no prefix is guessed.
+    expect(row).not.toMatch(/VITE_|NEXT_PUBLIC_/)
+    expect(button(/It does: write the keys to GitHub/)).toBeTruthy()
+    expect(document.querySelector('[data-testid="sdk-health-problem-never_seen"]')!.textContent).not.toContain('missing CI keys')
+    // Fix all leaves the question out: install task + upgrade PR only.
+    expect(button(/Fix all \(2\)/)).toBeTruthy()
+  })
+
+  it('names the values the way the app builds them when the bundler is known', () => {
+    const [p] = presentSdkHealthProblems([ALL[2]!], { nativeApp: false, bundler: 'next' })
+    expect(p!.detail).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID and NEXT_PUBLIC_MUSHI_API_KEY')
+    expect(p!.question).toBe(true)
+    expect(presentSdkHealthProblems([ALL[2]!], { nativeApp: true, bundler: null })[0]).toEqual(ALL[2])
   })
 
   it('a never-seen app with only setup steps reads as steps left, not problems', async () => {
@@ -172,7 +197,7 @@ describe('SdkHealthPanel', () => {
     act(() => button(/Write secrets/)!.click())
     await flush()
     const text = document.body.textContent ?? ''
-    expect(text).toContain("GitHub didn't let Mushi write secrets")
+    expect(text).toContain("GitHub didn't let Mushi Mushi write secrets")
     expect(text).toContain('mushi_secret')
     expect(text).toContain('gh secret set VITE_MUSHI_API_KEY')
   })

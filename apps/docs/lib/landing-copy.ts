@@ -162,6 +162,11 @@ const LANDING_LOADER_URL = 'https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist
  * `npx`: the person signs up, copies the script tag the console prints with
  * their project ID and key filled in, and asks the builder to add it. The SDK
  * key in the tag can only send reports (`report:write`), like any browser key.
+ *
+ * The line shown here is an example, and says so. `YOUR_SDK_KEY` is the
+ * placeholder the console's own Script tag tab prints until a key is made
+ * (apps/admin/src/lib/sdkSnippets.ts); the console always fills in the
+ * project ID, so `YOUR_PROJECT_ID` appears only in this example and the guide.
  */
 export const LANDING_INSTALL_LOVABLE = {
   steps: {
@@ -169,9 +174,10 @@ export const LANDING_INSTALL_LOVABLE = {
     setup: 'Paste this into Lovable or Bolt',
     fix: 'See why it broke',
   },
-  setupLead: 'Put your project ID and key from step 1 in place of the capitals.',
+  setupLead: 'This is an example. Your real line is waiting after sign-up.',
+  copyLabel: 'Copy example',
   prompt: `Add this script tag inside the <head> of index.html exactly as written, and change nothing else:
-<script async src="${LANDING_LOADER_URL}" data-project="YOUR_PROJECT_ID" data-key="YOUR_API_KEY"></script>`,
+<script async src="${LANDING_LOADER_URL}" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>`,
   setupCheck: 'A report button on your published app. Tap it and send yourself a first report.',
   fixLead: 'Each report gets a plain-English diagnosis and a fix prompt in your Mushi Mushi console. Copy the prompt into Lovable or Bolt.',
   connector: { label: 'Or read reports inside Lovable with the Mushi Mushi connector →', href: '/quickstart/lovable-mcp' },
@@ -182,58 +188,95 @@ export const LANDING_INSTALL_LOVABLE = {
 export interface LandingFaqItem {
   q: string
   a: string
+  /** Which group the question is listed under. "No coding" comes first. */
+  group: LandingFaqGroupId
+  /** A link shown under the answer. The JSON-LD answer stays the plain text of `a`. */
+  more?: { label: string; href: string }
 }
+
+export type LandingFaqGroupId = 'no-code' | 'developers'
+
+/** The FAQ's two groups, in the order they are shown (ADR 0056: the no-code path first). */
+export const LANDING_FAQ_GROUPS: readonly { id: LandingFaqGroupId; label: string }[] = [
+  { id: 'no-code', label: 'No coding' },
+  { id: 'developers', label: 'Developers' },
+] as const
 
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
+    group: 'no-code',
     q: 'Do I need to know how to code?',
     a: 'No. If you build with Lovable or Bolt, you add Mushi Mushi by pasting one prompt, with no terminal. When a bug comes in, you read a short note in plain English and paste the fix instructions back into Lovable or Bolt. You check the change before you publish it.',
   },
   {
+    group: 'no-code',
     q: 'How long does setup take?',
     a: 'About five minutes. In Lovable or Bolt, you sign up, copy your script tag and ask the builder to add it. In Cursor or Claude Code, it is one command or one click. A test report gets its plain-English diagnosis in about 10 seconds.',
   },
   {
+    group: 'no-code',
     q: 'What is Mushi Mushi, in plain terms?',
-    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, and sends that to the AI assistant in your code editor so the fix can start right away. It can also check your live site once for free, with no sign-up, for pages that error, dead links and images, and a title still saying "Lovable App". The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
+    a: 'A bug-report inbox with an AI that explains each bug. People who use your app can report a problem with one tap. Mushi Mushi turns each report into a short, plain-English explanation of what went wrong and how to fix it, written as instructions you paste into Lovable or Bolt, or that the AI assistant in your code editor reads itself. It can also check your live site once for free, with no sign-up, for pages that error, dead links and images, and a title still saying "Lovable App". The name comes from 虫 (mushi), the Japanese word for "bug" or "insect".',
   },
   {
+    group: 'no-code',
     q: 'I build in Lovable or Bolt and have no terminal. Can I use it?',
     a: 'Yes. Sign up free, copy the script tag your setup page shows (your project ID and key are already in it), and ask Lovable or Bolt to add it to the <head> of index.html. Your published app gets a report button. Each report gets a plain-English diagnosis and a fix prompt you paste back into Lovable or Bolt.',
   },
   {
+    group: 'no-code',
+    q: 'What does it collect from my users?',
+    a: 'When someone sends a report: what they typed, a picture of the screen if they attach one (they see it first and can remove it; password and card-number boxes are blacked out), the page address, their browser and screen size, and the app\'s recent error messages. It also counts page visits with a random ID, and skips browsers that ask not to be tracked. No name or email is collected unless your app passes one. On the free plan, reports are deleted after 14 days.',
+    more: { label: 'The full list, and one sentence for your own privacy note →', href: '/quickstart/lovable-bolt#what-it-collects-from-your-users' },
+  },
+  {
+    group: 'no-code',
+    q: 'How do I remove it?',
+    a: 'Ask Lovable or Bolt: "Remove the Mushi Mushi script tag from index.html", then publish. The report button is gone and nothing more is sent. To delete what was already collected, delete the project on the Manage apps page of your Mushi Mushi console.',
+    more: { label: 'How to remove it, step by step →', href: '/quickstart/lovable-bolt#how-to-remove-it' },
+  },
+  {
+    group: 'no-code',
     q: 'Do I need my own AI key?',
     a: "No. Mushi Mushi writes the diagnosis with its own AI, and the free plan watches one app with 100 diagnoses a month, no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi Mushi hands it.",
   },
   {
+    group: 'no-code',
     q: 'Who makes it, and can I use it today?',
     a: 'Built by one developer in Japan (Kensaurus 合同会社), who runs it on his own live apps and sites. The hosted service is live, the libraries are published on npm, and the source code is public on GitHub. The native iOS, Android and Flutter libraries are still previews.',
   },
   {
+    group: 'developers',
     q: 'Is Mushi Mushi a Sentry alternative?',
     a: "It can be, or it can run alongside Sentry. Sentry is built around what the code threw, with a User Feedback widget and replay alongside. Mushi Mushi starts from what the user reported, ingests Sentry's errors too, explains each one in plain English, and hands your agent a fix prompt to start from. One queue, with or without Sentry.",
   },
   {
+    group: 'developers',
     q: 'Do I need Sentry to use it?',
     a: 'No. Mushi Mushi works on its own. If you already use Sentry (a popular service that records errors when code crashes), you can point its alerts at Mushi. Those errors then land in the same list as user reports, with duplicates merged, each one explained in plain English and marked resolved in Sentry when the fix is merged.',
   },
   {
+    group: 'developers',
     q: 'What does npx mushi-mushi do?',
     a: 'It runs a setup wizard on your computer. The wizard works out which framework your app uses (React, Next.js, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor or Node), installs the matching Mushi Mushi library, saves your settings in your env file (and warns you if that file is not in .gitignore), and asks before it adds the setup snippet to your code. It never commits, pushes or touches your Git history, and its source is public on GitHub.',
   },
   {
+    group: 'developers',
     q: 'How do I debug an app that Cursor or Claude Code wrote?',
     a: 'Connect your editor to Mushi Mushi with the install box near the top of this page: one command for Claude Code, one click for Cursor. It uses MCP, the standard way AI editors connect to outside tools. Bug reports then arrive as plain-English diagnoses your AI assistant can read, with a fix prompt ready to apply without leaving the editor.',
   },
   {
+    group: 'developers',
     q: 'Is it open source? Can I self-host?',
     a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: one app, 100 diagnoses a month, no card.',
   },
   {
+    group: 'developers',
     q: 'Can an AI agent write the fix for me?',
     a: 'Yes, if you want it to. Connect your GitHub repo and turn on automatic fixes, and an agent opens a pull request for a diagnosed bug. The built-in fixer needs no key of your own; to use Cursor agents, add your Cursor key, or run them on your own computer with mushi work. With your own Anthropic key, a second AI then reads that pull request next to the original report and says merge, fix first, or do not merge, so a fix that only hides the symptom is caught. Nothing merges unless you merge it or turn on automatic merging.',
   },
   {
+    group: 'developers',
     q: 'Which frameworks are supported?',
     a: 'Web: React, Vue, Svelte, Angular, and any other site through the browser widget. Mobile: React Native and Capacitor. Server: Node. One wizard installs any of them. Native iOS, Android and Flutter SDKs are previews and install from the GitHub repo.',
   },
@@ -253,7 +296,7 @@ export const LANDING_WHAT_THIS_IS = {
   definition: `Mushi Mushi is an open-source tool for ${lowerFirst(MUSHI_TAGLINE_V2.category)}: every bug your users report gets a ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
   who: 'Solo founders who build with AI tools and then lose whole afternoons fixing code they did not fully write themselves. People who work this way are often called vibe coders.',
   boundary:
-    'It works inside your code editor, not as yet another dashboard to check. Sentry, Linear and Slack can feed into the same list, but you need none of them to start.',
+    'It works where you already build: you paste the fix into Lovable or Bolt, or your code editor (Cursor, Claude Code) reads it itself. It is not one more dashboard you have to keep checking. Sentry, Linear and Slack can feed into the same list, but you need none of them to start.',
 } as const
 
 export const LANDING_WHERE_TO_START_INTRO =

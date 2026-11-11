@@ -368,7 +368,7 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
             {/* Phase 4c: row-level provenance badge — "SDK" or "Sentry" */}
             <span
               className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
-              title={entry.correlationId ? `Captured by Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi SDK — console-wrap instrumentation'}
+              title={entry.correlationId ? `Captured by Mushi Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi Mushi SDK — console-wrap instrumentation'}
             >
               SDK
             </span>

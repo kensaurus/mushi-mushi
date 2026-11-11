@@ -16,7 +16,7 @@ const RUNNER_STATUS = {
     word: 'Status unknown',
     short: 'Unknown',
     dot: 'bg-fg-faint',
-    why: 'GitHub did not list this runner, so Mushi knows it only from its jobs. Give the GitHub token Administration: read to see idle and offline runners.',
+    why: 'GitHub did not list this runner, so Mushi Mushi knows it only from its jobs. Give the GitHub token Administration: read to see idle and offline runners.',
   },
   on_demand: { word: 'On demand', dot: 'bg-ok', why: 'GitHub starts a fresh machine for each job and deletes it afterwards.' },
   // A one-job runner family: each job registers its own runner, which is
@@ -25,7 +25,7 @@ const RUNNER_STATUS = {
     word: 'One runner per job',
     short: 'Per job',
     dot: 'bg-ok',
-    why: 'A new runner registers for each job and is removed when it ends. Mushi groups them by name; the heartbeat, when there is one, says whether the machine is up.',
+    why: 'A new runner registers for each job and is removed when it ends. Mushi Mushi groups them by name; the heartbeat, when there is one, says whether the machine is up.',
   },
 } as const
 

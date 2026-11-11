@@ -138,7 +138,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     label: 'Slack Webhook URL',
     summary: 'Posts new high-severity reports and weekly digests to this Slack webhook.',
     howItWorks:
-      'When a report is classified at high severity or above (or via the weekly summary cron), Mushi sends a formatted Slack message to this URL. Leave blank to disable Slack delivery without affecting in-app notifications.',
+      'When a report is classified at high severity or above (or via the weekly summary cron), Mushi Mushi sends a formatted Slack message to this URL. Leave blank to disable Slack delivery without affecting in-app notifications.',
     default: { value: 'unset (Slack disabled)' },
     backend: {
       table: 'project_settings',
@@ -152,9 +152,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.sentry_dsn',
     label: 'Sentry DSN',
-    summary: 'Your app’s Sentry DSN, saved so Mushi knows this project reports crashes to Sentry.',
+    summary: 'Your app’s Sentry DSN, saved so Mushi Mushi knows this project reports crashes to Sentry.',
     howItWorks:
-      'Validated on save (a sentry.io host, or a self-hosted host the operator allows). Mushi does not send events to this DSN: it only reads it as a sign that Sentry is connected, on the Settings page, the portfolio view and the app recipe. Issue import, enrichment and resolve-on-merge use the org slug and auth token on the Sentry card instead.',
+      'Validated on save (a sentry.io host, or a self-hosted host the operator allows). Mushi Mushi does not send events to this DSN: it only reads it as a sign that Sentry is connected, on the Settings page, the portfolio view and the app recipe. Issue import, enrichment and resolve-on-merge use the org slug and auth token on the Sentry card instead.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',
@@ -171,7 +171,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.sentry_webhook_secret',
     label: 'Sentry Webhook Secret',
-    summary: 'Client Secret of the Sentry internal integration that sends issue, alert and user-feedback webhooks to Mushi.',
+    summary: 'Client Secret of the Sentry internal integration that sends issue, alert and user-feedback webhooks to Mushi Mushi.',
     howItWorks:
       'Stored in Vault. The Sentry webhook handler verifies the `Sentry-Hook-Signature` HMAC against this secret, requires a `Sentry-Hook-Timestamp` within 5 minutes, and rejects a `Request-ID` or body it already accepted. Mismatch → 401, the delivery is dropped. Copy it from Sentry → Settings → Developer Settings → your internal integration → Client Secret.',
     default: { value: 'unset (inbound disabled)' },
@@ -188,7 +188,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     id: 'settings.general.sentry_consume_user_feedback',
     label: 'Consume Sentry User Feedback',
     summary:
-      'When enabled, Sentry user-feedback submissions are mirrored into the Mushi report queue.',
+      'When enabled, Sentry user-feedback submissions are mirrored into the Mushi Mushi report queue.',
     howItWorks:
       'Drives the inbound webhook handler. With the toggle on, every Sentry user-feedback event creates a fresh report (deduplicated by Sentry event id). With it off, payloads are acknowledged but ignored — useful when you want webhook signing wired without yet doubling your queue volume.',
     default: { value: 'true' },
@@ -286,9 +286,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.fix_model',
     label: 'Fix model',
-    summary: "Which Claude model Mushi's own fix agent writes code fixes with.",
+    summary: "Which Claude model Mushi Mushi's own fix agent writes code fixes with.",
     howItWorks:
-      'When Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.',
+      'When Mushi Mushi drafts a fix itself (agent claude_code), it sends the report, the relevant files and your repo context to this model and turns its edits into a draft pull request. Sonnet 5.5 is the default. Haiku 5.5 costs a twentieth as much and suits small, local fixes; Opus 5.5 costs twice as much and suits hard, cross-file bugs. Cursor Cloud and GitHub cloud agents use their own model settings.',
     default: { value: 'claude-sonnet-5-5' },
     recommended: {
       value: "claude-opus-5-5",
@@ -313,9 +313,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     id: 'settings.general.agent_pr_review',
     label: 'Review cloud agent pull requests',
     summary:
-      'On by default. Claude Opus 5.5 reviews every pull request a cloud coding agent (Cursor, GitHub) opens as a fix, and a "hold" verdict stops Mushi from merging it until you override.',
+      'On by default. Claude Opus 5.5 reviews every pull request a cloud coding agent (Cursor, GitHub) opens as a fix, and a "hold" verdict stops Mushi Mushi from merging it until you override.',
     howItWorks:
-      'When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold; a project member can merge anyway from the console with a reason. New commits are reviewed again, and the last verdict applies until that review finishes. Without an Anthropic key the review is skipped and the fix shows "Review skipped". A review usually costs $0.05 to $0.20 on your key, at most about $0.90 with retries.',
+      'When a Cursor Cloud or GitHub cloud agent finishes with a pull request, Mushi Mushi sends the bug report, the pull request description, its CI state and the diff (up to about 100,000 characters; for a larger diff, the file list and the biggest changes) to Claude Opus 5.5 on your own Anthropic key. The review checks whether the change fixes the bug, what it breaks or removes, decisions it took on its own, whether its tests prove the fix, and security. It answers merge, fix first or hold, adds the result to the fix timeline and posts one comment on the pull request. Merging from the console, the CLI or merge_fix refuses a hold; a project member can merge anyway from the console with a reason. New commits are reviewed again, and the last verdict applies until that review finishes. Without an Anthropic key the review is skipped and the fix shows "Review skipped". A review usually costs $0.05 to $0.20 on your key, at most about $0.90 with retries.',
     default: { value: 'true (on; needs an Anthropic key)' },
     recommended: {
       value: "on",
@@ -344,7 +344,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
   {
     id: 'settings.general.stage1_confidence_threshold',
     label: 'Noise filter confidence',
-    summary: 'How confident Mushi must be that a report is spam or test noise before dropping it.',
+    summary: 'How confident Mushi Mushi must be that a report is spam or test noise before dropping it.',
     howItWorks:
       'Every inbound report runs through Stage 1 (the quick check model, Haiku 4.5 by default). If the model says "this is spam/test/noise" with confidence ≥ this threshold, the report is dropped before Stage 2 spends tokens on it. Higher = more strict (more reports survive to Stage 2, fewer false drops); lower = more aggressive culling (cheaper, slightly more false drops).',
     default: { value: '0.85', range: '0.50 – 0.99' },
@@ -383,7 +383,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     id: 'settings.general.fix_branch_template',
     label: 'Fix Branch Template',
     summary:
-      'Branch name pattern when Mushi opens a draft fix PR on GitHub.',
+      'Branch name pattern when Mushi Mushi opens a draft fix PR on GitHub.',
     howItWorks:
       'When auto-fix opens a PR, it names the branch from this pattern. Every name must look like `<type>/MUSHI-<reportId>-<words>`: a type (`bugfix/`, `feature/`, `hotfix/`, `refactor/`, `chore/`, `docs/`, `test/` or `ci/`), then `MUSHI-{reportId}-`, then lowercase words. After that you can use `{category}` (the report category), `{date}` (`YYYY-MM-DD`, UTC) and `{shortId}` (the first 8 characters of the report id). Leave it empty to use `bugfix/MUSHI-<reportId>-<summary words>`.',
     default: { value: 'bugfix/MUSHI-{reportId}-{category}' },
@@ -400,9 +400,9 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     id: 'settings.general.supabase_project_ref',
     label: 'Supabase project ref',
     summary:
-      'Links this Mushi project to your app\u2019s Supabase project so diagnoses can read its schema, advisors, edge functions and logs.',
+      'Links this Mushi Mushi project to your app\u2019s Supabase project so diagnoses can read its schema, advisors, edge functions and logs.',
     howItWorks:
-      'The ref is the 20-character id in `https://<ref>.supabase.co`. Mushi reads that one project with the Supabase access token you add under Settings \u2192 AI keys \u2192 Supabase, in read-only mode and with SELECT queries only. The token is checked against this ref, so save the ref first. Clearing the ref unlinks the project; the token stays in Vault until you remove it.',
+      'The ref is the 20-character id in `https://<ref>.supabase.co`. Mushi Mushi reads that one project with the Supabase access token you add under Settings \u2192 AI keys \u2192 Supabase, in read-only mode and with SELECT queries only. The token is checked against this ref, so save the ref first. Clearing the ref unlinks the project; the token stays in Vault until you remove it.',
     default: { value: 'Not linked' },
     backend: {
       table: 'project_settings',
@@ -422,7 +422,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     summary:
       'Your Anthropic key — used to read bugs in plain English and draft fixes. Stored encrypted; only a vault reference is saved in settings.',
     howItWorks:
-      'When set, bug reading and fix drafting bill your Anthropic account instead of platform credits. The key is stored encrypted in Supabase Vault — rotation is instant. When unset, Mushi falls back to the platform default (if your plan includes one). Powers fast-filter, classify-report, and fix-worker.',
+      'When set, bug reading and fix drafting bill your Anthropic account instead of platform credits. The key is stored encrypted in Supabase Vault — rotation is instant. When unset, Mushi Mushi falls back to the platform default (if your plan includes one). Powers fast-filter, classify-report, and fix-worker.',
     default: { value: 'unset (uses platform default)' },
     backend: {
       table: 'project_settings',
@@ -475,7 +475,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     id: 'settings.byok.openrouter_key',
     label: 'OpenRouter API key',
     summary:
-      'One key for many models. Mushi uses it as a backup after your OpenAI keys, and shows its remaining credits.',
+      'One key for many models. Mushi Mushi uses it as a backup after your OpenAI keys, and shows its remaining credits.',
     howItWorks:
       'Chat and embedding calls that would go to OpenAI try your OpenAI keys first, then your OpenRouter keys, with OpenRouter model names (`openai/gpt-5.4`). Speech-to-text and fine-tuning stay on OpenAI, which OpenRouter does not serve. "Test" reads the key from OpenRouter for free; the credits line comes from OpenRouter’s /api/v1/key.',
     default: { value: 'unset' },
@@ -495,7 +495,7 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     id: 'settings.firecrawl.api_key',
     label: 'Firecrawl API Key',
     summary:
-      'Your Firecrawl key — lets Mushi look up docs and release notes while reviewing a bug or drafting a fix.',
+      'Your Firecrawl key — lets Mushi Mushi look up docs and release notes while reviewing a bug or drafting a fix.',
     howItWorks:
       'When set, Research can crawl URLs during review; auto-fix pulls web snippets when local context is thin; a weekly cron checks dependency release notes. Stored encrypted in Vault. Leave unset to skip web research entirely.',
     default: { value: 'unset (web research disabled)' },
@@ -560,9 +560,9 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
     id: 'settings.firecrawl.known_issues_search',
     label: 'Search the web for known fixes',
     summary:
-      'Off by default. When on, Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.',
+      'Off by default. When on, Mushi Mushi sends the error message from each error report to Firecrawl to search GitHub and Stack Overflow for known fixes.',
     howItWorks:
-      "After a report is classified, Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as \"Others who hit this\". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.",
+      "After a report is classified, Mushi Mushi takes its error message (the Sentry error line or the first console error), removes IDs, URLs and long numbers, and sends what is left (plus the runtime name, such as node) to Firecrawl: its developer index of GitHub issues, pull requests, READMEs and docs first, then a search limited to github.com and stackoverflow.com. The top results appear on the report as \"Others who hit this\". It runs once per report and again when someone presses Search again, only for reports with a real exception, and needs a Firecrawl key (yours, or Mushi Mushi's shared one). The same setting lets a fix dispatch with little code context send the report summary (or the first 200 characters of its description) to find related fixes. About 2-5 Firecrawl credits per lookup.",
     default: { value: 'false (nothing is sent)' },
     recommended: {
       value: "off for apps whose error messages can hold personal data; on otherwise",
@@ -582,7 +582,7 @@ const SETTINGS_FIRECRAWL: ConfigDoc[] = [
       ],
     },
     whenToChange:
-      'Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi for a third party.',
+      'Turn it on when your error reports often come from libraries (Supabase, React Native, an AI SDK) and you are fine with Firecrawl receiving the scrubbed error text. Leave it off if no report text may leave Mushi Mushi for a third party.',
   },
 ];
 
@@ -749,7 +749,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     id: 'integrations.sentry.project_slug',
     label: 'Sentry project slug',
     summary:
-      'The specific Sentry project Mushi correlates against for stack traces and breadcrumbs.',
+      'The specific Sentry project Mushi Mushi correlates against for stack traces and breadcrumbs.',
     howItWorks:
       'Scopes the event search when enriching a report. Leave blank to search across all projects under the org (slower; recommended only for tiny orgs).',
     default: { value: 'unset (org-wide search)' },
@@ -766,7 +766,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     id: 'integrations.sentry.auto_import',
     label: 'Import new Sentry issues automatically',
     summary:
-      'Every 15 minutes, new unresolved Sentry issues in this app’s Sentry projects become Mushi reports. No Sentry webhook needed.',
+      'Every 15 minutes, new unresolved Sentry issues in this app’s Sentry projects become Mushi Mushi reports. No Sentry webhook needed.',
     howItWorks:
       'The Sentry poll searches each configured Sentry project for unresolved issues seen since its last run (with a 15-minute overlap) and imports them through the same path as “Import existing Sentry issues”: one report per Sentry issue, already-imported issues are linked, not duplicated. A report marked fixed or closed whose issue fires again is reopened. Each new report is triaged like any other.',
     default: { value: 'off' },
@@ -777,13 +777,13 @@ const INTEGRATIONS: ConfigDoc[] = [
       readBy: ['sentry-seer-poll edge function'],
     },
     whenToChange:
-      'Turn on when you have not set up a Sentry alert-rule webhook, or want new issues in Mushi without one. Leave off if every Sentry issue should not cost a triage.',
+      'Turn on when you have not set up a Sentry alert-rule webhook, or want new issues in Mushi Mushi without one. Leave off if every Sentry issue should not cost a triage.',
   },
   {
     id: 'integrations.sentry.auth_token',
     label: 'Sentry auth token',
     summary:
-      'Sentry token granting `project:read` + `event:read` (import, enrichment) and `event:write` (resolve the issue when a Mushi fix merges).',
+      'Sentry token granting `project:read` + `event:read` (import, enrichment) and `event:write` (resolve the issue when a Mushi Mushi fix merges).',
     howItWorks:
       'Stored as a vault reference (`vault://id`) — never in plaintext. Used to import existing issues, fetch the matching event payload for a report, and resolve linked Sentry issues when their fix PR merges.',
     default: { value: 'unset (enrichment disabled)' },
@@ -805,7 +805,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Langfuse host',
     summary: 'Base URL of your Langfuse instance — cloud or self-hosted.',
     howItWorks:
-      'Saved per project and checked by the integration health probe, which calls this host with the key pair. Mushi’s own LLM traces (Stage 1, Stage 2, fix-worker, judge) do not use it: they go to the deployment’s `LANGFUSE_*` environment settings.',
+      'Saved per project and checked by the integration health probe, which calls this host with the key pair. Mushi Mushi’s own LLM traces (Stage 1, Stage 2, fix-worker, judge) do not use it: they go to the deployment’s `LANGFUSE_*` environment settings.',
     default: { value: 'unset (falls back to the deployment’s LANGFUSE_BASE_URL on the card)' },
     backend: {
       table: 'project_settings',
@@ -817,14 +817,14 @@ const INTEGRATIONS: ConfigDoc[] = [
       ],
     },
     whenToChange:
-      'Set it when you want the Integrations page to check your own Langfuse project. It does not redirect Mushi’s LLM traces.',
+      'Set it when you want the Integrations page to check your own Langfuse project. It does not redirect Mushi Mushi’s LLM traces.',
   },
   {
     id: 'integrations.langfuse.public_key',
     label: 'Langfuse public key',
     summary: 'Pairs with the secret key for HTTP Basic auth against the Langfuse ingest endpoint.',
     howItWorks:
-      'Stored in Vault. The integration health probe sends it as the username of HTTP Basic auth when it checks your Langfuse host. Mushi’s own LLM traces use the deployment’s `LANGFUSE_PUBLIC_KEY`, not this.',
+      'Stored in Vault. The integration health probe sends it as the username of HTTP Basic auth when it checks your Langfuse host. Mushi Mushi’s own LLM traces use the deployment’s `LANGFUSE_PUBLIC_KEY`, not this.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',
@@ -839,7 +839,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Langfuse secret key',
     summary: 'Secret half of the Langfuse key pair the Integrations page checks your Langfuse project with.',
     howItWorks:
-      'Stored in Vault. The integration health probe sends it as the password of HTTP Basic auth when it checks your Langfuse host. Mushi’s own LLM traces use the deployment’s `LANGFUSE_SECRET_KEY`, not this.',
+      'Stored in Vault. The integration health probe sends it as the password of HTTP Basic auth when it checks your Langfuse host. Mushi Mushi’s own LLM traces use the deployment’s `LANGFUSE_SECRET_KEY`, not this.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',
@@ -863,7 +863,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       readBy: ['fix-worker edge function'],
     },
     whenToChange:
-      'Set when you graduate from "review only" to "Mushi opens PRs". Typically the production repo, not a sandbox.',
+      'Set when you graduate from "review only" to "Mushi Mushi opens PRs". Typically the production repo, not a sandbox.',
   },
   {
     id: 'integrations.github.default_branch',
@@ -903,7 +903,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'GitHub webhook secret',
     summary: 'HMAC secret that authenticates inbound check-run, check-suite and push webhooks from GitHub.',
     howItWorks:
-      "Mushi's webhook route (`POST /v1/webhooks/github`) verifies the `X-Hub-Signature-256` header against this secret. Without a match → 401, the event is dropped. The same value must be set in the GitHub repo Settings → Webhooks.",
+      "Mushi Mushi's webhook route (`POST /v1/webhooks/github`) verifies the `X-Hub-Signature-256` header against this secret. Without a match → 401, the event is dropped. The same value must be set in the GitHub repo Settings → Webhooks.",
     default: { value: 'unset (CI sync disabled)' },
     backend: {
       table: 'project_settings',
@@ -917,7 +917,7 @@ const INTEGRATIONS: ConfigDoc[] = [
   {
     id: 'integrations.cursor_cloud.api_key',
     label: 'Cursor API key',
-    summary: 'Cursor API key Mushi uses to start Cursor Cloud Agent runs that draft a fix PR.',
+    summary: 'Cursor API key Mushi Mushi uses to start Cursor Cloud Agent runs that draft a fix PR.',
     howItWorks:
       'Stored in Vault. When a fix is dispatched to the `cursor_cloud` agent, the fix-worker starts a Cursor Cloud Agent run with this key against the repo from the GitHub card, and the status poller uses it to follow the run. Skill-pipeline steps in cloud mode use it too. Connect GitHub first: Cursor needs the repo URL and token.',
     default: { value: 'unset (Cursor dispatch unavailable)' },
@@ -938,7 +938,7 @@ const INTEGRATIONS: ConfigDoc[] = [
   {
     id: 'integrations.cursor_cloud.default_model',
     label: 'Cursor default model',
-    summary: 'Cursor model slug for agent runs Mushi starts.',
+    summary: 'Cursor model slug for agent runs Mushi Mushi starts.',
     howItWorks:
       'Passed as the model on each Cursor Cloud Agent run. When empty, fix dispatches let Cursor use your account default, skill-pipeline steps use `composer-2.5`, and the story mapper sends `default`.',
     default: { value: 'composer-2.5 (database default)' },
@@ -959,7 +959,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     label: 'Cursor auto-create PRs',
     summary: 'Whether a Cursor agent run opens a draft PR by itself when it finishes.',
     howItWorks:
-      'Only skill-pipeline steps sent to Cursor read this setting. Fix dispatches from a report always ask Cursor to open the PR, because Mushi tracks the fix through that PR.',
+      'Only skill-pipeline steps sent to Cursor read this setting. Fix dispatches from a report always ask Cursor to open the PR, because Mushi Mushi tracks the fix through that PR.',
     default: { value: 'true' },
     backend: {
       table: 'project_settings',
@@ -972,9 +972,9 @@ const INTEGRATIONS: ConfigDoc[] = [
   {
     id: 'integrations.claude_code_agent.api_key',
     label: 'Claude Code agent: Anthropic API key',
-    summary: 'Anthropic key Mushi uses only to check that the Claude Code agent integration is healthy.',
+    summary: 'Anthropic key Mushi Mushi uses only to check that the Claude Code agent integration is healthy.',
     howItWorks:
-      'Stored in Vault. The integration health probe calls the Anthropic models list with it (no tokens used). The fix itself runs in your repo’s GitHub Actions workflow with the `ANTHROPIC_API_KEY` secret you add there; Mushi never sends this key to GitHub.',
+      'Stored in Vault. The integration health probe calls the Anthropic models list with it (no tokens used). The fix itself runs in your repo’s GitHub Actions workflow with the `ANTHROPIC_API_KEY` secret you add there; Mushi Mushi never sends this key to GitHub.',
     default: { value: 'unset' },
     backend: {
       table: 'project_settings',
@@ -1175,7 +1175,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       ],
     },
     whenToChange:
-      'Update when archiving and replacing the tracker — Mushi follows the new repo as soon as you save.',
+      'Update when archiving and replacing the tracker — Mushi Mushi follows the new repo as soon as you save.',
   },
   {
     id: 'integrations.routing.pagerduty.routing_key',
@@ -1183,7 +1183,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     summary:
       '32-character integration key for PagerDuty Events API v2 — pages on-call when severity = critical.',
     howItWorks:
-      'Mushi POSTs a v2 event payload with `event_action=trigger` and a fingerprint built from the report cluster id, so duplicate criticals dedupe instead of paging twice. Auto-resolves the incident when the linked report closes.',
+      'Mushi Mushi POSTs a v2 event payload with `event_action=trigger` and a fingerprint built from the report cluster id, so duplicate criticals dedupe instead of paging twice. Auto-resolves the incident when the linked report closes.',
     default: { value: 'unset' },
     backend: {
       table: 'project_integrations',
@@ -1223,7 +1223,7 @@ const STORAGE: ConfigDoc[] = [
     label: 'Bucket',
     summary: 'Name of the bucket the storage adapter writes artifacts into.',
     howItWorks:
-      'Must already exist on the chosen provider — Mushi never creates buckets implicitly (avoids accidental data scattering across regions). The IAM identity behind the credentials below needs `s3:PutObject` / `s3:GetObject` (or the equivalent) on this bucket.',
+      'Must already exist on the chosen provider — Mushi Mushi never creates buckets implicitly (avoids accidental data scattering across regions). The IAM identity behind the credentials below needs `s3:PutObject` / `s3:GetObject` (or the equivalent) on this bucket.',
     default: { value: 'unset' },
     backend: {
       table: 'project_storage_settings',
@@ -1274,7 +1274,7 @@ const STORAGE: ConfigDoc[] = [
     summary:
       'String prepended to every key the storage adapter writes — segments artifacts inside a shared bucket.',
     howItWorks:
-      'A trailing slash is added if missing. Useful when one bucket hosts multiple Mushi projects or coexists with other apps — set to `mushi/prod/` so your tooling can audit just the Mushi paths without confusing them with neighbours.',
+      'A trailing slash is added if missing. Useful when one bucket hosts multiple Mushi Mushi projects or coexists with other apps — set to `mushi/prod/` so your tooling can audit just the Mushi Mushi paths without confusing them with neighbours.',
     default: { value: 'empty (writes to bucket root)' },
     backend: {
       table: 'project_storage_settings',
@@ -1313,7 +1313,7 @@ const STORAGE: ConfigDoc[] = [
     id: 'storage.access_key_ref',
     label: 'Access key ID',
     summary:
-      'The access-key half of your bucket credentials. Paste the key itself; Mushi stores it in Supabase Vault, never in plain text.',
+      'The access-key half of your bucket credentials. Paste the key itself; Mushi Mushi stores it in Supabase Vault, never in plain text.',
     howItWorks:
       "On Save the server stores the raw key in Vault under the project's own Vault name (mushi/storage/<project>/access_key) and keeps only that name. The storage adapter reads the secret when it signs a request. A saved key is never shown again; paste a new one to replace it.",
     default: { value: 'unset' },
@@ -1366,7 +1366,7 @@ const COMPLIANCE: ConfigDoc[] = [
     summary:
       "Pins your project's data to a specific geographic region — `us`, `eu`, `jp`, or `self` (BYO storage).",
     howItWorks:
-      'On first set, Mushi pins the project to this region: a trigger copies it into `region_routing`, and the API’s region router sends that project’s requests to the matching regional deployment. It does not check where your storage bucket lives. Once pinned, change attempts return 409 with `code: REGION_LOCKED`. To migrate, open a support ticket so the data move can be audited.',
+      'On first set, Mushi Mushi pins the project to this region: a trigger copies it into `region_routing`, and the API’s region router sends that project’s requests to the matching regional deployment. It does not check where your storage bucket lives. Once pinned, change attempts return 409 with `code: REGION_LOCKED`. To migrate, open a support ticket so the data move can be audited.',
     default: { value: 'unpinned' },
     backend: {
       table: 'projects',
@@ -1507,7 +1507,7 @@ const COMPLIANCE: ConfigDoc[] = [
     label: 'DSAR subject email',
     summary: 'Email address of the data subject who asked for access, export, deletion or correction of their data.',
     howItWorks:
-      'Submitting records a DSAR (Data Subject Access Request) with this email and the request type (access, export, deletion or rectification), status `pending`, and writes an audit log entry. Mushi does not search, export or delete anything for you: your team fulfils the request, then marks it in progress, completed (with an evidence link) or rejected. The SOC 2 evidence check fails while any request stays pending for more than 30 days.',
+      'Submitting records a DSAR (Data Subject Access Request) with this email and the request type (access, export, deletion or rectification), status `pending`, and writes an audit log entry. Mushi Mushi does not search, export or delete anything for you: your team fulfils the request, then marks it in progress, completed (with an evidence link) or rejected. The SOC 2 evidence check fails while any request stays pending for more than 30 days.',
     default: { value: 'unset' },
     backend: {
       table: 'data_subject_requests',
@@ -1530,7 +1530,7 @@ const SSO: ConfigDoc[] = [
     summary:
       'Which federation protocol the IdP speaks — `saml` (self-service) or `oidc` (audit-only — manual setup required).',
     howItWorks:
-      "Decides how the config is registered. SAML is fully self-service: Mushi calls the Supabase Auth (GoTrue) Admin API to register the provider and stores the ACS URL + Entity ID it returns. Supabase Auth then handles the SAML sign-in itself; Mushi has no SSO callback of its own. OIDC is stored for audit but Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.",
+      "Decides how the config is registered. SAML is fully self-service: Mushi Mushi calls the Supabase Auth (GoTrue) Admin API to register the provider and stores the ACS URL + Entity ID it returns. Supabase Auth then handles the SAML sign-in itself; Mushi Mushi has no SSO callback of its own. OIDC is stored for audit but Mushi Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.",
     default: { value: 'saml' },
     backend: {
       table: 'enterprise_sso_configs',
@@ -1546,7 +1546,7 @@ const SSO: ConfigDoc[] = [
     label: 'IdP metadata URL',
     summary: "URL of the IdP's SAML metadata (certificates, endpoints, assertion shape).",
     howItWorks:
-      'Mushi passes it to the Supabase Auth Admin API when it registers the SAML provider; Supabase Auth fetches and parses the metadata. Mushi keeps the URL on the config row for display and audit. SAML needs either this URL or pasted metadata XML.',
+      'Mushi Mushi passes it to the Supabase Auth Admin API when it registers the SAML provider; Supabase Auth fetches and parses the metadata. Mushi Mushi keeps the URL on the config row for display and audit. SAML needs either this URL or pasted metadata XML.',
     default: { value: 'unset' },
     backend: {
       table: 'enterprise_sso_configs',
@@ -1555,15 +1555,15 @@ const SSO: ConfigDoc[] = [
       readBy: ['api edge function (POST /v1/admin/sso → Supabase Auth Admin API)', 'api edge function (GET /v1/admin/sso)'],
     },
     whenToChange:
-      'Update when migrating IdPs (Okta → Entra, etc.). Verify the new metadata URL is reachable from your Mushi region before flipping.',
+      'Update when migrating IdPs (Okta → Entra, etc.). Verify the new metadata URL is reachable from your Mushi Mushi region before flipping.',
   },
   {
     id: 'sso.entity_id',
     label: 'Entity ID',
     summary:
-      'Unique identifier for this Mushi project as seen by the IdP — also called the audience.',
+      'Unique identifier for this Mushi Mushi project as seen by the IdP — also called the audience.',
     howItWorks:
-      'For SAML, Mushi replaces what you type with the Entity ID Supabase Auth reports after registering the provider; that is the value to enter as the audience in your IdP. For OIDC the column holds the client ID. Mushi only displays it; Supabase Auth checks assertions.',
+      'For SAML, Mushi Mushi replaces what you type with the Entity ID Supabase Auth reports after registering the provider; that is the value to enter as the audience in your IdP. For OIDC the column holds the client ID. Mushi Mushi only displays it; Supabase Auth checks assertions.',
     default: { value: 'unset' },
     backend: {
       table: 'enterprise_sso_configs',
@@ -1579,7 +1579,7 @@ const SSO: ConfigDoc[] = [
     label: 'SSO email domains',
     summary: 'Comma-separated email domains routed to this SSO provider (`acme.com, acme.co.jp`).',
     howItWorks:
-      'Sent to the Supabase Auth Admin API with the SAML provider, so Supabase Auth can pick this provider when an SSO sign-in starts from one of these email domains. The Mushi console sign-in page does not offer SSO sign-in by domain yet, and there is no "SSO required" switch.',
+      'Sent to the Supabase Auth Admin API with the SAML provider, so Supabase Auth can pick this provider when an SSO sign-in starts from one of these email domains. The Mushi Mushi console sign-in page does not offer SSO sign-in by domain yet, and there is no "SSO required" switch.',
     default: { value: 'unset' },
     backend: {
       table: 'enterprise_sso_configs',
@@ -1675,7 +1675,7 @@ const MARKETPLACE: ConfigDoc[] = [
   {
     id: 'marketplace.plugin_webhook_url',
     label: 'Plugin webhook URL',
-    summary: 'Where Mushi POSTs subscribed plugin events — your endpoint receives them.',
+    summary: 'Where Mushi Mushi POSTs subscribed plugin events — your endpoint receives them.',
     howItWorks:
       'Every subscribed event fires a signed JSON POST against this URL (public https only). A failed delivery is retried by a per-minute cron, up to 5 attempts in all, with exponential backoff starting at 30 seconds; after the last one the plugin’s last delivery status turns to `error` and the operator is alerted.',
     default: { value: 'unset (plugin disabled)' },
@@ -1696,7 +1696,7 @@ const MARKETPLACE: ConfigDoc[] = [
     label: 'Plugin signing secret',
     summary: 'HMAC secret your plugin verifies on every inbound event so it can trust the payload.',
     howItWorks:
-      'The API requires a secret whenever a webhook URL is set and stores it in Vault; the console pre-fills the field with a random 64-character hex value you can copy or replace. Mushi signs every event with `X-Mushi-Signature: t=<ms>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">` and also sends Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`). Your plugin recomputes the HMAC with this secret; mismatch = drop the event.',
+      'The API requires a secret whenever a webhook URL is set and stores it in Vault; the console pre-fills the field with a random 64-character hex value you can copy or replace. Mushi Mushi signs every event with `X-Mushi-Signature: t=<ms>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">` and also sends Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`). Your plugin recomputes the HMAC with this secret; mismatch = drop the event.',
     default: { value: 'random value pre-filled by the console (the API requires one; it never generates it)' },
     backend: {
       table: 'project_plugins',
@@ -1827,7 +1827,7 @@ const BILLING: ConfigDoc[] = [
     label: 'Plan',
     summary: 'Subscription tier — determines the included LLM credits, MAU cap, and feature gates.',
     howItWorks:
-      'Plan changes go through Stripe Checkout / Customer Portal — Mushi mirrors the new plan id back via webhook. Downgrades are queued to the end of the current period; upgrades take effect immediately and are pro-rated.',
+      'Plan changes go through Stripe Checkout / Customer Portal — Mushi Mushi mirrors the new plan id back via webhook. Downgrades are queued to the end of the current period; upgrades take effect immediately and are pro-rated.',
     default: { value: 'free' },
     backend: {
       table: 'billing_subscriptions',
@@ -1878,9 +1878,9 @@ const BILLING: ConfigDoc[] = [
   {
     id: 'billing.support_subject',
     label: 'Support subject',
-    summary: 'One-line summary of your support request — the title of the ticket the Mushi team sees.',
+    summary: 'One-line summary of your support request — the title of the ticket the Mushi Mushi team sees.',
     howItWorks:
-      'The contact route (`POST /v1/support/contact` on the api edge function) saves a row in `support_tickets` and posts the subject and the start of the body to the Mushi operators’ Slack or Discord alert channel. You can send at most 5 tickets an hour. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn\'t bounce it back asking for clarification.',
+      'The contact route (`POST /v1/support/contact` on the api edge function) saves a row in `support_tickets` and posts the subject and the start of the body to the Mushi Mushi operators’ Slack or Discord alert channel. You can send at most 5 tickets an hour. Keep it specific (`"Refund for May overage — invoice 1234"`) so support doesn\'t bounce it back asking for clarification.',
     default: { value: 'empty', range: '3 – 200 characters' },
     backend: {
       table: 'support_tickets',
@@ -1969,7 +1969,7 @@ const MCP: ConfigDoc[] = [
     summary:
       'Picks which install snippet you copy — `mcp.json` (Claude Desktop / Cursor) vs `.env.local` (custom MCP host).',
     howItWorks:
-      'Pure UI toggle. The first mode emits a `~/.cursor/mcp.json` block that registers the Mushi MCP server with stdio transport. The second emits an env-var preamble for hosts that read MCP config via env (some self-hosted Claude Desktop forks).',
+      'Pure UI toggle. The first mode emits a `~/.cursor/mcp.json` block that registers the Mushi Mushi MCP server with stdio transport. The second emits an env-var preamble for hosts that read MCP config via env (some self-hosted Claude Desktop forks).',
     default: { value: 'mcp.json' },
     whenToChange:
       "Use `mcp.json` for off-the-shelf clients. Switch to `.env.local` only if your MCP host doesn't parse `mcp.json` natively.",
@@ -1986,13 +1986,13 @@ const SDK_INSTALL: ConfigDoc[] = [
       "Drives the live preview and the generated `Mushi.init({ widget: { position: '…' }})` call. The widget mounts in a shadow DOM, so the position is independent of the host app's CSS.",
     default: { value: 'bottom-right' },
     whenToChange:
-      "Pick the corner that doesn't collide with your existing chrome (chat bubbles usually live bottom-right, so move Mushi to bottom-left if so).",
+      "Pick the corner that doesn't collide with your existing chrome (chat bubbles usually live bottom-right, so move Mushi Mushi to bottom-left if so).",
   },
   {
     id: 'sdk-install.trigger_mode',
     label: 'Trigger mode',
     summary:
-      'Controls whether Mushi injects its own launcher, pins a slim header banner, attaches to your button, or stays programmatic-only.',
+      'Controls whether Mushi Mushi injects its own launcher, pins a slim header banner, attaches to your button, or stays programmatic-only.',
     howItWorks:
       'Five modes: `banner` (recommended) renders a slim 36 px strip pinned to the top or bottom of the viewport — less obtrusive than a FAB and never competes with bottom navigation. `auto` shows the stamp button on desktop and the edge tab on phones (768 px wide or less). `edge-tab` is a 22×48 px tab flush with the screen edge (44 px tap area) that visitors can drag along the edge. Both lift above fixed bottom bars, fade while the page scrolls, and offer "Hide the bug button for this visit" in the panel. `attach` hides the default button and binds to `attachToSelector`. `manual` / `hidden` render no launcher — call `Mushi.open()` programmatically. The banner\'s body padding is adjusted automatically on mount and removed on dismiss, sdk.hide(), route suppression, or destroy().',
     default: { value: 'auto' },
@@ -2157,7 +2157,7 @@ const SDK_INSTALL: ConfigDoc[] = [
     summary:
       'Where a key is used: all your apps (universal), every app in this organization, or this app only. New keys default to all your apps.',
     howItWorks:
-      "All my apps: one key for every app in every organization you own, so you add it once even when your apps live in several organizations. It reaches only organizations where you are an owner, never one you only administer or belong to, and only you can change or remove it. This organization: every app in it; owners and admins manage it. This app only: nothing else uses it. Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, its owners' all-apps keys (by priority when an organization has several owners), then Mushi's own key. Change a key's scope from its row; each change is recorded in the key audit log. Supabase access tokens always stay with one app.",
+      "All my apps: one key for every app in every organization you own, so you add it once even when your apps live in several organizations. It reaches only organizations where you are an owner, never one you only administer or belong to, and only you can change or remove it. This organization: every app in it; owners and admins manage it. This app only: nothing else uses it. Each app tries its keys in this order: its own key, its old single key from before key pools, its organization's key, its owners' all-apps keys (by priority when an organization has several owners), then Mushi Mushi's own key. Change a key's scope from its row; each change is recorded in the key audit log. Supabase access tokens always stay with one app.",
     default: { value: 'All my apps (when you own this app’s organization); otherwise this organization for owners and admins, else this app' },
     backend: {
       table: 'byok_keys',
@@ -2176,7 +2176,7 @@ const SDK_INSTALL: ConfigDoc[] = [
     id: 'byok.spend_down',
     label: 'Spend down expiring credits',
     summary:
-      "Before a Cursor key's credits expire, Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.",
+      "Before a Cursor key's credits expire, Mushi Mushi sends open bugs to Cursor on its own so the credits fix something instead of lapsing.",
     howItWorks:
       "From the start date (the expiry minus the days you pick) until the expiry, the spend-down worker runs every 10 minutes. It picks the apps this key already pays for (its own app, or for a shared key every app without a Cursor key of its own), takes the open reports not tried in the last week, best first by severity, judge score and a named component, and dispatches them as automatic Cursor fixes. It stops at your fixes-per-day number, at three fixes running per app, and at each app's auto-fix limits. It also pauses an app whose spend reliably is not producing mergeable work: looking at its spend-down runs of the last 14 days, with at least 20 to go on, its Opus \"merge\" rate is clearly under 20%, its \"hold\" rate clearly over 35%, or clearly over half its runs end without a pull request. A paused app still gets one fix a day as a probe. It resumes when newer runs bring it back above 25% merge, under 30% hold and under 45% without a pull request, when two probes in a row get \"merge\", when the old runs pass 14 days, or when an owner or admin presses Resume. Every fix opens a draft pull request; nothing merges. The section shows what the last 7 days bought: runs, pull requests, mergeable, merged, and the Opus review cost (the latest review of each pull request). When every app has nothing left to send (each open report was tried in the last week or the agent said it needs a person), the section says so and links to the reports, the live-site watch and QA stories, where new work comes from.",
     default: { value: 'off; 10 fixes a day; starts 14 days before expiry' },
@@ -2197,9 +2197,9 @@ const SDK_INSTALL: ConfigDoc[] = [
     id: 'byok.review_followups',
     label: 'Review follow-ups',
     summary:
-      'When the Opus review of an agent\'s pull request says "fix first", Mushi sends it back to a new Cursor agent once with the review\'s findings, and Opus reviews the push.',
+      'When the Opus review of an agent\'s pull request says "fix first", Mushi Mushi sends it back to a new Cursor agent once with the review\'s findings, and Opus reviews the push.',
     howItWorks:
-      'Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi cloud agent opened (never a person\'s pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request\'s branch with the report\'s summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app\'s auto-fix is off. Each follow-up counts against the app\'s auto-fix daily limit and the organization\'s follow-ups per day. Before each one, the model is checked against the Cursor key\'s model list (read at most once an hour); a model the key cannot run waits instead of dispatching. "Last round model" (optional) runs a pull request\'s second follow-up, the one that happens only after the first did not satisfy the reviewer, on a stronger model such as Opus while the first stays on the cheaper one. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.',
+      'Off until an organization owner or admin turns it on; turning it on also picks up the last 3 days of "fix first" reviews. Every 10 minutes the review-followup worker looks for "fix first" reviews of the latest commit of pull requests a Mushi Mushi cloud agent opened (never a person\'s pull request, a fork, or a branch the agent did not create). For each, it starts a new Cursor agent on that pull request\'s branch with the report\'s summary and diagnosis and every finding about a file the pull request changed (findings that read as instructions to the agent, or whose fix carries a foreign URL or a shell command, are never sent), asking it to fix exactly those, add or adjust tests, run them and push to the same branch, or to explain why a finding is wrong. One follow-up per reviewed commit and two per pull request; never on a "hold" (that needs a person) or a "merge"; never on a closed or merged pull request; never when the app\'s auto-fix is off. Each follow-up counts against the app\'s auto-fix daily limit and the organization\'s follow-ups per day. Before each one, the model is checked against the Cursor key\'s model list (read at most once an hour); a model the key cannot run waits instead of dispatching. "Last round model" (optional) runs a pull request\'s second follow-up, the one that happens only after the first did not satisfy the reviewer, on a stronger model such as Opus while the first stays on the cheaper one. When the agent pushes, Opus reviews the new commit, and the scoreboard shows the verdict after.',
     default: { value: 'off; the key and model each app\'s fixes use; 30 a day', range: '1-200 a day' },
     backend: {
       table: 'organizations',

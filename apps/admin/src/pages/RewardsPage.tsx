@@ -115,7 +115,7 @@ export function RewardsPage() {
         icon={<IconRewards />}
         description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
         helpTitle="About tester rewards"
-        helpWhatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
+        helpWhatIsIt="The Rewards program tracks user activity via the Mushi Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
         helpUseCases={[
           'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
           'Reward power users with monetary payments (via Stripe Connect) at the Champion tier',

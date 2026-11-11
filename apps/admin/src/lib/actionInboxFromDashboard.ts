@@ -49,7 +49,7 @@ function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
     return {
       tone: 'plan',
       title: 'No quality scores yet — run a first check',
-      reason: 'Mushi grades its own bug triage so you can trust the severity labels. One click starts the first check.',
+      reason: 'Mushi Mushi grades its own bug triage so you can trust the severity labels. One click starts the first check.',
       primary: { kind: 'link', to: '/judge?action=run', label: 'Run quality check' },
     }
   }

@@ -83,7 +83,7 @@ export function SpendLimitsPanel() {
       <SettingsList
         id="spend-limits"
         title="Spend limits"
-        description="Caps on what this project spends. Mushi stops when a limit is reached and says why on the report or fix."
+        description="Caps on what this project spends. Mushi Mushi stops when a limit is reached and says why on the report or fix."
       >
           {SPEND_LIMITS.map((m) => (
             <SettingsRow key={m.field} icon={<IconCost size={16} />} title={m.label} purpose={m.help}>

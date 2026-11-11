@@ -31,7 +31,7 @@ export const FIX_LIFECYCLE_STAGES: FixLifecycleStageDefinition[] = [
   {
     id: 'merge',
     label: 'Merge & close',
-    plain: 'Squash-merge the PR from Fixes or GitHub. Mushi marks the report Fixed and notifies the reporter.',
+    plain: 'Squash-merge the PR from Fixes or GitHub. Mushi Mushi marks the report Fixed and notifies the reporter.',
     clearsWhen: 'Report status → fixed.',
   },
 ]

@@ -97,7 +97,7 @@ export function ActivityPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Sessions appear once the Mushi SDK is installed and users visit instrumented pages. Use Connect if the empty state persists.'
+          'Sessions appear once the Mushi Mushi SDK is installed and users visit instrumented pages. Use Connect if the empty state persists.'
         }
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
@@ -248,7 +248,7 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">No sessions recorded yet</p>
           <p className="mt-1 text-xs">
-            Once users visit pages with the Mushi SDK installed, sessions will appear here.{' '}
+            Once users visit pages with the Mushi Mushi SDK installed, sessions will appear here.{' '}
             <Link to="/connect" className="text-brand hover:underline">
               Check your SDK setup →
             </Link>

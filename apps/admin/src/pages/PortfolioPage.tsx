@@ -125,8 +125,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         title="Apps"
         description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
         helpTitle="About apps"
-        helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
-        helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
+        helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
+        helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
         helpFlowPath="/portfolio"
       >
         <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
@@ -146,7 +146,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 tone={status.tone}
                 ariaLabel="Apps status"
                 metrics={[
-                  { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi setup chores do not count.' },
+                  { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
                   { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
                   { label: 'Fix once', value: page.data.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
                 ]}
@@ -368,11 +368,11 @@ function FindingsSections({ findings, names }: { findings: PageDataState<Portfol
           </ul>
         </Section>
       )}
-      <Section title="Mushi SDK versions">
+      <Section title="Mushi Mushi SDK versions">
         {sdkFailed ? (
           <p className="text-sm text-danger" role="status">{sdkFailed.message}</p>
         ) : behind.length === 0 ? (
-          <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi SDK.</p>
+          <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi Mushi SDK.</p>
         ) : (
           <ul className="flex flex-col gap-1 text-sm">
             {behind.map((e) => (

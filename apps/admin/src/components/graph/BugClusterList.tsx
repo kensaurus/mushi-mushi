@@ -46,7 +46,7 @@ export function BugClusterList() {
         <p className="text-xs text-fg-muted">Reading the clusters…</p>
       ) : clusters.length === 0 ? (
         <p className="text-xs text-fg-muted" data-testid="graph-clusters-empty">
-          No two bugs share a cause yet. Mushi groups reports with the same root cause as they are diagnosed.
+          No two bugs share a cause yet. Mushi Mushi groups reports with the same root cause as they are diagnosed.
         </p>
       ) : (
         <ul className="divide-y divide-edge-subtle" data-testid="graph-clusters">

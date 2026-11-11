@@ -67,8 +67,8 @@ export function fixesMeter(stats: Pick<BillingStats, 'fixesSucceeded' | 'fixesAt
     tone: 'neutral',
     detail:
       byServer > 0
-        ? `${byServer.toLocaleString()} started by Mushi's server agent this period`
-        : 'Fix PRs from Mushi merged this period, from any agent',
+        ? `${byServer.toLocaleString()} started by Mushi Mushi's server agent this period`
+        : 'Fix PRs from Mushi Mushi merged this period, from any agent',
     to: '/fixes',
   }
 }
