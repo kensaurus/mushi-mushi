@@ -267,13 +267,12 @@ describe('installCommand', () => {
 describe('windowsShim', () => {
   it('runs the package manager through cmd.exe on Windows only, with the same arguments', () => {
     const cmd: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
-    expect(windowsShim(cmd, 'linux', undefined)).toEqual(cmd)
-    expect(windowsShim(cmd, 'darwin', 'ignored')).toEqual(cmd)
-    expect(windowsShim(cmd, 'win32', 'C:\Windows\system32\cmd.exe')).toEqual([
-      'C:\Windows\system32\cmd.exe',
+    expect(windowsShim(cmd, 'linux')).toEqual(cmd)
+    expect(windowsShim(cmd, 'darwin')).toEqual(cmd)
+    expect(windowsShim(cmd, 'win32')).toEqual([
+      'cmd.exe',
       ['/d', '/s', '/c', 'pnpm', 'install', '--frozen-lockfile', '--prefer-offline'],
     ])
-    expect(windowsShim(cmd, 'win32', undefined)[0]).toBe('cmd.exe')
   })
 })
 

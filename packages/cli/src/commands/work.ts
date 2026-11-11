@@ -1020,7 +1020,7 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const [bin, args] = windowsShim(cmd, process.platform, process.env.ComSpec)
+  const [bin, args] = windowsShim(cmd, process.platform)
   let r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
   if (r.code !== 0) r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
   if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
@@ -1033,9 +1033,9 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
  * (2026-11-11). Run them through cmd.exe there. The arguments are the fixed
  * ones from installCommand, never user input.
  */
-export function windowsShim(cmd: [string, string[]], platform: NodeJS.Platform, comSpec: string | undefined): [string, string[]] {
+export function windowsShim(cmd: [string, string[]], platform: NodeJS.Platform): [string, string[]] {
   if (platform !== 'win32') return cmd
-  return [comSpec || 'cmd.exe', ['/d', '/s', '/c', cmd[0], ...cmd[1]]]
+  return ['cmd.exe', ['/d', '/s', '/c', cmd[0], ...cmd[1]]]
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
