@@ -237,6 +237,12 @@ export const QaStoryRunnerBodySchema = z
     trigger: z.string().optional(),
     story_id: z.string().uuid('story_id must be a UUID').optional(),
     run_id: z.string().uuid('run_id must be a UUID').optional(),
+    // The pg_cron minute that found a story due (qa-story-runner-tick sends
+    // date_trunc('minute', now())); schedules are matched against it so a
+    // call delivered late still runs the stories of its own minute. Kept a
+    // plain string: an unreadable tick is ignored, never a 400 that drops
+    // the tick's runs.
+    tick: z.string().max(64).optional(),
   })
   .passthrough()
 

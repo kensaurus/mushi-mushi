@@ -66,6 +66,33 @@ describe('per-minute edge crons fire only when there is work', () => {
     expect(started).toBeGreaterThan(idle)
   })
 
+  it('the QA tick checks and sends one minute, and the runner matches against it', async () => {
+    const tickSql = migration('20261111094933_qa_story_runner_tick_minute.sql')
+    expect(tickSql).toContain("jsonb_build_object('trigger', 'cron', 'tick', date_trunc('minute', now()))")
+    expect(tickSql).toContain("where mushi.qa_story_runner_has_work(date_trunc('minute', now()));")
+    expect(fn('qa-story-runner/index.ts')).toContain('const matchAt = cronTickTime(body.tick, now)')
+    expect(fn('qa-story-runner/index.ts')).toContain("cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)")
+
+    const { cronTickTime } = await import('../../supabase/functions/qa-story-runner/cron-tick.ts')
+    const now = new Date('2026-11-11T09:50:20Z')
+    // Delivered 80 s late: still the minute pg_cron checked.
+    expect(cronTickTime('2026-11-11T09:49:00+00:00', now).toISOString()).toBe('2026-11-11T09:49:00.000Z')
+    // Missing, unreadable, too old or too far ahead: the arrival time.
+    expect(cronTickTime(undefined, now)).toBe(now)
+    expect(cronTickTime('not a time', now)).toBe(now)
+    expect(cronTickTime('2026-11-11T09:30:00Z', now)).toBe(now)
+    expect(cronTickTime('2026-11-11T09:55:00Z', now)).toBe(now)
+  })
+
+  it('the Health page does not call a gated job stale on a quiet day', () => {
+    const health = fn('api/routes/health.ts')
+    expect(health).toMatch(/ON_DEMAND_JOBS = new Set\(\['plugin-dispatch-retry', 'qa-story-runner'\]\)/)
+    expect(health).toMatch(/staleness = ON_DEMAND_JOBS\.has\(job\)\s*\?\s*'ok'/)
+    // The cron_runs job names the gated functions record.
+    expect(fn('plugin-dispatch-retry/index.ts')).toContain("startCronRun(db, 'plugin-dispatch-retry', 'cron')")
+    expect(fn('qa-story-runner/index.ts')).toContain("startCronRun(db, 'qa-story-runner', 'cron')")
+  })
+
   it('the work checks are not callable from the API', () => {
     expect(sql).toContain('revoke all on function mushi.qa_story_runner_has_work(timestamptz) from public, anon, authenticated;')
     expect(sql).toContain('revoke all on function mushi.plugin_dispatch_retry_has_work() from public, anon, authenticated;')

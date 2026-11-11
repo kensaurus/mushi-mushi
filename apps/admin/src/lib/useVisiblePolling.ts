@@ -9,13 +9,20 @@
  * Health page). A hidden tab does no work.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function useVisiblePolling(reload: () => void, ms: number): void {
+  // Latest callback without restarting the timer: a page whose reload
+  // callback changes on every render would otherwise reset the interval each
+  // time and could never reach `ms` (same reason as realtime.ts's handlerRef).
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+
   useEffect(() => {
     let id: number | null = null
+    const tick = () => reloadRef.current()
     const start = () => {
-      if (id == null) id = window.setInterval(reload, ms)
+      if (id == null) id = window.setInterval(tick, ms)
     }
     const stop = () => {
       if (id != null) window.clearInterval(id)
@@ -23,7 +30,7 @@ export function useVisiblePolling(reload: () => void, ms: number): void {
     }
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        reload()
+        tick()
         start()
       } else stop()
     }
@@ -33,5 +40,5 @@ export function useVisiblePolling(reload: () => void, ms: number): void {
       stop()
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [reload, ms])
+  }, [ms])
 }

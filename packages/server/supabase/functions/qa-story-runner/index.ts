@@ -54,6 +54,7 @@ import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotifi
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
+import { cronTickTime } from './cron-tick.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -747,8 +748,12 @@ Deno.serve(
       return new Response('Internal error', { status: 500 })
     }
 
+    // Match schedules against the minute pg_cron checked, not the arrival
+    // time: the tick only calls when a story is due that minute, so a call
+    // pg_net delivers a minute late must not miss it.
+    const matchAt = cronTickTime(body.tick, now)
     const dueStories = (stories ?? []).filter((s: QaStory) =>
-      cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
+      cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)
     )
 
     // Nothing due this minute: answer before writing a cron_runs row. The
