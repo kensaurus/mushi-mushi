@@ -93,11 +93,11 @@ export const PRICING_TIER_CTAS: Readonly<Record<string, PricingTierCta>> = {
 }
 
 export const CLOUD_INTRO = {
-  lead: 'Mushi Mushi Cloud at kensaur.us/mushi-mushi is the hosted version. It runs the same code as the public repo, including the source-available enterprise folder. We run it; you pay by the number of apps, with a diagnosis allowance for each app you upgrade.',
+  lead: 'Mushi Mushi Cloud at kensaur.us/mushi-mushi is the hosted version. It runs the same code as the public repo, including the source-available enterprise folder. We run it; you pay by the number of apps, with one diagnosis allowance shared by your whole team.',
   diagnosisNote:
     'A diagnosis = one finished plain-English root cause written to your queue. Filtered noise and deduplicated groups do not count.',
   meteredWhy:
-    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for each upgraded app. Duplicate reports collapse, so you pay once per root cause.',
+    'A plan sets how many apps your team can have; diagnoses are the allowance under it. Free covers one app and 100 diagnoses a month, Builder three apps, Studio ten. Bug signals are bursty, so past the allowance each diagnosis is a few cents, with a monthly overage cap you set for the team. Duplicate reports collapse, so you pay once per root cause.',
 } as const
 
 export const CONNECT_SKILLS = {
@@ -197,7 +197,7 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
       'Three apps, plugins from the marketplace, usage alerts and an audit log; then $0.03/diagnosis with a $50 overage cap you set',
     cloudNotes:
       'Three apps, plugin marketplace, usage alerts, email support; $0.03 per extra diagnosis',
-    plain: 'Up to 3 apps. 1,000 bugs explained a month on the app you upgrade. Adds plugins, usage alerts and email support.',
+    plain: 'Up to 3 apps. 1,000 bugs explained a month, shared by every app in your team. Adds plugins, usage alerts and email support.',
   },
   {
     id: 'pro',
@@ -216,13 +216,13 @@ export const PRICING_TIERS: readonly PricingTierRow[] = [
     // teams, shared_views and intelligence_reports (the weekly report).
     // Your own AI key is on every plan (pricing_plans.feature_flags.byok,
     // migration 20261028180000), so no row lists it as a plan feature.
-    // A subscription is attached to one app (billing_subscriptions.project_id;
-    // _shared/quota.ts resolves the diagnosis allowance from that app's own
-    // row), so the plan's diagnoses belong to the upgraded app. The app limit,
-    // seats, retention and plugins resolve per organization.
+    // A subscription belongs to the team (billing_subscriptions.organization_id;
+    // _shared/org-billing.ts resolves every plan limit per organization and
+    // _shared/quota.ts counts diagnoses across the team's apps), so the plan's
+    // diagnoses, app limit, seats, retention and plugins are all the team's.
     cloudNotes:
       'Ten apps, 5 seats, weekly report, shared views; $0.03 per extra diagnosis',
-    plain: 'Up to 10 apps and 5 people on your team. 3,000 bugs explained a month on the app you upgrade, with a weekly report.',
+    plain: 'Up to 10 apps and 5 people on your team. 3,000 bugs explained a month, shared by every app, with a weekly report.',
   },
   {
     id: 'enterprise',

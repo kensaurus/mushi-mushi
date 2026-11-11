@@ -34,6 +34,7 @@ import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts'
 import { jsonError, resolveAccessibleOrg } from '../shared.ts'
 import { canManageProjectSdkConfig } from '../helpers.ts'
 import { organizationHasPlanFeature } from '../../_shared/entitlements.ts'
+import { resolveOrgPlan } from '../../_shared/org-billing.ts'
 import { leaderboardSearchTerm, plainIssues, rewardsWriteDenial } from '../../_shared/rewards-admin.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
 import { awardPointsForEndUser, basePointsFor, invalidateRuleCache } from '../../_shared/reputation.ts'
@@ -661,14 +662,10 @@ export function registerRewardsRoutes(app: Hono<{ Variables: Variables }>): void
     const organizationId = await getOrgIdForProject(db, projectId)
     if (!organizationId) return c.json({ ok: false, error: { code: 'NO_ORG' } }, 422)
 
-    // Verify the org's plan allows monetary rewards (enterprise only)
-    const { data: org } = await db
-      .from('organizations')
-      .select('id, billing_subscriptions(plan_id)')
-      .eq('id', organizationId)
-      .single() as { data: { id: string; billing_subscriptions: Array<{ plan_id: string }> } | null }
-
-    const planId = org?.billing_subscriptions?.[0]?.plan_id ?? 'hobby'
+    // Verify the org's plan allows monetary rewards (enterprise only). The
+    // team's plan from the shared resolver: the old embedded read took any
+    // subscription row, canceled ones included.
+    const planId = (await resolveOrgPlan(db, organizationId)).id
     if (planId !== 'enterprise') {
       return c.json({
         ok: false,

@@ -156,6 +156,9 @@ export function ProjectBillingCard({
               Period ends <RelativeTime value={project.subscription.current_period_end} />
             </InlineProof>
           )}
+          <p className="mt-1 text-2xs text-fg-muted">
+            Team plan: it covers every app in this team, and the diagnoses and spend cap are shared.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {purchasable.length > 0 && !isComplimentary && (
@@ -163,7 +166,7 @@ export function ProjectBillingCard({
               onClick={onTogglePicker}
               disabled={actioning?.startsWith(`checkout:${project.project_id}`) ?? false}
             >
-              {pickerOpen ? 'Hide plans' : subscribed ? 'Change plan' : 'Upgrade'}
+              {pickerOpen ? 'Hide plans' : subscribed ? 'Change team plan' : 'Upgrade team'}
             </Btn>
           )}
           {project.customer?.stripe_customer_id && !isComplimentary && (

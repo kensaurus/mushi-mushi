@@ -145,11 +145,8 @@ const ALL_PLANS = [FREE_CLOUD, INDIE, PRO, ENTERPRISE];
 
 // Stub out Deno-only modules before importing the SUT. Vitest hoists vi.mock.
 //
-// The middleware does `db.from(...).select(...).eq(...).in(...).order(...).limit(...).maybeSingle()`
-// to read `billing_subscriptions`, then passes the sub to
-// `resolvePlanFromSubscription` (mocked separately). So the chain just
-// needs to resolve to an arbitrary sub-shaped object — the actual plan
-// resolution is driven by `planState.active` below.
+// The middleware reads `projects` through this chain; the plan itself comes
+// from the mocked org-billing resolver below, driven by `planState.active`.
 function makeQueryChain(): Record<string, unknown> {
   const chain = {
     select: () => chain,
@@ -194,6 +191,14 @@ vi.mock('../../supabase/functions/_shared/plans.ts', async () => {
     resolvePlanFromSubscription: async () => planState.active,
   };
 });
+
+// The team-plan resolver (org-billing.ts) is the one seam every gate goes
+// through; its own precedence is pinned in org-billing.test.ts. Here it
+// answers with the row under test.
+vi.mock('../../supabase/functions/_shared/org-billing.ts', () => ({
+  resolveOrgPlan: async () => planState.active,
+  resolveProjectBilling: async () => ({ plan: planState.active }),
+}));
 
 const { requireFeature, minimumPlanFor, GATED_ROUTES } =
   await import('../../supabase/functions/_shared/entitlements.ts');

@@ -14,8 +14,10 @@
 // The endpoint (STRIPE_WEBHOOK_ENDPOINT_ID) subscribes to exactly these ten
 // types. Add a type here and to the endpoint in the same change.
 //
-// Mirrors them into `billing_subscriptions` / `billing_customers`. The
-// gateway reads `billing_subscriptions.status` + `.plan_id` to drive quota.
+// Mirrors them into `billing_subscriptions` / `billing_customers`, and writes
+// the team's plan to `organizations.plan_id`. A plan belongs to the team
+// (organization), not to one app: every gate resolves it through
+// `_shared/org-billing.ts`. Complimentary organizations are never written.
 //
 // Hardening:
 //   * Verifies Stripe-Signature with `verifyStripeSignature` BEFORE parsing.
@@ -46,6 +48,7 @@ import {
   tierFromBasePrice,
 } from '../_shared/billing-rules.ts'
 import { invalidateDiagnosisCache, invalidateQuotaCache } from '../_shared/quota.ts'
+import { syncOrganizationPlan } from '../_shared/org-billing.ts'
 import { reportMessage, withSentry } from '../_shared/sentry.ts'
 import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
 import { emitProductEvent } from '../_shared/product-events.ts'
@@ -111,26 +114,63 @@ function periodFromAny(
   return readSubscriptionPeriod(sub as unknown as StripeSubscription)
 }
 
+// The team a Stripe object belongs to, and the app its rows are anchored to.
 // `organization_id` is NOT NULL on billing_subscriptions and
 // billing_customers, and an upsert checks it even when the row already exists.
 // Without it every subscription and checkout event failed with 23502, so a
 // buyer was charged and never got the plan. Throwing makes Stripe retry.
-async function organizationIdForProject(db: Db, projectId: string): Promise<string> {
-  const { data, error } = await db
+//
+// Checkouts since the team-billing change carry `metadata.organization_id`
+// (copied onto the subscription through `subscription_data[metadata]`);
+// older ones only carry `project_id`, mapped to its organization. The anchor
+// is the metadata app when it still exists, else the team's oldest app
+// (projects-crud moves anchors on delete; this covers a race). Null anchor =
+// the team has no apps left.
+async function resolveBillingOwner(
+  db: Db,
+  metadata: Record<string, string> | undefined,
+): Promise<{ organizationId: string; anchorProjectId: string | null }> {
+  const metaOrg = metadata?.['organization_id'] || null
+  const metaProject = metadata?.['project_id'] || null
+  if (metaProject) {
+    const { data, error } = await db
+      .from('projects')
+      .select('id, organization_id')
+      .eq('id', metaProject)
+      .maybeSingle()
+    if (error) throw new Error(`project_lookup_failed: ${error.message}`)
+    const row = data as { id: string; organization_id: string | null } | null
+    if (row?.organization_id && (!metaOrg || metaOrg === row.organization_id)) {
+      return { organizationId: row.organization_id, anchorProjectId: row.id }
+    }
+    if (!metaOrg) {
+      throw new Error(`project ${metaProject} has no organization_id and the event carries none`)
+    }
+  }
+  if (!metaOrg) throw new Error('event metadata names neither organization_id nor project_id')
+  const { data: anchor, error: anchorErr } = await db
     .from('projects')
-    .select('organization_id')
-    .eq('id', projectId)
+    .select('id')
+    .eq('organization_id', metaOrg)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle()
-  if (error) throw new Error(`project_lookup_failed: ${error.message}`)
-  if (!data?.organization_id) throw new Error(`project ${projectId} has no organization_id`)
-  return data.organization_id as string
+  if (anchorErr) throw new Error(`anchor_lookup_failed: ${anchorErr.message}`)
+  return { organizationId: metaOrg, anchorProjectId: (anchor as { id?: string } | null)?.id ?? null }
+}
+
+// Every app in the team shares the plan, so a plan change resets every cached
+// verdict in this isolate (other functions' caches expire within 60 s).
+function invalidateTeamQuotaCaches(): void {
+  invalidateQuotaCache()
+  invalidateDiagnosisCache()
 }
 
 const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   const subId = raw.id as string
-  const projectId = (raw.metadata as Record<string, string> | undefined)?.['project_id']
-  if (!projectId) {
-    wlog.warn('subscription_missing_project_id', { id: subId })
+  const meta = raw.metadata as Record<string, string> | undefined
+  if (!meta?.['project_id'] && !meta?.['organization_id']) {
+    wlog.warn('subscription_missing_owner_metadata', { id: subId })
     return
   }
 
@@ -160,7 +200,19 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
   const { start, end } = periodFromAny(sub as unknown as Record<string, unknown>)
   const overageItem = overageSubscriptionItem(sub.items.data)
 
-  const organizationId = await organizationIdForProject(db, projectId)
+  const { organizationId, anchorProjectId } = await resolveBillingOwner(db, sub.metadata ?? meta)
+  if (!anchorProjectId) {
+    // The team deleted every app. A live subscription with nowhere to store
+    // it must page someone (Stripe retries meanwhile); an ended one only
+    // needs the team's plan dropped to Free.
+    if (['active', 'trialing', 'past_due'].includes(sub.status)) {
+      throw new Error(`subscription ${subId}: organization ${organizationId} has no app to anchor it to`)
+    }
+    await syncOrganizationPlan(db, organizationId)
+    invalidateTeamQuotaCaches()
+    return
+  }
+  const projectId = anchorProjectId
   const { error } = await db.from('billing_subscriptions').upsert(
     {
       project_id: projectId,
@@ -179,10 +231,14 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
     { onConflict: 'stripe_subscription_id' },
   )
   if (error) throw new Error(`subscription_upsert_failed: ${error.message}`)
-  invalidateQuotaCache(projectId)
+  // The team's plan, from its newest live subscription (Free when none), so
+  // the seat cap and every other org-level reader agree with Stripe. A late
+  // `deleted` for an old subscription cannot drop a team that pays on a newer
+  // one. Complimentary teams are skipped.
+  await syncOrganizationPlan(db, organizationId)
   // A plan change can add or remove the overage item, which decides whether
   // diagnoses above the included quota are allowed.
-  invalidateDiagnosisCache(projectId)
+  invalidateTeamQuotaCaches()
 
   // Company funnel (mushi-self): a paid plan going active. Dedup on the Stripe
   // subscription id so created/updated retries collapse to one row.
@@ -192,7 +248,7 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
       actorFallback: 'project_owner',
       eventName: 'upgrade_completed',
       surface: 'server',
-      properties: { project_id: projectId, plan: planId },
+      properties: { project_id: projectId, organization_id: organizationId, plan: planId },
       dedupKey: `upgrade_completed:${subId}`,
     })
   }
@@ -202,10 +258,11 @@ const upsertSubscription = async (db: Db, raw: Record<string, unknown>) => {
 // Stripe also fires it for synchronous-failure flows. Read `payment_status`
 // to set `default_payment_ok` honestly so the UI doesn't lie.
 const linkCustomerOnCheckout = async (db: Db, session: Record<string, unknown>) => {
-  const projectId = (session.metadata as Record<string, string> | undefined)?.['project_id']
+  const meta = session.metadata as Record<string, string> | undefined
+  const projectId = meta?.['project_id']
   const customerId = session.customer as string | undefined
   const email = (session.customer_details as { email?: string } | undefined)?.email
-  if (!projectId || !customerId) return
+  if ((!projectId && !meta?.['organization_id']) || !customerId) return
 
   // Guard: test-fixture IDs (cus_test_*) must never be written to
   // billing_customers in production — they indicate a QA event that leaked
@@ -217,20 +274,30 @@ const linkCustomerOnCheckout = async (db: Db, session: Record<string, unknown>) 
     return
   }
   const paymentOk = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
-  const organizationId = await organizationIdForProject(db, projectId)
-  const { error } = await db.from('billing_customers').upsert(
-    {
-      project_id: projectId,
+  const { organizationId, anchorProjectId } = await resolveBillingOwner(db, meta)
+  // One customer per team. Update the team's row in place (checkout writes it
+  // before the session opens, so it usually exists); insert only when absent.
+  // The row keeps the app it was first created from.
+  const now = new Date().toISOString()
+  const { data: updated, error: updErr } = await db
+    .from('billing_customers')
+    .update({ stripe_customer_id: customerId, email: email ?? '', default_payment_ok: paymentOk, updated_at: now })
+    .eq('organization_id', organizationId)
+    .select('project_id')
+  if (updErr) throw new Error(`customer_update_failed: ${updErr.message}`)
+  if ((updated?.length ?? 0) === 0) {
+    if (!anchorProjectId) throw new Error(`organization ${organizationId} has no app to anchor its customer to`)
+    const { error } = await db.from('billing_customers').insert({
+      project_id: anchorProjectId,
       organization_id: organizationId,
       stripe_customer_id: customerId,
       email: email ?? '',
       default_payment_ok: paymentOk,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'project_id' },
-  )
-  if (error) throw new Error(`customer_upsert_failed: ${error.message}`)
-  invalidateQuotaCache(projectId)
+      updated_at: now,
+    })
+    if (error) throw new Error(`customer_insert_failed: ${error.message}`)
+  }
+  invalidateTeamQuotaCaches()
 }
 
 const markPaymentDelinquent = async (db: Db, invoice: Record<string, unknown>) => {
@@ -367,7 +434,7 @@ async function notifySubscriptionDeleted(
 
   await notifyOperator({
     title: 'Customer cancelled',
-    body: `Subscription \`${subId ?? '?'}\` ended. Project \`${projectName(meta)}\` has dropped to free.`,
+    body: `Subscription \`${subId ?? '?'}\` ended. The team that bought it from app \`${projectName(meta)}\` has dropped to Free.`,
     level: 'warn',
     fields: [
       { label: 'Plan', value: planId ?? 'unknown' },

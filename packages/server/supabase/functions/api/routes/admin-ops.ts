@@ -19,6 +19,7 @@ import {
   type CheckoutLineItem,
 } from '../../_shared/stripe.ts';
 import { getPlan } from '../../_shared/plans.ts';
+import { orgCustomer, organizationIdForProject, resolveProjectBilling } from '../../_shared/org-billing.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
@@ -1521,13 +1522,18 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       .eq('id', body.project_id)
       .maybeSingle();
     const organizationId = projectRef?.organization_id ?? null;
+    // A plan belongs to the team, so checkout needs one (projects.organization_id
+    // is NOT NULL; a miss means the project row is gone).
+    if (!organizationId) {
+      return c.json({ ok: false, error: { code: 'NO_ORGANIZATION', message: 'This app is not in a team, so a plan cannot be bought for it. Reload the page and try again.' } }, 400);
+    }
 
     // Refuse to push a complimentary org through Stripe Checkout — they're
     // already on a comp tier server-side, and creating a real Stripe customer
     // here would silently dual-bill them once a card is attached. The FE
     // hides the upgrade CTA for these orgs, so reaching this branch means
     // either a forged request or an out-of-date client.
-    if (organizationId) {
+    {
       const { data: orgPosture } = await db
         .from('organizations')
         .select('billing_mode, plan_id')
@@ -1638,17 +1644,17 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     const lineItems: CheckoutLineItem[] = [{ price: prices.base, quantity: 1 }];
     if (prices.overage) lineItems.push({ price: prices.overage });
 
-    // A second Checkout Session for a project that already pays would create
-    // a second Stripe subscription and bill both. The portal cannot switch
-    // plans either: Stripe only lets customers cancel, not update, a
-    // subscription with a metered price (docs.stripe.com/customer-management,
-    // "Limitations").
-    // Paying projects switch through POST /v1/admin/billing/change-plan
+    // The plan belongs to the team: a second Checkout Session from ANY app in
+    // a team that already pays would create a second Stripe subscription and
+    // bill both. The portal cannot switch plans either: Stripe only lets
+    // customers cancel, not update, a subscription with a metered price
+    // (docs.stripe.com/customer-management, "Limitations").
+    // Paying teams switch through POST /v1/admin/billing/change-plan
     // (routes/billing-change-plan.ts) instead.
     const { data: liveSubs, error: liveSubsErr } = await db
       .from('billing_subscriptions')
       .select('status, plan_id')
-      .eq('project_id', body.project_id);
+      .eq('organization_id', organizationId);
     if (liveSubsErr) return dbError(c, liveSubsErr);
     const liveSub = (liveSubs ?? []).find((s) => blocksNewCheckout(s.status));
     if (liveSub) {
@@ -1657,18 +1663,20 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
           ok: false,
           error: {
             code: 'ALREADY_SUBSCRIBED',
-            message: `This project already has a paid plan (${liveSub.plan_id ?? 'unknown'}, ${liveSub.status}). To switch between Indie and Pro or between monthly and annual, use Change plan on the Billing page; the difference is prorated.`,
+            message: `This team already has a paid plan (${liveSub.plan_id ?? 'unknown'}, ${liveSub.status}), and it covers every app in the team. To switch between Builder and Studio or between monthly and annual, use Change plan on the Billing page; the difference is prorated.`,
           },
         },
         409,
       );
     }
 
-    const { data: existing } = await db
-      .from('billing_customers')
-      .select('stripe_customer_id')
-      .eq('project_id', body.project_id)
-      .maybeSingle();
+    // One Stripe customer per team: reuse the one any app in the team made.
+    let existing: Awaited<ReturnType<typeof orgCustomer>>;
+    try {
+      existing = await orgCustomer(db, organizationId);
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+    }
 
     let customerId = existing?.stripe_customer_id;
 
@@ -1689,15 +1697,25 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       const customer = await createCustomer(cfg, {
         email: body.email,
         projectId: body.project_id,
+        organizationId,
       });
       customerId = customer.id;
-      await db.from('billing_customers').upsert({
-        project_id: body.project_id,
-        organization_id: organizationId,
-        stripe_customer_id: customerId,
-        email: body.email,
-        default_payment_ok: false,
-      });
+      if (existing) {
+        // The team's row held a stale test-fixture id: replace it in place.
+        await db
+          .from('billing_customers')
+          .update({ stripe_customer_id: customerId, email: body.email, default_payment_ok: false, updated_at: new Date().toISOString() })
+          .eq('organization_id', organizationId)
+          .eq('project_id', existing.project_id);
+      } else {
+        await db.from('billing_customers').upsert({
+          project_id: body.project_id,
+          organization_id: organizationId,
+          stripe_customer_id: customerId,
+          email: body.email,
+          default_payment_ok: false,
+        });
+      }
     }
 
     let session: Awaited<ReturnType<typeof createCheckoutSession>>;
@@ -1705,6 +1723,7 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       session = await createCheckoutSession(cfg, {
         customer: customerId,
         projectId: body.project_id,
+        organizationId,
         planId: plan.id,
         lineItems,
       });
@@ -1773,13 +1792,16 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
     );
     if (portalForbidden) return portalForbidden;
 
-    const { data: customer } = await db
-      .from('billing_customers')
-      .select('stripe_customer_id')
-      .eq('project_id', body.project_id)
-      .maybeSingle();
+    // The team's Stripe customer (one per organization), whichever app bought.
+    let customer: Awaited<ReturnType<typeof orgCustomer>> = null;
+    try {
+      const portalOrg = await organizationIdForProject(db, body.project_id);
+      customer = portalOrg ? await orgCustomer(db, portalOrg) : null;
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+    }
     if (!customer?.stripe_customer_id) {
-      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER', message: 'This project has no billing account yet, so there is nothing to manage. Pick a plan to start one.' } }, 404);
+      return c.json({ ok: false, error: { code: 'NO_STRIPE_CUSTOMER', message: 'This team has no billing account yet, so there is nothing to manage. Pick a plan to start one.' } }, 404);
     }
 
     const cfg = stripeFromEnv();
@@ -1829,11 +1851,13 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
       }
     }
 
-    const { data: customer } = await db
-      .from('billing_customers')
-      .select('stripe_customer_id')
-      .eq('project_id', projectId)
-      .maybeSingle();
+    // Invoices are the team's: one Stripe customer per organization.
+    let customer: Awaited<ReturnType<typeof orgCustomer>> = null;
+    try {
+      customer = project?.organization_id ? await orgCustomer(db, project.organization_id) : null;
+    } catch (err) {
+      return dbError(c, { message: err instanceof Error ? err.message : String(err) });
+    }
     if (!customer?.stripe_customer_id) {
       return c.json({ ok: true, data: { invoices: [] } });
     }
@@ -1955,13 +1979,12 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         .maybeSingle();
       projectName = project?.name ?? null;
 
-      const { data: sub } = await db
-        .from('billing_subscriptions')
-        .select('plan_id, status')
-        .eq('project_id', body.project_id)
-        .maybeSingle();
-      if (sub?.status === 'active' || sub?.status === 'trialing' || sub?.status === 'past_due') {
-        planId = sub.plan_id ?? null;
+      // The team's paid plan, as ticket context; a read error leaves it blank.
+      try {
+        const billing = await resolveProjectBilling(db, body.project_id);
+        planId = billing.liveSub || billing.billingMode === 'complimentary' ? billing.plan.id : null;
+      } catch {
+        planId = null;
       }
     }
 

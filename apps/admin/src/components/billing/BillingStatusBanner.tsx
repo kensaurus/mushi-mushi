@@ -50,8 +50,8 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBa
         title={plainBanner ? 'Create a project first' : 'No projects yet'}
         subtitle={
           plainBanner
-            ? 'Billing is per app — set one up on Projects first.'
-            : 'Billing is per-project — create an app first, then usage and invoices appear here.'
+            ? 'Plans are per team — add your first app on Projects, then usage appears here.'
+            : 'A plan covers every app in your team — create an app first, then usage and invoices appear here.'
         }
         action={
           <Btn to="/projects" size="sm" variant="ghost">{actions.projects ?? 'Create project'}</Btn>

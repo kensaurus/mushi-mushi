@@ -125,7 +125,7 @@ export function BillingPredictabilityControls({
               : noOverage
               ? 'Annual plans have no overage, so no spend cap applies. Diagnoses stop at the included amount.'
               : planDefaultCapUsd != null
-              ? `Plan default: $${planDefaultCapUsd}/mo. Leave blank to reset.`
+              ? `Caps the whole team's overage. Plan default: $${planDefaultCapUsd}/mo. Leave blank to reset.`
               : 'Hard stop tier — no overage cap applies.'}
           </InlineProof>
           <Btn size="sm" onClick={saveCap} loading={savingCap} disabled={disabled || !isSubscribed || noOverage}>
@@ -144,7 +144,7 @@ export function BillingPredictabilityControls({
             disabled={disabled || savingEmail}
           />
           <InlineProof className="border-0 bg-transparent px-0 py-0 text-fg-muted">
-            50%, 80%, and 100% diagnosis quota alerts. Blank = project owner.
+            50%, 80%, and 100% alerts on the team's diagnoses. Blank = team owner.
           </InlineProof>
           <Btn size="sm" onClick={saveEmail} loading={savingEmail} disabled={disabled}>
             Save alert email

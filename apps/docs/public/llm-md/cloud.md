@@ -11,10 +11,10 @@ description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix d
 
 ## Plans
 
-Diagnoses are counted per app. A paid plan is attached to the app you upgrade:
-that app gets the plan's diagnoses, and every other app in the team keeps 100
-a month until you upgrade it too. The app limit, seats, history and plugins
-apply to the whole team. [Pricing](/pricing) has the details.
+A plan belongs to your team, not to one app. Its diagnoses are shared by
+every app in the team, and so are the app limit, seats, history, plugins and
+the spend cap. Upgrade from any app's card and the whole team moves to the
+plan. [Pricing](/pricing) has the details.
 
 No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
 You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
@@ -29,15 +29,15 @@ team invites need Studio. Full details are on [pricing](/pricing).
 1. `kensaur.us/mushi-mushi/admin`: email and password, or a GitHub account when that sign-in is offered.
 2. Email confirmation (for email sign-up) → sign in → `/onboarding` wizard.
 3. Create your first app, then run `npx mushi-mushi` in its folder to install the SDK. The wizard makes the key for you.
-4. The Billing page in the console shows diagnoses used / limit per app, with an **Upgrade** button
-   (**Change plan** once you pay).
+4. The Billing page in the console shows your team's diagnoses used / limit, with an **Upgrade team** button
+   (**Change team plan** once you pay).
 5. Stripe Checkout → on success, your subscription becomes active. Overage on monthly plans bills through Stripe meter events.
 
 ## Why metered on diagnoses
 
 ## Spend controls
 
-Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default). The cap belongs to the upgraded app and is set in the console under Billing → Spending cap; set it to $0 for a fixed bill. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
+Every monthly paid plan has a **hard cap on overage spend** ($50 Builder, $200 Studio by default). The cap covers the whole team and is set in the console under Billing → Spending cap; set it to $0 for a fixed bill. When the cap is reached, Mushi Mushi pauses new diagnoses for the rest of the calendar month with an upgrade prompt. Annual plans have no overage and stop at the included diagnoses. You also receive email alerts at 50%, 80% and 100% of your included diagnoses.
 
 ## Self-hosting
 

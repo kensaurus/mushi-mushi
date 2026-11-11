@@ -14,7 +14,7 @@
 //      API-key callers, else from `projects.owner_id = userId` for JWT
 //      callers — the same projection every existing handler uses).
 //   2. Resolves the active billing subscription via
-//      `resolvePlanFromSubscription` (single source of truth shared with
+//      `resolvePlanForScope` → `_shared/org-billing.ts` (single source of truth shared with
 //      `quota.ts` and the BillingPage).
 //   3. Looks up `plan.feature_flags[flag]`. Truthy → call `next()`.
 //      Falsey or missing → respond 402 with a machine-readable
@@ -35,7 +35,8 @@
 // ============================================================
 import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
-import { getPlan, listPlans, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
+import { getPlan, listPlans, type PricingPlan } from './plans.ts'
+import { resolveOrgPlan, resolveProjectBilling } from './org-billing.ts'
 import { log } from './logger.ts'
 import { isSalesLedPlan, SALES_CONTACT_EMAIL } from './billing-rules.ts'
 
@@ -62,44 +63,21 @@ export interface ResolvedEntitlement {
 }
 
 /**
- * The plan in force for an organization (or, for a legacy project with no
- * organization, for that project): the newest live subscription, else the
- * organization's `plan_id`, else Free. Shared by `resolveActiveEntitlement`
- * and org-scoped gates so the console's `has(flag)` and the server agree.
+ * The plan in force for an organization (or, for a project, its
+ * organization's). One rule for every gate: `_shared/org-billing.ts`
+ * (complimentary org → its plan; else the org's newest live subscription;
+ * else `organizations.plan_id`; else Free). Shared by
+ * `resolveActiveEntitlement` and org-scoped gates so the console's
+ * `has(flag)` and the server agree.
  */
 export async function resolvePlanForScope(
   db: ReturnType<typeof getServiceClient>,
   scope: { organizationId: string | null; projectId?: string | null },
 ): Promise<PricingPlan> {
   const { organizationId, projectId } = scope
-
-  const subQuery = db
-    .from('billing_subscriptions')
-    .select('status, plan_id')
-  // Independent reads: run them together (each is one PostgREST round trip
-  // on every /v1/admin/entitlements and every gated route).
-  const [{ data: org }, { data: sub }] = await Promise.all([
-    organizationId
-      ? db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
-      : Promise.resolve({ data: null }),
-    organizationId
-      ? subQuery
-          .eq('organization_id', organizationId)
-          .in('status', ['active', 'trialing', 'past_due'])
-          .order('current_period_end', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : projectId
-        ? subQuery
-            .eq('project_id', projectId)
-            .in('status', ['active', 'trialing', 'past_due'])
-            .order('current_period_end', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-  ])
-
-  return sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'free_cloud')
+  if (organizationId) return resolveOrgPlan(db, organizationId)
+  if (projectId) return (await resolveProjectBilling(db, projectId)).plan
+  return getPlan('free_cloud')
 }
 
 /** True when the organization's plan sets `feature_flags[flag] === true`. */

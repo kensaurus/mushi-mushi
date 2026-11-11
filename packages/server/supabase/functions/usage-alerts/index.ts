@@ -1,17 +1,20 @@
 /**
  * FILE: supabase/functions/usage-alerts/index.ts
  * PURPOSE: Cron edge function that fires 50%, 80%, and 100% diagnosis quota alerts
- *          to project owners. Guards the "anti-Cursor $7,225" predictability
+ *          to team owners (a plan's diagnoses are shared by every app in the
+ *          team). Guards the "anti-Cursor $7,225" predictability
  *          promise: users always see a warning before the spend cap kicks in.
  *
  * OVERVIEW:
  * - Runs hourly via pg_cron (every hour, top of hour).
- * - Queries usage_events for current-month diagnoses per project.
- * - Joins against billing_subscriptions → pricing_plans to get included quota.
+ * - Finds the teams with diagnoses this month, then counts each team's
+ *   diagnoses across its apps against the team's plan (_shared/org-billing.ts).
+ *   Complimentary teams are skipped.
  * - Fires a Resend email + operator Slack notification at 50%, 80%, and 100%
  *   thresholds (once each per billing month).
  * - Deduplication: checks `project_settings.last_usage_alert_50_at`,
- *   `last_usage_alert_80_at`, and `last_usage_alert_100_at`.
+ *   `last_usage_alert_80_at`, and `last_usage_alert_100_at` on one app per
+ *   team (lowest id).
  *
  * DEPENDENCIES:
  * - _shared/db.ts, _shared/plans.ts, _shared/auth.ts, _shared/sentry.ts
@@ -28,7 +31,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { log } from '../_shared/logger.ts'
-import { listPlans } from '../_shared/plans.ts'
+import { countOrgUsage, resolveOrgBilling } from '../_shared/org-billing.ts'
 import { diagnosisOverageBillable } from '../_shared/billing-rules.ts'
 import { notifyOperator } from '../_shared/operator-notify.ts'
 import { sendTransactionalEmail } from '../_shared/email.ts'
@@ -90,7 +93,7 @@ function buildAlertEmail(opts: {
     <p style="margin: 0; color: #555; font-size: 14px;">${opts.projectName} · ${opts.planName} plan</p>
   </div>
 
-  <p>Your project has used <strong>${used} of ${limit} diagnoses</strong> this month (${opts.pct}%).</p>
+  <p>Your team has used <strong>${used} of ${limit} diagnoses</strong> this month (${opts.pct}%).</p>
 
   ${isOver
     ? `<p style="color: ${accentColor}; font-weight: 600;">New reports will continue to be received, but diagnoses (Stage-2 AI analysis) will pause until you upgrade or a new billing month starts.</p>`
@@ -111,7 +114,7 @@ function buildAlertEmail(opts: {
   <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
   <p style="color: #999; font-size: 12px;">
     Mushi Mushi · <a href="${CONSOLE_URL}/billing?project=${opts.projectId}">Manage billing</a> ·
-    You're receiving this because you're an owner of <strong>${opts.projectName}</strong>.
+    You're receiving this because you're an owner of the team <strong>${opts.projectName}</strong>.
   </p>
 </body>
 </html>`
@@ -161,141 +164,105 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   })
   aLog.info('AI budget alerts', budget)
 
-  const plans = await listPlans()
-
-  // Build plan lookup map.
-  const planById = new Map(plans.map((p) => [p.id, p]))
-
   const now = new Date()
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
 
-  // Aggregate diagnoses used this billing month per project, excluding shadow rows.
+  // Which apps had a diagnosis this month (only to find the teams to check;
+  // the count itself is exact, per team, below).
   const { data: diagUsage } = await db
     .from('usage_events')
-    .select('project_id, quantity')
+    .select('project_id')
     .eq('event_name', 'diagnoses')
     .gte('occurred_at', periodStart.toISOString())
 
-  // Sum per project (excluding shadow rows; real rows have no shadow flag).
-  const diagByProject = new Map<string, number>()
-  for (const row of diagUsage ?? []) {
-    // Phase 1 shadow events may still appear briefly; skip them.
-    const meta = (row as unknown as { metadata?: Record<string, unknown> }).metadata
-    if (meta?.['shadow'] === 'true') continue
-    diagByProject.set(row.project_id, (diagByProject.get(row.project_id) ?? 0) + Number(row.quantity))
-  }
-
-  if (diagByProject.size === 0) {
+  const activeProjectIds = Array.from(new Set((diagUsage ?? []).map((r) => (r as { project_id: string }).project_id)))
+  if (activeProjectIds.length === 0) {
     aLog.info('no diagnoses this month — nothing to alert', {})
     return new Response(JSON.stringify({ ok: true, checked: 0, sent: 0 }), { status: 200 })
   }
 
-  // Fetch subscriptions + project settings for projects with usage.
-  const projectIds = Array.from(diagByProject.keys())
-
-  const [{ data: subs }, { data: settings }] = await Promise.all([
-    db
-      .from('billing_subscriptions')
-      .select('project_id, plan_id, status, monthly_spend_cap_usd_override, overage_subscription_item_id')
-      .in('project_id', projectIds)
-      .in('status', ['active', 'trialing', 'past_due']),
-    db
-      .from('project_settings')
-      .select('project_id, last_usage_alert_50_at, last_usage_alert_80_at, last_usage_alert_100_at, alert_email')
-      .in('project_id', projectIds),
-  ])
-
-  const subByProject = new Map<string, { plan_id: string | null; monthly_spend_cap_usd_override?: number | null }>()
-  for (const s of subs ?? []) subByProject.set(s.project_id, s)
-
-  const settingsByProject = new Map<string, {
-    last_usage_alert_50_at: string | null
-    last_usage_alert_80_at: string | null
-    last_usage_alert_100_at: string | null
-    alert_email: string | null
-  }>()
-  for (const s of settings ?? []) settingsByProject.set(s.project_id, s)
-
-  // Fetch project owner emails for projects without an explicit alert_email.
-  const { data: projects } = await db
+  // A plan and its diagnoses belong to the team (organization): one alert per
+  // team, on its pooled count, against the team's plan.
+  const { data: activeProjects } = await db
     .from('projects')
-    .select('id, name')
-    .in('id', projectIds)
-  const projectById = new Map((projects ?? []).map((p) => [p.id, p]))
-
-  // Fetch owner emails: project_members → auth.users (via service role RPC).
-  // Service role can read auth.users directly via a raw SQL query.
-  const { data: members } = await db
-    .from('project_members')
-    .select('project_id, user_id, role')
-    .in('project_id', projectIds)
-    .eq('role', 'owner')
-
-  const ownerUserIds = Array.from(new Set((members ?? []).map((m) => m.user_id)))
-  let emailByUserId = new Map<string, string>()
-  if (ownerUserIds.length > 0) {
-    // Service role can call the get_user_emails_by_ids SECURITY DEFINER RPC
-    // (migration 20260621120000) which queries auth.users in one round-trip.
-    // db.rpc() returns a PostgrestFilterBuilder (thenable but no .catch method),
-    // so we use await + try/catch instead of chaining .catch() — MUSHI-MUSHI-SERVER-13.
-    let authUsers: { id: string; email: string }[] | null = null
-    try {
-      const { data, error } = await db.rpc('get_user_emails_by_ids', { p_user_ids: ownerUserIds })
-      if (error) throw error
-      authUsers = data as { id: string; email: string }[] | null
-    } catch (err) {
-      aLog.warn('get_user_emails_by_ids failed — falling back to admin API', { err: String(err) })
-    }
-    if (authUsers) {
-      emailByUserId = new Map(authUsers.map((u) => [u.id, u.email]))
-    } else {
-      // Fallback: per-user auth.admin call (max 50 to avoid runaway).
-      for (const uid of ownerUserIds.slice(0, 50)) {
-        try {
-          const { data } = await db.auth.admin.getUserById(uid)
-          if (data?.user?.email) emailByUserId.set(uid, data.user.email)
-        } catch {
-          // best-effort — skip this user if admin API fails
-        }
-      }
-    }
-  }
-
-  const ownerEmailByProject = new Map<string, string>()
-  for (const m of members ?? []) {
-    if (!ownerEmailByProject.has(m.project_id) && emailByUserId.get(m.user_id)) {
-      ownerEmailByProject.set(m.project_id, emailByUserId.get(m.user_id)!)
-    }
-  }
+    .select('organization_id')
+    .in('id', activeProjectIds)
+  const orgIds = Array.from(
+    new Set(
+      ((activeProjects ?? []) as Array<{ organization_id: string | null }>)
+        .map((p) => p.organization_id)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  )
+  const { data: orgRows } = orgIds.length > 0
+    ? await db.from('organizations').select('id, name').in('id', orgIds)
+    : { data: [] as Array<{ id: string; name: string | null }> }
+  const orgNameById = new Map(((orgRows ?? []) as Array<{ id: string; name: string | null }>).map((o) => [o.id, o.name]))
 
   let sent = 0
+  let checked = 0
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
 
-  for (const [projectId, diagUsed] of diagByProject) {
-    const sub = subByProject.get(projectId)
-    const planId = sub?.plan_id ?? 'free_cloud'
-    const plan = planById.get(planId)
-    if (!plan) continue
-
+  for (const orgId of orgIds) {
+    let billing: Awaited<ReturnType<typeof resolveOrgBilling>>
+    try {
+      billing = await resolveOrgBilling(db, orgId, { includeProjectIds: true })
+    } catch (err) {
+      aLog.warn('team billing read failed; skipping', { orgId, err: err instanceof Error ? err.message : String(err) })
+      continue
+    }
+    // Mushi Mushi pays for complimentary teams; there is nothing to warn about.
+    if (billing.billingMode === 'complimentary') continue
+    const plan = billing.plan
+    const sub = billing.liveSub
     const diagLimit = plan.included_diagnoses_per_month
     if (!diagLimit || diagLimit <= 0) continue // unlimited / enterprise
+
+    const { count: diagUsed, error: countErr } = await countOrgUsage(
+      db,
+      billing.projectIds,
+      'diagnoses',
+      { startIso: periodStart.toISOString(), endIso: periodEnd.toISOString() },
+      { excludeShadow: true },
+    )
+    if (countErr) {
+      aLog.warn('team diagnosis count failed; skipping', { orgId, err: countErr.message })
+      continue
+    }
+    checked++
 
     const pct = Math.round((diagUsed / diagLimit) * 100)
     if (pct < 50) continue
 
-    const s = settingsByProject.get(projectId)
-    const toEmail =
-      s?.alert_email ??
-      ownerEmailByProject.get(projectId) ??
-      null
+    // The team's alert state and alert address live on one app: the oldest
+    // in id order, so every run picks the same one.
+    const projectId = [...billing.projectIds].sort()[0]
+    if (!projectId) continue
+    const [{ data: settingRows }, { data: owner }] = await Promise.all([
+      db
+        .from('project_settings')
+        .select('project_id, last_usage_alert_50_at, last_usage_alert_80_at, last_usage_alert_100_at, alert_email')
+        .in('project_id', billing.projectIds),
+      db
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', orgId)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle(),
+    ])
+    const rows = (settingRows ?? []) as Array<{
+      project_id: string
+      last_usage_alert_50_at: string | null
+      last_usage_alert_80_at: string | null
+      last_usage_alert_100_at: string | null
+      alert_email: string | null
+    }>
+    const settings = rows.find((r) => r.project_id === projectId) ?? null
 
-    const proj = projectById.get(projectId)
-    const projectName = proj?.name ?? projectId
-    const spendCap =
-      (sub as unknown as { monthly_spend_cap_usd_override?: number | null } | null)
-        ?.monthly_spend_cap_usd_override ??
-      plan.monthly_spend_cap_usd ??
-      null
+    const teamName = orgNameById.get(orgId) ?? 'Your team'
+    const spendCap = sub?.monthly_spend_cap_usd_override ?? plan.monthly_spend_cap_usd ?? null
 
     const isOver = pct >= 100
     const alertTier: 50 | 80 | 100 = isOver ? 100 : pct >= 80 ? 80 : 50
@@ -305,16 +272,34 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
         : alertTier === 80
           ? 'last_usage_alert_80_at'
           : 'last_usage_alert_50_at'
-    const lastAlert = s?.[lastAlertKey] ? new Date(s[lastAlertKey]!).getTime() : null
+    const lastAlert = settings?.[lastAlertKey] ? new Date(settings[lastAlertKey]!).getTime() : null
     const alreadySentThisMonth =
       lastAlert !== null && now.getTime() - lastAlert < thirtyDaysMs
 
     if (alreadySentThisMonth) continue
 
+    // An alert address set on any app's card counts for the team.
+    let toEmail = settings?.alert_email ?? rows.find((r) => r.alert_email)?.alert_email ?? null
+    const ownerId = (owner as { user_id?: string } | null)?.user_id
+    if (!toEmail && ownerId) {
+      try {
+        const { data, error } = await db.rpc('get_user_emails_by_ids', { p_user_ids: [ownerId] })
+        if (error) throw error
+        toEmail = ((data ?? []) as Array<{ email?: string }>)[0]?.email ?? null
+      } catch {
+        try {
+          const { data } = await db.auth.admin.getUserById(ownerId)
+          toEmail = data?.user?.email ?? null
+        } catch {
+          // best-effort — no address, no email
+        }
+      }
+    }
+
     // Build and send email.
     if (toEmail) {
       const { subject, html } = buildAlertEmail({
-        projectName,
+        projectName: teamName,
         diagnosesUsed: diagUsed,
         diagnosesLimit: diagLimit,
         pct,
@@ -322,15 +307,14 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
         spendCapUsd: spendCap,
         projectId,
         alertTier,
-        noOverage:
-          !!sub && !diagnosisOverageBillable(sub as { overage_subscription_item_id?: string | null }),
+        noOverage: !!sub && !diagnosisOverageBillable(sub),
       })
       await sendEmail(toEmail, subject, html)
-      aLog.info('usage alert sent', { projectId, pct, toEmail })
+      aLog.info('usage alert sent', { orgId, pct, toEmail })
       sent++
     }
 
-    // Also ping the operator via Slack (informational — no PII, just project name).
+    // Also ping the operator via Slack (informational — no PII, just the team name).
     await notifyOperator({
       title:
         alertTier === 100
@@ -338,10 +322,10 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
           : alertTier === 80
             ? 'Diagnosis quota 80% alert'
             : 'Diagnosis quota 50% alert',
-      body: `${projectName} is at ${pct}% of ${diagLimit.toLocaleString()} diagnoses/month (${plan.display_name}).`,
+      body: `${teamName} is at ${pct}% of ${diagLimit.toLocaleString()} diagnoses/month (${plan.display_name}).`,
       level: isOver ? 'urgent' : 'warn',
       fields: [
-        { label: 'Project', value: projectName },
+        { label: 'Team', value: teamName },
         { label: 'Plan', value: plan.display_name },
         { label: 'Usage', value: `${diagUsed} / ${diagLimit} (${pct}%)` },
         { label: 'Spend cap', value: spendCap ? `$${spendCap}` : 'none set' },
@@ -355,6 +339,6 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
       .upsert({ project_id: projectId, [lastAlertKey]: now.toISOString() }, { onConflict: 'project_id' })
   }
 
-  aLog.info('usage-alerts run complete', { checked: diagByProject.size, sent })
-  return new Response(JSON.stringify({ ok: true, checked: diagByProject.size, sent }), { status: 200 })
+  aLog.info('usage-alerts run complete', { checked, sent })
+  return new Response(JSON.stringify({ ok: true, checked, sent }), { status: 200 })
 }))

@@ -24,7 +24,7 @@ developers are below.
 
 A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
-**More than one app? Read this.** You upgrade from one app's card on the Billing page, and the subscription is attached to that app. The plan's diagnoses, its overage and its spend cap belong to that app. Every other app in the team keeps 100 diagnoses a month, with a hard stop, until you upgrade that app as well. The app limit, seats, history, plugins and the widget without a Mushi Mushi mark apply to the whole team.
+**More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
 
 **What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
@@ -140,15 +140,15 @@ Diagnoses are counted per calendar month (UTC) on every plan, so the count start
 
 ### Can I change my spend cap?
 
-Yes. Open **Billing → Spending cap** on the app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap belongs to that app. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the app never costs more than its base fee.
+Yes. Open **Billing → Spending cap** on any app's card. Set any USD cap on overage from $0–100,000 or clear it to use the plan default ($50 Builder, $200 Studio). The cap covers the whole team. Set it to **$0** for a fixed bill: diagnoses then pause at the included amount until the 1st, and the team never pays more than the base fee.
 
 ### Who receives usage alert emails?
 
-By default, the **project owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) per billing month.
+By default, the **team owner**. Override the address under **Usage alert email** on the same card. Alerts fire once per threshold (50%, 80%, 100%) of the team's diagnoses per billing month.
 
 ### Is usage per app or per team?
 
-**Diagnoses and the spend cap are per app; the app limit is per team.** Each app has its own diagnosis counter. The plan's diagnoses and its spend cap belong to the app you upgraded: another app in the same team keeps 100 diagnoses a month until you upgrade it too. So the most one upgraded app can cost in a calendar month is its base fee plus its cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), and an app you have not upgraded is never billed. The plan's app limit counts the apps in your team.
+**Per team.** A plan belongs to the team: its diagnoses are one shared allowance for every app in the team, counted together each month, and the app limit, seats and spend cap are the team's too. So the most a team can be billed in a calendar month is the base fee plus the cap ($29 + $50 on Builder, $79 + $200 on Studio, at the default caps), however many apps it has.
 
 ### Can I downgrade mid-cycle?
 

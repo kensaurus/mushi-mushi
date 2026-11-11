@@ -67,7 +67,13 @@ function fakeDb(world: World) {
             case 'project_retention_policies':
               return { data: world.policy ?? null, error: null }
             case 'projects':
-              return { data: world.project ?? null, error: null }
+              // org-billing.ts reads the org row embedded in the project read.
+              return {
+                data: world.project
+                  ? { ...world.project, organizations: world.org ? { billing_mode: 'stripe', ...world.org } : null }
+                  : null,
+                error: null,
+              }
             case 'organizations':
               return { data: world.org ?? null, error: null }
             case 'billing_subscriptions':
@@ -107,12 +113,22 @@ describe('resolveProjectRetention', () => {
     expect(r.source).toBe('plan')
   })
 
-  it('a project with no organization still honours a project-keyed subscription', async () => {
+  it('a plan belongs to the team: a subscription row keyed only to the app is never read', async () => {
+    // projects.organization_id is NOT NULL; an app with no organization is
+    // one that no longer exists, so it gets the free window.
     const r = await resolveProjectRetention(
       fakeDb({ project: { organization_id: null }, subscriptionByProject: { status: 'trialing', plan_id: 'pro' } }),
       'proj-legacy',
     )
-    expect(r.retention_days).toBe(90)
+    expect(r).toMatchObject({ retention_days: 7, source: 'fallback' })
+  })
+
+  it('a complimentary team keeps its plan window', async () => {
+    const r = await resolveProjectRetention(
+      fakeDb({ project: { organization_id: 'org-comp' }, org: { plan_id: 'pro', billing_mode: 'complimentary' } as never }),
+      'proj-1',
+    )
+    expect(r).toMatchObject({ retention_days: 90, plan_id: 'pro', source: 'plan' })
   })
 
   it('no policy, no subscription, no org plan falls back to the free window', async () => {
