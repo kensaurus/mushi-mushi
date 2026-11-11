@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState, lazy } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { useRealtime, useRealtimeReload } from '../lib/realtime'
+import { useRealtime } from '../lib/realtime'
+import { useVisiblePolling } from '../lib/useVisiblePolling'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
@@ -179,6 +180,9 @@ function resolveHealthTab(value: string | null): HealthTabId {
   return 'overview'
 }
 
+
+/** How often the open Health page re-reads cron health (it polls cron_runs instead of subscribing). */
+const CRON_POLL_MS = 60_000
 export function HealthPage() {
   const [hubParams] = useSearchParams()
   if (hubParams.get('hub') === 'check') {
@@ -261,10 +265,11 @@ function HealthPageContent() {
   }, [reloadStats, llmQuery, cronQuery])
 
   useRealtime({ table: 'llm_invocations' }, reloadAll)
-  // Debounced: the daily cron_runs retention job deletes a few thousand rows
-  // in one statement, and Realtime delivers DELETE events without RLS. An
-  // undebounced subscription would fire reloadAll once per deleted row.
-  useRealtimeReload(['cron_runs'], reloadAll)
+  // cron_runs is polled, not subscribed: it takes a write every few seconds
+  // (every cron tick) and this page was its only listener, so it left the
+  // Realtime publication on 2026-11-11 (cost audit). A minute matches the
+  // fastest job's cadence.
+  useVisiblePolling(reloadAll, CRON_POLL_MS)
 
   useEffect(() => {
     const lastRun = cron?.byJob['judge-batch']?.lastRun

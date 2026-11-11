@@ -4,7 +4,8 @@
  *          (deploy size limit; `api` forwards these paths).
  *
  *   The daemon (`mushi work --daemon`), with a worker:run key only:
- *     POST /v1/worker/heartbeat            register the host and its lanes, renew leases;
+ *     POST /v1/worker/heartbeat            register the host and its lanes, renew leases (work-heartbeat.ts,
+ *                                          also served by `api` itself);
  *                                          answers each lane's closed settings and the host guards
  *     POST /v1/worker/claim                { laneId } a first-time user test the console queued for the
  *                                          lane's app first, when the daemon runs them (ADR 0053
@@ -45,7 +46,7 @@ import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
 import { AUDIT_FINDINGS_PER_HOUR, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
 import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
-import { claimFreshEyes, endFreshEyesRun, lanesToWake, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
+import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
 import { isOperatorUser } from '../../_shared/operator-gate.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
@@ -56,14 +57,12 @@ import {
   hostOnline,
   inLocalCooldown,
   laneInfraBackoff,
-  laneWriteNeeded,
   recentlySkipped,
   SKIPPED_COOLDOWN_MS,
   laneClaimBlock,
   laneConfigFromRow,
   mayAutoRequeue,
   parseClaimDone,
-  parseHeartbeat,
   parseHostGuards,
   parseLaneSettings,
   rankWorkCandidates,
@@ -72,7 +71,8 @@ import {
 } from '../../_shared/work-lanes.ts'
 import { callerCanAccessProject, callerProjectIds } from '../shared.ts'
 import { flagClaim, flagsFor, registerWorkStatusRoutes } from './work-status.ts'
-import { cursorLoginView, mergeCursorLoginReport, parseStoredCursorLogin, pendingCursorLogin, type CursorLoginReport } from '../../_shared/cursor-login.ts'
+import { cursorLoginView, parseStoredCursorLogin } from '../../_shared/cursor-login.ts'
+import { err, HOST_COLUMNS, LANE_COLUMNS, registerWorkerHeartbeatRoute, workerOnly, type HostRow, type LaneRow } from './work-heartbeat.ts'
 import { maskEmail } from '../../_shared/work-telemetry.ts'
 
 const wlog = log.child('work-routes')
@@ -90,14 +90,10 @@ export const QUEUE_MAX = 50
 const CLOSED_STATUSES = new Set(['fixed', 'verified', 'dismissed'])
 export const WORKER_KEY_SCOPES = ['worker:run'] as const
 export const WORKER_KEY_MINTS_PER_HOUR = 10
-const HEARTBEATS_PER_MINUTE = 10
 const CLAIMS_PER_MINUTE = 30
 const RECENT_DAYS = 7
 
 type Role = 'owner' | 'admin' | 'member' | 'viewer' | null
-
-/** A new lane's settings until the console changes them (the machine may propose some on first registration). */
-const NEW_LANE_DEFAULTS: LaneConfig = { paused: false, concurrency: 1, model: null, mode: 'fix', stop_at: null, drain: false, prune_own: false }
 
 export interface WorkRouteDeps {
   getServiceClient: () => Db
@@ -136,62 +132,15 @@ export const defaultWorkRouteDeps: WorkRouteDeps = {
   now: () => new Date(),
 }
 
-function err(c: Ctx, code: string, message: string, status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503) {
-  return c.json({ ok: false, error: { code, message } }, status)
-}
-
 /** A helper's refusal: the answer to send instead of the row it looked for. */
 class Refusal {
   constructor(readonly response: Response) {}
-}
-
-/** /v1/worker/* take only a worker:run API key: a console session or an mcp key never drives a lane. */
-function workerOnly(c: Ctx): Response | null {
-  const scopes = (c.get('apiKeyScopes') as string[] | undefined) ?? []
-  if (c.get('authMethod') !== 'apiKey' || !scopes.includes('worker:run')) {
-    return err(c, 'WORKER_KEY_REQUIRED', 'Only a local worker key (scope worker:run) reaches this route. Create one with `mushi worker install`.', 403)
-  }
-  return null
 }
 
 function chunks<T>(xs: readonly T[]): T[][] {
   const out: T[][] = []
   for (let i = 0; i < xs.length; i += IN_CHUNK) out.push(xs.slice(i, i + IN_CHUNK))
   return out
-}
-
-interface HostRow {
-  id: string
-  owner_user_id: string
-  api_key_id: string
-  host_id: string
-  hostname: string
-  platform: string
-  mushi_version: string | null
-  last_heartbeat_at: string
-  status: Record<string, unknown> | null
-  guards: Record<string, unknown> | null
-  revoked_at: string | null
-  /** Claim kinds beyond its lanes' modes the daemon runs (fresh_eyes). */
-  takes: string[] | null
-}
-
-interface LaneRow {
-  id: string
-  host_id: string
-  project_id: string
-  name: string
-  model: string | null
-  mode: string
-  concurrency: number
-  paused: boolean
-  stop_at: string | null
-  drain: boolean
-  prune_own: boolean
-  review_model: string | null
-  repo: string | null
-  status: Record<string, unknown> | null
-  last_seen_at: string
 }
 
 interface ClaimRow {
@@ -219,8 +168,6 @@ interface ClaimRow {
   detail: string | null
 }
 
-const HOST_COLUMNS = 'id, owner_user_id, api_key_id, host_id, hostname, platform, mushi_version, last_heartbeat_at, status, guards, revoked_at, takes'
-const LANE_COLUMNS = 'id, host_id, project_id, name, model, mode, concurrency, paused, stop_at, drain, prune_own, review_model, repo, status, last_seen_at'
 const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, ux_run_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
 const REPORT_DETAIL_COLUMNS =
   'id, project_id, summary, description, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
@@ -479,156 +426,6 @@ async function claimPayload(db: Db, reportId: string) {
       }
     }),
   }
-}
-
-async function heartbeat(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
-  const denied = workerOnly(c)
-  if (denied) return denied
-  const db = deps.getServiceClient()
-  const now = deps.now()
-  const keyId = c.get('apiKeyId') as string
-  const userId = c.get('userId') as string
-  const rate = await deps.claimRateLimit(db, `work:${keyId}:heartbeat`, HEARTBEATS_PER_MINUTE, 60)
-  if (!rate.allowed) return err(c, 'RATE_LIMITED', 'Too many heartbeats; one a minute is enough.', 429)
-  const parsed = parseHeartbeat(await c.req.json().catch(() => null))
-  if (!parsed.ok) return err(c, 'VALIDATION_ERROR', parsed.message, 400)
-  const hb = parsed.value
-
-  const { data: existing, error: readErr } = await db.from('work_hosts').select(HOST_COLUMNS).eq('api_key_id', keyId).eq('host_id', hb.host.hostId).maybeSingle()
-  if (readErr) return err(c, 'DB_ERROR', 'Could not read this worker.', 500)
-  if ((existing as HostRow | null)?.revoked_at) {
-    return err(c, 'HOST_REVOKED', 'This worker was revoked in the console. Stop, and set it up again with `mushi worker install`.', 403)
-  }
-  const hostFields = {
-    owner_user_id: userId,
-    hostname: hb.host.hostname,
-    platform: hb.host.platform,
-    mushi_version: hb.host.version,
-    takes: hb.host.takes,
-    status: hb.status,
-    // Server time: a machine with a wrong clock must not look fresh or stale.
-    last_heartbeat_at: now.toISOString(),
-    updated_at: now.toISOString(),
-  }
-  let host: HostRow
-  if (existing) {
-    const { data, error } = await db.from('work_hosts').update(hostFields).eq('id', (existing as HostRow).id).select(HOST_COLUMNS).single()
-    if (error || !data) return err(c, 'DB_ERROR', 'The heartbeat could not be stored.', 500)
-    host = data as HostRow
-  } else {
-    const { data, error } = await db.from('work_hosts').insert({ ...hostFields, api_key_id: keyId, host_id: hb.host.hostId }).select(HOST_COLUMNS).single()
-    if (error || !data) return err(c, 'DB_ERROR', 'This worker could not be registered.', 500)
-    host = data as HostRow
-  }
-
-  const { data: laneRows, error: lanesErr } = await db.from('work_lanes').select(LANE_COLUMNS).eq('host_id', host.id)
-  if (lanesErr) return err(c, 'DB_ERROR', 'Could not read the lanes.', 500)
-  const known = new Map(((laneRows ?? []) as LaneRow[]).map((l) => [l.name, l]))
-  const lanes: Array<{ id: string; name: string; projectId: string; config: LaneConfig }> = []
-  const refused: Array<{ name: string; reason: string }> = []
-  // One access check per app, not per lane: a machine runs many lanes on a
-  // few apps, and each check is several membership reads.
-  const accessByProject = new Map<string, ReturnType<typeof deps.access>>()
-  for (const l of hb.lanes) {
-    if (!accessByProject.has(l.projectId)) accessByProject.set(l.projectId, deps.access(c, db, userId, l.projectId))
-    const access = await accessByProject.get(l.projectId)!
-    if (!access.allowed || access.role === 'viewer') {
-      refused.push({ name: l.name, reason: access.allowed ? 'A viewer cannot run fixes for this app.' : 'This key cannot reach that app.' })
-      continue
-    }
-    const prev = known.get(l.name)
-    if (prev && prev.project_id !== l.projectId) {
-      refused.push({ name: l.name, reason: 'This lane name is registered for another app on this machine. Give the lane a new name.' })
-      continue
-    }
-    let row: LaneRow | null = prev ?? null
-    if (prev && !laneWriteNeeded(prev, { status: l.status as Record<string, unknown> | null, repo: l.repo ?? null }, now)) {
-      // Idle and unchanged: the stored row is still true.
-      row = prev
-    } else if (prev) {
-      const { data } = await db
-        .from('work_lanes')
-        .update({ status: l.status, last_seen_at: now.toISOString(), ...(l.repo ? { repo: l.repo } : {}) })
-        .eq('id', prev.id)
-        .select(LANE_COLUMNS)
-        .single()
-      row = (data as LaneRow | null) ?? prev
-    } else {
-      const { data, error } = await db
-        .from('work_lanes')
-        .insert({ ...NEW_LANE_DEFAULTS, ...l.initial, host_id: host.id, project_id: l.projectId, name: l.name, repo: l.repo, status: l.status, last_seen_at: now.toISOString() })
-        .select(LANE_COLUMNS)
-        .single()
-      if (error || !data) {
-        refused.push({ name: l.name, reason: 'The lane could not be registered. Try again in a minute.' })
-        continue
-      }
-      row = data as LaneRow
-    }
-    lanes.push({ id: row.id, name: row.name, projectId: row.project_id, config: laneConfigFromRow(row) })
-  }
-
-  // The heartbeat renews the leases the worker is still working on.
-  let renewed: string[] = []
-  if (hb.claims.length) {
-    const { data } = await db
-      .from('work_claims')
-      .update({ lease_until: new Date(now.getTime() + WORK_LEASE_MS).toISOString(), updated_at: now.toISOString() })
-      .in('id', hb.claims)
-      .eq('host_id', host.id)
-      .eq('status', 'active')
-      .gt('lease_until', now.toISOString())
-      .select('id')
-    renewed = ((data ?? []) as Array<{ id: string }>).map((r) => r.id)
-  }
-  const lost = hb.claims.filter((id) => !renewed.includes(id))
-  // Lanes whose app has a first-time user test waiting ask for work now
-  // instead of after their idle wait. Lane ids only: never a command.
-  const wake = await lanesToWake(db, lanes, hb.host.takes.includes('fresh_eyes'), now)
-  const recheckAccount = await recheckAsked(db, host.id, hb.status, now)
-  const account = await syncCursorLogin(db, host.id, hb.cursorLogin, now)
-  return c.json({
-    ok: true,
-    // recheckAccount, cursorAccount and cursorLogin are new top-level fields: daemons that predate them ignore them (worker/protocol.ts).
-    data: { hostId: host.id, heartbeatSeconds: 60, guards: hostGuardsFrom(host.guards), lanes, refused, renewed, lost, wake, recheckAccount, ...account },
-  })
-}
-
-/**
- * The Cursor account the console set for this machine, and the sign-in it
- * asked for (ADR 0048 amendment 2026-10-28): stores what the machine reports
- * about that sign-in, then answers with the open request, if any. Read on its
- * own: before migration 20261028150000_worker_cursor_account the columns are
- * missing, and that must never fail a heartbeat.
- */
-async function syncCursorLogin(db: Db, hostId: string, report: CursorLoginReport | null, now: Date): Promise<{ cursorAccount: string | null; cursorLogin: { requestId: string } | null }> {
-  const { data, error } = await db.from('work_hosts').select('cursor_account, cursor_login').eq('id', hostId).maybeSingle()
-  if (error || !data) return { cursorAccount: null, cursorLogin: null }
-  const row = data as { cursor_account: string | null; cursor_login: unknown }
-  const stored = parseStoredCursorLogin(row.cursor_login)
-  const merged = mergeCursorLoginReport(stored, report, now)
-  if (merged && JSON.stringify(merged) !== JSON.stringify(stored)) {
-    await db.from('work_hosts').update({ cursor_login: merged }).eq('id', hostId)
-  }
-  return { cursorAccount: row.cursor_account ?? null, cursorLogin: pendingCursorLogin(merged, now) }
-}
-
-/** How long a "Re-check the account" request stays open for a machine that has not run the check yet. */
-const RECHECK_OPEN_MS = 30 * 60_000
-
-/**
- * True when someone asked for a new Cursor account check (POST
- * /v1/admin/work/hosts/:id/recheck) after the machine's last one. Read on its
- * own: before migration 20261028120000_worker_recheck the column is missing,
- * and that must never fail a heartbeat.
- */
-async function recheckAsked(db: Db, hostId: string, status: Record<string, unknown>, now: Date): Promise<boolean> {
-  const { data, error } = await db.from('work_hosts').select('recheck_requested_at').eq('id', hostId).maybeSingle()
-  const at = error ? null : ((data as { recheck_requested_at?: string | null } | null)?.recheck_requested_at ?? null)
-  const asked = at ? Date.parse(at) : NaN
-  if (!Number.isFinite(asked) || now.getTime() - asked > RECHECK_OPEN_MS) return false
-  const age = (status.checks as { cursor?: { ageSec?: number } } | undefined)?.cursor?.ageSec
-  return typeof age !== 'number' || now.getTime() - age * 1000 < asked
 }
 
 async function claim(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -1231,7 +1028,8 @@ async function mintWorkerKey(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
 }
 
 export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: WorkRouteDeps = defaultWorkRouteDeps): void {
-  app.post('/v1/worker/heartbeat', deps.workerAuth, (c) => heartbeat(c as Ctx, deps))
+  // The handler lives in work-heartbeat.ts, which `api` also imports (one edge invocation per heartbeat).
+  registerWorkerHeartbeatRoute(app, deps)
   app.post('/v1/worker/claim', deps.workerAuth, (c) => claim(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/renew', deps.workerAuth, (c) => renew(c as Ctx, deps))
   app.post('/v1/worker/claims/:id/done', deps.workerAuth, (c) => done(c as Ctx, deps))

@@ -1,7 +1,7 @@
 // ============================================================
 // qa-story-runner — QA Coverage Suite browser agent runner
 //
-// Invoked by pg_cron every minute. Scans for qa_stories whose
+// Invoked by pg_cron (every minute that may have work). Scans for qa_stories whose
 // schedule_cron is due, executes them via the configured browser
 // provider (firecrawl_actions for Deno Edge; local/browserbase via
 // an external CLI trigger), writes qa_story_runs + qa_story_evidence
@@ -27,7 +27,11 @@
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
 // The function itself gates execution on whether each story's
 // schedule_cron aligns with the current time (via a simple cron-match
-// check) so we don't need one pg_cron job per story.
+// check) so we don't need one pg_cron job per story. Since 2026-11-11 the
+// job posts only when mushi.qa_story_runner_has_work() finds a story that
+// may be due this minute or a stale manual run (migration
+// 20261111091825_cron_edge_work_gates), about 340 calls a day instead of
+// 1,440; a call with nothing due returns before writing cron_runs.
 //
 // Rate limits
 // ───────────
@@ -696,6 +700,69 @@ Deno.serve(
     })
     if (abandoned > 0) rlog.info('abandoned manual runs', { failed: abandoned })
 
+    // Fetch all enabled stories. The previous select embedded
+    // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
+    // which referenced a non-existent `projects → mushi_runtime_config`
+    // foreign key (PostgREST returned PGRST200 → 500). The embedded
+    // base_url was never read either — the per-run baseUrl falls through
+    // to `Deno.env.get('DEFAULT_BASE_URL')` below — so the safest fix is
+    // to drop the broken embed entirely. If we ever surface a per-project
+    // base URL again, plumb it through `project_settings` (which already
+    // has a real FK from `projects.id`).
+    const { data: stories, error: storiesErr } = await db
+      .from('qa_stories')
+      .select('*')
+      .eq('enabled', true)
+
+    if (storiesErr) {
+      // Truncate the message before logging and persisting — a transient Supabase
+      // 522/pooler failure carries a ~20KB Cloudflare HTML page in `.message`.
+      // Storing or logging that raw would pollute cron_runs, Supabase Logs, and
+      // (incorrectly) Sentry with unreadable noise.
+      const errMsg = (storiesErr.message ?? String(storiesErr)).slice(0, 500)
+
+      if (isTransientDbConnectionError(storiesErr)) {
+        // Transient infra failure (pooler reset, Cloudflare 522) — do NOT send
+        // to Sentry. Route to Supabase Logs only, queryable via:
+        //   metadata.parsed.event = "qa_transient_fetch_error"
+        console.warn(
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            level: 'warn',
+            scope: 'mushi:qa-story-runner',
+            event: 'qa_transient_fetch_error',
+            msg: 'transient DB/network error fetching qa_stories — not an app bug',
+            db_code: storiesErr.code ?? 'unknown',
+            err_message: errMsg,
+          }),
+        )
+      } else {
+        rlog.error('Failed to fetch qa_stories', {
+          err: { ...storiesErr, message: errMsg },
+        })
+      }
+
+      const failedRun = await startCronRun(db, 'qa-story-runner', 'cron')
+      await failedRun.fail(new Error(errMsg))
+      return new Response('Internal error', { status: 500 })
+    }
+
+    const dueStories = (stories ?? []).filter((s: QaStory) =>
+      cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
+    )
+
+    // Nothing due this minute: answer before writing a cron_runs row. The
+    // pg_cron job only calls when mushi.qa_story_runner_has_work() says a
+    // story may be due (2026-11-11 cost audit), so this is the rare tick
+    // where its looser check and cronMatches disagree.
+    if (dueStories.length === 0) {
+      rlog.info('no stories due', { total: stories?.length ?? 0 })
+      return new Response(JSON.stringify({ ok: true, data: { due: 0, abandoned } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
     // 2026-05-24: previous code called `startCronRun('qa-story-runner')` —
     // missing the `db` first argument and destructuring `cronRunId` instead
     // of the actual `runId`/`finish`/`fail` shape the helper exposes. That
@@ -708,56 +775,6 @@ Deno.serve(
     rlog.info('qa-story-runner invoked', { jobName: 'qa-story-runner' })
 
     try {
-      // Fetch all enabled stories. The previous select embedded
-      // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
-      // which referenced a non-existent `projects → mushi_runtime_config`
-      // foreign key (PostgREST returned PGRST200 → 500). The embedded
-      // base_url was never read either — the per-run baseUrl falls through
-      // to `Deno.env.get('DEFAULT_BASE_URL')` below — so the safest fix is
-      // to drop the broken embed entirely. If we ever surface a per-project
-      // base URL again, plumb it through `project_settings` (which already
-      // has a real FK from `projects.id`).
-      const { data: stories, error: storiesErr } = await db
-        .from('qa_stories')
-        .select('*')
-        .eq('enabled', true)
-
-      if (storiesErr) {
-        // Truncate the message before logging and persisting — a transient Supabase
-        // 522/pooler failure carries a ~20KB Cloudflare HTML page in `.message`.
-        // Storing or logging that raw would pollute cron_runs, Supabase Logs, and
-        // (incorrectly) Sentry with unreadable noise.
-        const errMsg = (storiesErr.message ?? String(storiesErr)).slice(0, 500)
-
-        if (isTransientDbConnectionError(storiesErr)) {
-          // Transient infra failure (pooler reset, Cloudflare 522) — do NOT send
-          // to Sentry. Route to Supabase Logs only, queryable via:
-          //   metadata.parsed.event = "qa_transient_fetch_error"
-          console.warn(
-            JSON.stringify({
-              ts: new Date().toISOString(),
-              level: 'warn',
-              scope: 'mushi:qa-story-runner',
-              event: 'qa_transient_fetch_error',
-              msg: 'transient DB/network error fetching qa_stories — not an app bug',
-              db_code: storiesErr.code ?? 'unknown',
-              err_message: errMsg,
-            }),
-          )
-        } else {
-          rlog.error('Failed to fetch qa_stories', {
-            err: { ...storiesErr, message: errMsg },
-          })
-        }
-
-        await cronRun.fail(new Error(errMsg))
-        return new Response('Internal error', { status: 500 })
-      }
-
-      const dueStories = (stories ?? []).filter((s: QaStory) =>
-        cronMatches(s.schedule_cron ?? '*/15 * * * *', now)
-      )
-
       rlog.info('stories due', { total: stories?.length ?? 0, due: dueStories.length })
 
       // Rate-limit by project

@@ -24,7 +24,12 @@
  *          fresh-eyes runs (ADR 0053), the public free Production Check and
  *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
  *          cookieless landing page-view count with the daily GTM scorecard
- *          (landing-visits.ts).
+ *          (landing-visits.ts), the design CI push and recipe drift
+ *          (recipe-ingest.ts) and the org's bill imports (spend-ledger.ts),
+ *          moved 2026-11-11 to make room in `api` for the runner push and the
+ *          worker heartbeat, which `api` now serves itself (one invocation
+ *          each instead of two). api-ext still registers those two routes for
+ *          callers that reach it directly.
  */
 
 import { Hono } from 'npm:hono@4'
@@ -73,6 +78,8 @@ import { registerProductionCheckRoutes } from '../api/routes/production-check.ts
 import { registerPublicScoreboardRoutes } from '../api/routes/public-scoreboard.ts'
 import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
 import { registerBillingChangePlanRoutes } from '../api/routes/billing-change-plan.ts'
+import { registerRecipeIngestRoutes } from '../api/routes/recipe-ingest.ts'
+import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
 
 ensureSentry('api-ext')
 
@@ -124,6 +131,8 @@ registerPublicScoreboardRoutes(app)
 registerLandingVisitRoutes(app)
 // Plan change for paying teams (forwarded from api; api size budget).
 registerBillingChangePlanRoutes(app)
+registerRecipeIngestRoutes(app)
+registerSpendLedgerRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 
