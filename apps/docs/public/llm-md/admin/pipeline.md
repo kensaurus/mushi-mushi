@@ -73,7 +73,7 @@ The **Workers** tab shows your local workers: machines that run `mushi work --da
 | Part | What it shows |
 | --- | --- |
 | **Machines** | Each registered machine: online or offline, its last heartbeat, what it is doing now (working, idle, waiting for memory, for the GitHub quota, for the Cursor sign-in, or for a free agent space), its load, the Cursor account check and the `gh` sign-in as they last answered, which lane holds each agent space and in which stage, and its guards: how many agents may run at once, the free-memory floor and the GitHub API floor. The machine's owner changes the guards or revokes it. |
-| **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). An audit lane also has a second model that may only veto a finding. |
+| **Lanes** | One app on one machine: its model, mode, how many it runs at once, paused or not, its stop date, and drain (finish what runs, take nothing new). A fix lane also has **Takes**: every severity, medium and worse, high and worse, or critical only. An audit lane also has a second model that may only veto a finding. |
 | **Queue** | Reports the lane takes first, in order. Move a report up or down, remove it, or paste report ids (one or many) into **Add reports by id**. A report already being fixed somewhere else waits in the queue until it is free. |
 | **Recent runs** | The last 7 days: runs, PRs opened, no change, timeouts, errors, and failures of the machine (infra) kept apart from failures of the code. |
 
@@ -81,7 +81,7 @@ A lane's **mode** says what it does:
 
 | Mode | What the lane does |
 | --- | --- |
-| Fix reports and follow-ups | Its queue first, then the worst open reports; a draft PR for each |
+| Fix reports and follow-ups | Its queue first, then the worst open reports down to its **Takes** floor; a draft PR for each. It fixes a group of duplicate reports once: it takes no report while another report in its group is being fixed, and one report per group at a time |
 | Review follow-ups only | Fixes what Opus asked for on PRs a local agent opened |
 | Resolve merge conflicts | Merges the base branch into this repository's PRs that wait in the merge queue for a conflict agent. The agent may change only the conflicted files; anything else is refused. It counts toward the 2 conflict agents a PR may have, cloud and local together |
 | Audit the code, screen by screen | A model proposes bugs; the machine files only those its own check reproduces, at most 12 an hour per app, into a fix lane for the same app on that machine |
@@ -114,7 +114,7 @@ Log lines are cleaned on the machine and again by Mushi Mushi before they are st
 
 ### Send to my local worker
 
-On a report's page and on a pipeline group, **Send to my local worker** puts the reports at the end of one of your lanes for that app. While a lane holds a report, no cloud agent is sent to it, and the lane does not take a report a cloud agent is already working on.
+On a report's page, on a pipeline group, and on **Reports** when you select rows from one app, **Send to my local worker** puts the reports at the end of one of your lanes for that app (up to 50 at a time). A queued report goes whatever the lane's **Takes** floor says: you chose it. While a lane holds a report, no cloud agent is sent to it, and the lane does not take a report a cloud agent is already working on.
 
 ### Create a worker key
 
