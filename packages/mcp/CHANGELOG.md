@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.30.5
+
+### Patch Changes
+
+- 7f3dd9a: Refresh the bundled docs index with the new beginner pages (What is Mushi Mushi?, the glossary, the samples page, and pages for no-code founders, agencies and phone apps) and the retitled phone-app, connect and how-it-works pages.
+- a45452b: Refresh the bundled docs index after the framework quickstarts were renamed ("Bug report widget for …") and gained a step on where the project ID and API key come from.
+- 7f3dd9a: Add Lovable to the client registry (`MCP_CLIENTS`): a keyless entry for Lovable's custom MCP connector, with the hosted OAuth URL and the steps to add it. `McpClientDef.keyless` marks a client that signs in with OAuth, so the console mints no key for it.
+
 ## 0.30.4
 
 ### Patch Changes

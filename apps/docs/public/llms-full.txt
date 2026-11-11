@@ -320,7 +320,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.4"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -347,7 +347,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.4"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
@@ -6076,7 +6076,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.30.4`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.30.5`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -6924,7 +6924,7 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 | @mushi-mushi/core, @mushi-mushi/web | 1.33.x |
 | @mushi-mushi/react | 1.33.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.35.x |
+| @mushi-mushi/cli | 0.36.x |
 | @mushi-mushi/mcp | 0.30.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
@@ -9470,7 +9470,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.4`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.30.5`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -22664,7 +22664,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.30.4"],
+      "args": ["-y", "@mushi-mushi/mcp@0.30.5"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
