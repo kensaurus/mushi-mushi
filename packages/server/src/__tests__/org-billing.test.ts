@@ -50,6 +50,7 @@ import {
 } from '../../supabase/functions/_shared/org-billing.ts'
 import { resolvePlanForScope } from '../../supabase/functions/_shared/entitlements.ts'
 import { appLimitDenial } from '../../supabase/functions/_shared/plan-app-limit.ts'
+import { decideDiagnosisQuota } from '../../supabase/functions/_shared/quota.ts'
 
 // ─── A PostgREST-shaped fake that records every call ────────────────────────
 type Row = Record<string, unknown>
@@ -210,6 +211,32 @@ describe('diagnoses are pooled per team', () => {
     const r = await countOrgUsage(db, ['a', 'b', 'c'], 'diagnoses', { startIso: '2026-11-01T00:00:00Z' }, { excludeShadow: true })
     expect(r).toEqual({ count: 2496, error: null })
     expect(counts.every((c) => JSON.stringify(c.ids) === JSON.stringify(['a', 'b', 'c']))).toBe(true)
+  })
+})
+
+describe("complimentary teams keep working as before", () => {
+  it('the owner’s complimentary Studio team: plan pro, no Stripe row, pooled diagnoses well under 3,000 are allowed', async () => {
+    const { db } = fakeDb({
+      projects: [
+        { id: 'own-1', organization_id: 'org-comp', organizations: { billing_mode: 'complimentary', plan_id: 'pro' } },
+        { id: 'own-2', organization_id: 'org-comp', organizations: { billing_mode: 'complimentary', plan_id: 'pro' } },
+      ],
+      billing_subscriptions: [],
+    })
+    const billing = await resolveProjectBilling(db, 'own-2', { includeProjectIds: true })
+    expect(billing.plan.id).toBe('pro')
+    expect(billing.liveSub).toBeNull()
+    expect(billing.projectIds).toHaveLength(2)
+    // Busiest pooled month on prod for the 10-app complimentary team: 395.
+    const verdict = decideDiagnosisQuota({
+      plan: { ...billing.plan, included_diagnoses_per_month: 3000, overage_unit_amount_decimal_diagnoses: 0.03, monthly_spend_cap_usd: 200 } as never,
+      used: 395,
+      hasSubscription: false,
+      spendCapUsd: 200,
+      periodResetsAt: '2026-12-01T00:00:00Z',
+    })
+    expect(verdict.allowed).toBe(true)
+    expect(verdict.overage).toBe(false)
   })
 })
 
