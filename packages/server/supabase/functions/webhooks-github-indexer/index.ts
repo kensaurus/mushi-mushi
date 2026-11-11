@@ -1362,7 +1362,7 @@ async function loadStoredChunks(
       .select('file_path, symbol_name, content_hash, imports, tombstoned_at')
       .eq('project_id', projectId)
       .in('file_path', paths.slice(i, i + 50))
-      .not('embedding', 'is', null);
+      .not('embedding_768', 'is', null);
     if (error) throw new Error(`stored chunk lookup failed: ${error.message}`);
     for (const r of (data ?? []) as Array<StoredChunk & { file_path: string; symbol_name: string | null }>) {
       stored.set(chunkKey(r.file_path, r.symbol_name), r);

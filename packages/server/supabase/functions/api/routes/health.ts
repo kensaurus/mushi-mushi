@@ -500,6 +500,10 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
       'seer-poller': 15,
       'ci-sync': 60,
     };
+    // Jobs whose pg_cron tick calls them only when there is work
+    // (migration 20261111091825_cron_edge_work_gates). A quiet day writes no
+    // cron_runs row, which is health, not staleness.
+    const ON_DEMAND_JOBS = new Set(['plugin-dispatch-retry', 'qa-story-runner']);
     const now = Date.now();
     const rowsOrEmpty = runs ?? [];
 
@@ -553,8 +557,9 @@ export function registerHealthRoutes(app: Hono<{ Variables: Variables }>): void 
         const ageMin = Math.max(0, Math.round((now - new Date(lastRunIso).getTime()) / 60_000));
         const expected = EXPECTED_CADENCE_MIN[job] ?? 60 * 24;
         byJob[job].stalenessMinutes = ageMin;
-        byJob[job].staleness =
-          ageMin <= expected ? 'ok' : ageMin <= expected * 3 ? 'warn' : 'stale';
+        byJob[job].staleness = ON_DEMAND_JOBS.has(job)
+          ? 'ok'
+          : ageMin <= expected ? 'ok' : ageMin <= expected * 3 ? 'warn' : 'stale';
       }
     }
 

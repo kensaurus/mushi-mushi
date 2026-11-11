@@ -35,6 +35,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { useVisiblePolling } from '../lib/useVisiblePolling'
 import { TabbedSubNav } from '../components/TabbedSubNav'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
@@ -146,32 +147,6 @@ function useBackgroundLiveSync(livePath: string, scope: 'project' | 'enumeration
     void sync()
   }, [sync])
   return { syncing, sync }
-}
-
-/** Reload every `ms` while the tab is visible, and once on coming back. */
-function useVisiblePolling(reload: () => void, ms: number): void {
-  useEffect(() => {
-    let id: number | null = null
-    const start = () => {
-      if (id == null) id = window.setInterval(reload, ms)
-    }
-    const stop = () => {
-      if (id != null) window.clearInterval(id)
-      id = null
-    }
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        reload()
-        start()
-      } else stop()
-    }
-    if (document.visibilityState !== 'hidden') start()
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [reload, ms])
 }
 
 export function CiPage() {

@@ -5,8 +5,10 @@
  * POST /qa-stories/:sid/run inserts a pending row and fire-and-forgets the
  * runner. A 503 BOOT_ERROR (or a dropped invoke) never updates that row, and
  * the cron path inserts its own runs instead of adopting it. `started_at`
- * is set at insert. Cron is every minute (`qa-story-runner-tick`), so a
- * manual row still pending after 10 minutes did not start.
+ * is set at insert. Cron checks every minute (`qa-story-runner-tick`) and
+ * calls the runner when a row like this exists (mushi.qa_story_runner_has_work
+ * uses the same 10 minutes), so a manual row still pending after 10 minutes
+ * did not start.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'

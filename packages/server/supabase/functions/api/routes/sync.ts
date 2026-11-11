@@ -517,12 +517,16 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
     const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts')
     const { createEmbedding } = await import('../../_shared/embeddings.ts')
+    const { upsertCodebaseChunks } = await import('../../_shared/codebase-chunk-upsert.ts')
+    const { extractRelativeImports } = await import('../../_shared/codebase-graph-build.ts')
 
     if (!shouldIndex(filePath)) {
       return c.json({ ok: true, data: { chunks: 0, file_path: filePath, skipped: 'unsupported_extension' } })
     }
 
-    const chunks = chunk(filePath, pgSafeText(source))
+    const safeSource = pgSafeText(source)
+    const chunks = chunk(filePath, safeSource)
+    const imports = extractRelativeImports(safeSource)
     let inserted = 0
     const chunkErrors: string[] = []
     for (const ch of chunks) {
@@ -530,7 +534,10 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
         const text = `${filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
         const embedding = await createEmbedding(text, { projectId, functionName: 'codebase-sync' })
         const contentHash = await sha256Hex(ch.body)
-        const { error } = await db.from('project_codebase_files').upsert(
+        // Through upsert_codebase_chunks like the GitHub indexer: it stores
+        // only the 768-d search vector (embedding_768), never the legacy
+        // 1536-d `embedding` column (2026-11-11 cost audit).
+        const { error } = await upsertCodebaseChunks(db, [
           {
             project_id: projectId,
             file_path: filePath,
@@ -541,11 +548,12 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
             language: ch.language,
             content_hash: contentHash,
             content_preview: pgSafeSlice(ch.body, 500),
+            imports,
             embedding,
+            last_modified: new Date().toISOString(),
             tombstoned_at: null,
           },
-          { onConflict: 'project_id,file_path,symbol_name', ignoreDuplicates: false },
-        )
+        ])
         if (error) {
           chunkErrors.push(`${filePath}#${ch.symbolName ?? 'whole'}: ${error.message}`)
         } else {

@@ -25,6 +25,8 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
   { file: 'landing-visits', register: 'registerLandingVisitRoutes', count: 2 },
   { file: 'health-checks', register: 'registerHealthCheckRoutes', count: 1 },
+  { file: 'recipe-ingest', register: 'registerRecipeIngestRoutes', count: 5 },
+  { file: 'spend-ledger', register: 'registerSpendLedgerRoutes', count: 3 },
 ]
 
 describe('route groups that run in api-ext', () => {
@@ -44,5 +46,22 @@ describe('route groups that run in api-ext', () => {
     expect(api).toContain("forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*'])")
     expect(api).not.toContain('registerSkillsRoutes(app)')
     expect(ext).toContain('registerSkillsRoutes(app)')
+  })
+
+  // 2026-11-11 audit: a forward is a second edge invocation. The runner push
+  // and the worker heartbeat (each about one a minute per machine) are served
+  // by `api` itself from small modules; api-ext keeps them for direct callers.
+  it('api serves the runner push and the worker heartbeat itself, before any forward catches them', () => {
+    expect(api).toContain('registerRunnerIngestRoute(app);')
+    expect(api).toContain('registerWorkerHeartbeatRoute(app);')
+    expect(api).not.toContain("'/v1/ingest/runner'")
+    // Hono runs handlers in registration order: the heartbeat must come before the /v1/worker/* forward.
+    expect(api.indexOf('registerWorkerHeartbeatRoute(app);')).toBeLessThan(api.indexOf("forwardToApiExt(['/v1/worker/*'"))
+    expect(api).not.toContain('registerCiRoutes(app)')
+    expect(api).not.toContain('registerWorkRoutes(app)')
+    expect(ext).toContain('registerCiRoutes(app)')
+    expect(ext).toContain('registerWorkRoutes(app)')
+    expect(fn('api/routes/ci.ts')).toContain('registerRunnerIngestRoute(app, deps)')
+    expect(fn('api/routes/work.ts')).toContain('registerWorkerHeartbeatRoute(app, deps)')
   })
 })

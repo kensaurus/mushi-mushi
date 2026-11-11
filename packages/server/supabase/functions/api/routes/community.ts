@@ -85,6 +85,8 @@ export function registerCommunityRoutes(app: Hono<{ Variables: Variables }>) {
 
     const result = data as { ok: boolean; linked?: number; error?: string }
     if (!result.ok) {
+      // 30 links an hour per user (migration 20261111093051); the SDK links once per sign-in.
+      if (result.error === 'rate_limited') return c.json({ error: 'rate_limited' }, 429)
       return c.json({ error: result.error ?? 'link_failed' }, 400)
     }
 

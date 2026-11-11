@@ -59,14 +59,12 @@ import { registerPortfolioRoutes } from './routes/portfolio.ts';
 import { registerRadarRoutes } from './routes/radar.ts';
 import { registerDigestRoutes } from './routes/digest.ts';
 import { registerConnectorRoutes } from './routes/connectors.ts';
-import { registerRecipeIngestRoutes } from './routes/recipe-ingest.ts';
 import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
 import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
 import { registerGateFindingDismissRoutes } from './routes/gate-finding-dismiss.ts';
 import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
-import { registerSpendLedgerRoutes } from './routes/spend-ledger.ts';
 import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
@@ -88,6 +86,8 @@ import { registerIntakeVoiceRoutes } from './routes/intake-voice.ts';
 import { registerPushRoutes } from './routes/push.ts';
 import { registerSentryImportRoutes } from './routes/sentry-import.ts';
 import { registerReportFileRoutes } from './routes/report-file.ts';
+import { registerRunnerIngestRoute } from './routes/ci-runner-ingest.ts';
+import { registerWorkerHeartbeatRoute } from './routes/work-heartbeat.ts';
 
 ensureSentry('api');
 
@@ -778,14 +778,25 @@ registerPortfolioRoutes(app);
 registerRadarRoutes(app);
 registerDigestRoutes(app);
 registerConnectorRoutes(app);
-registerRecipeIngestRoutes(app);
+// recipe-ingest.ts (design CI push, portfolio resources, recipe drift): served
+// by api-ext, so `api` has room for the runner and worker heartbeats it now
+// serves itself. Under ten calls a day (2026-11-11), so the forward is cheap.
+forwardToApiExt([
+  '/v1/ingest/recipe',
+  '/v1/ingest/recipe/events',
+  '/v1/ingest/recipe/csv',
+  '/v1/admin/orgs/:orgId/portfolio/resources',
+  '/v1/admin/projects/:id/recipe/drift',
+]);
 registerAccountsRegisterRoutes(app);
 registerRecipeChangeRoutes(app);
 registerStoreOpsRoutes(app);
 registerFindingExplainRoutes(app);
 registerGateFindingDismissRoutes(app);
 registerPortfolioFunnelRoutes(app);
-registerSpendLedgerRoutes(app);
+// spend-ledger.ts (the org's bill imports): served by api-ext for the same
+// reason; a few calls a day.
+forwardToApiExt(['/v1/admin/orgs/:orgId/spend', '/v1/admin/orgs/:orgId/spend/imports', '/v1/admin/orgs/:orgId/spend/imports/:importId']);
 registerStoreReviewIntakeRoutes(app);
 registerWorkspaceNavMetaRoutes(app);
 // Agent skills (skills.ts); deploy size limit, 2026-10-22.
@@ -835,8 +846,11 @@ registerIntakeVoiceRoutes(app);
 registerPushRoutes(app);
 registerSentryImportRoutes(app);
 registerReportFileRoutes(app);
-// CI runners you can see (Plan 022): runner ingest, CI overview, re-run tests.
-forwardToApiExt(['/v1/admin/ci/*', '/v1/ingest/runner', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// CI runners you can see (Plan 022): CI overview, re-run tests, runner keys.
+// The runner push (about one a minute per runner) is served here, not
+// forwarded: a forward costs a second edge invocation (2026-11-11 audit).
+registerRunnerIngestRoute(app);
+forwardToApiExt(['/v1/admin/ci/*', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
 // Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
 forwardToApiExt([
   '/v1/admin/projects/:id/verify-settings',
@@ -856,6 +870,9 @@ forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
 // health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.
 forwardToApiExt(['/v1/admin/health-checks']);
 // work.ts: local workers (`mushi work --daemon`, ADR 0048); deploy size limit, 2026-10-27.
+// The heartbeat (once a minute per daemon) is served here and registered
+// before the /v1/worker/* forward, so it costs one edge invocation, not two.
+registerWorkerHeartbeatRoute(app);
 forwardToApiExt(['/v1/worker/*', '/v1/admin/work/*']);
 // repo-housekeeping.ts (ADR 0051, console ops plan P4): repo clean-up from /repo; deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/projects/:id/repo-cleanup', '/v1/admin/projects/:id/repo-cleanup/*']);

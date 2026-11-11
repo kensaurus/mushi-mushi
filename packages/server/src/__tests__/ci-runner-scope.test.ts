@@ -126,9 +126,13 @@ describe('runner:write plumbing', () => {
   it('is typed, mintable and wired on the ingest route', () => {
     expect(read('_shared/auth.ts')).toMatch(/export type McpScope = [^\n]*'runner:write'/)
     expect(read('api/routes/project-keys.ts')).toMatch(/ALLOWED_KEY_SCOPES = \[[^\]]*'runner:write'[^\]]*\]/)
+    // The handler lives in ci-runner-ingest.ts (served by api and api-ext); ci.ts registers it too.
+    const ingest = read('api/routes/ci-runner-ingest.ts')
+    expect(ingest).toContain("app.post('/v1/ingest/runner', deps.apiKeyAuth, deps.requireRunnerScope,")
+    expect(ingest).toContain("requireRunnerScope: requireApiKeyScope('runner:write')")
     const ci = read('api/routes/ci.ts')
-    expect(ci).toContain("app.post('/v1/ingest/runner', deps.apiKeyAuth, deps.requireRunnerScope,")
     expect(ci).toContain("requireRunnerScope: requireApiKeyScope('runner:write')")
+    expect(ci).toContain('registerRunnerIngestRoute(app, deps)')
     expect(read('api/routes/openapi.ts')).toMatch(/'\/v1\/ingest\/runner'[\s\S]{0,900}security: \[\{ mushiApiKey: \['runner:write'\] \}\]/)
   })
 

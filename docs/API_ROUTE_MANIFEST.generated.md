@@ -678,7 +678,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/ingest/recipe` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
 | POST | `/v1/ingest/recipe/csv` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
 | POST | `/v1/ingest/recipe/events` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/recipe-ingest.ts` |
-| POST | `/v1/ingest/runner` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| POST | `/v1/ingest/runner` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/ci-runner-ingest.ts` |
 | POST | `/v1/ingest/spans` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/intake/voice` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | GET | `/v1/intake/voice/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
@@ -824,5 +824,5 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/findings` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
-| POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work-heartbeat.ts` |
 | POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
