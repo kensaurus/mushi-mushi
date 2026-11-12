@@ -24,12 +24,14 @@ import {
   DEFAULT_TRAIN_MAX_MEMBERS,
   RED_TRAIN_DETAIL_PREFIX,
   TRAIN_BLOCKED_DETAIL_PREFIX,
+  TRAIN_RERUN_DETAIL_PREFIX,
   benchReason,
   bisectTrain,
   isApprovedAtHead,
   isExpress,
   isTrainReady,
   pickTrainMembers,
+  shouldRerunTrain,
   trainBranchName,
   trainDue,
   trainMergeGate,
@@ -62,6 +64,8 @@ export interface TrainDeps {
   mergeInto: (token: string, ref: GithubRepoRef, branch: string, head: string, message: string) => Promise<{ outcome: 'merged' | 'noop' | 'conflict' | 'error'; sha?: string; message?: string }>
   openPr: (token: string, ref: GithubRepoRef, pr: { head: string; base: string; title: string; body: string }) => Promise<{ number: number } | null>
   closePr: (token: string, ref: GithubRepoRef, n: number, comment: string) => Promise<void>
+  /** Re-run the failed GitHub Actions runs behind a head's red checks; how many runs were re-queued (0 = none could be). */
+  rerunFailed?: (token: string, ref: GithubRepoRef, sha: string) => Promise<number>
   deleteBranch: (token: string, ref: GithubRepoRef, branch: string) => Promise<void>
   /** 'squash' when the base branch must stay linear or merge commits are off; else 'merge'. */
   mergeMethod: (token: string, ref: GithubRepoRef, base: string) => Promise<TrainMergeMethod>
@@ -102,6 +106,8 @@ interface TrainRow {
   created_at: string
   detail?: string | null
   updated_at?: string | null
+  /** Times the failed checks were re-run before the train was judged red. */
+  ci_reruns?: number | null
 }
 
 export interface TrainSettings {
@@ -116,7 +122,7 @@ export function trainSettingsFrom(row: { train_interval_minutes?: number | null;
   }
 }
 
-const TRAIN_COLUMNS = 'id, project_id, repo, branch, base_ref, pr_number, head_sha, state, members, attempt, created_at, detail, updated_at'
+const TRAIN_COLUMNS = 'id, project_id, repo, branch, base_ref, pr_number, head_sha, state, members, attempt, created_at, detail, updated_at, ci_reruns'
 
 async function setRows(db: SupabaseClient, ids: string[], patch: Record<string, unknown>) {
   if (!ids.length) return
@@ -267,7 +273,7 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
     await db.from('release_trains').update({ updated_at: now, head_sha: head, detail: `CI is running for ${train.members.length} fixes (${checks.pending} check${checks.pending === 1 ? '' : 's'} left).` }).eq('id', train.id)
     return 'testing'
   }
-  if (checks.failed.length) return redTrain(db, train, token, ref, checks.failed, settings, deps)
+  if (checks.failed.length) return redTrain(db, train, token, ref, checks.failed, settings, deps, head)
   const gate = trainMergeGate({ mergeableState: pr.mergeableState, detail: train.detail, updatedAt: train.updated_at, now: deps.now?.() ?? new Date() })
   if (gate === 'hold') {
     await db.from('release_trains').update({ updated_at: now, detail: `${TRAIN_BLOCKED_DETAIL_PREFIX} a required check did not pass (a cancelled run reads as no failure). Re-run CI on #${train.pr_number}, or it is rebuilt in 30 minutes.` }).eq('id', train.id)
@@ -310,7 +316,7 @@ async function tickTrain(db: SupabaseClient, train: TrainRow, token: string, ref
 }
 
 /** A red train: bisect, or hold the member that failed alone. */
-async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref: GithubRepoRef, failed: string[], settings: TrainSettings, deps: TrainDeps): Promise<string> {
+async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref: GithubRepoRef, failed: string[], settings: TrainSettings, deps: TrainDeps, head?: string | null): Promise<string> {
   const now = new Date().toISOString()
   // Checks that fail on the base branch too are not the members' fault:
   // bisecting would split a healthy train and hold an innocent fix.
@@ -325,6 +331,16 @@ async function redTrain(db: SupabaseClient, train: TrainRow, token: string, ref:
     return 'base_red'
   }
   const names = checkNameList(failed)
+  // First red result: re-run the failed runs once before blaming any member.
+  // A runner that could not install a browser, or a page scanned before it
+  // hydrated, is not the members' code (SBC #1299, glot #949/#954, 2026-11-12).
+  if (head && deps.rerunFailed && shouldRerunTrain(train.ci_reruns)) {
+    const rerun = await deps.rerunFailed(token, ref, head).catch(() => 0)
+    if (rerun > 0) {
+      await db.from('release_trains').update({ ci_reruns: (train.ci_reruns ?? 0) + 1, updated_at: now, detail: `${TRAIN_RERUN_DETAIL_PREFIX} ${names}.` }).eq('id', train.id)
+      return 'rerun'
+    }
+  }
   const why = `CI failed: ${names}.`
   await deps.closePr(token, ref, train.pr_number!, `${why} Mushi retries part of this train to find the pull request that breaks it.`)
   await deps.deleteBranch(token, ref, train.branch)

@@ -4,7 +4,7 @@
  *          leaves, how a red train is bisected, and what the train PR says.
  */
 import { describe, expect, it } from 'vitest'
-import { TRAIN_BLOCKED_DETAIL_PREFIX, benchReason, bisectTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainMergeGate, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
+import { TRAIN_BLOCKED_DETAIL_PREFIX, TRAIN_CI_RERUNS, benchReason, bisectTrain, failedWorkflowRunIds, shouldRerunTrain, isExpress, isTrainReady, pickTrainMembers, trainBranchName, trainDue, trainMergeGate, trainPullRequest, type TrainCandidate } from '../../supabase/functions/_shared/merge-train.ts'
 
 describe('trainMergeGate', () => {
   const now = new Date('2026-11-02T06:00:00Z')
@@ -110,6 +110,27 @@ describe('a red train', () => {
   it('retries its first half and defers the rest; a train of one is that member failing', () => {
     expect(bisectTrain([1, 2, 3, 4, 5])).toEqual({ retry: [1, 2, 3], deferred: [4, 5], failedAlone: null })
     expect(bisectTrain([7])).toEqual({ retry: [], deferred: [], failedAlone: 7 })
+  })
+
+  it('re-runs its failed checks once before blaming anyone (a runner install, a page not hydrated yet)', () => {
+    expect(TRAIN_CI_RERUNS).toBe(1)
+    expect(shouldRerunTrain(undefined)).toBe(true)
+    expect(shouldRerunTrain(0)).toBe(true)
+    expect(shouldRerunTrain(1)).toBe(false)
+  })
+
+  it('finds the Actions runs behind failed checks, once each, and skips checks from other CIs', () => {
+    const run = (id: number, job: number) => `https://github.com/o/r/actions/runs/${id}/job/${job}`
+    expect(
+      failedWorkflowRunIds([
+        { conclusion: 'failure', details_url: run(43168854818, 1) },
+        { conclusion: 'failure', details_url: run(43168854818, 2) },
+        { conclusion: 'timed_out', details_url: run(77, 3) },
+        { conclusion: 'success', details_url: run(88, 4) },
+        { conclusion: 'failure', details_url: 'https://ci.example.com/build/9' },
+        { conclusion: 'failure', details_url: null },
+      ]),
+    ).toEqual([43168854818, 77])
   })
 })
 

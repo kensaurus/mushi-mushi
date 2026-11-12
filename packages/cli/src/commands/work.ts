@@ -207,13 +207,13 @@ export function hookFailureDetail(r: { stdout: string; stderr: string }, max = 9
 export type WorkStage = 'prepare' | 'agent' | 'commit' | 'push' | 'pr'
 
 const INFRA_FAILURE =
-  /\b(?:EACCES|EPERM|ENOSPC|ENOMEM|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|E_NETWORK|E_AUTH_MISSING)\b|permission denied|could not resolve host|unable to access|connection (?:lost|reset|refused|timed out)|rate limit|index\.lock|cannot lock ref|unable to create .*\.lock|no space left|out of memory|cannot allocate memory|killed|signal 9|timed out|resource temporarily unavailable|segmentation fault|SIGSEGV|core dumped|exit (?:code|status) 139/i
+  /\b(?:EACCES|EPERM|ENOSPC|ENOMEM|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|E_NETWORK|E_AUTH_MISSING)\b|permission denied|could not resolve host|unable to access|connection (?:lost|reset|refused|timed out)|rate limit|index\.lock|cannot lock ref|unable to create .*\.lock|no space left|out of memory|cannot allocate memory|killed|signal 9|timed out|resource temporarily unavailable|segmentation fault|SIGSEGV|core dumped|exit (?:code|status) 139|Native stack trace|FailureMessage Object|FATAL ERROR:|JavaScript heap out of memory/i
 
 /**
  * Infra or code, as ADR 0033 splits CI: a
  * failure before the agent started, or one that names the machine (a
  * permission, the network, a lock, memory, a timeout, a tool that crashed
- * with a segfault) is infra; anything
+ * with a segfault or a V8 fatal error) is infra; anything
  * else (a hook rejecting the change, a test the change broke) is code.
  */
 export function classifyFailure(message: string, stage: WorkStage): 'infra' | 'code' {
