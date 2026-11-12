@@ -39,7 +39,7 @@ const MAX_PENDING = 20
 const MAX_FILE_BYTES = 1_000_000
 
 /**
- * @internal Exported for tests only. A file in the worktree read in one go: opened once without
+ * A file in the worktree read in one go (also used by work-recheck.ts): opened once without
  * following a symlink (a model-named path must not leave the clone), checked on the open handle
  * (a regular file, at most MAX_FILE_BYTES), then read from that same handle. Null when it is not.
  */
@@ -172,7 +172,7 @@ function jsonIn(text: string): Record<string, unknown> | null {
 }
 
 const SAFE_PATH_RE = /^[A-Za-z0-9_@()[\]+.-]+(?:\/[A-Za-z0-9_@()[\]+.-]+)*$/
-/** @internal Exported for tests only. A repo-relative path with no way out of the worktree. */
+/** A repo-relative path with no way out of the worktree (also used by work-recheck.ts). */
 export function safePath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const p = raw.trim().replace(/^\.\//, '')
@@ -181,7 +181,7 @@ export function safePath(raw: unknown): string | null {
 }
 
 /**
- * @internal Exported for tests only. A regex the worker will run: at most 200
+ * A regex the worker will run (also used by work-recheck.ts): at most 200
  * characters, no backreference, no quantified group that itself repeats (the
  * classic catastrophic-backtracking shape), and it must compile.
  */
@@ -250,7 +250,7 @@ export function evidenceLine(fileText: string, line: number, quote: string): { l
   return null
 }
 
-/** @internal Exported for tests only. A pattern check over one file's text: does the problem reproduce? */
+/** A pattern check over one file's text: does the problem reproduce? (Also how work-recheck.ts rechecks a filed finding.) */
 export function patternReproduces(fileText: string, c: Extract<AuditCheck, { kind: 'pattern' }>): boolean {
   const re = safeRegex(c.regex, c.ignoreCase)
   if (!re) return false

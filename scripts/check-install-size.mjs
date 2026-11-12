@@ -117,7 +117,12 @@ export const BUDGETS = [
   // --agent claude` (work-agents.ts: the agent table, the out-of-usage stop) so
   // fixes run on Claude Code when Cursor credits are out. No new dependencies;
   // measured 270.3 kB packed, 1,001.3 kB unpacked in CI.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 275_000, unpacked: 1_010_000 },
+  // 2026-11-12: packed 275 → 280 kB, unpacked 1,010 → 1,020 kB: `mushi work`
+  // rechecks a report for free before an agent run (work-recheck.ts, the
+  // `gone` outcome, `--recheck` sweep; ADR 0048 amendment b), plus the 0.36.x
+  // CHANGELOG entries. No new dependencies; measured 275.1 kB packed,
+  // 1,013.9 kB unpacked in CI.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 280_000, unpacked: 1_020_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

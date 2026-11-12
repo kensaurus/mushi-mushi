@@ -114,7 +114,7 @@ export interface WorkerLane {
     finishedAt: string | null
     autoRequeued: boolean
   }>
-  counts7d: { runs: number; prs: number; merges?: number; filed?: number; noChange: number; timeouts: number; errors: number; infra: number }
+  counts7d: { runs: number; prs: number; merges?: number; filed?: number; gone?: number; noChange: number; timeouts: number; errors: number; infra: number }
 }
 
 type ClaimKind = 'fix' | 'conflict' | 'audit'
@@ -225,7 +225,8 @@ export function laneCountsLine(lane: Pick<WorkerLane, 'config' | 'counts7d'>): s
   const errors = `${n.timeouts} timed out, ${n.errors} errors${n.infra > 0 ? ` (${n.infra} the machine's fault)` : ''}`
   if (lane.config.mode === 'conflicts') return `${n.runs} conflicts tried, ${n.merges ?? 0} merged in, ${errors} in 7 days`
   if (lane.config.mode === 'audit') return `${n.runs} screens read, ${n.filed ?? 0} with findings filed, ${errors} in 7 days`
-  return `${n.runs} runs, ${n.prs} PRs, ${errors} in 7 days`
+  // Reports found already fixed cost no agent run: say how many the lane saved.
+  return `${n.runs} runs, ${n.prs} PRs${n.gone ? `, ${n.gone} already fixed (no agent run)` : ''}, ${errors} in 7 days`
 }
 
 /** One sentence on how the workers stand, and the three numbers that matter. */
@@ -272,6 +273,7 @@ export const OUTCOME_LABEL: Record<string, string> = {
   pushed: 'Merged the base in',
   refused: 'Refused by its checks',
   filed: 'Filed findings',
+  gone: 'Already fixed: closed without an agent run',
 }
 
 export interface WriteResult {

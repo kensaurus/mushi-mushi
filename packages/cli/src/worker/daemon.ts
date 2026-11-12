@@ -410,7 +410,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
           failureKind: out.result === 'failed' ? (out.failureKind ?? 'code') : null,
           fixId: out.fixId ?? null,
           prUrl: out.prUrl ?? null,
-          detail: out.outcome.slice(0, 1000),
+          // `gone`: the server closes the report with this as its team note.
+          detail: (out.result === 'gone' && out.note ? out.note : out.outcome).slice(0, 1000),
         }),
       })
       if (!done.ok) say(lane, `  outcome not recorded: ${done.error.code} ${done.error.message}`)
