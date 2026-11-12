@@ -323,7 +323,11 @@ db4c8383a), which also stayed open and would have been tried again after the
   report is closed as fixed with a team note. Only `source = code_audit` is
   read this way: a person's words never close their own report. A check cut
   short, an unsafe pattern or path, or a file that moved leaves the report to
-  the agent.
+  the agent. A `present` problem is gone only when the whole file no longer
+  has it: the audit's ±3-line window alone called 93 of 217 findings gone
+  whose code had only moved (measured 2026-11-12 over 638 open findings: 420
+  still reproduce, 124 resolved, 93 moved, 1 file deleted; of 6 sampled
+  resolved ones, 5 were truly fixed and 1 partly).
 - **`already_fixed` with proof closes the report.** A verdict naming a commit
   that `git merge-base --is-ancestor` finds on the base branch ends `gone`.
 - **`gone` claim outcome.** The daemon ends its claim `gone` with the note as

@@ -77,6 +77,13 @@ export function recheckReport(detail: { source?: string | null; description?: st
   // A file that moved or was split may still hold the bug elsewhere: the agent looks.
   if (text === null) return { gone: false, reason: `${check.file} is not in the base branch any more, so the agent looks` }
   if (patternReproduces(text, check)) return { gone: false, reason: null }
+  // The audit looks 3 lines either side of the cited line. Code that only
+  // moved (2026-11-12: 93 of 217 "gone" findings) still has the problem
+  // elsewhere in the file: a `present` problem is gone only when the whole
+  // file no longer has it.
+  if (check.expect === 'present' && patternReproduces(text, { ...check, line: null })) {
+    return { gone: false, reason: `the code moved away from line ${check.line ?? '?'} but is still in ${check.file}, so the agent looks` }
+  }
   return {
     gone: true,
     reason: `its own check no longer reproduces: /${check.regex}/${check.ignoreCase ? 'i' : ''} is not ${check.expect} in ${check.file}${check.line ? ` near line ${check.line}` : ''}`,

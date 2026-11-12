@@ -55,10 +55,18 @@ describe('recheckReport', () => {
     expect(recheckReport({ source: 'code_audit', description: 'no check here' }, '/wt', file('x')).gone).toBe(false)
   })
 
-  it('honours the line window the audit used (3 lines either side)', () => {
+  it('never calls a problem gone when the code only moved further down the file', () => {
     const far = Array.from({ length: 20 }, (_, i) => (i === 15 ? '<ChevronRight />' : 'x')).join('\n')
-    // The pattern is 13 lines away from line 3: the audit would not see it, so neither does the recheck.
-    expect(recheckReport(report, '/wt', file(far)).gone).toBe(true)
+    // 13 lines from the cited line 3: outside the audit window, but still in the file (2026-11-12: 93 such false "gone").
+    const moved = recheckReport(report, '/wt', file(far))
+    expect(moved.gone).toBe(false)
+    expect(moved.reason).toContain('moved')
+  })
+
+  it('an absent check is gone once the wanted text is back near the cited line', () => {
+    const absent = { source: 'code_audit', description: desc('/role="status"/ is absent in app/loading.tsx near line 2') }
+    expect(recheckReport(absent, '/wt', file('<div>\n<p role="status">\n</div>')).gone).toBe(true)
+    expect(recheckReport(absent, '/wt', file('<div>\n<p>\n</div>')).gone).toBe(false)
   })
 })
 
