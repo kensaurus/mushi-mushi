@@ -21,6 +21,7 @@ import {
   LANE_MODES,
   laneCountsLine,
   laneRuns,
+  MIN_SEVERITY_OPTIONS,
   MODEL_RE,
   moveItem,
   OUTCOME_LABEL,
@@ -30,6 +31,7 @@ import {
   stopRun,
   type LaneConfig,
   type LaneSettings,
+  type MinSeverity,
   type RunTelemetry,
   type WorkerHost,
   type WorkerLane,
@@ -235,6 +237,27 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
       </div>
 
       {modeHint && <p className="text-2xs text-fg-muted" data-testid={`${testId}-mode-hint`}>{modeHint}</p>}
+      {c.mode === 'fix' && (
+        <div className="max-w-md space-y-1">
+          <SelectField
+            id={`${testId}-min-severity-input`}
+            label="Takes"
+            value={lane.minSeverity ?? ''}
+            disabled={busy === 'min_severity'}
+            onChange={(e) => void save('min_severity', { min_severity: (e.target.value || null) as MinSeverity | null })}
+            data-testid={`${testId}-min-severity`}
+          >
+            {MIN_SEVERITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </SelectField>
+          <p className="text-2xs text-fg-muted">
+            Worst first, one report per duplicate group. Reports you queue below go whatever their severity.
+          </p>
+        </div>
+      )}
       {c.mode === 'conflicts' && !lane.repo && (
         <p className="text-2xs text-warn-foreground">This machine has not said which repository its clone is. Update the Mushi Mushi CLI there; until then the lane takes no conflicts.</p>
       )}

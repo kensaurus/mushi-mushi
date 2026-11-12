@@ -238,6 +238,38 @@ describe('POST /v1/worker/claim', () => {
     expect(s.db.table('work_queue').map((q) => q.report_id)).toEqual([R(1)])
   })
 
+  it('a drain floor stops the ranked list at that severity; a queued report still goes', async () => {
+    const s = await registered({ reports: [report(1, { severity: 'high' }), report(2, { severity: 'medium' }), report(3, { severity: 'low' })] })
+    const lane = s.db.table('work_lanes').find((l) => l.id === s.laneA)!
+    lane.min_severity = 'high'
+    // Room for several runs, so only the floor can say no.
+    lane.concurrency = 4
+    const first = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    expect(first.body.data.claim).toMatchObject({ fromQueue: false, report: { id: R(1) } })
+    const none = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    expect(none.body.data.claim).toBeNull()
+    s.db.table('work_queue').push({ id: 'q1', lane_id: s.laneA, project_id: P1, report_id: R(3), position: 0, source: 'console', created_at: '2026-10-27T00:00:00Z' })
+    const queued = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    expect(queued.body.data.claim).toMatchObject({ fromQueue: true, report: { id: R(3) } })
+  })
+
+  it('fixes a duplicate group once: no sibling while one is claimed or already fixing', async () => {
+    const s = await registered({
+      reports: [
+        report(1, { severity: 'high', report_group_id: 'g1' }),
+        report(2, { severity: 'high', report_group_id: 'g1' }),
+        report(3, { severity: 'medium', report_group_id: 'g2' }),
+        report(4, { status: 'fixing', report_group_id: 'g2' }),
+        report(5, { severity: 'low' }),
+      ],
+    })
+    const a = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    expect(a.body.data.claim.report.id).toBe(R(2))
+    // R(1) shares g1 with the claimed R(2); R(3) shares g2 with R(4), already fixing.
+    const b = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneB } })
+    expect(b.body.data.claim.report.id).toBe(R(5))
+  })
+
   it('a paused lane takes nothing', async () => {
     const s = await registered({ reports: [report(1)] })
     s.db.table('work_lanes').find((l) => l.id === s.laneA)!.paused = true

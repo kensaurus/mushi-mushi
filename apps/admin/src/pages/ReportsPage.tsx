@@ -27,6 +27,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
+import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { usePageCopy } from '../lib/copy'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
@@ -275,6 +276,12 @@ export function ReportsPage() {
     })
   }, [])
 
+  // Bulk "send to my local worker": every selected report must be in one app,
+  // the app the worker lanes belong to.
+  const bulkWorkerProjectId = useMemo(() => {
+    const apps = new Set(reports.filter((r) => selected.has(r.id)).map((r) => r.project_id))
+    return apps.size === 1 ? [...apps][0]! : null
+  }, [reports, selected])
   const allSelected = reports.length > 0 && reports.every((r) => selected.has(r.id))
   const someSelected = !allSelected && reports.some((r) => selected.has(r.id))
 
@@ -941,6 +948,11 @@ export function ReportsPage() {
         onSetStatus={(v) => requestBulk('set_status', v)}
         onSetSeverity={(v) => requestBulk('set_severity', v)}
         onDismiss={() => requestBulk('dismiss')}
+        extra={
+          bulkWorkerProjectId ? (
+            <SendToWorkerButton projectId={bulkWorkerProjectId} reportIds={[...selected]} data-testid="bulk-send-to-worker" />
+          ) : null
+        }
       />
 
       {pendingBulk && (

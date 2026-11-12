@@ -130,13 +130,25 @@ export function laneConfigFromRow(row: {
  * What the console may change on a lane: the seven verbs, plus `review_model`
  * (an audit lane's optional veto model, ADR 0050). `review_model` is not a
  * heartbeat verb: it travels in the audit claim, so a daemon that predates it
- * never sees an unknown key.
+ * never sees an unknown key. `min_severity` (the drain floor) is server-only
+ * the same way: the claim route applies it.
  */
-export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null; min_severity?: MinSeverity | null }
+
+/**
+ * A lane's drain floor (work_lanes.min_severity): the lowest severity it
+ * claims from the ranked list. Server-only like review_model, so an older
+ * daemon never sees it. null = every severity.
+ */
+export const MIN_SEVERITIES = ['critical', 'high', 'medium'] as const
+export type MinSeverity = (typeof MIN_SEVERITIES)[number]
+
+/** Server-only lane settings: the console may set them, the heartbeat never carries them. */
+const SERVER_ONLY_SETTINGS = ['review_model', 'min_severity'] as const
 
 export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ok: false, message: 'Lane settings must be an object.' }
-  const { review_model: reviewModel, ...rest } = raw as Record<string, unknown>
+  const { review_model: reviewModel, min_severity: minSeverity, ...rest } = raw as Record<string, unknown>
   const out: LaneSettings = {}
   if (reviewModel !== undefined) {
     if (reviewModel !== null && (typeof reviewModel !== 'string' || !MODEL_RE.test(reviewModel))) {
@@ -144,8 +156,14 @@ export function parseLaneSettings(raw: unknown): Parsed<LaneSettings> {
     }
     out.review_model = reviewModel as string | null
   }
+  if (minSeverity !== undefined) {
+    if (minSeverity !== null && (typeof minSeverity !== 'string' || !(MIN_SEVERITIES as readonly string[]).includes(minSeverity))) {
+      return { ok: false, message: `min_severity must be one of ${MIN_SEVERITIES.join(', ')}, or null for every severity.` }
+    }
+    out.min_severity = minSeverity as MinSeverity | null
+  }
   if (Object.keys(rest).length === 0) {
-    return reviewModel === undefined ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, 'review_model'].join(', ')}.` } : { ok: true, value: out }
+    return Object.keys(out).length === 0 ? { ok: false, message: `Send at least one of ${[...LANE_VERBS, ...SERVER_ONLY_SETTINGS].join(', ')}.` } : { ok: true, value: out }
   }
   const verbs = parseLaneVerbs(rest, { partial: true })
   if (!verbs.ok) return verbs
@@ -334,6 +352,33 @@ export function rankWorkCandidates<T extends WorkCandidate>(rows: readonly T[]):
       (SEVERITY_WEIGHT[(b.severity ?? '').toLowerCase()] ?? 0) - (SEVERITY_WEIGHT[(a.severity ?? '').toLowerCase()] ?? 0) ||
       b.created_at.localeCompare(a.created_at),
   )
+}
+
+/** At or above the lane's drain floor. No floor takes everything; an unknown severity only passes no floor. */
+export function meetsSeverityFloor(severity: string | null, floor: MinSeverity | null | undefined): boolean {
+  if (!floor) return true
+  return (SEVERITY_WEIGHT[(severity ?? '').toLowerCase()] ?? 0) >= SEVERITY_WEIGHT[floor]!
+}
+
+/**
+ * One claim per duplicate group (reports.report_group_id). Drop a ranked
+ * candidate whose group is busy (another member is being fixed: an active
+ * claim, a live run or an open PR), and keep only the first, worst-ranked
+ * member of each remaining group, so two lanes, or one lane twice, never fix
+ * the same bug in parallel. `rows` arrive ranked; reports in no group pass.
+ */
+export function onePerGroup<T extends { id: string; report_group_id?: string | null }>(rows: readonly T[], busyGroups: ReadonlySet<string>): T[] {
+  const seen = new Set<string>()
+  const out: T[] = []
+  for (const r of rows) {
+    const g = r.report_group_id
+    if (g) {
+      if (busyGroups.has(g) || seen.has(g)) continue
+      seen.add(g)
+    }
+    out.push(r)
+  }
+  return out
 }
 
 export interface AttemptLite {

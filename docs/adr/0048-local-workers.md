@@ -282,3 +282,27 @@ and to change.
 - **Capability, not version sniffing.** A daemon that can switch sends
   `host.can: ["cursor_login"]`; without it the console says to update the CLI.
   Migration `20261028150000_worker_cursor_account.sql` (additive).
+
+## Amendment 2026-11-12: a drain floor and one fix per duplicate group
+
+The owner had about 1,000 open reports across apps and wanted the workers to
+fix the worst first, without a person picking each one.
+
+- **`work_lanes.min_severity`** (critical, high, medium; NULL = all). It is
+  server-only, like `review_model`: the claim route applies it to the ranked
+  list, and the heartbeat never carries it, so an older daemon never sees an
+  unknown setting. A report a person queued goes whatever its severity.
+- **One fix per duplicate group** (`reports.report_group_id`). A ranked report
+  is not offered while another member of its group is claimed, queued, has a
+  live run or an open PR, or is `fixing`; and only the worst-ranked member of a
+  free group is offered. A read error leaves no group busy, so the worst case
+  is a second fix of a duplicate, never an idle lane.
+- **Rejected: closing grouped duplicates in bulk.** A sample of 12 grouped
+  code-audit reports on 2026-11-12 held 2 different bugs under one canonical
+  ("Go back can leave the app" under "Go back pops in and shifts the error
+  screen"). Closing all 134 grouped duplicates would have buried about 20 real
+  bugs.
+- **Not done: choosing the agent per lane from the console.** The daemon runs
+  one agent per machine (its sign-in check and out-of-usage backoff are
+  per host), so the agent stays a machine setting (`--agent`, worker.json).
+- Migration `20261112090000_work_lane_min_severity.sql` (additive).

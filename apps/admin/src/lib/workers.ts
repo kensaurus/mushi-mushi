@@ -91,6 +91,8 @@ export interface WorkerLane {
   config: LaneConfig
   /** Audit lanes: the model that may veto a reproduced finding; null = no veto pass. */
   reviewModel?: string | null
+  /** The lowest severity the lane claims on its own (a queued report always goes); null = all. */
+  minSeverity?: MinSeverity | null
   /** owner/name of the lane's clone, as the machine reports it. */
   repo?: string | null
   /** Numbers and words, plus `runs` (RunTelemetry) from a CLI that sends them. */
@@ -280,7 +282,16 @@ export interface WriteResult {
 const fail = (res: { error?: { message?: string } | null }) => ({ ok: false, message: res.error?.message ?? 'The request failed.' })
 
 /** What the console may change on a lane: the closed settings, plus an audit lane's veto model. */
-export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null }
+export type LaneSettings = Partial<LaneConfig> & { review_model?: string | null; min_severity?: MinSeverity | null }
+
+/** A fix lane's floor (work_lanes.min_severity), worst first. */
+export type MinSeverity = 'critical' | 'high' | 'medium'
+export const MIN_SEVERITY_OPTIONS: ReadonlyArray<{ value: MinSeverity | ''; label: string }> = [
+  { value: '', label: 'Every severity' },
+  { value: 'medium', label: 'Medium and worse' },
+  { value: 'high', label: 'High and worse' },
+  { value: 'critical', label: 'Critical only' },
+]
 
 /** Change one lane setting (only the verbs that changed). */
 export async function patchLane(laneId: string, patch: LaneSettings): Promise<WriteResult> {
