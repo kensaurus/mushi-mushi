@@ -16,6 +16,7 @@ import {
   hookFailureDetail,
   isHookRejection,
   pushWithHooks,
+  commitWithHooks,
   agentEnv,
   branchNameFor,
   runProc,
@@ -591,6 +592,44 @@ describe('isHookRejection', () => {
     expect(isHookRejection('git push failed: ! [rejected] HEAD -> main (non-fast-forward)')).toBe(false)
     expect(isHookRejection('git push failed: remote: Permission denied to bot. fatal: Authentication failed')).toBe(false)
     expect(isHookRejection('git push failed: fatal: unable to access github.com')).toBe(false)
+  })
+})
+
+describe('commitWithHooks', () => {
+  const repoWithHook = (hook: (root: string) => string) => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-work-commit-'))
+    const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe' }).toString()
+    sh(root, 'init', '-q', '-b', 'main')
+    sh(root, 'config', 'user.email', 'w@example.com')
+    sh(root, 'config', 'user.name', 'worker')
+    writeFileSync(join(root, 'a.txt'), 'one\n')
+    sh(root, 'add', 'a.txt')
+    writeFileSync(join(root, '.git', 'hooks', 'pre-commit'), hook(root), { mode: 0o755 })
+    return { root, sh }
+  }
+
+  it.skipIf(process.platform === 'win32')('runs a failed pre-commit hook once more and commits when it passes the second time', async () => {
+    // Fails once (a typecheck that died under load), passes on the same staged change.
+    const { root, sh } = repoWithHook((r) => `#!/bin/sh\nif [ -f '${r}/.flaky-seen' ]; then exit 0; fi\ntouch '${r}/.flaky-seen'\necho '┃  typecheck-changed ❯ '\necho '🥊 typecheck-changed (3.25 seconds)'\nexit 1\n`)
+    const logs: string[] = []
+    try {
+      await commitWithHooks(root, ['-q', '-m', 'fix: a thing'], (l) => logs.push(l))
+      expect(sh(root, 'log', '--oneline').trim()).toContain('fix: a thing')
+      expect(logs[0]).toContain('running the hooks once more')
+      expect(logs[1]).toContain('passed the second time')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')("a pre-commit hook that fails twice is the change's failure", async () => {
+    const { root, sh } = repoWithHook(() => `#!/bin/sh\necho '┃  typecheck-changed ❯ '\necho 'src/a.ts(3,1): error TS2322: nope'\necho '🥊 typecheck-changed (40 seconds)'\nexit 1\n`)
+    try {
+      await expect(commitWithHooks(root, ['-q', '-m', 'fix: a thing'], () => {})).rejects.toThrow(/hook steps failed: typecheck-changed/)
+      expect(() => sh(root, 'log', '--oneline')).toThrow()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 
