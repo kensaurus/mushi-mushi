@@ -21,7 +21,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, join, win32 } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import type { Command } from 'commander'
 import { apiCall, requireConfig, requireUuid } from '../cli-shared.js'
@@ -1138,22 +1138,37 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const [bin, args] = windowsShim(cmd, process.platform)
+  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync)
+  if (!spawnable) {
+    log(`  deps: no ${cmd[0]} script next to this Node, so no install; the agent works without dependencies`)
+    return
+  }
+  const [bin, args] = spawnable
   let r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
   if (r.code !== 0) r = await runProc(bin, args, { cwd: wt, timeoutMs: 10 * 60_000 })
   if (r.code !== 0) log(`  deps: install failed twice, the agent works without them (${failureTail(r, 300)})`)
 }
 
+/** Where each package manager's own script sits beside node.exe (npm's bundle, a global install, corepack). */
+const WINDOWS_PM_SCRIPTS: Record<string, readonly string[]> = {
+  npm: ['node_modules/npm/bin/npm-cli.js'],
+  pnpm: ['node_modules/pnpm/bin/pnpm.cjs', 'node_modules/corepack/dist/pnpm.js'],
+  yarn: ['node_modules/yarn/bin/yarn.js', 'node_modules/corepack/dist/yarn.js'],
+}
+
 /**
  * @internal Exported for tests only. On Windows pnpm, npm and yarn are `.cmd`
  * shims, which spawn() cannot start without a shell: every install failed
- * with `spawn pnpm ENOENT` and the agent worked with no dependencies
- * (2026-11-11). Run them through cmd.exe there. The arguments are the fixed
- * ones from installCommand, never user input.
+ * with `spawn pnpm ENOENT` (2026-11-11). Run the package manager's own script
+ * with this Node instead, never through cmd.exe: a shell anywhere in runProc
+ * made CodeQL treat every git argument as shell input (alerts 417-420). Null
+ * when no script is found, and the run goes on without an install.
  */
-export function windowsShim(cmd: [string, string[]], platform: NodeJS.Platform): [string, string[]] {
+export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean): [string, string[]] | null {
   if (platform !== 'win32') return cmd
-  return ['cmd.exe', ['/d', '/s', '/c', cmd[0], ...cmd[1]]]
+  // Windows path rules whatever the host: the tests run this on Linux too.
+  const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(win32.dirname(nodeExe), rel)).find((p) => hasFile(p))
+  return script ? [nodeExe, [script, ...cmd[1]]] : null
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
