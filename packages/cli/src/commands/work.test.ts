@@ -432,6 +432,10 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     expect(classifyFailure('git push failed: pre-push hook timed out', 'push')).toBe('infra')
     expect(classifyFailure('git fetch: fatal: unable to access https://github.com/o/r: Could not resolve host', 'commit')).toBe('infra')
     expect(classifyFailure("fatal: Unable to create '/x/.git/index.lock': File exists", 'commit')).toBe('infra')
+    // A hook whose tool crashed is the machine, not the change (2026-11-12: Node segfaulted in check:design-system).
+    expect(classifyFailure('git commit failed: hook steps failed: design-system. .husky/pre-commit: line 21: 45927 Segmentation fault npm run check:design-system', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: lint. npm run lint exit status 139', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: lint. src/a.ts: 2 errors', 'commit')).toBe('code')
     expect(classifyFailure('git commit failed: ✗ check-dead-buttons: 1 violation', 'commit')).toBe('code')
     expect(classifyFailure('gh pr create failed: a pull request already exists', 'pr')).toBe('code')
   })
