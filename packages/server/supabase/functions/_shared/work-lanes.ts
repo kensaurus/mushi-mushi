@@ -535,9 +535,12 @@ export async function claimFirstFree<T extends { id: string }>(
  * How a run ended. `pushed` and `refused` are conflict runs (ADR 0049: a merge
  * commit pushed, or the worker's own checks refused the agent's result);
  * `filed` is an audit run that filed at least one reproduced finding (ADR 0050);
- * `ran` is a first-time user test that finished and synced (ADR 0053 amendment).
+ * `ran` is a first-time user test that finished and synced (ADR 0053 amendment);
+ * `gone` is a fix run that found the report already fixed on the base branch
+ * without an agent run, or with the fix named on it (work-recheck.ts in the
+ * CLI): the server closes the report.
  */
-export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran'] as const
+export const CLAIM_OUTCOMES = ['pr_opened', 'no_change', 'verdict', 'timeout', 'skipped', 'stopped', 'failed', 'pushed', 'refused', 'filed', 'ran', 'gone'] as const
 export type ClaimOutcome = (typeof CLAIM_OUTCOMES)[number]
 export const FAILURE_KINDS = ['infra', 'code'] as const
 export type FailureKind = (typeof FAILURE_KINDS)[number]
@@ -569,6 +572,7 @@ export function parseClaimDone(raw: unknown): Parsed<ClaimDone> {
   if (b.outcome === 'pr_opened' && !prUrl) return { ok: false, message: 'A pr_opened outcome needs prUrl (https://github.com/<owner>/<repo>/pull/<n>).' }
   const headAfter = typeof b.headAfter === 'string' && /^[0-9a-f]{40}$/.test(b.headAfter) ? b.headAfter : null
   if (b.outcome === 'pushed' && !headAfter) return { ok: false, message: 'A pushed outcome needs headAfter, the 40-hex sha of the merge commit.' }
+  if (b.outcome === 'gone' && (typeof b.detail !== 'string' || !b.detail.trim())) return { ok: false, message: 'A gone outcome needs detail: how the worker knows the report is already fixed.' }
   const detail = typeof b.detail === 'string' ? b.detail.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, 1000) : null
   return { ok: true, value: { outcome: b.outcome as ClaimOutcome, failureKind: failureKind as FailureKind | null, fixId, prUrl, detail, headAfter } }
 }

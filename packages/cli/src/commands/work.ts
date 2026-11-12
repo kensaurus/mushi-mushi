@@ -31,6 +31,7 @@ import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 import { agentRun, agentSpec, agentUnavailable, cursorSignInState, parseLocalAgent, type AgentSignIn, type LocalAgent } from './work-agents.js'
 import { wrongRepoMessage } from './work-repo.js'
+import { goneNote, recheckReport, verdictCommits } from './work-recheck.js'
 
 export { cursorSignInState }
 
@@ -624,6 +625,8 @@ export interface ReportDetail {
   project_id?: string | null
   summary: string | null
   description?: string | null
+  /** Where the report came from; only a `code_audit` report is rechecked for free before a run (work-recheck.ts). */
+  source?: string | null
   category?: string | null
   severity?: string | null
   status?: string
@@ -713,7 +716,8 @@ export interface WorkOptions {
 }
 
 /** How one run ended, as the daemon reports it back (POST /v1/worker/claims/:id/done). */
-type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed'
+/** `gone`: the report is already fixed on the base branch (its own check no longer reproduces, or the agent found the fix there); it is closed, see work-recheck.ts. */
+type WorkResult = 'pr_opened' | 'no_change' | 'verdict' | 'timeout' | 'skipped' | 'stopped' | 'failed' | 'gone'
 
 /** Used by the local worker (worker/daemon.ts). */
 export interface WorkOutcome {
@@ -725,6 +729,8 @@ export interface WorkOutcome {
   agentUnavailable?: boolean
   prUrl?: string
   fixId?: string
+  /** With `gone`: the team note the report is closed with. */
+  note?: string
 }
 
 /** @internal Exported for tests only. The PATCH that closes a run whose agent account could not run: infra, so it starts no cooldown. */
@@ -735,6 +741,91 @@ export function agentUnavailablePayload(branch: string, agent: LocalAgent, run: 
     error: `${WORK_INFRA_PREFIX} the ${agentSpec(agent).label} agent could not run (usage or sign-in): ${failureTail(run, 300)}`.slice(0, 1000),
     completed_at: now.toISOString(),
   }
+}
+
+/**
+ * Close a report `workOne` found already fixed (result `gone`), with a team
+ * note saying how it knows. The local worker does the same on the server when
+ * it ends its claim as `gone`. A failed close is said, never fatal.
+ */
+async function closeGone(api: Api, r: WorkOutcome, log: (line: string) => void): Promise<void> {
+  try {
+    await api(`/v1/admin/reports/${encodeURIComponent(r.reportId)}`, { method: 'PATCH', body: JSON.stringify({ status: 'fixed', note: r.note ?? r.outcome }) })
+    log('  report closed as fixed (no agent run needed)')
+  } catch (err) {
+    log(`  report not closed (${err instanceof Error ? err.message : String(err)}); close it in the console`)
+  }
+}
+
+/** Open statuses a recheck sweep reads (the ones a fix run could still take). */
+const RECHECK_STATUSES = ['classified', 'triaged', 'reopened', 'new', 'grouped'] as const
+const RECHECK_PAGE = 200
+/** At most this many reports per sweep: about 10 pages per status; run it again for more. */
+const RECHECK_MAX = 2000
+
+export interface RecheckSweep {
+  dryRun: boolean
+  base: string
+  sha: string | null
+  checked: number
+  gone: Array<{ reportId: string; severity: string | null; reason: string }>
+  stillThere: number
+  unclear: number
+  closeFailed: number
+}
+
+/**
+ * `mushi work --recheck`: every open code-audit report's own check, run again
+ * on one worktree at the base branch. No install, no agent, no tokens. A
+ * report whose check no longer reproduces is closed as fixed with a team note
+ * (dry run: only counted). Reports from people are never touched.
+ */
+export async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; log: (line: string) => void; readFile?: (path: string) => string | null }): Promise<RecheckSweep> {
+  const base = await defaultBranch(repoDir)
+  await git(repoDir, ['fetch', '--quiet', 'origin', base])
+  const root = join(homedir(), '.cache', 'mushi', 'work', basename(repoDir))
+  mkdirSync(root, { recursive: true })
+  const wt = join(root, 'recheck')
+  await clearWorktree(repoDir, wt)
+  await git(repoDir, ['worktree', 'add', '--detach', wt, `origin/${base}`])
+  const sha = (await runProc('git', ['rev-parse', 'HEAD'], { cwd: wt })).stdout.trim() || null
+  const out: RecheckSweep = { dryRun: o.dryRun, base, sha, checked: 0, gone: [], stillThere: 0, unclear: 0, closeFailed: 0 }
+  try {
+    // Read every page first: closing a report moves it out of its status, which would shift the pages.
+    const rows: Array<ReportDetail & { source?: string | null }> = []
+    for (const status of RECHECK_STATUSES) {
+      for (let offset = 0; offset < RECHECK_MAX; offset += RECHECK_PAGE) {
+        const page = await api<{ reports: Array<ReportDetail & { source?: string | null }> }>(`/v1/admin/reports?status=${status}&limit=${RECHECK_PAGE}&offset=${offset}`)
+        const got = page.reports ?? []
+        rows.push(...got.filter((r) => r.source === 'code_audit'))
+        if (got.length < RECHECK_PAGE) break
+      }
+    }
+    for (const r of rows) {
+      if (interruptedBy()) break
+      out.checked++
+      const res = recheckReport(r, wt, o.readFile)
+      if (!res.gone) {
+        if (res.reason) out.unclear++
+        else out.stillThere++
+        continue
+      }
+      out.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason })
+      if (o.dryRun) continue
+      try {
+        await api(`/v1/admin/reports/${encodeURIComponent(r.id)}`, { method: 'PATCH', body: JSON.stringify({ status: 'fixed', note: goneNote(res.reason, `origin/${base}`, sha) }) })
+      } catch (err) {
+        out.closeFailed++
+        o.log(`  ${r.id}: not closed (${err instanceof Error ? err.message : String(err)})`)
+      }
+    }
+  } finally {
+    await clearWorktree(repoDir, wt)
+  }
+  const verb = o.dryRun ? 'would close' : 'closed'
+  o.log(`Rechecked ${out.checked} open code-audit report(s) on origin/${base}${sha ? ` (${sha.slice(0, 9)})` : ''}: ${verb} ${out.gone.length} that no longer reproduce, ${out.stillThere} still reproduce, ${out.unclear} left to the agent (check unreadable or file moved).`)
+  if (out.closeFailed) o.log(`${out.closeFailed} could not be closed; see the lines above.`)
+  return out
 }
 
 /** One report, start to end: the run `mushi work` and the local worker (worker/daemon.ts) both make. */
@@ -763,6 +854,15 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   const wt = join(root, detail.id.slice(0, 8))
   await clearWorktree(o.repoDir, wt)
   await git(o.repoDir, ['worktree', 'add', '-B', branch, wt, `origin/${base}`])
+  // Free, before any install or agent: is the report still there at all?
+  const recheck = recheckReport(detail, wt)
+  if (recheck.gone) {
+    const sha = (await runProc('git', ['rev-parse', 'HEAD'], { cwd: wt })).stdout.trim() || null
+    await clearWorktree(o.repoDir, wt)
+    await runProc('git', ['branch', '-D', branch], { cwd: o.repoDir })
+    return { reportId: detail.id, result: 'gone', outcome: `closed without an agent run: ${recheck.reason}`, note: goneNote(recheck.reason, `origin/${base}`, sha) }
+  }
+  if (recheck.reason) o.log(`  recheck: ${recheck.reason}`)
   await installDeps(wt, o.log)
   let keep = o.keep ?? false
   let fixId: string | null = null
@@ -839,6 +939,17 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
           ? parseVerdict(run.stdout)
           : { verdict: null, reason: failureTail(run, 300) || `${spec.bin} exited ${run.code}` }
       await close(submitPayload({ branch, prUrl: null, commitSha: null, filesChanged: [], linesChanged: 0, summary: '', noPr }))
+      // "Already fixed" with a commit that is on the base branch: close the
+      // report, so no later run spends an agent on it again.
+      if (noPr.verdict === 'already_fixed') {
+        for (const sha of verdictCommits(run.stdout.slice(0, 4000))) {
+          const onBase = await runProc('git', ['merge-base', '--is-ancestor', sha, `origin/${base}`], { cwd: wt })
+          if (onBase.code === 0) {
+            const reason = `the agent found the fix already on origin/${base} in ${sha}`
+            return { reportId: detail.id, result: 'gone', outcome: `no change (already_fixed): ${reason}; the report is closed`, fixId, note: goneNote(reason, `origin/${base}`, sha) }
+          }
+        }
+      }
       return { reportId: detail.id, result: run.timedOut ? 'timeout' : noPr.verdict ? 'verdict' : 'no_change', outcome: `no change (${noPr.verdict ?? 'no verdict'}): ${noPr.reason}`, fixId }
     }
 
@@ -1203,16 +1314,17 @@ export function registerWorkCommands(program: Command): void {
     .option('--max <n>', 'Reports per run', '3')
     .option('--report <id>', 'Work on this report only')
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
+    .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens) and close those that no longer reproduce; with --dry-run, only count them')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--any-repo', 'Skip the check that the clone is a repo the key\'s project is linked to (a monorepo or a fork)')
     .option('--json', 'Machine-readable JSON output')
     .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
     .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
-    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
+    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; recheck?: boolean; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       const agent = parseLocalAgent(opts.agent)
       if (opts.daemon) {
-        if (opts.repoDir || opts.report || opts.followups) {
+        if (opts.repoDir || opts.report || opts.followups || opts.recheck) {
           throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
         }
         const { runDaemon } = await import('../worker/daemon.js')
@@ -1233,6 +1345,13 @@ export function registerWorkCommands(program: Command): void {
       // Before any listing, plan or claim (the dry run too): the key decides whose reports come back.
       const whoami = await readWhoami(cfg)
       if (!opts.anyRepo) await requireRightRepo(whoami, repoDir)
+      if (opts.recheck) {
+        if (!opts.dryRun) requireWriteScope(cfg, whoami)
+        const sweep = await recheckBacklog(api, repoDir, { dryRun: !!opts.dryRun, log })
+        if (opts.json) process.stdout.write(`${JSON.stringify(sweep, null, 2)}
+`)
+        return
+      }
       if (opts.followups) {
         const listed = await api<{ fixes: LocalFollowupCandidate[] }>(`/v1/admin/projects/${cfg.projectId}/local-followups`)
         const due = listed.fixes.slice(0, max)
@@ -1285,6 +1404,7 @@ export function registerWorkCommands(program: Command): void {
           outcome: `failed: ${err instanceof Error ? err.message : String(err)}`,
         }))
         log(`  → ${r.outcome}${r.prUrl ? ` ${r.prUrl}` : ''}`)
+        if (r.result === 'gone') await closeGone(api, r, log)
         results.push(r)
         // The account is spent or signed out: every next report would fail the same way.
         if (r.agentUnavailable) {

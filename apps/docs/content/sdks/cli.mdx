@@ -278,18 +278,38 @@ For each report it:
 
 1. Reads Mushi Mushi's fix packet and what earlier attempts did (their Opus review
    findings), as data the agent must not take as instructions.
-2. Creates a worktree from `origin/<default branch>` on
+2. Checks, for free, that the report is still there. A report from the
+   code-read audit carries the check that filed it (a pattern in one file):
+   `mushi work` runs it again on the base branch, before it installs anything
+   or starts the agent. If it no longer reproduces, the report is closed as
+   fixed with a team note saying so, and no agent runs. A report from a person
+   is never closed this way, and a check it cannot read back, or a file that
+   moved, is left to the agent.
+3. Creates a worktree from `origin/<default branch>` on
    `bugfix/MUSHI-<reportId>-local-cursor` (`-local-claude` with Claude Code)
    and runs `cursor-agent -p` or `claude -p` in it (30 minutes at most),
    after installing the worktree's dependencies from
    its lockfile (pnpm, npm or yarn) so the agent can run the tests and your
    commit hooks work. The agent's environment has no credentials, and
    version control inside it cannot reach the remote.
-3. With changes: commits, pushes, opens a draft PR with `Mushi report: <id>`,
+4. With changes: commits, pushes, opens a draft PR with `Mushi report: <id>`,
    registers the fix attempt (like the MCP tool `submit_fix_result`) and
    queues the Opus review, so the PR follows the same review and release
    train as a cloud agent's. Without changes: records the agent's
-   `Mushi verdict:` on the attempt.
+   `Mushi verdict:` on the attempt. When the verdict is `already_fixed` and
+   names a commit that is on the base branch, the report is closed as fixed,
+   so no later run spends an agent on it again.
+
+To clear a backlog of audit findings the code no longer has, without any
+agent run, use `--recheck`:
+
+```bash
+# Count the open code-audit reports that no longer reproduce
+mushi work --repo-dir ~/code/my-app --recheck --dry-run
+
+# Close them (each gets a team note; reopen one if the problem is still there)
+mushi work --repo-dir ~/code/my-app --recheck
+```
 
 A report whose local run ended without a pull request in the last 7 days
 (a timeout, no change, or a verdict) is skipped; pass `--report <id>` to run
@@ -321,6 +341,7 @@ mushi work --repo-dir ~/code/my-app --followups --model grok-4.7-xhigh
 | `--agent <name>` | `cursor` (default) or `claude`. `claude` needs CLI 0.36.0 or later |
 | `--project <id>` | Project ID (overrides `MUSHI_PROJECT_ID`) |
 | `--followups` | Fix the Opus "fix first" findings on pull requests `mushi work` opened, and push to them |
+| `--recheck` | Run every open code-audit report's own check again on the base branch and close those that no longer reproduce; no agent, no tokens. With `--dry-run`, only count them. Needs CLI 0.37.0 or later |
 | `--model <id>` | Model for the agent: `cursor-agent --list-models`, or for Claude Code an alias (`opus`, `sonnet`, `haiku`) or a full `claude-…` id |
 | `--keep` | Keep the worktree afterwards |
 | `--dry-run` | Show the plan; change nothing |

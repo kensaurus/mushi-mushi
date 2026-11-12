@@ -312,6 +312,27 @@ describe('POST /v1/worker/claims/:id/done', () => {
     expect(again.status).toBe(409)
   })
 
+  it('a gone claim closes its open report as fixed, with the reason as a team note', async () => {
+    const s = await registered({ reports: [report(1)], projects: [{ id: P1, name: 'glot.it', owner_id: 'owner-1' }, { id: P2, name: 'yen-yen' }] })
+    const c = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    const reason = 'Closed by mushi work without an agent run: its own check no longer reproduces (checked on origin/main).'
+    const res = await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: c.body.data.claim.id }, body: { outcome: 'gone', detail: reason } })
+    expect(res.status).toBe(200)
+    expect(s.db.table('reports').find((r) => r.id === R(1))).toMatchObject({ status: 'fixed' })
+    expect(s.db.table('report_comments').map((n) => n.body)).toContain(reason)
+    expect(s.db.table('work_claims').find((x) => x.id === c.body.data.claim.id)).toMatchObject({ outcome: 'gone' })
+  })
+
+  it('a gone claim needs its reason, and never reopens or overrides a closed report', async () => {
+    const s = await registered({ reports: [report(1)] })
+    const c = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })
+    const bare = await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: c.body.data.claim.id }, body: { outcome: 'gone' } })
+    expect(bare.status).toBe(400)
+    s.db.table('reports').find((r) => r.id === R(1))!.status = 'dismissed'
+    await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: c.body.data.claim.id }, body: { outcome: 'gone', detail: 'already fixed' } })
+    expect(s.db.table('reports').find((r) => r.id === R(1))).toMatchObject({ status: 'dismissed' })
+  })
+
   it("refuses another worker's claim", async () => {
     const s = await registered({ reports: [report(1)] })
     const c = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.laneA } })

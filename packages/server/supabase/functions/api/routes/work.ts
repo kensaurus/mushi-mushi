@@ -49,6 +49,7 @@ import { auditFiledLastHour, fileAuditFinding } from './work-audit.ts'
 import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
 import { isOperatorUser } from '../../_shared/operator-gate.ts'
+import { postTeamNote } from '../../_shared/reporter-comms.ts'
 import { claimConflict, endConflictClaim, type ModeLane } from '../../_shared/work-conflicts.ts'
 import {
   claimFirstFree,
@@ -174,7 +175,7 @@ interface ClaimRow {
 
 const CLAIM_COLUMNS = 'id, lane_id, host_id, project_id, report_id, kind, merge_queue_id, ux_run_id, head_after, status, from_queue, claimed_at, lease_until, finished_at, outcome, failure_kind, auto_requeued, fix_attempt_id, pr_url, detail'
 const REPORT_DETAIL_COLUMNS =
-  'id, project_id, summary, description, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
+  'id, project_id, summary, description, source, category, severity, status, component, confidence, stage2_analysis, reproduction_steps, screenshot_url, bug_ontology_tags, created_at'
 const ATTEMPT_COLUMNS = 'id, report_id, status, agent, pr_url, pr_state, merged_at, error, created_at'
 
 /** The worker's own lane: the lane's host sends this key and is not revoked. */
@@ -693,9 +694,37 @@ async function done(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
     await endFreshEyesRun(db, own.ux_run_id, d.outcome, d.detail, now)
     return c.json({ ok: true, data: { requeued: false } })
   }
+  if (d.outcome === 'gone' && own.report_id) await closeGoneReport(db, own.project_id, own.report_id, d.detail ?? '', now)
   const requeued = d.failureKind === 'infra' ? await autoRequeue(db, own, d.failureKind, 'requeue', now) : false
   return c.json({ ok: true, data: { requeued } })
 }
+
+/**
+ * A fix claim that ended `gone`: the worker found the report already fixed on
+ * the base branch (its own code-audit check no longer reproduces, or the fix
+ * is a commit there). Close it as fixed, with the worker's reason as a team
+ * note, so no lane spends an agent on it again. Only an open report moves; a
+ * failed write is logged, never fatal: the claim already ended.
+ */
+async function closeGoneReport(db: Db, projectId: string, reportId: string, reason: string, now: Date): Promise<void> {
+  const { data, error } = await db
+    .from('reports')
+    .update({ status: 'fixed', fixed_at: now.toISOString() })
+    .eq('id', reportId)
+    .eq('project_id', projectId)
+    .in('status', [...OPEN_FOR_GONE])
+    .select('id')
+  if (error) {
+    console.warn('work: gone report not closed', { reportId, error: error.message })
+    return
+  }
+  if (!data || (data as unknown[]).length === 0) return
+  const note = await postTeamNote(db, { projectId, reportId, body: reason || 'Closed by a local worker: already fixed on the base branch.', authorName: 'Local worker' })
+  if (!note.ok) console.warn('work: gone note not saved', { reportId, error: note.error })
+}
+
+/** The statuses a `gone` claim may close: open ones, never one a person already closed or one in fixing with a live PR. */
+const OPEN_FOR_GONE = ['new', 'classified', 'grouped', 'triaged', 'reopened'] as const
 
 /** An audit claim files one finding its worker reproduced with a deterministic check (ADR 0050). */
 async function finding(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
@@ -890,6 +919,7 @@ async function listLanes(c: Ctx, deps: WorkRouteDeps): Promise<Response> {
               merges: finished.filter((x) => x.outcome === 'pushed').length,
               filed: finished.filter((x) => x.outcome === 'filed').length,
               noChange: finished.filter((x) => x.outcome === 'no_change' || x.outcome === 'verdict' || x.outcome === 'refused').length,
+              gone: finished.filter((x) => x.outcome === 'gone').length,
               timeouts: finished.filter((x) => x.outcome === 'timeout').length,
               errors: finished.filter((x) => x.outcome === 'failed' || x.outcome === 'lease_expired').length,
               infra: finished.filter((x) => x.failure_kind === 'infra').length,

@@ -306,3 +306,31 @@ fix the worst first, without a person picking each one.
   one agent per machine (its sign-in check and out-of-usage backoff are
   per host), so the agent stays a machine setting (`--agent`, worker.json).
 - Migration `20261112090000_work_lane_min_severity.sql` (additive).
+
+## Amendment 2026-11-12 (b): spend no agent run on a report that is already gone
+
+Of 10 drain runs on 2026-11-12, 3 found nothing to fix: two audit findings the
+code no longer had, and one fix main already carried (`already_fixed` in
+db4c8383a), which also stayed open and would have been tried again after the
+7-day cooldown. Over 30 days, 105 of 2,924 attempts ended `already_fixed`,
+`not_actionable` or `wrong_repo`.
+
+- **Free recheck before a run.** A `code_audit` report carries the
+  deterministic check that filed it (`Reproduced by the worker with no model:
+  pattern check, /re/ is present|absent in <file> near line N`). `mushi work`
+  runs it again with the audit's own evaluator on the fresh worktree, before
+  any install or agent. No longer reproduces → the run ends `gone` and the
+  report is closed as fixed with a team note. Only `source = code_audit` is
+  read this way: a person's words never close their own report. A check cut
+  short, an unsafe pattern or path, or a file that moved leaves the report to
+  the agent.
+- **`already_fixed` with proof closes the report.** A verdict naming a commit
+  that `git merge-base --is-ancestor` finds on the base branch ends `gone`.
+- **`gone` claim outcome.** The daemon ends its claim `gone` with the note as
+  `detail`; the claim route closes an open report (never one a person closed)
+  and posts the note. Manual `mushi work` closes it through
+  `PATCH /v1/admin/reports/:id` with the CLI key.
+- **`mushi work --recheck`** sweeps every open code-audit report the same way,
+  on one worktree, with no agent (`--dry-run` only counts).
+- Migration `20261112100000_work_claims_outcome_gone.sql` widens the outcome
+  CHECK.
