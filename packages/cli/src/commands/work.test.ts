@@ -9,7 +9,7 @@ import {
   wrongAppReason,
   inLocalCooldown,
   installCommand,
-  windowsShim,
+  windowsInstaller,
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
@@ -271,15 +271,24 @@ describe('installCommand', () => {
   })
 })
 
-describe('windowsShim', () => {
-  it('runs the package manager through cmd.exe on Windows only, with the same arguments', () => {
-    const cmd: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
-    expect(windowsShim(cmd, 'linux')).toEqual(cmd)
-    expect(windowsShim(cmd, 'darwin')).toEqual(cmd)
-    expect(windowsShim(cmd, 'win32')).toEqual([
-      'cmd.exe',
-      ['/d', '/s', '/c', 'pnpm', 'install', '--frozen-lockfile', '--prefer-offline'],
-    ])
+describe('windowsInstaller', () => {
+  const pnpm: [string, string[]] = ['pnpm', ['install', '--frozen-lockfile', '--prefer-offline']]
+  const node = String.raw`C:\Users\me\fnm\node.exe`
+
+  it('leaves Linux and macOS alone', () => {
+    expect(windowsInstaller(pnpm, 'linux', '/usr/bin/node', () => false)).toEqual(pnpm)
+    expect(windowsInstaller(pnpm, 'darwin', '/usr/bin/node', () => false)).toEqual(pnpm)
+  })
+
+  it("runs the package manager's own script with this Node on Windows, never cmd.exe", () => {
+    const corepack = String.raw`C:\Users\me\fnm\node_modules\corepack\dist\pnpm.js`
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === corepack)).toEqual([node, [corepack, 'install', '--frozen-lockfile', '--prefer-offline']])
+    const npm = String.raw`C:\Users\me\fnm\node_modules\npm\bin\npm-cli.js`
+    expect(windowsInstaller(['npm', ['ci']], 'win32', node, (p) => p === npm)).toEqual([node, [npm, 'ci']])
+  })
+
+  it('gives up (no install) rather than reach for a shell', () => {
+    expect(windowsInstaller(pnpm, 'win32', node, () => false)).toBeNull()
   })
 })
 

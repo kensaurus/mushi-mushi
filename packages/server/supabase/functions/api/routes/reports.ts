@@ -176,6 +176,9 @@ async function unpinnedReportStats(
   };
 }
 
+/** Statuses that mean "not fixed (any more)": moving a report to one clears fixed_at. */
+const OPEN_AGAIN: ReadonlySet<string> = new Set(['new', 'pending', 'submitted', 'queued', 'classified', 'grouped', 'triaged', 'in_progress', 'reopened'])
+
 export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void {
   // ============================================================
   // ADMIN ROUTES (JWT auth)
@@ -1414,6 +1417,14 @@ export function registerReportsRoutes(app: Hono<{ Variables: Variables }>): void
     // the console's regression chain reads it.
     if (updates.status === 'reopened') {
       updates.reopened_at = new Date().toISOString();
+    }
+    // Fixed by hand (or by an API key, e.g. `mushi work --recheck`) records
+    // when, as a merged fix does: time-to-fix and the release notes read it.
+    // 2026-11-12: 128 reports closed this way had no fixed_at.
+    if (updates.status === 'fixed') {
+      updates.fixed_at = new Date().toISOString();
+    } else if (typeof updates.status === 'string' && OPEN_AGAIN.has(updates.status)) {
+      updates.fixed_at = null;
     }
 
     if (Object.keys(updates).length === 0 && !reporterMessage && !teamNote) {
