@@ -763,7 +763,7 @@ const RECHECK_PAGE = 200
 /** At most this many reports per sweep: about 10 pages per status; run it again for more. */
 const RECHECK_MAX = 2000
 
-export interface RecheckSweep {
+interface RecheckSweep {
   dryRun: boolean
   base: string
   sha: string | null
@@ -780,7 +780,7 @@ export interface RecheckSweep {
  * report whose check no longer reproduces is closed as fixed with a team note
  * (dry run: only counted). Reports from people are never touched.
  */
-export async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; log: (line: string) => void; readFile?: (path: string) => string | null }): Promise<RecheckSweep> {
+async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; log: (line: string) => void; readFile?: (path: string) => string | null }): Promise<RecheckSweep> {
   const base = await defaultBranch(repoDir)
   await git(repoDir, ['fetch', '--quiet', 'origin', base])
   const root = join(homedir(), '.cache', 'mushi', 'work', basename(repoDir))

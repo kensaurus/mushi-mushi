@@ -28,7 +28,7 @@ import { patternReproduces, readWorktreeFile, safePath, safeRegex } from '../wor
 /** checkSummary cuts its text at 300 characters; a check that long may have lost its end. */
 const SUMMARY_CAP = 300
 
-export interface ParsedAuditCheck {
+interface ParsedAuditCheck {
   kind: 'pattern'
   regex: string
   ignoreCase: boolean
@@ -62,10 +62,10 @@ export function parseAuditCheck(description: string | null | undefined): ParsedA
   return { kind: 'pattern', regex: m[1]!, ignoreCase, expect: m[3] as 'present' | 'absent', file, line: m[5] ? Number(m[5]) : null }
 }
 
-export type Recheck = { gone: true; reason: string } | { gone: false; reason: string | null }
+type Recheck = { gone: true; reason: string } | { gone: false; reason: string | null }
 
 /**
- * @internal Exported for tests only. Does the report's own check still
+ * Does the report's own check still
  * reproduce in `worktree`? `gone: true` only when it is a code-audit report
  * with a readable check, the file is there, and the check no longer holds.
  */
@@ -85,7 +85,7 @@ export function recheckReport(detail: { source?: string | null; description?: st
 
 const SHA_RE = /\b([0-9a-f]{7,40})\b/g
 
-/** @internal Exported for tests only. Commit ids an `already_fixed` verdict names, at most 3. */
+/** Commit ids an `already_fixed` verdict names, at most 3. */
 export function verdictCommits(reason: string): string[] {
   return [...new Set([...reason.matchAll(SHA_RE)].map((m) => m[1]!).filter((s) => /[a-f]/.test(s) && /\d/.test(s)))].slice(0, 3)
 }
