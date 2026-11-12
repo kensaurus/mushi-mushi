@@ -1181,10 +1181,21 @@ export async function commitWithHooks(wt: string, args: string[], log: (line: st
   try {
     await git(wt, ['commit', ...args])
   } catch (err) {
-    if (!(err instanceof Error) || !isMissingModuleFailure(err.message)) throw err
-    log('  commit: a hook could not find a package; installing dependencies and committing again')
-    await installDeps(wt, log)
+    if (!(err instanceof Error)) throw err
+    if (isMissingModuleFailure(err.message)) {
+      log('  commit: a hook could not find a package; installing dependencies and committing again')
+      await installDeps(wt, log)
+      await git(wt, ['commit', ...args])
+      return
+    }
+    // A pre-commit hook that failed once may be this machine: glot.it's full
+    // `tsc` hook died in 3-13 s on finished fixes and passed on the same
+    // staged change minutes later (2026-11-12), and each loss was a whole
+    // agent run. Run the hooks once more; a second failure is the change's.
+    if (!/hook steps failed:|husky - pre-commit|pre-commit hook/i.test(err.message)) throw err
+    log(`  commit: a pre-commit hook failed (${err.message.replace(/^git commit failed: /, '').slice(0, 200)}); running the hooks once more on the same change`)
     await git(wt, ['commit', ...args])
+    log('  commit: the hooks passed the second time, so the first failure was this machine, not the change')
   }
 }
 
