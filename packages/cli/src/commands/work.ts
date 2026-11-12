@@ -118,8 +118,12 @@ export function freeBranchName(base: string, onOrigin: ReadonlySet<string>): str
   for (let n = 2; ; n++) if (!onOrigin.has(`${base}-${n}`)) return `${base}-${n}`
 }
 
+const UUID_ARG_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** @internal Exported for tests only. `bugfix/MUSHI-<id>-local-cursor` (or `-local-claude`), the cloud agents' shape (github-pr.ts) with a local suffix. */
 export function branchNameFor(reportId: string, category?: string | null, agent: LocalAgent = 'cursor'): string {
+  // The id comes from the API and ends up in git arguments: a report id is a uuid, nothing else.
+  if (!UUID_ARG_RE.test(reportId)) throw new MushiCliError('E_INVALID_INPUT', `Report id ${reportId.slice(0, 40)} is not a uuid.`)
   const c = (category ?? 'bug').toLowerCase()
   const prefix =
     c === 'other'
@@ -858,8 +862,8 @@ export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): P
   const recheck = recheckReport(detail, wt)
   if (recheck.gone) {
     const sha = (await runProc('git', ['rev-parse', 'HEAD'], { cwd: wt })).stdout.trim() || null
+    // The local branch is left: the next run on this report resets it (worktree add -B).
     await clearWorktree(o.repoDir, wt)
-    await runProc('git', ['branch', '-D', branch], { cwd: o.repoDir })
     return { reportId: detail.id, result: 'gone', outcome: `closed without an agent run: ${recheck.reason}`, note: goneNote(recheck.reason, `origin/${base}`, sha) }
   }
   if (recheck.reason) o.log(`  recheck: ${recheck.reason}`)
