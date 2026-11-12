@@ -1,5 +1,12 @@
 # @mushi-mushi/cli
 
+## 0.37.1
+
+### Patch Changes
+
+- 3db7982: `mushi work` counts a git hook in which Node itself crashed (a V8 fatal error, "Native stack trace", heap out of memory) as a failure of the machine, not of the fix, so the report starts no 7-day retry cooldown.
+- f4019b5: On Windows, `mushi work` installs a worktree's dependencies by running the package manager's own script (npm-cli.js, pnpm through corepack, yarn.js) with the current Node, never through `cmd.exe`. When no script is found it skips the install and says so.
+
 ## 0.37.0
 
 ### Minor Changes
