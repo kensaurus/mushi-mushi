@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "1.33",
     "headline": null,
     "pending": false,
@@ -1212,6 +1204,21 @@
       {
         "name": "@mushi-mushi/web",
         "version": "1.0.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.37",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.37.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.37.0"
       }
     ]
   },
@@ -2425,6 +2432,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.14",
       "0.8.13",
       "0.8.12",
       "0.8.11",
@@ -2509,7 +2517,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.13"
+        "version": "0.8.14"
       }
     ]
   },
@@ -2643,6 +2651,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.14",
       "0.6.13",
       "0.6.12",
       "0.6.11",
@@ -2739,7 +2748,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.13"
+        "version": "0.6.14"
       },
       {
         "name": "mushi-mushi",
