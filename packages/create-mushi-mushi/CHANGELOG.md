@@ -1,5 +1,12 @@
 # create-mushi-mushi
 
+## 0.6.14
+
+### Patch Changes
+
+- Updated dependencies [59d7cd0]
+  - @mushi-mushi/cli@0.37.0
+
 ## 0.6.13
 
 ### Patch Changes
