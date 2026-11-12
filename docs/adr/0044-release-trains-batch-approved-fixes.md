@@ -129,3 +129,18 @@ Measured since the 2026-10-26 amendment: 131 trains, 63 merged, 64 red, 47 of th
 - **A train merges only when GitHub says it can.** `trainMergeGate` reads GitHub's merge state as well as the check runs. A train GitHub blocks is held, and after 30 minutes it is abandoned so its repo's queue can move.
 - **Lanes test before they hand back.** `mushi work` tells the agent to run the unit tests and a typecheck for what it changed, and to leave full suites to the train.
 
+
+## Amendment 2026-11-12: re-run a red train once before blaming a fix
+
+SBC train #1299 had one member and failed because the CI runner could not
+install Playwright's browsers (apt exit 100). glot.it's legibility gate failed
+twice on a page scanned before it hydrated. Both times the queue read the red
+check as the members' code: the train was closed and its only member blocked.
+
+- On the first red result (when the base branch is not red too), the queue
+  re-runs the failed GitHub Actions runs behind the train head's checks
+  (`rerun-failed-jobs`) and keeps the train in testing. Only a second red
+  result bisects or blocks. `release_trains.ci_reruns` counts the re-runs,
+  because `detail` is rewritten on every tick (migration 20261112110000).
+- Checks from another CI, with no Actions run in their details URL, cannot be
+  re-run this way; such a train is judged as before.

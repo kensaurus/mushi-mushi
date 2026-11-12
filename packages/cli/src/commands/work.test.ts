@@ -444,6 +444,9 @@ describe('local workers (ADR 0048): infra failures never count against a report'
     // A hook whose tool crashed is the machine, not the change (2026-11-12: Node segfaulted in check:design-system).
     expect(classifyFailure('git commit failed: hook steps failed: design-system. .husky/pre-commit: line 21: 45927 Segmentation fault npm run check:design-system', 'commit')).toBe('infra')
     expect(classifyFailure('git commit failed: hook steps failed: lint. npm run lint exit status 139', 'commit')).toBe('infra')
+    // Node itself dying in a hook (V8 fatal, heap exhausted) is the machine too (2026-11-12, SBC check:design-system).
+    expect(classifyFailure('git commit failed: […] # / #FailureMessage Object: 000000686B1FE770 / ----- Native stack trace -----', 'commit')).toBe('infra')
+    expect(classifyFailure('git commit failed: hook steps failed: tsc. FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory', 'commit')).toBe('infra')
     expect(classifyFailure('git commit failed: hook steps failed: lint. src/a.ts: 2 errors', 'commit')).toBe('code')
     expect(classifyFailure('git commit failed: ✗ check-dead-buttons: 1 violation', 'commit')).toBe('code')
     expect(classifyFailure('gh pr create failed: a pull request already exists', 'pr')).toBe('code')
