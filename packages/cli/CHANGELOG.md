@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.36.3
+
+### Patch Changes
+
+- f96de93: `mushi work` counts a git hook whose tool crashed (a segmentation fault, `SIGSEGV`, core dumped, exit 139) as a failure of the machine, not of the fix, so the report starts no 7-day retry cooldown.
+
 ## 0.36.2
 
 ### Patch Changes
