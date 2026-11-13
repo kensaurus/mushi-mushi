@@ -1,11 +1,26 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.34",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.34.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.34.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.34.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.34.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.33",
@@ -1216,6 +1231,21 @@
     ]
   },
   {
+    "majorMinor": "0.38",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.38.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.38.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.37",
     "headline": null,
     "pending": false,
@@ -1342,6 +1372,10 @@
     "packages": [
       {
         "name": "@mushi-mushi/cli",
+        "version": "0.31.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
         "version": "0.31.0"
       }
     ]
@@ -1550,7 +1584,7 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.24.5"
+        "version": "0.24.6"
       }
     ]
   },
@@ -2442,6 +2476,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.15",
       "0.8.14",
       "0.8.13",
       "0.8.12",
@@ -2527,7 +2562,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.8.14"
+        "version": "0.8.15"
       }
     ]
   },
@@ -2661,6 +2696,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.15",
       "0.6.14",
       "0.6.13",
       "0.6.12",
@@ -2758,7 +2794,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.6.14"
+        "version": "0.6.15"
       },
       {
         "name": "mushi-mushi",
