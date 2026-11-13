@@ -71,11 +71,19 @@ describe("trackSessions: 'on-demand'", () => {
     expect(initSessionTracker).not.toHaveBeenCalled();
   });
 
-  it('starts right away for a tab opened with ?mushi_journeys=1, even with runtime config off', () => {
+  it('starts for a tab opened with ?mushi_journeys=1, even with runtime config off', async () => {
     window.history.replaceState(null, '', '/pricing?mushi_journeys=1');
     serveConfig();
     Mushi.init({ ...BASE, runtimeConfig: false });
-    expect(initSessionTracker).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(initSessionTracker).toHaveBeenCalledTimes(1));
+  });
+
+  it('never starts with trackSessions: false, opt-in or not', async () => {
+    window.history.replaceState(null, '', '/pricing?mushi_journeys=1');
+    serveConfig({ recordUntil: later(), sampleRate: 1 });
+    Mushi.init({ ...BASE, trackSessions: false });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(initSessionTracker).not.toHaveBeenCalled();
   });
 
   it('still starts at once by default', () => {

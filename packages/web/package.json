@@ -158,6 +158,12 @@
       "gzip": true
     },
     {
+      "name": "On-demand chunk: trackSessions 'on-demand' recording (gzipped)",
+      "path": "dist/chunks/journey-recording-*.js",
+      "limit": "1 KB",
+      "gzip": true
+    },
+    {
       "name": "Headless capture bundle (no widget, gzipped)",
       "path": "dist/headless.js",
       "limit": "35 KB",

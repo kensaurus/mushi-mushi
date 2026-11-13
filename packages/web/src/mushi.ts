@@ -43,7 +43,6 @@ import {
   markPageUnloading,
   flushLastOutboundOnUnload,
 } from '@mushi-mushi/core';
-import { deviceDraw, journeyRecordingDecision, readTabOptIn } from './journey-recording';
 
 import { MushiWidget } from './widget';
 import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
@@ -235,18 +234,32 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // `trackSessions: 'on-demand'` (Journey optimizer, ADR 0058): nothing is
   // sent unless this tab opted in (?mushi_journeys=1) or the console's
   // recording window, read from the runtime config below, samples this device.
+  // The deciding code is its own chunk, loaded only in that mode, so apps on
+  // the default pay no bytes for it (core bundle budget, 2026-11-13).
   const trackSessionsMode = bootstrapConfig.trackSessions;
-  const journeyTabOptIn = trackSessionsMode === 'on-demand' ? readTabOptIn(bootstrapConfig.projectId) : false;
+  const journeyRecording = trackSessionsMode === 'on-demand' ? import('./journey-recording') : null;
+  const journeyTabOptIn = journeyRecording?.then((m) => m.readTabOptIn(bootstrapConfig.projectId));
   function maybeStartSessionTracking(recording?: MushiRuntimeSdkConfig['journeys'] | null) {
-    if (sessionTrackingStarted) return;
-    const record = journeyRecordingDecision({
-      mode: trackSessionsMode,
-      tabOptIn: journeyTabOptIn,
-      window: recording,
-      draw: trackSessionsMode === 'on-demand' && recording ? deviceDraw(bootstrapConfig.projectId) : 1,
-      now: Date.now(),
-    });
-    if (record) startSessionTracking();
+    if (sessionTrackingStarted || trackSessionsMode === false) return;
+    if (!journeyRecording) {
+      startSessionTracking();
+      return;
+    }
+    void Promise.all([journeyRecording, journeyTabOptIn])
+      .then(([m, tabOptIn]) => {
+        if (sessionTrackingStarted) return;
+        const record = m.journeyRecordingDecision({
+          mode: trackSessionsMode,
+          tabOptIn: tabOptIn === true,
+          window: recording,
+          draw: recording ? m.deviceDraw(bootstrapConfig.projectId) : 1,
+          now: Date.now(),
+        });
+        if (record) startSessionTracking();
+      })
+      .catch(() => {
+        // The chunk failed to load: on-demand stays off, which is its default.
+      });
   }
   maybeStartSessionTracking(null);
 
