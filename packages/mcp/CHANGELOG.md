@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.31.2
+
+### Patch Changes
+
+- 0ce3357: The npm page and the setup docs now explain Mushi Mushi in plain words: one command, what happens next, and a prompt to paste into your AI editor.
+
 ## 0.31.1
 
 ### Patch Changes

@@ -325,7 +325,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -357,7 +357,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -6493,7 +6493,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.31.1`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.31.2`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -7364,12 +7364,12 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 | @mushi-mushi/core, @mushi-mushi/web | 1.35.x |
 | @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.39.x |
+| @mushi-mushi/cli | 0.40.x |
 | @mushi-mushi/mcp | 0.31.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 1.35.x |
+| mushi-mushi (launcher) | 1.36.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
@@ -10126,7 +10126,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.1`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.2`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -23636,7 +23636,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",

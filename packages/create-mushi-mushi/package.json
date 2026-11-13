@@ -1,6 +1,6 @@
 {
   "name": "create-mushi-mushi",
-  "version": "0.6.16",
+  "version": "0.6.17",
   "license": "MIT",
   "description": "Same as npx mushi-mushi. Kept so `npm create mushi-mushi` keeps working: it forwards every argument to the same setup wizard, starters (`--template`) and commands.",
   "bin": {
