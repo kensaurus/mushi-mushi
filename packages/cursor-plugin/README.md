@@ -83,7 +83,7 @@ The plugin also adds:
 - **`/triage-mushi-report`**: triage one report in a fixed order.
 - **`/test-mushi-mcp`**: check the server is reachable and the tools answer.
 - **`/fix-with-mushi`**: investigate, confirm with you, then dispatch a fix.
-- **`mushi-triage` skill**: the safe order to triage in.
+- **Seven skills**, generated from the repo's [`skills/`](../../skills) folder: `mushi-mushi` (start here), `mushi-setup`, `mushi-triage` (the safe order to triage in), `mushi-debug` (health check and debugging), `mushi-test`, `mushi-sdk-upgrade` and `mushi-check-live-app`.
 - **`mushi-mcp` rules**: least-privilege and safety rules for the write tools.
 
 ## Keys and scopes

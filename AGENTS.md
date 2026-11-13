@@ -405,6 +405,30 @@ TDD MCP tools: `map_user_stories`, `get_map_run_status`, `generate_tdd_from_stor
 
 ---
 
+## Agent skills shipped from this repo
+
+`skills/` is the only hand-edited copy of the Mushi Mushi agent skills (ADR
+0060, "Skills: one source"). `npx skills add kensaurus/mushi-mushi` installs
+from it:
+
+| Skill | Covers |
+|-------|--------|
+| `mushi-mushi` | Start here: the loop, and which skill to use next |
+| `mushi-setup` | Wizard install, sign-in, MCP wiring |
+| `mushi-triage` | Evidence → diagnosis → fix here or `dispatch_fix` |
+| `mushi-debug` | Pass/fail health check, then targeted debugging |
+| `mushi-test` | Story mapping, generated tests, end-to-end smoke test |
+| `mushi-sdk-upgrade` | `mushi-mushi` 1.x, scoped `@mushi-mushi/*`, the 0.x launcher rule |
+| `mushi-check-live-app` | The free Production Check for a live site |
+
+The Cursor plugin (`packages/cursor-plugin/skills/`) and the Claude Code
+plugin (`plugins/mushi-debugger/skills/`) ship generated copies. Edit
+`skills/<name>/SKILL.md`, run `pnpm sync:skills`, and commit the copies;
+`pnpm check:skills` (pre-commit and CI) fails on drift, and also when the
+Connect pages' `CONNECT_SKILLS.skillNames` disagree with `skills/`. Never add
+a `skills` field to `.claude-plugin/marketplace.json`: the skills CLI would
+then list every skill twice.
+
 ## Skill-Driven Triage Pipelines
 
 The Skill Pipeline feature (Jun 2026) integrates the [kenji skills / skills.sh](https://github.com/kensaurus/skills) agent-skill ecosystem into Mushi as a first-class pipeline concept.

@@ -1,43 +1,48 @@
 ---
 name: mushi-mushi
-description: "Find out what is broken in your live app and get it fixed, in plain words, with Mushi Mushi. Use when a user says the app is broken or a button does nothing, when you want to check a live Lovable, Bolt, Cursor or Claude Code app for broken pages, or to install the Mushi Mushi report button, MCP server or keys."
+description: "Find out what is broken in your live app and get it fixed, in plain words, with Mushi Mushi. Start here: it explains the loop and routes to the right Mushi Mushi skill for setup, triage, debugging, tests, SDK upgrades or a free check of a live site. Use when a user says the app is broken or a button does nothing, when you want to check a live Lovable, Bolt, Cursor or Claude Code app for broken pages, or to install the Mushi Mushi report button, MCP server or keys."
 triggers:
+  - "mushi mushi"
   - "setup mushi"
   - "install mushi"
   - "mushi api key"
   - "mushi sdk"
   - "mushi mcp"
-  - "map user stories"
-  - "tdd scenario"
-  - "qa story"
   - "byok key"
+  - "tdd scenario"
   - "story mapper"
+license: MIT
 ---
 
-# Mushi Mushi — setup and everyday use
+# Mushi Mushi — start here
 
-Mushi sits between your users and your editor. A user reports a bug from inside
-your app (a sentence, plus the screenshot, console and network tail Mushi
-captures for them). Mushi turns that report into a plain-English diagnosis and
-a fix prompt scoped to the files involved, and your agent pulls it into Cursor
-or Claude Code over MCP. The MCP server needs no LLM key of its own.
+Mushi Mushi sits between your users and your editor. A user reports a bug from
+inside your app (a sentence, plus the screenshot, console and network tail
+Mushi Mushi captures for them). Mushi Mushi turns that report into a
+plain-English diagnosis and a fix prompt scoped to the files involved, and
+your agent pulls it into Cursor or Claude Code over MCP.
 
-Beyond that core loop, the same project gives you:
+## Pick the skill
 
-- **Story mapping** — draft user stories from a live URL, no YAML to write.
-- **Test generation** — turn an accepted story into a Playwright spec.
-- **Auto-improve** — failing generated tests are rewritten and queued for review.
-- **BYOK key pool** — priority-ordered LLM keys with automatic failover.
+| The user wants to… | Skill |
+|--------------------|-------|
+| Know what visitors hit on a live site, before any install (free, no sign-up) | [`mushi-check-live-app`](../mushi-check-live-app/SKILL.md) |
+| Add Mushi Mushi to this app and wire the editor | [`mushi-setup`](../mushi-setup/SKILL.md) |
+| Triage a report: evidence, diagnosis, fix here or dispatch | [`mushi-triage`](../mushi-triage/SKILL.md) |
+| Check that the install works, or find what is broken in it | [`mushi-debug`](../mushi-debug/SKILL.md) |
+| Map user stories, generate and run tests, or smoke-test the whole loop | [`mushi-test`](../mushi-test/SKILL.md) |
+| Upgrade the SDK, or move from `@mushi-mushi/*` to `mushi-mushi` | [`mushi-sdk-upgrade`](../mushi-sdk-upgrade/SKILL.md) |
 
 ## Quick start
 
 ### 1. Add the SDK to your app
 
-The wizard detects your framework, installs the right package and writes the
-env vars:
+The wizard detects your framework, installs `mushi-mushi`, signs you in
+through the browser and writes the env vars. From an agent's terminal, pass
+`--yes`:
 
 ```bash
-npx mushi-mushi
+npx mushi-mushi --yes
 ```
 
 Or by hand, for any browser app:
@@ -52,11 +57,12 @@ import { Mushi } from 'mushi-mushi'
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey: import.meta.env.VITE_MUSHI_API_KEY, // or your framework's public env var
-  capture: {
-    discoverInventory: { enabled: true },
-  },
 })
 ```
+
+React, Vue, Svelte, Angular and Node import from `mushi-mushi/react`, `/vue`,
+`/svelte`, `/angular` and `/node`; [`mushi-setup`](../mushi-setup/SKILL.md)
+has the full table.
 
 ### 2. Connect your editor
 
@@ -66,17 +72,33 @@ npx mushi-mushi setup --ide cursor   # or: --ide claude
 
 Then ask your agent: *"what's broken in prod?"*
 
-### 3. Install the CLI (optional)
+### 3. The CLI (optional)
 
-```bash
-npm install -g @mushi-mushi/cli
-mushi login          # opens the browser; no copy-paste
+Every command runs as `npx mushi-mushi <command>` with no install. If you use
+it often, `npm install -g @mushi-mushi/cli` gives you the short `mushi`.
+
+## MCP server
+
+`npx mushi-mushi setup --ide …` writes this for you. By hand, the hosted
+server needs no key in the repo: you sign in from the editor's MCP panel, so
+the file is safe to commit (`.cursor/mcp.json` for Cursor, `.mcp.json` for
+Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "type": "http",
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/"
+    }
+  }
+}
 ```
 
-## MCP integration (Cursor, Claude Code, Claude Desktop)
-
-`npx mushi-mushi setup --ide …` writes this for you. To wire it by hand, add to
-your MCP config (`.cursor/mcp.json` for Cursor, `.mcp.json` for Claude Code):
+The local stdio server is the fallback for editors without remote MCP, or for
+a self-hosted API. It needs a project key with the `mcp:read` scope
+(`mcp:write` to dispatch fixes); keep a config that holds a real key out of
+git:
 
 ```json
 {
@@ -93,10 +115,6 @@ your MCP config (`.cursor/mcp.json` for Cursor, `.mcp.json` for Claude Code):
 }
 ```
 
-Replace the two placeholders with the values from the console, and keep a
-config that holds a real key out of git. Set `MUSHI_API_ENDPOINT` only if you
-self-host; it defaults to Mushi Cloud.
-
 Tools you will reach for first:
 
 | Tool | What it does |
@@ -104,55 +122,21 @@ Tools you will reach for first:
 | `get_recent_reports` | Survey the bug queue |
 | `get_report_detail` | One report with its diagnosis and evidence |
 | `get_fix_context` | The fix prompt and the files involved |
-| `dispatch_fix` | Hand a report to a sandboxed fix agent that opens a draft PR |
-| `map_user_stories` | Crawl a live URL and draft user stories |
-| `generate_tdd_from_story` | Write a Playwright test from a story id |
-| `improve_qa_story` | Rewrite a failing generated test |
-| `run_qa_story` | Trigger a manual QA run |
-| `list_pending_review_stories` | Generated tests waiting for approval |
-| `approve_qa_story` | Approve or reject a pending test |
-| `list_byok_keys` / `add_byok_key` | Inspect or extend the LLM key pool |
+| `triage_issue` | Evidence, similar bugs, blast radius and next steps in one packet |
+| `dispatch_fix` | Hand a report to a fix agent that opens a draft PR |
+| `diagnose_setup` | What is missing from the setup, and the next action |
+| `search_mushi_docs` | Search the current docs |
 
-## Story mapping and generated tests (CLI)
+## Environment variables
 
-```bash
-# Draft user stories from a live URL
-mushi stories map --url https://your-app.vercel.app --wait
-
-# Generate a test for an accepted story, then review it
-mushi tdd gen login-flow --mode review
-mushi tdd pending
-mushi tdd approve <qa-story-id>
-
-# Rewrite recently failing generated tests
-mushi tdd improve
-```
-
-In the console the same flows live under **Inventory → Discovery → "Map from
-live app"** and **QA Coverage**. Rewritten tests are created with
-`source=pdca` and gated by the story's automation mode:
-
-| Mode | Behaviour |
-|------|-----------|
-| `auto` | Enabled in the QA schedule immediately |
-| `review` | Waits in the "pending review" queue |
-| `approve` | Created disabled; you enable it by hand |
-
-## BYOK key pool
-
-Mushi keeps a priority-ordered pool of LLM keys per provider. When a key hits
-its quota, Mushi marks it `quota_exhausted` with a one-hour cooldown, falls back
-to the next active key, and shows a "Switch key" banner in the console.
-
-Pass the key through the `MUSHI_BYOK_KEY` environment variable so it never
-lands in your shell history or the process list:
-
-```bash
-mushi keys list
-
-# Add a backup Anthropic key, read from a variable you already have set
-MUSHI_BYOK_KEY="$ANTHROPIC_API_KEY" mushi keys add --provider anthropic --label backup --priority 200
-```
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `VITE_MUSHI_PROJECT_ID` / `NEXT_PUBLIC_MUSHI_PROJECT_ID` / … | The app's `.env.local` | Project id, with the framework's public prefix (the wizard writes it) |
+| `VITE_MUSHI_API_KEY` / `NEXT_PUBLIC_MUSHI_API_KEY` / … | The app's `.env.local` | Ingest-only key: it can send reports, never read them |
+| `MUSHI_API_KEY` | stdio MCP server, CI | Project key (starts with `mushi_`) with `mcp:read` or `mcp:write` |
+| `MUSHI_PROJECT_ID` | stdio MCP server, CI | Project UUID from the console |
+| `MUSHI_API_ENDPOINT` | stdio MCP server, CLI | Self-hosted API URL; leave unset for Mushi Cloud |
+| `MUSHI_BYOK_KEY` | Shell | One-shot input for `mushi keys add`, so the key stays out of shell history |
 
 ## Console pages
 
@@ -161,17 +145,7 @@ MUSHI_BYOK_KEY="$ANTHROPIC_API_KEY" mushi keys add --provider anthropic --label 
 | Reports | `/reports` | The bug queue and each diagnosis |
 | Inventory | `/inventory` | Accept story proposals, review map runs |
 | QA Coverage | `/qa-coverage` | Pending generated tests and run history |
-| Settings → AI keys | `/settings?tab=byok` | The BYOK key pool (Anthropic, OpenAI) |
-| Settings → Web tools | `/settings?tab=tools` | The Firecrawl key story mapping uses |
+| Settings → AI keys | `/settings?tab=byok` | Your own LLM and Firecrawl keys |
 
-## Environment variables
-
-| Variable | Description |
-|----------|-------------|
-| `MUSHI_API_KEY` | Project API key (starts with `mushi_`) for the CLI and MCP server |
-| `MUSHI_PROJECT_ID` | Project UUID from the console |
-| `MUSHI_API_ENDPOINT` | Self-hosted API URL; leave unset for Mushi Cloud |
-| `MUSHI_BYOK_KEY` | One-shot input for `mushi keys add` |
-
-Something not working? Use [`mushi-health`](../mushi-health/SKILL.md) for a
-pass/fail check, then [`mushi-debug`](../mushi-debug/SKILL.md).
+Something not working? [`mushi-debug`](../mushi-debug/SKILL.md) starts with a
+pass/fail health check.

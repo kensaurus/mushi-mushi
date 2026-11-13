@@ -2,7 +2,7 @@
   "name": "mushi-mushi",
   "displayName": "Mushi Mushi",
   "version": "0.31.1",
-  "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Mushi sees what users feel; Sentry sees what code throws.",
+  "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Ships the Mushi Mushi skills for setup, triage, debugging, tests and SDK upgrades. Mushi sees what users feel; Sentry sees what code throws.",
   "author": {
     "name": "Mushi Mushi",
     "url": "https://kensaur.us/mushi-mushi"
@@ -44,6 +44,12 @@
     }
   },
   "skills": [
+    "skills/mushi-check-live-app",
+    "skills/mushi-debug",
+    "skills/mushi-mushi",
+    "skills/mushi-sdk-upgrade",
+    "skills/mushi-setup",
+    "skills/mushi-test",
     "skills/mushi-triage"
   ],
   "rules": [

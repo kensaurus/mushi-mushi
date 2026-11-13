@@ -99,6 +99,8 @@
     "gen:error-catalog": "node scripts/generate-error-catalog.mjs",
     "check:community-files": "node scripts/sync-community-files.mjs --check",
     "sync:community-files": "node scripts/sync-community-files.mjs",
+    "check:skills": "node scripts/sync-skills.mjs --check",
+    "sync:skills": "node scripts/sync-skills.mjs",
     "release": "pnpm sync:community-files && pnpm check:narrative && turbo run build && pnpm check:publish && pnpm check:migration-catalog && changeset publish",
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",

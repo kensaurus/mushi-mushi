@@ -1,6 +1,13 @@
 ---
 name: mushi-check-live-app
 description: "Check a live web app for what visitors hit but never report: broken links and images, pages that don't load, placeholder titles like 'Lovable App', errors on load. Free, no sign-up. Use when the user says their app is broken, users are leaving, or before sharing a Lovable, Bolt or Vite app."
+triggers:
+  - "check my live app"
+  - "my app is broken"
+  - "users are leaving"
+  - "broken links"
+  - "production check"
+license: MIT
 ---
 
 # Check a live app for silent breakage
@@ -22,3 +29,6 @@ any code, find out what a visitor actually sees.
 
 Do not claim the site is fine if the check says it could not reach the
 site. That is a failed check, not a pass.
+
+Once the report button is in, [`mushi-triage`](../mushi-triage/SKILL.md)
+turns each report into a diagnosis and a fix.

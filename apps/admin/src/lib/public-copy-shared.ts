@@ -12,6 +12,20 @@ export const CONNECT_SKILLS = {
     'SKILL.md playbooks live in GitHub repos and sync into Mushi Mushi so the right playbook surfaces when a report lands. Your agent reads them — nothing runs automatically.',
   learnMoreHref: 'https://kensaur.us/mushi-mushi/docs/sdks/skills',
   learnMoreLabel: 'Learn about skills →',
+  /**
+   * The skills `npx skills add kensaurus/mushi-mushi` installs, in the order
+   * the Connect lane lists them. scripts/sync-skills.mjs --check fails when
+   * this list and the repo's skills/ folder disagree.
+   */
+  skillNames: [
+    'mushi-mushi',
+    'mushi-setup',
+    'mushi-triage',
+    'mushi-debug',
+    'mushi-test',
+    'mushi-sdk-upgrade',
+    'mushi-check-live-app',
+  ],
 } as const
 
 export const LOGIN_HERO = {

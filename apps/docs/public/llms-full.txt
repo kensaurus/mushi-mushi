@@ -292,8 +292,9 @@ It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\
 
 ## Claude Code plugin
 
-One command installs the hosted MCP hookup plus a `mushi-debugger` subagent
-(report triage → fix context → implement → close the loop):
+One command installs the hosted MCP hookup, a `mushi-debugger` subagent
+(report triage → fix context → implement → close the loop) and the seven
+[Mushi Mushi skills](/sdks/skills):
 
 ```
 /plugin marketplace add kensaurus/mushi-mushi
@@ -11423,7 +11424,21 @@ From the public [Connect page](/connect), pick **Skills** and run:
 npx skills add kensaurus/mushi-mushi
 ```
 
-That adds the five Mushi Mushi playbooks in the repo's `skills/` folder (`mushi-mushi`, `mushi-setup`, `mushi-debug`, `mushi-health` and `mushi-integration`) to your local agent. Workflow skills such as `workflow-fix-and-ship` come from the skill sources synced into the console catalog (by default `kensaurus/cursor-kenji`).
+That adds the seven Mushi Mushi skills in the repo's `skills/` folder to your local agent:
+
+| Skill | What it covers |
+|-------|----------------|
+| `mushi-mushi` | Start here: the loop in one page, and which skill to use next |
+| `mushi-setup` | Install the SDK with the wizard, sign in, and wire the MCP server into the editor |
+| `mushi-triage` | Triage a report from the editor: evidence, diagnosis, similar bugs, blast radius, then fix it here or dispatch a fix agent |
+| `mushi-debug` | A pass/fail health check (CLI, API, report pipeline, AI keys, QA runs), then targeted fixes for whatever failed |
+| `mushi-test` | Map user stories from a live URL, generate and run Playwright tests, and smoke-test the whole loop end to end |
+| `mushi-sdk-upgrade` | Upgrade the SDK, move from `@mushi-mushi/*` to `mushi-mushi`, and apply renamed options |
+| `mushi-check-live-app` | Send a live site through the free Production Check before installing anything |
+
+The Cursor plugin and the Claude Code plugin (`mushi-debugger`) ship the same seven skills, so installing either plugin gives you them too.
+
+Workflow skills such as `workflow-fix-and-ship` are not in this set. They come from the skill sources you sync into the console catalog: a new project starts with none, and the console suggests adding [`kensaurus/skills`](https://github.com/kensaurus/skills).
 
 ## How skills connect to Mushi Mushi [#how-skills-connect-to-mushi]
 

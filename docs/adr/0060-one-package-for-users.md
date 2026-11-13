@@ -108,6 +108,44 @@ No owner step is needed for this change. `npm deprecate` needs the owner's own
 npm login (CI's OIDC token can publish but not deprecate); Phase 2 lists the
 commands for the packages it folds.
 
+## Skills: one source (amendment, 2026-11-13)
+
+Owner: "make the skills in a single package too and remove obsolete ones too
+please". The agent skills had the same problem as the packages. There were
+four copies: `skills/` (what `npx skills add kensaurus/mushi-mushi`
+installs), an older `.cursor/skills/` set that had drifted from it since June,
+a `mushi-triage` skill that only the Cursor plugin had, and a Claude Code plugin
+with no skills at all.
+
+- **`skills/` is the only hand-edited copy.** Seven skills:
+  - `mushi-mushi` (router);
+  - `mushi-setup`;
+  - `mushi-triage` (moved from the Cursor plugin);
+  - `mushi-debug`, which absorbs `mushi-health`. A pass/fail health check is
+    debugging's first step, and the two shared most of their commands;
+  - `mushi-test`, which absorbs `mushi-integration`. Its end-to-end smoke test
+    is the same capture → diagnose → map → generate → run → improve loop;
+  - `mushi-sdk-upgrade` (moved from `.cursor/skills`, now covers this ADR's
+    umbrella and its 0.x launcher rule);
+  - `mushi-check-live-app`.
+
+  The merged skills keep both trigger sets. `.cursor/skills/` was deleted.
+  The skills CLI never read it.
+- **Both plugins ship the same skills, generated.** `scripts/sync-skills.mjs`
+  writes `packages/cursor-plugin/skills/*` and `plugins/mushi-debugger/skills/*`,
+  each `SKILL.md` with a GENERATED notice after its frontmatter, and rewrites
+  the Cursor manifest's `skills` list. `pnpm check:skills` runs in the
+  pre-commit hook and the CI build job, and also holds the Connect pages'
+  `CONNECT_SKILLS.skillNames` to `skills/`.
+- **The Claude Code plugin keeps its name, `mushi-debugger`.** Renaming would
+  break existing installs. Its description now says it includes the skills
+  (1.1.0). Claude Code scans a plugin's `skills/` folder on its own, so the
+  manifest needs no `skills` field. `.claude-plugin/marketplace.json` must not
+  declare one either: the skills CLI reads skill paths declared there and
+  would list every skill twice. skill-sync only reads `skills/` at a repo's
+  root, so the plugin copies are not synced twice either.
+- No npm package ships these files, so the change needs no changeset.
+
 ## Phase 2 (not done in this change)
 
 Bring the npm org down to about 12 published packages:
