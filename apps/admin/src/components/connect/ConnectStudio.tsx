@@ -11,6 +11,7 @@
  * - @mushi-mushi/mcp/clients, ClientConnectButton, admin ui primitives
  */
 
+import { Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import type { McpClientDef } from '@mushi-mushi/mcp/clients'
 import {
@@ -110,13 +111,17 @@ function SkillsLane({ client }: { client: McpClientDef }) {
           <CopyButton value={skillsCmd} label="Copy" copiedLabel="Copied" size="sm" />
         </div>
         <p className="text-2xs text-fg-muted">
-          {/* The repo's skills/ folder ships these five; workflow-fix-and-ship
-              is not one of them (QA bug 267). */}
-          Adds <code className="font-mono text-2xs">mushi-setup</code>,{' '}
-          <code className="font-mono text-2xs">mushi-health</code>,{' '}
-          <code className="font-mono text-2xs">mushi-debug</code>,{' '}
-          <code className="font-mono text-2xs">mushi-integration</code> and{' '}
-          <code className="font-mono text-2xs">mushi-mushi</code> to {client.label}.
+          {/* The names come from CONNECT_SKILLS.skillNames, which
+              sync-skills --check holds to the repo's skills/ folder;
+              workflow-fix-and-ship is not one of them (QA bug 267). */}
+          Adds{' '}
+          {CONNECT_SKILLS.skillNames.map((name, i, all) => (
+            <Fragment key={name}>
+              {i > 0 && (i === all.length - 1 ? ' and ' : ', ')}
+              <code className="font-mono text-2xs">{name}</code>
+            </Fragment>
+          ))}{' '}
+          to {client.label}.
         </p>
       </div>
       <div className="rounded-md border border-edge-subtle bg-surface-hover/30 p-3 text-xs text-fg-muted space-y-1">

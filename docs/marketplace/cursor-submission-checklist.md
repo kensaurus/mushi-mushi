@@ -16,7 +16,7 @@ Use this checklist before submitting the Mushi Mushi plugin to the Cursor Market
 - [x] `mcp.json` — hosted `mushi` entry uses the live edge function URL with `"type": "http"` and no static headers (OAuth sign-in); the check fails on placeholder hosts such as `your-project`
 - [x] Every `${VAR}` in `mcp.json` is declared under `variables` in `plugin.json`
 - [x] `mcp.json` — hosted URL is `https://kensaur.us/mushi-mushi/hosted-mcp/` (the OAuth row in docs/marketing/canonical-urls.md). Switched back from the direct edge-function URL on 2026-10-04: clients that log in look for OAuth metadata at the host root (`/.well-known/oauth-protected-resource/<path>`), which `supabase.co` cannot serve, so the MCP SDK's discovery failed there ("does not implement OAuth 2.0 Protected Resource Metadata") and passed on kensaur.us.
-- [ ] `skills/mushi-triage/SKILL.md` — workflow steps are accurate and up to date
+- [ ] `skills/*/SKILL.md` — generated from the repo's `skills/` folder; `pnpm check:skills` passes and the source skills are accurate and up to date
 - [ ] `rules/mushi-mcp.mdc` — write-tool list matches current catalog `mcp:write` tools
 - [ ] All three command files exist and reference current tool names
 - [ ] `README.md` — install instructions, tool table, security notes accurate

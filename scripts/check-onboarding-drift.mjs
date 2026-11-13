@@ -25,7 +25,6 @@ const SCAN_PATHS = [
   'packages/cli/README.md',
   'packages/mcp/README.md',
   'skills',
-  '.cursor/skills',
 ]
 
 const EXT = new Set(['.md', '.mdx'])
