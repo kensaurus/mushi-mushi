@@ -1,6 +1,6 @@
 # @mushi-mushi/angular
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Adds a bug-report widget to your Angular app (17 or later). When a user reports
 a problem, [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) gets a

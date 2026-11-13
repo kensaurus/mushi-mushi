@@ -45,6 +45,8 @@ export interface FirecrawlScrapeResult {
   markdown: string;
   html?: string;
   metadata?: Record<string, unknown>;
+  /** Every link on the page (absolute URLs), only when asked for with `links: true`. */
+  links?: string[];
 }
 
 export interface ResolvedFirecrawl {
@@ -280,6 +282,11 @@ export async function firecrawlSearch(
 
 export interface FirecrawlScrapeOptions {
   bypassCache?: boolean;
+  /**
+   * Also return the page's links, from the whole page (menu and footer
+   * included), so the markdown is the whole page too. Same credit cost.
+   */
+  links?: boolean;
 }
 
 /** "www.example.com" and "example.com" are one site; the bare host covers both. */
@@ -341,8 +348,9 @@ export function firecrawlScrapeOwnSite(
   projectId: string,
   url: string,
   siteUrl: string,
+  opts: { links?: boolean } = {},
 ): Promise<FirecrawlScrapeResult> {
-  return scrapeAllowed(db, projectId, url, { bypassCache: true, fresh: true }, [siteHost(siteUrl)]);
+  return scrapeAllowed(db, projectId, url, { bypassCache: true, fresh: true, links: opts.links }, [siteHost(siteUrl)]);
 }
 
 async function scrapeAllowed(
@@ -378,11 +386,12 @@ async function scrapeAllowed(
       // fresh: no Firecrawl cache (its default maxAge is 2 days), and a
       // Firecrawl timeout under our abort, so a slow page is not billed and
       // then thrown away.
-      body: JSON.stringify(
-        opts.fresh
-          ? { url, formats: ['markdown'], onlyMainContent: true, maxAge: 0, timeout: 15_000 }
-          : { url, formats: ['markdown'], onlyMainContent: true },
-      ),
+      body: JSON.stringify({
+        url,
+        formats: opts.links ? ['markdown', 'links'] : ['markdown'],
+        onlyMainContent: !opts.links,
+        ...(opts.fresh ? { maxAge: 0, timeout: 15_000 } : {}),
+      }),
       signal: AbortSignal.timeout(opts.fresh ? 20_000 : 30_000),
     });
 
@@ -396,7 +405,7 @@ async function scrapeAllowed(
     }
 
     const json = (await res.json()) as {
-      data?: { markdown?: string; html?: string; metadata?: Record<string, unknown> };
+      data?: { markdown?: string; html?: string; metadata?: Record<string, unknown>; links?: unknown };
     };
     const result: FirecrawlScrapeResult = {
       url,
@@ -404,6 +413,9 @@ async function scrapeAllowed(
       markdown: json.data?.markdown ?? '',
       html: json.data?.html,
       metadata: json.data?.metadata,
+      ...(opts.links
+        ? { links: Array.isArray(json.data?.links) ? json.data.links.filter((l): l is string => typeof l === 'string') : [] }
+        : {}),
     };
 
     span.end({ statusCode: res.status });

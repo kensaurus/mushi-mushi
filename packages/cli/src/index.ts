@@ -39,6 +39,7 @@ import { registerPortfolioCommands } from './commands/portfolio.js'
 import { registerConnectorsCommands } from './commands/connectors.js'
 import { registerFunnelCommands } from './commands/funnel.js'
 import { registerCodeHealthCommands } from './commands/code-health.js'
+import { registerJourneysCommands } from './commands/journeys.js'
 import { registerReleasesCommands } from './commands/releases.js'
 import { registerSentryCommands } from './commands/sentry.js'
 import { registerOutboxCommands } from './commands/outbox.js'
@@ -137,6 +138,7 @@ registerPortfolioCommands(program)
 registerConnectorsCommands(program)
 registerFunnelCommands(program)
 registerCodeHealthCommands(program)
+registerJourneysCommands(program)
 registerReleasesCommands(program)
 registerSentryCommands(program)
 registerOutboxCommands(program)

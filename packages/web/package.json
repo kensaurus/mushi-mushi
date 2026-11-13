@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/web",
   "version": "1.33.8",
-  "description": "Bug report and user feedback widget for the web. Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "Bug report and user feedback widget for the web. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -63,17 +63,20 @@ export const MUSHI_TAGLINE_LEGACY = {
 }
 
 /**
- * The promise the product makes about every bug — shared by `oneLiner` below
- * and by the npm descriptions that scripts/normalize-package-metadata.mjs
- * composes (which lower-case its first letter), so the two cannot drift.
+ * What the product does for an AI-built app, as its three pillars (ADR 0058):
+ * fix what breaks, improve the journeys people take, improve the code. Shared
+ * by `oneLiner` below and by the npm descriptions that
+ * scripts/normalize-package-metadata.mjs composes (which lower-case its first
+ * letter), so the two cannot drift. It was "Plain-English diagnosis + a ready
+ * fix, in your editor" (bug fixing only) until 2026-11-13.
  */
-const PROMISE = 'Plain-English diagnosis + a ready fix, in your editor'
+const PROMISE = 'Fix bugs, smooth user journeys and clean up the code'
 
 /** The category we own (VISION.md §1.5) — shared by `category` and `pitch`. */
-const CATEGORY = 'Bug fixing for AI-built apps' // ADR 0056 (was "The bug mediator for AI-built apps", ADR 0004)
+const CATEGORY = 'One place to improve AI-built apps' // ADR 0058 (was "Bug fixing for AI-built apps", ADR 0056; "The bug mediator for AI-built apps", ADR 0004)
 
 /**
- * Primary tagline ladder (v2) — the comprehension layer for AI-built apps.
+ * Primary tagline ladder (v2) — one place to improve AI-built apps (ADR 0058).
  * Import and use these on README headers, landing H1, docs landing, npm.
  * The canonical identity lives in /VISION.md (the constitution); this ladder
  * is the compressed propagation of its north-star sentence. See
@@ -85,30 +88,30 @@ export const MUSHI_TAGLINE_V2 = {
    * a compression of this. Use on the about/concept pages where there's room.
    */
   northStar:
-    'Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.',
+    'Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands your editor the fix in plain English.',
   /**
    * One-liner — the compressed north-star for fixed-width fields: GitHub repo
    * description, npm `description`, og:description fallback. Keep these byte-for-
    * byte identical across surfaces (the consistency check enforces it).
    */
-  oneLiner: `Your users tap a button to report a bug, and Mushi Mushi checks your live site too. ${PROMISE}. Open source.`,
+  oneLiner: `One place to improve your AI-built app. ${PROMISE}, from your editor. Open source.`,
   /**
-   * The per-bug promise, no trailing period. Package npm descriptions append
+   * The three-pillar promise, no trailing period. Package npm descriptions append
    * it to a role phrase and `category` (scripts/normalize-package-metadata.mjs).
    */
   promise: PROMISE,
   /** Hero — README headers, landing H1, docs landing. */
-  hero: 'Your AI wrote it. Mushi Mushi tells you why it broke.',
+  hero: 'Your AI built it. Mushi Mushi makes it better.',
   /**
    * The offer line that continues the hero (owner decision D1, 2026-10-28,
    * docs/plan-gtm-november-2026.md §3): the hero says why, this says what
    * happens next. Never a price — prices change with the plan and this ladder
    * is copied everywhere (check-tagline-consistency rule 4).
    */
-  heroOffer: '…and fixes it, with a reviewer that says no.',
+  heroOffer: '…with fixes your AI can apply, and a reviewer that says no.',
   /** Lead paragraph directly under hero. */
   subHero:
-    'Your users tap a button to tell you what broke, and Mushi Mushi checks your live site for you. Every bug gets a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.',
+    'Mushi Mushi checks your live site, shows where people get stuck, and reviews your code. Your users can tap a button to report a bug. Each problem comes with a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.',
   /** Eyebrow, npm category line, llms.txt. The category we own (VISION.md §1.5). */
   category: CATEGORY,
   /**
@@ -120,7 +123,7 @@ export const MUSHI_TAGLINE_V2 = {
    */
   pitch: `${CATEGORY}: ${PROMISE.charAt(0).toLowerCase()}${PROMISE.slice(1)}.`,
   /** og:description, slide headers. */
-  micro: 'Know why. Fix fast.',
+  micro: 'Fix it. Then make it better.',
   mark: '虫虫',
 }
 

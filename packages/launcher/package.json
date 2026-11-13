@@ -2,7 +2,7 @@
   "name": "mushi-mushi",
   "version": "0.8.14",
   "license": "MIT",
-  "description": "One command adds a bug report widget to any app. Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.",
+  "description": "One command adds a bug report widget to any app. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "bin": {
     "mushi-mushi": "./dist/index.js"
   },

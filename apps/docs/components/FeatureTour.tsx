@@ -27,13 +27,14 @@ export interface Feature {
  * What a card asks of you, in the plain words a non-technical builder uses.
  * The core loop (report button, diagnosis, fix prompt) needs none of these.
  */
-export type NeedKind = 'connect' | 'paid-key' | 'computer' | 'paid-key-or-computer'
+export type NeedKind = 'connect' | 'paid-key' | 'computer' | 'paid-key-or-computer' | 'sdk-or-paid-key'
 
 export const NEED_LABELS: Record<NeedKind, string> = {
   connect: 'Connect an account you already have',
   'paid-key': 'Needs a paid key from another service',
   computer: 'Needs a computer of yours that stays on',
   'paid-key-or-computer': 'Needs a paid key, or a computer of yours',
+  'sdk-or-paid-key': 'Needs the SDK in your app, or a paid key',
 }
 
 /** 24×24 line icons, drawn here so the docs need no icon dependency. */
@@ -46,6 +47,24 @@ function Icon({ children }: { children: ReactNode }) {
 }
 
 export const FEATURES: Feature[] = [
+  {
+    id: 'journeys',
+    name: 'Journey optimizer',
+    pain: 'You don’t know where people get lost in your app, or which pages say the same thing twice.',
+    does: 'Draws how people really move from page to page and scans your site’s own links. It points out dead ends, pages people leave from, duplicate pages, pages nothing links to and pages buried too deep, each with a prompt you paste into your coding agent.',
+    needs: 'The Mushi Mushi SDK in your app for real visits (page views are on by default, or record on demand), and your own Firecrawl key for the site scan. Either one is enough to start.',
+    kind: 'sdk-or-paid-key',
+    icon: (
+      <Icon>
+        <circle cx="5" cy="6" r="2" />
+        <circle cx="19" cy="6" r="2" />
+        <circle cx="12" cy="18" r="2" />
+        <path d="M7 6h10M6.2 7.7 10.8 16.3M17.8 7.7 13.2 16.3" />
+      </Icon>
+    ),
+    start: { label: 'Open Journeys', href: `${CONSOLE}/journeys` },
+    more: { label: 'How it works', href: '/admin/journeys' },
+  },
   {
     id: 'first-user-test',
     name: 'First-time user test',

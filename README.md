@@ -2,9 +2,11 @@
 
 # Mushi Mushi
 
-**Your AI wrote it. Mushi Mushi tells you why it broke.**
+**Your AI built it. Mushi Mushi makes it better.**
 
-Your users tap a button to tell you what broke, and Mushi Mushi checks your live site for you. Every bug gets a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.
+Mushi Mushi checks your live site, shows where people get stuck, and reviews your code. Your users can tap a button to report a bug. Each problem comes with a plain-English explanation and a fix that Lovable, Cursor or Claude Code can apply.
+
+**Fix what breaks** · **Smooth the journeys people take** · **Clean up the code** — one place, from your editor.
 
 **[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
 
@@ -56,6 +58,11 @@ flowchart LR
 3. **Fix.** Your editor reads the diagnosis over MCP and makes the fix with its own model. If you prefer, an agent opens a **draft** PR that you review like any other. On hosted Mushi Mushi the built-in fixer needs no key of your own; Cursor's agents need your Cursor key; or run fixes on your own computer with the Mushi Mushi worker. With your own Anthropic or OpenAI key, a second AI (Claude Opus, or GPT on an OpenAI key) reviews each agent PR first. Mushi Mushi will not merge a PR it says to hold unless you override it in the console and give a reason.
 
 It catches the bugs that never throw an error: the pay button hidden under the keyboard, the Save button tapped twice because nothing happened, the dashboard that takes 12 seconds.
+
+**Beyond bugs.** The same queue improves the rest of the app:
+
+- **Journeys.** The Journey optimizer maps how people move from page to page, from real visits, and flags dead ends, loops, pages people leave from, and orphan or duplicate pages. Each finding has a plain suggestion and a prompt your coding agent can run. The map from visits needs no key; the crawl of your live site needs a Firecrawl key. A first-time user test shows where a new user gets stuck (it runs on your own coding agent).
+- **Code.** Known security holes in your dependencies (once GitHub is connected), code audits run by your own agent, and clean-up of the branches and PRs Mushi Mushi made. Every change is a pull request you review.
 
 ## Quick start
 
@@ -190,7 +197,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~620K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 563 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~620K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 566 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

@@ -173,6 +173,10 @@ describe('MCP protocol handshake', () => {
       'refresh_recipe',
       'run_design_deviance',
       'run_store_review',
+      // Journey optimizer: starts a site scan (Firecrawl reads the live site).
+      'scan_site_journeys',
+      // Opens or stops the on-demand visit recording window.
+      'record_journeys',
       // Console parity: settings, the store review pull, and the operator records.
       'set_design_settings',
       'pull_store_reviews',

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-11T07:42:17.475Z",
+  "generatedAt": "2026-11-13T03:29:51.884Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -217,6 +217,15 @@
       "route_path": "/qa-coverage",
       "kind": "page",
       "content_hash": "c70185fe13ec3b658ed619e390391ea66a3a1c8e4954df58b10be7cae27552fe"
+    },
+    {
+      "doc_path": "pages/journeys.md",
+      "section": "main",
+      "title": "Journey optimizer",
+      "body": "# Journey optimizer\n\nA map of how people move through your app: dead ends, pages people leave from, duplicate pages and pages nothing links to, each with a fix to hand your coding agent.\n\nRoute: /journeys\nSection: Plan\n\nKeywords: journey, journeys, journey optimizer, user journey, user flow, flow map, site map, sitemap, navigation, dead end, drop-off, exit rate, duplicate page, orphan page, information architecture, ia, ux\n\nUse this page when the user asks about: journey, journeys, journey optimizer, user journey, user flow, flow map",
+      "route_path": "/journeys",
+      "kind": "page",
+      "content_hash": "ef8099e14d581624298ea0d044d668d8f852e7ba2d362bfb0a0bb2c83f69a540"
     },
     {
       "doc_path": "pages/first-user-test.md",

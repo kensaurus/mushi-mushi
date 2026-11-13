@@ -217,10 +217,10 @@ for (const rel of ALL_SCAN_PATHS) {
 const indexMdx = read('apps/docs/content/index.mdx')
 if (
   indexMdx !== null &&
-  !(indexMdx.includes('Your AI wrote it') && indexMdx.includes('why it broke'))
+  !(indexMdx.includes('Your AI built it') && indexMdx.includes('makes it better'))
 ) {
   failures.push(
-    'apps/docs/content/index.mdx\n      missing v2 hero H1 fragments:\n      "Your AI wrote it" + "why it broke"',
+    'apps/docs/content/index.mdx\n      missing v2 hero H1 fragments:\n      "Your AI built it" + "makes it better"',
   )
 }
 

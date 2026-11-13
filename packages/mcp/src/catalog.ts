@@ -1010,6 +1010,43 @@ export const TOOL_CATALOG: ToolSpec[] = [
     returnsUntrusted: true,
     useCase: 'What do users do right after they mint an API key?',
   },
+  {
+    name: 'get_journeys',
+    title: 'User journeys and where people get stuck',
+    description:
+      'Where do people get stuck in the app, and what should change? Reads the Journey optimizer for one project: page-to-page moves from real visits over the last days (7, 30 default, or 90) joined with the latest site scan\'s links. ' +
+      'Returns { days, liveUrl, score (0-100, 100 = no findings), rootPath, stats: { sessions, pageViews, pages, avgPagesPerSession, bounceRate, sampled }, scan, mapScan, recording ({ until, sampleRate } of the on-demand visit recording; until null = off), flows (top 10 common paths), findingsTotal, findingsByKind, findings: [{ id, kind, severity, pages, title, detail, suggestion, prompt }], next }. ' +
+      'Kinds: broken, dead_end, high_exit, loop, reload, duplicate_page, route_variant, duplicate_title, orphan, deep_page, unvisited. Each finding\'s prompt is a ready instruction for a coding agent in the app\'s repo. ' +
+      'Optional kind filters the findings, limit caps them (default 20, max 100), includeGraph adds the page nodes and edges (large). Read-only. ' +
+      'With no scan yet, call scan_site_journeys first; for event-level funnels use query_funnel or get_user_paths.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    returnsUntrusted: true,
+    useCase: 'Where do people get stuck in my app, and what should I change?',
+  },
+  {
+    name: 'scan_site_journeys',
+    title: 'Scan the live site for the journey map',
+    description:
+      'Start a site scan for the Journey optimizer: Firecrawl maps the live site and reads up to 40 pages (no LLM), keeping each page\'s title, internal links and a content fingerprint, so get_journeys can find orphan, duplicate and deep pages. ' +
+      'Optional baseUrl (the public https:// address; defaults to the one Mushi Mushi already knows) and projectId. Runs in the background, usually under a minute: call get_journeys again in about a minute. ' +
+      'Returns { scan: { id, status, baseUrl, pageCount, error, createdAt, finishedAt }, next }. One scan at a time per app (409 SCAN_RUNNING) and at most one every 10 minutes (429 SCAN_TOO_SOON); NO_LIVE_URL when no address is known, UNSAFE_URL for a private address; viewers cannot scan. ' +
+      'Uses the project\'s Firecrawl key. Write: it stores a scan; nothing in the app or repo changes.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'I just shipped new pages: map the site again.',
+  },
+  {
+    name: 'record_journeys',
+    title: 'Record visits for the journey map',
+    description:
+      'Open, extend or stop the on-demand visit recording window for the Journey optimizer. Apps whose Mushi Mushi SDK runs trackSessions: \'on-demand\' send no visits until a window is open; then that share of visitors is recorded until it ends (apps on the default trackSessions: true always record). ' +
+      'hours is 1 to 168 from now, or 0 to stop; optional sampleRate is the share of visitors, above 0 and at most 1 (0.1 = one in ten; unset keeps the current share, 0.1 by default), and projectId. ' +
+      'Returns { recording: { until, sampleRate }, next } (until null = off). Calling it again replaces the window. Viewers cannot record. Write: it changes the app\'s recording setting; nothing in the repo changes. Read the results with get_journeys.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Record one in ten visitors for the next day so I can see where people get stuck.',
+  },
 ];
 
 export interface ResourceSpec {

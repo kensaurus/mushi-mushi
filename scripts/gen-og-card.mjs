@@ -6,7 +6,7 @@
  * docs and landing, dev.to cover) from the brand SSOT, so a tagline or license
  * change reaches the image the same way it reaches READMEs and npm:
  *
- *   hero     MUSHI_TAGLINE_V2.hero      "Your AI wrote it. Mushi Mushi tells you why it broke."
+ *   hero     MUSHI_TAGLINE_V2.hero      "Your AI built it. Mushi Mushi makes it better."
  *   eyebrow  MUSHI_TAGLINE_V2.category
  *   lead     MUSHI_TAGLINE_V2.promise
  *   footer   MUSHI_CANONICAL_URLS.repo · MUSHI_OSS.license
@@ -26,12 +26,15 @@
  * preview → docs/social-preview/og-card.png.
  *
  * Usage: node scripts/gen-og-card.mjs
+ *        node scripts/gen-og-card.mjs --html <file>   write the card's HTML only,
+ *          to render with a stored-profile playwright-cli session (the
+ *          browser rule forbids a throwaway chromium.launch()), then
+ *          `node scripts/gen-og-card.mjs --copy <png>` to install the render.
  */
 
-import { copyFileSync, mkdirSync, statSync } from 'node:fs'
+import { copyFileSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { chromium } from 'playwright'
 import { MUSHI_CANONICAL_URLS, MUSHI_OSS, MUSHI_TAGLINE_V2, editorialTokens } from '../packages/brand/src/index.js'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,7 +46,7 @@ const HEIGHT = 630
 const escapeHtml = (s) =>
   s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-/** "Your AI wrote it. Mushi Mushi tells you why it broke." → ["Your AI wrote it.", "Mushi Mushi tells you why it broke."] */
+/** "Your AI built it. Mushi Mushi makes it better." → ["Your AI built it.", "Mushi Mushi makes it better."] */
 function splitHero(hero) {
   const cut = hero.indexOf('. ')
   if (cut < 0) return [hero, '']
@@ -124,6 +127,24 @@ function html() {
 }
 
 async function main() {
+  const htmlAt = process.argv.indexOf('--html')
+  if (htmlAt > 0) {
+    const file = resolve(process.argv[htmlAt + 1] ?? 'og-card.html')
+    writeFileSync(file, html())
+    console.log(`[gen-og-card] wrote ${file} (render it at ${WIDTH}×${HEIGHT})`)
+    return
+  }
+  const copyAt = process.argv.indexOf('--copy')
+  if (copyAt > 0) {
+    const png = resolve(process.argv[copyAt + 1] ?? '')
+    mkdirSync(dirname(OUT), { recursive: true })
+    copyFileSync(png, OUT)
+    mkdirSync(dirname(DOCS_COPY), { recursive: true })
+    copyFileSync(OUT, DOCS_COPY)
+    console.log(`[gen-og-card] installed ${png} as docs/social-preview/og-card.png and the apps/docs/public copy`)
+    return
+  }
+  const { chromium } = await import('playwright')
   const browser = await chromium.launch()
   try {
     const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT }, deviceScaleFactor: 1 })

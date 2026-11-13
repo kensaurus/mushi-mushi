@@ -865,6 +865,8 @@ forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:
 forwardToApiExt(['/v1/admin/projects/:id/sdk-health', '/v1/admin/projects/:id/sdk-health/tasks']);
 // project-home.ts: the per-app Home in one call; deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/projects/:id/home', '/v1/admin/projects/:id/home/thumbnail']);
+// journeys.ts: the Journey optimizer (ADR 0058); deploy size limit, 2026-11-13.
+forwardToApiExt(['/v1/admin/projects/:id/journeys', '/v1/admin/projects/:id/journeys/scan', '/v1/admin/projects/:id/journeys/recording']);
 // setup-gaps.ts and release-batch.ts (console ops plan P1, read-only); deploy size limit, 2026-10-27.
 forwardToApiExt(['/v1/admin/setup-gaps', '/v1/admin/release-batch']);
 // health-checks.ts: the Health check registry (plan-simplicity-2026-10 Phase 1, read-only); deploy size limit.

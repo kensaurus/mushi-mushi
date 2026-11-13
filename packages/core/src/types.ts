@@ -50,12 +50,17 @@ export interface MushiConfig {
    */
   analytics?: MushiAnalyticsConfig;
   /**
-   * Session lifecycle tracking for the console's Activity and Users views
-   * (session start / heartbeat / end, page views). Default true. Runs only
-   * while the `analytics` gate allows tracking; `false` turns it off even
-   * then.
+   * Session lifecycle tracking for the console's Activity, Users and
+   * Journeys views (session start / heartbeat / end, page views). Default
+   * true. Runs only while the `analytics` gate allows tracking; `false` turns
+   * it off even then.
+   *
+   * `'on-demand'` sends nothing until you ask: while the console's Journeys
+   * page has a recording window open, its share of visitors is recorded; a
+   * tab opened with `?mushi_journeys=1` is always recorded (for you or a
+   * tester). Use it when every request on every visit costs too much.
    */
-  trackSessions?: boolean;
+  trackSessions?: boolean | 'on-demand';
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -2033,6 +2038,11 @@ export interface MushiRuntimeSdkConfig {
    * true only when the project turned it on AND the server can send it.
    */
   reporter?: { emailEnabled: boolean; pushEnabled: boolean; vapidPublicKey: string | null };
+  /**
+   * Journey optimizer recording window, present only while open. Read by
+   * `trackSessions: 'on-demand'`; ignored otherwise.
+   */
+  journeys?: { recordUntil: string; sampleRate: number };
 }
 
 export interface MushiSdkVersionInfo {

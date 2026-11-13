@@ -392,6 +392,18 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    // Journey optimizer (ADR 0058): how people move through the app and what in the site map gets in their way.
+    id: 'nav:journeys',
+    path: '/journeys',
+    label: 'Journey optimizer',
+    sectionId: 'plan',
+    pdcaStage: 'plan',
+    iconKey: 'explore',
+    paletteDescription: 'A map of how people move through your app: dead ends, pages people leave from, duplicate pages and pages nothing links to, each with a fix to hand your coding agent.',
+    paletteKeywords: ['journey', 'journeys', 'journey optimizer', 'user journey', 'user flow', 'flow map', 'site map', 'sitemap', 'navigation', 'dead end', 'drop-off', 'exit rate', 'duplicate page', 'orphan page', 'information architecture', 'ia', 'ux'],
+    paletteGroup: 'Plan',
+  },
+  {
     // Fresh-eyes runs (ADR 0053): a tab of UX runs called "Fresh eyes" until 2026-10-28.
     id: 'nav:first-user-test',
     path: '/first-user-test',
@@ -1159,6 +1171,7 @@ export const CORE_NAV_PATHS: readonly string[] = [
   '/dashboard',
   '/reports',
   '/fixes',
+  '/journeys',
   '/pipeline',
   '/portfolio',
   '/connect',
@@ -1170,13 +1183,13 @@ export const CORE_NAV_PATHS: readonly string[] = [
 
 /**
  * The sidebar a builder sees (console audit 2026-11-11, finding 8): someone
- * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Connect and
- * Settings; every other page they may open is under "More pages". Pipeline
+ * who built an app with Lovable or Bolt needs Home, Bugs, Fixes, Journeys
+ * (ADR 0058: make the app better, not only fix it), Connect and Settings; every other page they may open is under "More pages". Pipeline
  * stays core for every account (ADR 0027 amendment 2026-10-27). Operators
  * (entitlements `operator`) keep CORE_NAV_PATHS.
  */
 /** @internal Exported for tests. */
-export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/pipeline', '/connect', '/settings']
+export const BUILDER_CORE_NAV_PATHS: readonly string[] = ['/dashboard', '/reports', '/fixes', '/journeys', '/pipeline', '/connect', '/settings']
 
 /** The core sidebar for this viewer. */
 export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly string[] {

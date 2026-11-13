@@ -1,6 +1,6 @@
 # @mushi-mushi/ux
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 For people who build with an AI coding agent and keep hearing that a screen is cramped, unreadable or broken on a phone. This [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) tool finds the UX problems on every screen of your app before your users do, and lets the coding agent you already pay for fix them one screen at a time. Every change is measured. Only the ones that help are kept, on a branch you review.
 

@@ -43,6 +43,7 @@ import {
   markPageUnloading,
   flushLastOutboundOnUnload,
 } from '@mushi-mushi/core';
+import { deviceDraw, journeyRecordingDecision, readTabOptIn } from './journey-recording';
 
 import { MushiWidget } from './widget';
 import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';
@@ -204,7 +205,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // bots, consent), so under consent:'required' nothing is sent until
   // setConsent('granted'), whichever tracker initialises first.
   let unsubPageViewHistory: (() => void) | null = null;
-  if (bootstrapConfig.trackSessions !== false) {
+  let sessionTrackingStarted = false;
+  function startSessionTracking() {
+    if (sessionTrackingStarted) return;
+    sessionTrackingStarted = true;
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
@@ -228,6 +232,23 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // History API unavailable (sandboxed iframe) — heartbeats still flow.
     }
   }
+  // `trackSessions: 'on-demand'` (Journey optimizer, ADR 0058): nothing is
+  // sent unless this tab opted in (?mushi_journeys=1) or the console's
+  // recording window, read from the runtime config below, samples this device.
+  const trackSessionsMode = bootstrapConfig.trackSessions;
+  const journeyTabOptIn = trackSessionsMode === 'on-demand' ? readTabOptIn(bootstrapConfig.projectId) : false;
+  function maybeStartSessionTracking(recording?: MushiRuntimeSdkConfig['journeys'] | null) {
+    if (sessionTrackingStarted) return;
+    const record = journeyRecordingDecision({
+      mode: trackSessionsMode,
+      tabOptIn: journeyTabOptIn,
+      window: recording,
+      draw: trackSessionsMode === 'on-demand' && recording ? deviceDraw(bootstrapConfig.projectId) : 1,
+      now: Date.now(),
+    });
+    if (record) startSessionTracking();
+  }
+  maybeStartSessionTracking(null);
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
@@ -1245,6 +1266,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
+    if (runtime.enabled !== false) maybeStartSessionTracking(runtime.journeys ?? null);
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
     reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
     syncReporterChannels();
