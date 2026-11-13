@@ -27,7 +27,7 @@ import { nodeSeverity, type JourneyFinding, type JourneyMap, type JourneyNode, t
 export const JOURNEY_NODE_SIZE = { width: 196, height: 70 }
 const ROW_GAP = 26
 const COLUMN_GAP = 90
-/** Most siblings stacked in one column of the site hierarchy before it wraps. */
+/** @internal Exported for tests. Most siblings stacked in one column of the site hierarchy before it wraps. */
 export const SITEMAP_MAX_ROWS = 8
 
 export interface JourneyNodeData extends Record<string, unknown> {
@@ -144,7 +144,7 @@ export function buildJourneyLayout(map: JourneyMap, hasScan: boolean, findings: 
   }
 }
 
-/** Each page's parent in the site hierarchy: the longest other page path it sits under, else the start page. */
+/** @internal Exported for tests. Each page's parent in the site hierarchy: the longest other page path it sits under, else the start page. */
 export function sitemapParents(paths: string[], rootPath: string): Map<string, string> {
   const set = new Set(paths)
   const root = set.has(rootPath) ? rootPath : set.has('/') ? '/' : null
