@@ -51,12 +51,13 @@ describe('detectFromPackageJson', () => {
     expect(result.framework).toBe('capacitor')
   })
 
-  it('returns vanilla and warns for Angular — recommends @mushi-mushi/angular', () => {
+  it("returns vanilla and warns for Angular — recommends 'mushi-mushi/angular'", () => {
     const result = detectFromPackageJson(
       JSON.stringify({ dependencies: { '@angular/core': '^17.0.0' } }),
     )
     expect(result.framework).toBe('vanilla')
-    expect(result.warnings.some((w) => w.includes('@mushi-mushi/angular'))).toBe(true)
+    expect(result.warnings.some((w) => w.includes('Install mushi-mushi,') && w.includes("from 'mushi-mushi/angular'"))).toBe(true)
+    expect(result.warnings.some((w) => w.includes('@mushi-mushi/angular'))).toBe(false)
   })
 
   it('returns vanilla for an unknown framework', () => {

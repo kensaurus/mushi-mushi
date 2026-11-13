@@ -79,7 +79,7 @@ Create a free account (no card) or sign in to the Mushi Mushi admin console, and
   Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
-npm install @mushi-mushi/web`} },
+npm install mushi-mushi`} },
     { id: 'mount-mushi', label: 'Add Mushi Mushi alongside BugHerd', content: <>Both can coexist for a few days while you train clients on the new UX.</> },
     { id: 'redact', label: 'Mark sensitive elements with data-mushi-redact', content: {`<!-- Blacked out in Mushi Mushi screenshots -->
 

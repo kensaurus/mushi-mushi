@@ -67,8 +67,8 @@ The "is this drift?" test for any feature you build or surface you write: *"Does
 |-------|----------|---------|-------------|
 | `classify-report` | `supabase/functions/classify-report/` | `reports` INSERT | LLM triage: severity, category, blast-radius |
 | `fix-worker` | `supabase/functions/fix-worker/` | manual / classify result | Opens a draft GitHub PR for a fix and queues its Opus review; the PR stays a draft (no host CI) until `agent-pr-review` says merge on its head (ADR 0047). Refactored to import branch/commit/PR helpers from `_shared/github-pr.ts`. A cloud dispatch on a report that had earlier attempts adds what they did (each PR's latest Opus review and serious findings, or the agent's no-PR note), screened and fenced (`_shared/prior-attempts.ts`), so a re-dispatch does not repeat a rejected theory. |
-| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
-| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
+| `sdk-upgrade-worker` | `supabase/functions/sdk-upgrade-worker/` | POST from `sdk-upgrade` route | **NEW** Reads the connected repo's `package.json`(s), bumps `mushi-mushi` and `@mushi-mushi/*` to latest npm versions, opens a draft PR + marks ready. Writes result to `sdk_upgrade_jobs`. When the host has `.github/workflows/mushi-sdk-lockfile.yml` (ADR 0019) it pushes the bump as one commit and parks the job in `awaiting_lockfile` instead of opening the PR. Guards: allow-listed paths, semver-only bumps, vault token resolution, `requireServiceRoleAuth`. |
+| `sdk-versions-cron` | `supabase/functions/sdk-versions-cron/` | pg_cron daily 02:30 UTC + release.yml | **NEW** Fetches latest stable version for `mushi-mushi` and every `@mushi-mushi/*` package from the npm registry and upserts into `sdk_versions` so freshness chips are accurate between hand-authored migrations. Service-role bearer (pg_cron) or a GitHub OIDC token from `release.yml` (`_shared/github-oidc.ts`). |
 | `sdk-release-sync` | `supabase/functions/sdk-release-sync/` | pg_cron every 5 min | **NEW** Polls GitHub for active SDK upgrade jobs (`pr_opened \| ready_to_merge \| blocked \| merged \| deploying`): fetches PR detail, latest check-run, and deployment status (normalized via `normalizeDeployStatus`), then upserts CI/deploy/release status into `sdk_upgrade_jobs` to drive the release-cockpit chips. First opens the PR for `awaiting_lockfile` jobs once the host lockfile workflow pushed (or after 30 min, with a note). `requireServiceRoleAuth`. |
 | `inventory-propose` | `supabase/functions/inventory-propose/` | manual / cron | Proposes user-story inventory from SDK observation data |
 | `story-mapper` | `supabase/functions/story-mapper/` | POST /map-from-live | Crawls live app URL (Firecrawl/Browserbase) → Claude drafts `inventory.yaml` → `inventory_proposals` (source=live_crawl); opt-in Cursor Cloud PR |
@@ -534,11 +534,32 @@ Admin UI: `MergeFixPreflight`, `FixCiFeedback`, `pickPrimaryFixAttempt()` in
 
 ---
 
+## One package for users (ADR 0060, Nov 2026)
+
+Users install ONE package: `npm install mushi-mushi`, then import from
+`mushi-mushi` (browser SDK), `mushi-mushi/react`, `/vue`, `/svelte`,
+`/angular`, `/node` (+ `/node/express`, `/fastify`, `/hono`), `/core`,
+`/headless`, `/i18n`, `/otel`, `/test-utils`. `npx mushi-mushi` still runs
+the wizard (bin = `packages/launcher/dist/bin.js`). React Native
+(`@mushi-mushi/react-native`) and Capacitor (`@mushi-mushi/capacitor`) stay
+scoped; the wizard installs them itself.
+
+- Every install snippet a user sees (console, docs, README, CLI, emails) uses
+  `mushi-mushi`. Scoped names stay only for React Native, Capacitor,
+  self-host packages and "already on `@mushi-mushi/*`? it keeps working".
+- Code that reads a host's dependencies recognises `mushi-mushi` next to the
+  old `@mushi-mushi/*` names (CLI `isMushiSdkPackage`, server
+  `isMushiPackageName` / `UPGRADEABLE_PACKAGES`). Never a bare
+  `startsWith('@mushi-mushi/')` check for "is the SDK installed".
+- `packages/launcher` must never depend on an adapter package: the adapters
+  are devDependencies bundled into their entry, so npm never auto-installs
+  their required framework peer.
+
 ## One-click SDK Install & Upgrade (Jun 2026)
 
 Extends the "one-click MCP install" to **SDK/CLI install and upgrades**. The
 headline capability is a **"Create Upgrade PR"** that opens a reviewed GitHub PR
-bumping `@mushi-mushi/*` in the connected repo, reusing the existing GitHub App
+bumping `mushi-mushi` and `@mushi-mushi/*` in the connected repo, reusing the existing GitHub App
 + draft-PR machinery.
 
 ### Architecture

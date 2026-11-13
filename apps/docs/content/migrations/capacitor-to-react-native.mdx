@@ -44,7 +44,7 @@ You have three options for the **web** experience after porting the native app:
 2. **RN Web for the app shell + Next.js for marketing.** One app, two surfaces.
 3. **Full RN Web.** Single codebase, with SEO trade-offs.
 
-Option 1 is usually the simplest. You can run `@mushi-mushi/web` on the
+Option 1 is usually the simplest. You can run `mushi-mushi` on the
 marketing site and `@mushi-mushi/react-native` in the new app against the
 same project ID and API key at the same time.
 

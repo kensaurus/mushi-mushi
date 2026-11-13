@@ -49,7 +49,7 @@ through one identify function.
 ## Recipe: keep Pendo for analytics + guides; use Mushi Mushi for feedback
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 // 1. Initialise both
 window.pendo.initialize({
@@ -76,9 +76,9 @@ intake and triage.
   id="pendo-feedback-to-mushi"
   steps={[
     { id: 'create-project', label: 'Create a Mushi Mushi project', content: <><a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-pendo-feedback-to-mushi">Create a free account</a> (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy <code>projectId</code> + <code>apiKey</code> from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
-# Or @mushi-mushi/react if you're on React`}</pre> },
-    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi Mushi } from '@mushi-mushi/web'
+    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: <pre className="text-xs">{`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'`}</pre> },
+    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi } from 'mushi-mushi'
 const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
     { id: 'mirror-identity', label: 'Mirror pendo.identify into mushi.setUser', content: <pre className="text-xs">{`function identifyEverywhere(visitor, account) {
   window.pendo.identify(visitor, account)

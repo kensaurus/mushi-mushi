@@ -2,9 +2,211 @@
   "name": "mushi-mushi",
   "version": "0.8.15",
   "license": "MIT",
-  "description": "One command adds a bug report widget to any app. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
+  "description": "The one package: SDK and setup wizard for any app. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "bin": {
-    "mushi-mushi": "./dist/index.js"
+    "mushi-mushi": "./dist/bin.js"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./web": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./core": {
+      "import": {
+        "types": "./dist/core.d.ts",
+        "default": "./dist/core.js"
+      },
+      "require": {
+        "types": "./dist/core.d.cts",
+        "default": "./dist/core.cjs"
+      }
+    },
+    "./headless": {
+      "import": {
+        "types": "./dist/headless.d.ts",
+        "default": "./dist/headless.js"
+      },
+      "require": {
+        "types": "./dist/headless.d.cts",
+        "default": "./dist/headless.cjs"
+      }
+    },
+    "./i18n": {
+      "import": {
+        "types": "./dist/i18n.d.ts",
+        "default": "./dist/i18n.js"
+      },
+      "require": {
+        "types": "./dist/i18n.d.cts",
+        "default": "./dist/i18n.cjs"
+      }
+    },
+    "./otel": {
+      "import": {
+        "types": "./dist/otel.d.ts",
+        "default": "./dist/otel.js"
+      },
+      "require": {
+        "types": "./dist/otel.d.cts",
+        "default": "./dist/otel.cjs"
+      }
+    },
+    "./test-utils": {
+      "import": {
+        "types": "./dist/test-utils.d.ts",
+        "default": "./dist/test-utils.js"
+      },
+      "require": {
+        "types": "./dist/test-utils.d.cts",
+        "default": "./dist/test-utils.cjs"
+      }
+    },
+    "./react": {
+      "import": {
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
+      },
+      "require": {
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
+      }
+    },
+    "./vue": {
+      "import": {
+        "types": "./dist/vue.d.ts",
+        "default": "./dist/vue.js"
+      },
+      "require": {
+        "types": "./dist/vue.d.cts",
+        "default": "./dist/vue.cjs"
+      }
+    },
+    "./svelte": {
+      "import": {
+        "types": "./dist/svelte.d.ts",
+        "default": "./dist/svelte.js"
+      },
+      "require": {
+        "types": "./dist/svelte.d.cts",
+        "default": "./dist/svelte.cjs"
+      }
+    },
+    "./angular": {
+      "import": {
+        "types": "./dist/angular.d.ts",
+        "default": "./dist/angular.js"
+      },
+      "require": {
+        "types": "./dist/angular.d.cts",
+        "default": "./dist/angular.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node.d.ts",
+        "default": "./dist/node.js"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    },
+    "./node/express": {
+      "import": {
+        "types": "./dist/node-express.d.ts",
+        "default": "./dist/node-express.js"
+      },
+      "require": {
+        "types": "./dist/node-express.d.cts",
+        "default": "./dist/node-express.cjs"
+      }
+    },
+    "./node/fastify": {
+      "import": {
+        "types": "./dist/node-fastify.d.ts",
+        "default": "./dist/node-fastify.js"
+      },
+      "require": {
+        "types": "./dist/node-fastify.d.cts",
+        "default": "./dist/node-fastify.cjs"
+      }
+    },
+    "./node/hono": {
+      "import": {
+        "types": "./dist/node-hono.d.ts",
+        "default": "./dist/node-hono.js"
+      },
+      "require": {
+        "types": "./dist/node-hono.d.cts",
+        "default": "./dist/node-hono.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "web": [
+        "./dist/index.d.ts"
+      ],
+      "core": [
+        "./dist/core.d.ts"
+      ],
+      "headless": [
+        "./dist/headless.d.ts"
+      ],
+      "i18n": [
+        "./dist/i18n.d.ts"
+      ],
+      "otel": [
+        "./dist/otel.d.ts"
+      ],
+      "test-utils": [
+        "./dist/test-utils.d.ts"
+      ],
+      "react": [
+        "./dist/react.d.ts"
+      ],
+      "vue": [
+        "./dist/vue.d.ts"
+      ],
+      "svelte": [
+        "./dist/svelte.d.ts"
+      ],
+      "angular": [
+        "./dist/angular.d.ts"
+      ],
+      "node": [
+        "./dist/node.d.ts"
+      ],
+      "node/express": [
+        "./dist/node-express.d.ts"
+      ],
+      "node/fastify": [
+        "./dist/node-fastify.d.ts"
+      ],
+      "node/hono": [
+        "./dist/node-hono.d.ts"
+      ]
+    }
   },
   "scripts": {
     "build": "tsup",
@@ -13,10 +215,57 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mushi-mushi/cli": "workspace:^"
+    "@mushi-mushi/cli": "workspace:^",
+    "@mushi-mushi/core": "workspace:^",
+    "@mushi-mushi/node": "workspace:^",
+    "@mushi-mushi/web": "workspace:^"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=17",
+    "@opentelemetry/api": ">=1.0.0",
+    "express": ">=4.18.0",
+    "fastify": ">=4.0.0",
+    "hono": ">=4.0.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0",
+    "svelte": ">=4",
+    "vue": ">=3.3"
+  },
+  "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "svelte": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@mushi-mushi/angular": "workspace:^",
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/react": "workspace:^",
+    "@mushi-mushi/svelte": "workspace:^",
+    "@mushi-mushi/vue": "workspace:^",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
     "tsup": "^8.5.1",

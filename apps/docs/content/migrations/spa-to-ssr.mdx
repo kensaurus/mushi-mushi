@@ -50,7 +50,7 @@ npx sv create                     # SvelteKit`}</pre> },
     { id: 'env-prefix', label: 'Rename env vars per the table above', content: <>Run <code>npx mushi-mushi init</code> in the new project — it detects the framework and writes correct env-var names automatically.</> },
     { id: 'mushi-provider', label: 'Mount Mushi Mushi at the root of the new framework', content: <pre className="text-xs">{`// Next.js App Router — app/providers.tsx (CLIENT component)
 'use client'
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 export function Providers({ children }) {
   return <MushiProvider config={{
     projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -64,7 +64,7 @@ export default defineNuxtConfig({
 })
 
 // Nuxt: plugins/mushi.client.ts (MushiPlugin initialises the SDK itself)
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 export default defineNuxtPlugin((nuxtApp) => {
   const cfg = useRuntimeConfig()
   nuxtApp.vueApp.use(MushiPlugin, {
@@ -76,7 +76,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 // SvelteKit: src/routes/+layout.svelte (initMushi initialises the SDK itself)
 <script>
   import { onMount } from 'svelte'
-  import { initMushi } from '@mushi-mushi/svelte'
+  import { initMushi } from 'mushi-mushi/svelte'
   onMount(() => {
     initMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -124,4 +124,4 @@ the server-side HTML, you'll see:
 - [Next.js: Migrating from Vite](https://nextjs.org/docs/app/guides/migrating/from-vite)
 - [Nuxt installation](https://nuxt.com/docs/4.x/getting-started/installation)
 - [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
-- [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
+- [`mushi-mushi/react`](/sdks/react) / [`mushi-mushi/vue`](/sdks/vue) / [`mushi-mushi/svelte`](/sdks/svelte) SDK references

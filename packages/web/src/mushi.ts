@@ -1306,7 +1306,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     // console-managed trigger/banner is correct on the very first render
     // instead of flashing the bootstrap default then snapping.
     if (cached) applyRuntimeConfig(cached);
-    apiClient.getSdkConfig().then((result) => {
+    // On demand, the recording window must reflect a stop right away, so this
+    // one read skips the HTTP cache; every other app keeps the cached read.
+    apiClient.getSdkConfig(trackSessionsMode === 'on-demand' ? { fresh: true } : undefined).then((result) => {
       if (result.ok && result.data) {
         cacheRuntimeConfig(config.projectId, result.data);
         applyRuntimeConfig(result.data);

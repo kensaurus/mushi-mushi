@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/svelte
 
 ---
 title: Bug report widget for Svelte and SvelteKit
-description: "Free, open-source bug report widget for Svelte and SvelteKit: install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout."
+description: "Free, open-source bug report widget for Svelte and SvelteKit: install mushi-mushi and call initMushi from hooks.client.ts or a root layout."
 ---
 
 # Bug report widget for Svelte and SvelteKit
@@ -32,11 +32,11 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
 ## Install and initialize
 
 ```bash
-pnpm add @mushi-mushi/svelte
+pnpm add mushi-mushi
 ```
 
 ```ts
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -46,4 +46,4 @@ initMushi({
 
 Call `initMushi` from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 
-API detail: [`@mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`mushi-mushi`](/sdks/web).

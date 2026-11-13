@@ -2,7 +2,7 @@
   "name": "@mushi-mushi/plugin-pagerduty",
   "version": "0.2.12",
   "license": "MIT",
-  "description": "Mushi Mushi plugin for PagerDuty — pages on-call when Mushi Mushi triages a bug as critical and resolves the page when the fix lands.",
+  "description": "Optional, runs on your own server: Mushi Mushi plugin for PagerDuty — pages on-call when Mushi Mushi triages a bug as critical and resolves the page when the fix lands. Mushi Mushi Cloud pages natively.",
   "type": "module",
   "exports": {
     ".": {

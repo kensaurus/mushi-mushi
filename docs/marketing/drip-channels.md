@@ -45,7 +45,7 @@ Getting included is a permanent trickle of qualified stars.
 | 2 | [awesome-self-hosted](https://github.com/awesome-selfhosted/awesome-selfhosted) | Analytics / Error-tracking | Self-host story is strong; AGPLv3 server qualifies for the main (free/OSS) list, no `non-free` tag needed. |
 | 3 | [awesome-devtools](https://github.com/Alan-FGR/awesome-devtools) | Monitoring / Debugging | Clear fit. |
 | 4 | [awesome-react](https://github.com/enaqx/awesome-react) | Performance / Debugging tools | Our React SDK is the polished flagship. |
-| 5 | [awesome-vue](https://github.com/vuejs/awesome-vue) | Dev-tools | We have `@mushi-mushi/vue` + composable support. |
+| 5 | [awesome-vue](https://github.com/vuejs/awesome-vue) | Dev-tools | We have `mushi-mushi/vue` + composable support. |
 | 6 | [awesome-svelte](https://github.com/TheComputerM/awesome-svelte) | Utilities / Debugging | We have the SvelteKit hook integration. |
 | 7 | [awesome-llm-ops](https://github.com/tensorchord/Awesome-LLMOps) | Monitoring / Observability | The Judge + Langfuse angle. |
 | 8 | [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | Developer Tools | `@mushi-mushi/mcp` is a real MCP server. |
@@ -70,7 +70,7 @@ newsletter template from [snippets.md](./snippets.md).
 | # | Newsletter | Submit via | Audience | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | **Bytes** (bytes.dev) | [bytes.dev/submissions](https://bytes.dev/submissions) | JS / TS devs, ~200k | Casual tone — matches Mushi-chan perfectly. Highest-value JS newsletter. |
-| 2 | **Node Weekly** | [cooperpress.com/publications/](https://cooperpress.com/publications/) contact | Node devs, ~70k | Clean, editorial. Pitch the `@mushi-mushi/node` middleware. |
+| 2 | **Node Weekly** | [cooperpress.com/publications/](https://cooperpress.com/publications/) contact | Node devs, ~70k | Clean, editorial. Pitch the `mushi-mushi/node` middleware. |
 | 3 | **React Status** | same cooperpress contact | React devs, ~70k | Pitch the React SDK + the `@mushi-mushi/mcp` for Cursor crowd. |
 | 4 | **JavaScript Weekly** | same cooperpress contact | Broad JS, ~150k | The biggest. Pitch after traction on smaller ones. |
 | 5 | **TLDR Web Dev** | [tldr.tech/webdev/submit](https://tldr.tech/webdev/submit) | Short-form readers, ~100k | One-line + link format fits us. |
@@ -141,7 +141,7 @@ Not a Sentry thing (and you probably know that), but Mushi Mushi was designed
 for exactly this — shake-to-report widget + LLM classification, drops into
 React with:
 
-    import { MushiProvider } from '@mushi-mushi/react'
+    import { MushiProvider } from 'mushi-mushi/react'
 
     <MushiProvider config={{ projectId, apiKey }}>
       <YourApp />

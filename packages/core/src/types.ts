@@ -1783,7 +1783,8 @@ export interface MushiCaptureEventInput {
 export interface MushiApiClient {
   submitReport(report: MushiReport): Promise<MushiApiResponse<{ reportId: string }>>;
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
-  getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
+  /** `fresh` bypasses the browser HTTP cache (used by `trackSessions: 'on-demand'`). */
+  getSdkConfig(opts?: { fresh?: boolean }): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
   /**
    * Send one assistant turn. Forwards the page context + thread id; the
    * end-user identity token (when set) travels on the X-Mushi-User-Token

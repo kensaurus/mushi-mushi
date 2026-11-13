@@ -314,7 +314,7 @@ export function SdkInstallCard({
           <SdkInstallShell embedded={embedded} className={`${embedded ? '' : 'px-4 py-3 '}text-xs text-fg-secondary leading-relaxed`}>
             <p className="font-medium text-fg mb-1">Server-side capture</p>
             <p>
-              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">@mushi-mushi/node</code>{' '}
+              <code className="px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">mushi-mushi/node</code>{' '}
               runs in Node 18+ (and edge runtimes). It captures uncaught exceptions, unhandled rejections,
               and 5xx errors — no browser widget needed. Reports land in the same inbox as user-submitted bugs,
               so your team sees server and client failures in one queue.

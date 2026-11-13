@@ -108,4 +108,4 @@ Vite, `MushiProvider` can also read `VITE_MUSHI_PROJECT_ID` and
 - [Vite docs: env variables](https://vite.dev/guide/env-and-mode)
 - [React blog: Sunsetting Create React App](https://react.dev/blog/2025/02/14/sunsetting-create-react-app)
 - [Vitest](https://vitest.dev/)
-- [`@mushi-mushi/react` SDK reference](/sdks/react)
+- [`mushi-mushi/react` SDK reference](/sdks/react)

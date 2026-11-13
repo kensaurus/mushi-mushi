@@ -6,6 +6,8 @@
 [![license](https://img.shields.io/npm/l/@mushi-mushi/plugin-cursor-cloud)](./LICENSE)
 [![types](https://img.shields.io/npm/types/@mushi-mushi/plugin-cursor-cloud)](./src/index.ts)
 
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For people who want a first fix attempt to start on its own when something
 serious breaks. When Mushi Mushi triages a critical bug, this starts a
 [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent/api/endpoints) on

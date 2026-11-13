@@ -6,12 +6,15 @@ The shared types, API client and utilities under every [Mushi Mushi](https://git
 
 **You probably don't need to install this directly.** Run `npx mushi-mushi` and the wizard installs the SDK for your framework ([`react`](https://npmjs.com/package/@mushi-mushi/react), [`vue`](https://npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) or [`web`](https://npmjs.com/package/@mushi-mushi/web)), which depends on this one. Reach for `core` when you build your own adapter or need the types.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { createPreFilter } from 'mushi-mushi/core'`. This package keeps working and keeps getting updates.
+
 ```bash
-npm install @mushi-mushi/core
+npm install mushi-mushi   # then import from 'mushi-mushi/core'
+# or: npm install @mushi-mushi/core   # same code; import from '@mushi-mushi/core'
 ```
 
 ```ts
-import { createPreFilter, captureEnvironment } from '@mushi-mushi/core';
+import { createPreFilter, captureEnvironment } from 'mushi-mushi/core';
 
 const filter = createPreFilter();
 filter.check('asdf');      // { passed: false, reason: 'Too short (min 10 characters)' }
@@ -56,7 +59,7 @@ Pass `preset` instead of setting every `widget`, `capture` and `proactive` flag.
 The postures `production-calm`, `beta-loud`, `internal-debug` and `manual-only` also work. Precedence, highest first: **explicit config → `preset` → env vars (`NEXT_PUBLIC_MUSHI_*`, `VITE_MUSHI_*`) → SDK defaults.**
 
 ```typescript
-import { expandPreset, validateConfig } from '@mushi-mushi/core';
+import { expandPreset, validateConfig } from 'mushi-mushi/core';
 
 validateConfig(config);                // warns on typos or a bad preset, never throws (MUSHI_SILENT=1 hides it)
 const resolved = expandPreset(config); // preset → nested options, explicit values win

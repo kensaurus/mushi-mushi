@@ -37,7 +37,10 @@ Then nothing is sent until you ask:
 
 - **Record visits on demand** on this page opens a window for 1 hour, 1 day or
   1 week, for 10%, 50% or all visitors. Each device is drawn in or out once
-  and stays that way, so no visit is half recorded. **Stop** ends it at once.
+  and stays that way, so no visit is half recorded. **Stop** applies from each
+  visitor's next page load (SDK newer than 1.34.1; 1.34.1 and older can take about
+  6 minutes). A page that is already open keeps recording until it is closed or
+  reloaded.
 - **Test in your own browser** copies your address with `?mushi_journeys=1`.
   That tab records whatever the window says; `?mushi_journeys=0` turns it off.
 

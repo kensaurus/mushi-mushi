@@ -7,6 +7,7 @@
  * logic can be unit-tested without spawning a child process.
  */
 
+import { isLauncherOnly, isMushiSdkPackage } from './detect.js';
 import { CLOUD_API_ENDPOINT, CLOUD_MCP_OAUTH_URL } from './endpoint.js';
 import { fetchIngestSetup } from './heartbeat-wait.js';
 import { apiKeyHeaders, sanitizeCliCredentials, sanitizeEndpoint } from './sanitize-config.js';
@@ -272,6 +273,7 @@ async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
     };
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
     const sdks = [
+      'mushi-mushi',
       '@mushi-mushi/react',
       '@mushi-mushi/web',
       '@mushi-mushi/core',
@@ -282,14 +284,14 @@ async function checkSdkInstall(cwd: string): Promise<DoctorCheck | null> {
       '@mushi-mushi/capacitor',
       '@mushi-mushi/node',
     ];
-    const installed = sdks.filter((s) => deps[s]);
+    const installed = sdks.filter((s) => deps[s] && !isLauncherOnly(s, deps[s]));
     return {
       name: 'SDK installed in this repo',
       ok: installed.length > 0,
       detail:
         installed.length > 0
           ? installed.map((s) => `${s}@${deps[s]}`).join(', ')
-          : 'No @mushi-mushi/* package in package.json — run `npx mushi-mushi` to install',
+          : 'No Mushi Mushi SDK (mushi-mushi) in package.json — run `npx mushi-mushi` to install',
     };
   } catch {
     return null; // Not a JS repo or no package.json — silently skip
@@ -613,13 +615,17 @@ async function checkHostAppWiring(cwd: string): Promise<DoctorCheck[]> {
     });
 
     if (isCapHybrid) {
-      const hasWebSdk = Boolean(deps['@mushi-mushi/web'] || deps['@mushi-mushi/react']);
+      const hasWebSdk = Boolean(
+        (deps['mushi-mushi'] && !isLauncherOnly('mushi-mushi', deps['mushi-mushi'])) ||
+          deps['@mushi-mushi/web'] ||
+          deps['@mushi-mushi/react'],
+      );
       checks.push({
         name: '[host] Capacitor hybrid — WebView SDK',
         ok: hasWebSdk,
         detail: hasWebSdk
-          ? 'Use @mushi-mushi/web or @mushi-mushi/react in the WebView (initMushi in main.tsx)'
-          : 'Install @mushi-mushi/web for Capacitor WebView reporting',
+          ? 'Use mushi-mushi (or mushi-mushi/react) in the WebView (initMushi in main.tsx)'
+          : 'Install mushi-mushi for Capacitor WebView reporting',
       });
       checks.push({
         name: '[host] Capacitor native plugin (optional)',
@@ -1154,7 +1160,7 @@ export async function checkOnboardingStatus(
 
 /**
  * Advisory check comparing the running CLI against the npm `latest` tag and
- * against `@mushi-mushi/*` SDK versions in the target repo. Never blocks
+ * against the `mushi-mushi` and `@mushi-mushi/*` SDK versions in the target repo. Never blocks
  * `ready`; a registry timeout silently skips (no network ≠ broken setup).
  */
 async function checkVersionDrift(
@@ -1208,7 +1214,7 @@ async function checkVersionDrift(
     // while the CLI is 0.x), so compare each dep against ITS OWN npm latest
     // rather than against the CLI version.
     const candidates = Object.entries(deps)
-      .filter(([name]) => name.startsWith('@mushi-mushi/'))
+      .filter(([name, spec]) => isMushiSdkPackage(name) && !isLauncherOnly(name, spec))
       .filter(([, v]) => /^[~^]?\d/.test(v));
     const drifted = (
       await Promise.all(
@@ -1483,7 +1489,7 @@ export async function runDoctor(
         ok: true,
         warn: true,
         detail:
-          'No @mushi-mushi/* found in cwd package.json — but live heartbeats confirm the SDK is active. Run from your app repo or install with `mushi init`.',
+          'No mushi-mushi or @mushi-mushi/* package in cwd package.json — but live heartbeats confirm the SDK is active. Run from your app repo or install with `npx mushi-mushi`.',
       };
     }
   }

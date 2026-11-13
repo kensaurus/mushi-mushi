@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Use `npx mushi-mushi`.** This package runs the same setup wizard and is kept so `npm create mushi-mushi` keeps working. It also has the `--template` starter apps below, which `npx mushi-mushi` does not.
+
 Adds [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) to the app you
 already have, so when a user says something is broken you get the likely cause
 in plain English and a fix prompt for your AI editor. One command finds your

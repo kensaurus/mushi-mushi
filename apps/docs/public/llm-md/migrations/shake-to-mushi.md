@@ -100,7 +100,7 @@ Shake.registerUser('user-42')
 
 ```ts
 // AFTER: Mushi Mushi web
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -111,8 +111,7 @@ mushi.setUser({ id: 'user-42', email: 'jane@example.com', name: 'Jane Doe' })
 ## Migration checklist
 
 Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web:    npm install @mushi-mushi/web
-# React:  npm install @mushi-mushi/react
+    { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web or React: npm install mushi-mushi
 # RN:     npm install @mushi-mushi/react-native
 #         plus expo-sensors (shake) and react-native-view-shot (screenshots)
 # Capacitor: npm install @mushi-mushi/capacitor && npx cap sync`} },

@@ -4,6 +4,8 @@
 
 The React and Next.js SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). It adds a bug button to your app. When a user taps it, Mushi Mushi captures a screenshot, the route, their note and the recent console and network events, explains the cause in plain English, and hands your editor a fix to start from.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { MushiProvider } from 'mushi-mushi/react'`. This package keeps working and keeps getting updates.
+
 ```mermaid
 flowchart LR
     A["User taps the bug button"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
@@ -12,12 +14,13 @@ flowchart LR
 ## Quick start
 
 ```bash
-npx mushi-mushi    # detects React or Next.js, installs this package, writes NEXT_PUBLIC_ / VITE_ env vars
-# or: npm install @mushi-mushi/react
+npm install mushi-mushi    # then import from 'mushi-mushi/react'
+# or: npx mushi-mushi      # wizard: detects React or Next.js, installs the SDK, writes NEXT_PUBLIC_ / VITE_ env vars
+# or: npm install @mushi-mushi/react   # same code; import from '@mushi-mushi/react'
 ```
 
 ```tsx
-import { MushiProvider } from '@mushi-mushi/react';
+import { MushiProvider } from 'mushi-mushi/react';
 
 function App() {
   return (
@@ -40,7 +43,7 @@ The provider uses React context, so it lives in a client component:
 ```tsx
 // app/providers.tsx
 'use client';
-import { MushiProvider } from '@mushi-mushi/react';
+import { MushiProvider } from 'mushi-mushi/react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -74,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 ## Use your own button
 
 ```tsx
-import { MushiTrigger, MushiAttach } from '@mushi-mushi/react'
+import { MushiTrigger, MushiAttach } from 'mushi-mushi/react'
 
 // Any element or component
 <MushiTrigger as="button" category="bug" className="my-feedback-btn">

@@ -69,7 +69,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 // SvelteKit: src/routes/+layout.svelte (initMushi initialises the SDK itself)
 
   import { onMount } from 'svelte'
-  import { initMushi } from '@mushi-mushi/svelte'
+  import { initMushi } from 'mushi-mushi/svelte'
   onMount(() => {
     initMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -115,4 +115,4 @@ the server-side HTML, you'll see:
 - [Next.js: Migrating from Vite](https://nextjs.org/docs/app/guides/migrating/from-vite)
 - [Nuxt installation](https://nuxt.com/docs/4.x/getting-started/installation)
 - [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
-- [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
+- [`mushi-mushi/react`](/sdks/react) / [`mushi-mushi/vue`](/sdks/vue) / [`mushi-mushi/svelte`](/sdks/svelte) SDK references

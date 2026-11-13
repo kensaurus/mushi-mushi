@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional add-on for the browser SDK; most apps don't need it.** To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi). Add this next to it only if junk reports cost you LLM calls.
+
 An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports, for web apps that get a lot of "hi" and "asdf". It runs in the browser and stops empty or nonsense reports before they are sent, so they never reach the server or an LLM. Most apps do not need it: the web SDK already runs its own pattern filter first.
 
 > **Status: the ONNX mode is experimental.** Model inference is not implemented yet: `createOnnxClassifier()` loads `onnxruntime-web` and your model, then returns the heuristic's verdict for every report (`modelId: 'heuristic-fallback'`) and logs one console warning saying so. Use `createHeuristicClassifier()` in production.
@@ -13,7 +15,7 @@ npm install @mushi-mushi/wasm-classifier
 ```
 
 ```ts
-import { Mushi } from '@mushi-mushi/web';
+import { Mushi } from 'mushi-mushi';
 import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier';
 
 Mushi.init({

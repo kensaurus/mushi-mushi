@@ -125,9 +125,9 @@ export interface LifecycleEmailContent {
 
 const CURSOR_SETUP = 'npx mushi-mushi setup --ide cursor'
 const SNIPPET = [
-  'npm install @mushi-mushi/web',
+  'npm install mushi-mushi',
   '',
-  "import { Mushi } from '@mushi-mushi/web'",
+  "import { Mushi } from 'mushi-mushi'",
   "Mushi.init({ projectId: '<your project id>', apiKey: '<your api key>' })",
 ].join('\n')
 

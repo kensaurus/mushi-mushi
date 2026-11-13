@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server or host the Slack endpoints yourself. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For people who run their own Mushi Mushi backend and want bug reports and the
 `/mushi` command in Slack. It has the building blocks for a Slack app: the
 `/mushi` slash command router, Slack request verification, the OAuth install
