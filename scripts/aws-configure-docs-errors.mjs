@@ -14,8 +14,11 @@
  *      kensaur.us-mushi-mushi, whose ErrorDocument is `index.html` — a key
  *      that does not exist, hence the second NoSuchKey on every 404. Point it
  *      at the docs export's own 404.html (S3 serves it with status 404).
- *   2. A response headers policy on the `/mushi-mushi/docs/*` behavior.
+ *   2. A response headers policy for the `/mushi-mushi/docs/*` behavior.
  *      CloudFront applies it to every response it sends, whatever the status.
+ *      This script creates and updates the policy only; attaching it to the
+ *      behavior is a distribution write, owned by kensaurus/kensaur.us
+ *      `infra/edge/`.
  *      Its values are read from buildSecurityHeaders() in
  *      cloudfront-mushi-docs-response.js, so the 2xx and 4xx headers are one
  *      source. It also strips the x-amz-* error headers that name the key.
@@ -31,14 +34,12 @@
  * Idempotent: reads current state and only writes what differs.
  *
  * RUN:  node scripts/aws-configure-docs-errors.mjs [--dry-run]
- * ENV:  CLOUDFRONT_DISTRIBUTION_ID (default E246VQ1C9QYZVB)
- *       S3_BUCKET                  (default kensaur.us-mushi-mushi)
+ * ENV:  S3_BUCKET (default kensaur.us-mushi-mushi)
  * IAM:  s3:GetBucketWebsite, s3:PutBucketWebsite on the bucket;
  *       cloudfront:ListResponseHeadersPolicies, GetResponseHeadersPolicy,
- *       CreateResponseHeadersPolicy, UpdateResponseHeadersPolicy,
- *       GetDistributionConfig, UpdateDistribution. The GitHub deploy role
- *       (scripts/setup-aws-github-oidc.mjs) has only the last two, so this is
- *       run by an account admin, not by deploy-docs.yml.
+ *       CreateResponseHeadersPolicy, UpdateResponseHeadersPolicy. The GitHub
+ *       deploy role (scripts/setup-aws-github-oidc.mjs) has none of these, so
+ *       this is run by an account admin, not by deploy-docs.yml.
  * VERIFY: deploy-docs.yml's "Smoke-check a missing docs page" step.
  */
 
@@ -191,25 +192,6 @@ export function desiredWebsiteConfig(current, errorKey = DOCS_ERROR_KEY) {
   return next
 }
 
-/**
- * Attach `policyId` to the docs cache behavior in a distribution config.
- * Returns true when the config was changed. Refuses to replace a different
- * policy someone attached on purpose.
- */
-export function attachPolicyToDocsBehavior(distConfig, policyId, pathPattern = DOCS_PATH_PATTERN) {
-  const behavior = distConfig.CacheBehaviors?.Items?.find((cb) => cb.PathPattern === pathPattern)
-  if (!behavior) throw new Error(`no cache behavior with PathPattern ${pathPattern}`)
-  if (behavior.ResponseHeadersPolicyId === policyId) return false
-  if (behavior.ResponseHeadersPolicyId) {
-    throw new Error(
-      `${pathPattern} already uses response headers policy ${behavior.ResponseHeadersPolicyId}; ` +
-        `detach it deliberately before running this script`,
-    )
-  }
-  behavior.ResponseHeadersPolicyId = policyId
-  return true
-}
-
 function aws(args) {
   return execFileSync('aws', [...args, '--output', 'json'], { encoding: 'utf8' })
 }
@@ -228,7 +210,6 @@ function writeTmpJson(name, value) {
 
 function main() {
   const dryRun = process.argv.includes('--dry-run')
-  const distId = process.env.CLOUDFRONT_DISTRIBUTION_ID || 'E246VQ1C9QYZVB'
   const bucket = process.env.S3_BUCKET || 'kensaur.us-mushi-mushi'
   const tag = dryRun ? '[dry-run] ' : ''
 
@@ -270,21 +251,12 @@ function main() {
     }
   }
 
-  // 3. Attach it to the docs behavior.
-  if (!policyId) {
-    console.log(`${tag}attach the new policy to ${DOCS_PATH_PATTERN}`)
-    return
-  }
-  const dist = awsJson(['cloudfront', 'get-distribution-config', '--id', distId])
-  if (!attachPolicyToDocsBehavior(dist.DistributionConfig, policyId)) {
-    console.log(`✓ ${DOCS_PATH_PATTERN} already uses ${POLICY_NAME}`)
-    return
-  }
-  console.log(`${tag}attach ${POLICY_NAME} to ${DOCS_PATH_PATTERN} on ${distId}`)
-  if (!dryRun) {
-    aws(['cloudfront', 'update-distribution', '--id', distId, '--if-match', dist.ETag, '--distribution-config', writeTmpJson('dist.json', dist.DistributionConfig)])
-    console.log('Done. Propagation takes a few minutes; then invalidate "/mushi-mushi/docs/*".')
-  }
+  // 3. Attaching the policy to the docs behavior is a distribution write,
+  //    owned by kensaurus/kensaur.us `infra/edge/`. Print what it must reference.
+  console.log(
+    `${POLICY_NAME} (${policyId ?? 'id assigned on create'}) must be the ResponseHeadersPolicyId ` +
+      `of ${DOCS_PATH_PATTERN}; kensaurus/kensaur.us infra/edge/ owns that attachment.`,
+  )
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

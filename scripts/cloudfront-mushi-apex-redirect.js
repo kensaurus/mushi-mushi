@@ -42,7 +42,7 @@
  * trailing slash so exact /integrations is not captured by docs rules.
  *
  * ATTACHMENT: viewer-request on kensaur.us Default behavior via
- * scripts/aws-attach-apex-redirect.mjs (combined with glot.it SPA router).
+ * kensaurus/kensaur.us infra/edge/ (the only writer of E246).
  *
  * RUNTIME: cloudfront-js-2.0
  */
