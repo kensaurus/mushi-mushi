@@ -4,16 +4,18 @@ import { describe, expect, it } from 'vitest'
 import {
   CRASH_GUIDE,
   FIRST_RUN_NAME_PROJECT,
-  GUIDE_LINE_MAX,
   HOME_ALL_CLEAR,
   NOT_FOUND_GUIDE,
   editorConnectGuide,
   firstDiagnosisGuide,
   loginGuide,
   onboardingTabGuide,
-  type EditorConnectState,
   type GuideLine,
 } from './fieldGuide'
+
+/** The longest line a phone shows on one or two lines beside the figure. */
+const GUIDE_LINE_MAX = 90
+type EditorConnectState = Parameters<typeof editorConnectGuide>[0]
 import type { FirstDiagnosisState } from './firstDiagnosis'
 import { ONBOARDING_TAB_IDS } from '../components/onboarding/types'
 import type { LoginFormMode } from './loginSubmit'

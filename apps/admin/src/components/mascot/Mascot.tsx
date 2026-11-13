@@ -54,7 +54,7 @@ const POSE_ART: Record<MascotPose, { full: string; small: string }> = {
   laptop: { full: laptop, small: laptopSm },
 }
 
-export type MascotSize = 'sm' | 'md' | 'lg'
+type MascotSize = 'sm' | 'md' | 'lg'
 
 const SIZE: Record<MascotSize, { box: string; px: number }> = {
   sm: { box: 'size-16', px: 64 },

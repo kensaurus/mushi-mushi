@@ -29,9 +29,7 @@ const POSES = {
   think: { full: think, small: thinkSm },
 } satisfies Record<string, { full: StaticImageData; small: StaticImageData }>
 
-export type MascotPose = keyof typeof POSES
-
-export function Mascot({ pose, line }: { pose: MascotPose; line: string }) {
+export function Mascot({ pose, line }: { pose: keyof typeof POSES; line: string }) {
   const art = POSES[pose]
   return (
     <div className="docs-guide" data-mascot-pose={pose}>

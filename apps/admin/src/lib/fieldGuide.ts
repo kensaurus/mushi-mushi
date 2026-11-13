@@ -32,13 +32,11 @@ export type MascotPose =
   | 'oops'
   | 'laptop'
 
+/** A pose and one line of at most 90 characters (fieldGuide.test.ts checks). */
 export interface GuideLine {
   pose: MascotPose
   line: string
 }
-
-/** The longest line a phone shows on one or two lines beside the figure. */
-export const GUIDE_LINE_MAX = 90
 
 // ─── Sign in ────────────────────────────────────────────────────────────────
 
@@ -93,7 +91,7 @@ export function firstDiagnosisGuide(state: FirstDiagnosisState): GuideLine {
 
 // ─── Full setup checklist (one line per tab) ────────────────────────────────
 
-export interface SetupProgress {
+interface SetupProgress {
   /** The team has at least one project (the progress rail only shows then). */
   hasProject: boolean
   /** Every step of the active project is done. */
@@ -130,7 +128,7 @@ export const HOME_ALL_CLEAR: GuideLine = {
 // ─── Connect (editor / MCP) ─────────────────────────────────────────────────
 
 /** The editor (MCP) state the Connect page already reads. */
-export type EditorConnectState = McpStats['topPriority']
+type EditorConnectState = McpStats['topPriority']
 
 export function editorConnectGuide(state: EditorConnectState): GuideLine {
   switch (state) {
