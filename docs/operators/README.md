@@ -31,8 +31,9 @@
 - [Monetization across apps](./monetization.md) — binding the RevenueCat,
   App Store Connect and Play connectors, what the payment drift checks mean,
   and how approved actions work (ADR 0025).
-- [Live-site watch](./site-watch.md) — the `MushiSiteWatch` User-Agent to
-  filter from Sentry and analytics, and when older monitors start sending it.
+- [Live-site watch](./site-watch.md) — the `mushi_monitor` URL marker and the
+  `MushiSiteWatch` User-Agent to filter from Sentry and analytics, and when
+  older monitors start sending them.
 - [Local workers](./local-workers.md) — `mushi work --daemon` as a systemd
   user unit or a Windows scheduled task, its guards and key, and moving the
   hand-made lane services onto it (ADR 0048).

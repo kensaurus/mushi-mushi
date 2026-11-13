@@ -26,6 +26,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { createTrace } from './observability.ts';
 import { markKeyUsed, resolveLlmKey } from './byok.ts';
+import { monitorScrapeBody, type MonitorJobKind } from './monitor-url.ts';
 
 const log = rootLog.child('firecrawl');
 
@@ -334,7 +335,9 @@ export function firecrawlScrapeChangelog(
  * base URL the project configured for that crawl, and only its host (with or
  * without "www.", and its subdomains) passes past the allow-list. Report text
  * never reaches this path. Always a live fetch: a re-map right after a deploy
- * must not read a cached copy (review 2026-10-10).
+ * must not read a cached copy (review 2026-10-10). It loads the customer's
+ * app, so the request carries the `mushi_monitor=qa` marker and the Mushi
+ * User-Agent (`monitor-url.ts`); the result keeps the bare `url`.
  */
 export function firecrawlScrapeOwnSite(
   db: SupabaseClient,
@@ -342,14 +345,14 @@ export function firecrawlScrapeOwnSite(
   url: string,
   siteUrl: string,
 ): Promise<FirecrawlScrapeResult> {
-  return scrapeAllowed(db, projectId, url, { bypassCache: true, fresh: true }, [siteHost(siteUrl)]);
+  return scrapeAllowed(db, projectId, url, { bypassCache: true, fresh: true, monitorKind: 'qa' }, [siteHost(siteUrl)]);
 }
 
 async function scrapeAllowed(
   db: SupabaseClient,
   projectId: string,
   url: string,
-  opts: FirecrawlScrapeOptions & { fresh?: boolean },
+  opts: FirecrawlScrapeOptions & { fresh?: boolean; monitorKind?: MonitorJobKind },
   trustedHosts: readonly string[],
 ): Promise<FirecrawlScrapeResult> {
   const resolved = await resolveFirecrawl(db, projectId);
@@ -369,20 +372,21 @@ async function scrapeAllowed(
   const span = trace.span('http');
 
   try {
+    // fresh: no Firecrawl cache (its default maxAge is 2 days), and a
+    // Firecrawl timeout under our abort, so a slow page is not billed and
+    // then thrown away.
+    const body: Record<string, unknown> = opts.fresh
+      ? { url, formats: ['markdown'], onlyMainContent: true, maxAge: 0, timeout: 15_000 }
+      : { url, formats: ['markdown'], onlyMainContent: true };
     const res = await fetch(`${FIRECRAWL_BASE}/v2/scrape`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${resolved.key}`,
       },
-      // fresh: no Firecrawl cache (its default maxAge is 2 days), and a
-      // Firecrawl timeout under our abort, so a slow page is not billed and
-      // then thrown away.
-      body: JSON.stringify(
-        opts.fresh
-          ? { url, formats: ['markdown'], onlyMainContent: true, maxAge: 0, timeout: 15_000 }
-          : { url, formats: ['markdown'], onlyMainContent: true },
-      ),
+      // A third-party page (changelog, research) goes out as it is; a page of
+      // the customer's app is marked as Mushi's traffic.
+      body: JSON.stringify(opts.monitorKind ? monitorScrapeBody(opts.monitorKind, body) : body),
       signal: AbortSignal.timeout(opts.fresh ? 20_000 : 30_000),
     });
 
