@@ -167,9 +167,9 @@ export default defineConfig({
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          // The brand mark is opaque with its own background, so the same
-          // 512 render is safe for maskable crops.
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // Field Kenji's specimen disc at 80% on its vermillion field, so a
+          // maskable crop never cuts his top-knot or Mushi-chan.
+          { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         // Android Chrome: "Share" an audio file (Google Recorder .m4a, a voice
         // memo) straight into the console. iOS has no share_target.
