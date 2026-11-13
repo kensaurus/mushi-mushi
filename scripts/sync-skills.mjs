@@ -29,7 +29,7 @@
 //
 // Idempotent. Line endings are normalised to LF (the repo's .gitattributes).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -46,9 +46,34 @@ const check = process.argv.includes('--check')
 const rel = (p) => relative(ROOT, p).replaceAll('\\', '/')
 const lf = (s) => s.replace(/\r\n/g, '\n')
 
+// Read or list a path directly and treat "not there" as empty. Checking with
+// existsSync()/statSync() first and then reading or writing is a
+// time-of-check/time-of-use race (CodeQL js/file-system-race).
+const isMissing = (err) => err?.code === 'ENOENT' || err?.code === 'ENOTDIR'
+
+/** The file's text with LF line endings, or null when it does not exist. */
+function readIfPresent(path) {
+  try {
+    return lf(readFileSync(path, 'utf8'))
+  } catch (err) {
+    if (isMissing(err)) return null
+    throw err
+  }
+}
+
+/** A directory's entries, or [] when the directory does not exist. */
+function entriesOf(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+  } catch (err) {
+    if (isMissing(err)) return []
+    throw err
+  }
+}
+
 function listFiles(dir, base = dir) {
   const out = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+  for (const entry of entriesOf(dir)) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) out.push(...listFiles(full, base))
     else out.push(relative(base, full).replaceAll('\\', '/'))
@@ -57,8 +82,7 @@ function listFiles(dir, base = dir) {
 }
 
 function listSkillDirs(dir) {
-  if (!existsSync(dir)) return []
-  return readdirSync(dir, { withFileTypes: true })
+  return entriesOf(dir)
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort()
@@ -113,11 +137,11 @@ const skills = []
 for (const name of listSkillDirs(sourceRoot)) {
   const dir = join(sourceRoot, name)
   const skillPath = join(dir, 'SKILL.md')
-  if (!existsSync(skillPath)) {
+  const text = readIfPresent(skillPath)
+  if (text === null) {
     problems.push(`${rel(dir)} has no SKILL.md`)
     continue
   }
-  const text = lf(readFileSync(skillPath, 'utf8'))
   const fm = splitFrontmatter(text)
   if (!fm) {
     problems.push(`${rel(skillPath)} must start with --- frontmatter`)
@@ -133,7 +157,7 @@ for (const name of listSkillDirs(sourceRoot)) {
   if (text.includes('GENERATED from skills/')) problems.push(`${rel(skillPath)} is a source file but carries a GENERATED notice`)
   const files = new Map()
   for (const file of listFiles(dir)) {
-    const raw = lf(readFileSync(join(dir, file), 'utf8'))
+    const raw = readIfPresent(join(dir, file)) ?? ''
     files.set(file, file === 'SKILL.md' ? generated(name, file, raw) : raw)
   }
   skills.push({ name, files })
@@ -155,7 +179,7 @@ if (problems.length === 0) {
     }
     for (const { name, files } of skills) {
       const dir = join(targetRoot, name)
-      const present = existsSync(dir) && statSync(dir).isDirectory() ? listFiles(dir) : []
+      const present = listFiles(dir)
       for (const extra of present.filter((f) => !files.has(f))) {
         if (check) problems.push(`${target}/${name}/${extra} has no source`)
         else {
@@ -165,7 +189,7 @@ if (problems.length === 0) {
       }
       for (const [file, want] of files) {
         const dest = join(dir, file)
-        const current = existsSync(dest) ? lf(readFileSync(dest, 'utf8')) : null
+        const current = readIfPresent(dest)
         if (current === want) continue
         if (check) {
           problems.push(`${rel(dest)} is ${current === null ? 'missing' : 'stale'}`)
