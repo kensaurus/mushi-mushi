@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { parseArgs, FLAGS_HELP, MIN_NODE_MAJOR } from '@mushi-mushi/cli/wizard-args'
 
 const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url))
@@ -68,6 +70,44 @@ describe('mushi-mushi launcher', () => {
     expect(stdout).toContain('bug-reporting SDK launcher')
     expect(stdout).toContain('--framework')
     expect(stdout).toContain('--skip-test-report')
+    expect(stdout).toContain('npx mushi-mushi --template vue my-app')
+  })
+
+  it('scaffolds a starter with --template, the same as npm create mushi-mushi', () => {
+    const target = mkdtempSync(join(tmpdir(), 'mushi-tpl-')) + '-app'
+    try {
+      const { stdout, status } = run(['--template', 'node', target])
+      expect(status).toBe(0)
+      expect(stdout).toContain('Scaffolded the node starter')
+      expect(existsSync(join(target, 'src', 'server.mjs'))).toBe(true)
+      expect(existsSync(join(target, '.gitignore'))).toBe(true)
+    } finally {
+      rmSync(target, { recursive: true, force: true })
+    }
+  })
+
+  it('runs the wizard for a bare word that is not a command, after a --template hint', () => {
+    // `npm create mushi-mushi my-app` ran the wizard before the alias change.
+    // Non-interactive, the wizard bails out with its own message, which proves
+    // it ran instead of Commander's "unknown command".
+    const { stderr, status } = run(['my-app'])
+    expect(status).toBe(1)
+    expect(stderr).toContain('To start a new app instead: npx mushi-mushi --template <vue|svelte|node> my-app')
+    expect(stderr).toContain('non-interactive terminal detected')
+    expect(stderr).not.toContain('unknown command')
+  })
+
+  it('prints the hint once, and not for a real subcommand', () => {
+    expect(run(['my-app']).stderr.match(/To start a new app instead/g)).toHaveLength(1)
+    const sub = run(['setup', '--help'])
+    expect(sub.stdout + sub.stderr).not.toContain('To start a new app instead')
+    expect(sub.stdout).toContain('Wire the Mushi MCP server')
+  })
+
+  it('rejects an unknown template', () => {
+    const { stderr, status } = run(['--template', 'django'])
+    expect(status).toBe(1)
+    expect(stderr).toContain('Unknown template: django')
   })
 
   it('advertises Node >= 20 in help', () => {

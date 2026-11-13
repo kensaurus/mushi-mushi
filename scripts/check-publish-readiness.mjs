@@ -73,17 +73,12 @@ for (const root of PUBLISH_ROOTS) {
     //       entry points users type on the command line. Owned by the
     //       org since v0.1.0; re-scoping would break every documented
     //       install line.
-    //     - `eslint-plugin-mushi-mushi` — ESLint convention requires
-    //       community plugins to be either `eslint-plugin-*` (unscoped)
-    //       or `@<scope>/eslint-plugin*` (scoped). We chose the unscoped
-    //       form because it auto-discovers via `extends: ['plugin:mushi-mushi/recommended']`
-    //       without users having to remember the @-prefix in their
-    //       eslintrc — matches eslint-plugin-react, eslint-plugin-import,
-    //       eslint-plugin-jsx-a11y, etc.
+    //   `eslint-plugin-mushi-mushi` was a third until ADR 0060 Phase 1b
+    //   (2026-11-13): it is private now and its rules ship as
+    //   `mushi-mushi/eslint`, so a new publish under that name fails here.
     const UNSCOPED_ALLOWED = new Set([
       'mushi-mushi',
       'create-mushi-mushi',
-      'eslint-plugin-mushi-mushi',
     ])
     if (
       typeof pkg.name !== 'string' ||

@@ -32,6 +32,7 @@ export default defineConfig([
       detect: 'src/detect.ts',
       version: 'src/version.ts',
       'wizard-args': 'src/wizard-args.ts',
+      'wizard-bin': 'src/wizard-bin.ts',
     },
     format: ['esm'],
     dts: true,

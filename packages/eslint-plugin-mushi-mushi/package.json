@@ -1,7 +1,8 @@
 {
   "name": "eslint-plugin-mushi-mushi",
   "version": "0.3.7",
-  "description": "Separate on purpose: a dev dependency for your ESLint config, not part of `mushi-mushi`. Rules that catch what AI coding tools often ship: buttons wired to empty handlers, and faker or placeholder data left in production code.",
+  "private": true,
+  "description": "Internal to Mushi Mushi: install `mushi-mushi` instead and import the rules from `mushi-mushi/eslint`. Workspace source of those rules (buttons wired to empty handlers, faker or placeholder data left in production code); no longer published.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

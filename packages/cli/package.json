@@ -43,6 +43,7 @@
   },
   "files": [
     "dist",
+    "templates",
     "README.md",
     "LICENSE"
   ],
@@ -99,6 +100,12 @@
       "import": {
         "types": "./dist/wizard-args.d.ts",
         "default": "./dist/wizard-args.js"
+      }
+    },
+    "./wizard-bin": {
+      "import": {
+        "types": "./dist/wizard-bin.d.ts",
+        "default": "./dist/wizard-bin.js"
       }
     },
     "./version": {

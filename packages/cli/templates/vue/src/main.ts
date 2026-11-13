@@ -1,5 +1,5 @@
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 const app = createApp(App)
