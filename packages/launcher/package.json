@@ -1,6 +1,6 @@
 {
   "name": "mushi-mushi",
-  "version": "0.8.15",
+  "version": "1.35.0",
   "license": "MIT",
   "description": "The one package: SDK and setup wizard for any app. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "bin": {

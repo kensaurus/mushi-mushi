@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-slack-app",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "license": "MIT",
   "description": "Self-host only: Mushi Mushi plugin for Slack — /mushi slash command router, Slack request verification, OAuth install helpers and an app manifest. Mushi Mushi Cloud has Add to Slack built in.",
   "type": "module",

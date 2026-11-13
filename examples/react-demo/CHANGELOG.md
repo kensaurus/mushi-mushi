@@ -1,5 +1,12 @@
 # mushi-mushi-react-demo
 
+## 0.0.23
+
+### Patch Changes
+
+- Updated dependencies [f318574]
+  - @mushi-mushi/react@1.35.0
+
 ## 0.0.22
 
 ### Patch Changes

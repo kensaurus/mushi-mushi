@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/wasm-classifier",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Optional add-on for the browser SDK; most apps don't need it. Stops empty or nonsense bug reports in the browser before they are sent. The ONNX backend is experimental and falls back to the heuristic.",
   "license": "MIT",
   "type": "module",

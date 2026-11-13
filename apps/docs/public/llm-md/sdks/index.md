@@ -13,15 +13,15 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.34.x |
-| @mushi-mushi/react | 1.34.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.35.x |
+| @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.38.x |
+| @mushi-mushi/cli | 0.39.x |
 | @mushi-mushi/mcp | 0.31.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 0.8.x |
+| mushi-mushi (launcher) | 1.35.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 

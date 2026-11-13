@@ -1,5 +1,14 @@
 # @mushi-mushi/react
 
+## 1.35.0
+
+### Patch Changes
+
+- f318574: npm descriptions and READMEs now say who each package is for. To add Mushi Mushi to an app, install `mushi-mushi`; the integration and tooling packages say when you need them, and the SDK READMEs show the matching `mushi-mushi/<framework>` import. No code changes.
+- Updated dependencies [f318574]
+  - @mushi-mushi/core@1.35.0
+  - @mushi-mushi/web@1.35.0
+
 ## 1.34.0
 
 ### Patch Changes
