@@ -42,7 +42,8 @@ Trademarks are property rights independent of copyright. The MIT,
 AGPL-3.0 and Enterprise Edition licenses grant rights to the **software**;
 none of them grants rights to the **trademarks**. The logo and mark image
 files (`packages/brand/src/logo*`, the favicons and app icons, the mascot
-art in `docs/mascot/`) are also not licensed for copying beyond what this
+art in `docs/mascot/` and every `assets/mascot/` folder under `apps/`) are
+also not licensed for copying beyond what this
 policy allows: they are all rights reserved. This is normal — Mozilla, Apache, Linux, Postgres,
 Redis, Elasticsearch and most other major projects do the same.
 

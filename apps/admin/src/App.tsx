@@ -17,6 +17,7 @@ import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary'
 import { EditorialErrorState } from './components/EditorialErrorState'
+import { NOT_FOUND_GUIDE } from './lib/fieldGuide'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
@@ -146,6 +147,7 @@ function NotFoundPage() {
   return (
     <EditorialErrorState
       eyebrow="404 · not found"
+      mascot={NOT_FOUND_GUIDE}
       headline={
         <>
           We can't find <em>that page</em>.

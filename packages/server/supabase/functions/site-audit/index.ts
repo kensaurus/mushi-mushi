@@ -30,6 +30,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveFirecrawl } from '../_shared/firecrawl.ts'
 import { SITE_WATCH_USER_AGENT } from '../_shared/site-watch.ts'
+import { monitorScrapeBody, untagMonitorUrl } from '../_shared/monitor-url.ts'
 import {
   isBrokenStatus,
   isDocumentUrl,
@@ -97,8 +98,10 @@ export function auditUrls(baseUrl: string, mapped: unknown[], limit: number): st
 
 function toPage(raw: Record<string, unknown>): AuditPage | null {
   const m = (raw.metadata ?? {}) as Record<string, unknown>
-  const url = (m.sourceURL ?? m.url) as string | undefined
-  if (!url) return null
+  const tagged = (m.sourceURL ?? m.url) as string | undefined
+  if (!tagged) return null
+  // The batch sent each URL with the mushi_monitor marker; rules and reports use the bare one.
+  const url = untagMonitorUrl(tagged)
   const str = (v: unknown) => (typeof v === 'string' ? v : Array.isArray(v) && typeof v[0] === 'string' ? v[0] : null)
   return {
     url: url.replace(/\/$/, ''),
@@ -117,7 +120,8 @@ function toPage(raw: Record<string, unknown>): AuditPage | null {
             .filter((line) => /[\u3040-\u30FF]/.test(line))
             .join('\n')
         : null,
-    links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+    // A "#top" or same-page href resolves against the marked page URL; untag it like the page.
+    links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string').map(untagMonitorUrl) : [],
   }
 }
 
@@ -158,19 +162,21 @@ export async function testTargets(
 }
 
 async function startRun(db: SupabaseClient, d: Required<SiteAuditDeps>, a: SiteAuditRow, key: string): Promise<string> {
+  // The map discovers URLs and renders no page, so its input is not tagged (monitor-url.ts).
   const map = await fc(d.fetch, key, '/map', { method: 'POST', body: JSON.stringify({ url: a.base_url, limit: 1000, sitemap: 'include', includeSubdomains: false }) })
   const urls = auditUrls(a.base_url, (map.links as unknown[]) ?? [], a.page_limit)
   const batch = await fc(d.fetch, key, '/batch/scrape', {
     method: 'POST',
-    body: JSON.stringify({
-      urls,
-      formats: ['html', 'links', 'markdown'],
-      onlyMainContent: false,
-      maxAge: 0,
-      waitFor: 2500,
-      timeout: 45_000,
-      headers: { 'User-Agent': SITE_WATCH_USER_AGENT },
-    }),
+    body: JSON.stringify(
+      monitorScrapeBody('audit', {
+        urls,
+        formats: ['html', 'links', 'markdown'],
+        onlyMainContent: false,
+        maxAge: 0,
+        waitFor: 2500,
+        timeout: 45_000,
+      }),
+    ),
   })
   const id = typeof batch.id === 'string' ? batch.id : null
   if (!id) throw new Error('Firecrawl did not return a batch id')

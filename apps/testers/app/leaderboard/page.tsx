@@ -5,6 +5,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { TestersPageShell } from '../components/TestersPageShell'
+import { Mascot } from '../components/Mascot'
 
 export const metadata: Metadata = {
   title: 'Tester Leaderboard',
@@ -58,12 +59,17 @@ export default async function LeaderboardPage() {
         </div>
 
         {leaders.length === 0 ? (
-          <div className="testers-panel p-12 text-center">
-            <p className="mb-3 text-3xl">🏆</p>
+          <div className="testers-panel flex flex-col items-center p-10 text-center">
             <p className="font-medium">No testers yet — be the first!</p>
+            <div className="mt-5">
+              <Mascot
+                pose="point"
+                line="Pick an app and find a real bug. Your first accepted report puts you here."
+              />
+            </div>
             <Link
               href="/apps/"
-              className="testers-brand-mark mt-4 inline-block text-sm underline underline-offset-2 hover:opacity-90"
+              className="testers-brand-mark mt-5 inline-block text-sm underline underline-offset-2 hover:opacity-90"
             >
               Browse apps →
             </Link>

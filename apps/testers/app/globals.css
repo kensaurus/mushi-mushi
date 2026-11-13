@@ -106,9 +106,101 @@
     background: var(--mushi-paper-wash);
     border-radius: 0.75rem;
   }
+
+  /* The field guide (components/Mascot.tsx). Bounties is always dark, so a
+     cream paper spot (the brand's dark-theme ink) sits behind the watercolour
+     figure; the line is a margin note with a vermillion rule. */
+  .testers-guide {
+    display: flex;
+    gap: 0.9rem;
+  }
+
+  .testers-guide--row {
+    align-items: flex-end;
+    text-align: left;
+  }
+
+  .testers-guide--stack {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .testers-guide__figure {
+    position: relative;
+    flex: none;
+    width: 7rem;
+    height: 7rem;
+  }
+
+  .testers-guide__figure::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 84%;
+    aspect-ratio: 1;
+    transform: translateX(-50%);
+    border-radius: 9999px;
+    background: var(--mushi-dark-ink);
+  }
+
+  .testers-guide__figure img {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    user-select: none;
+  }
+
+  .testers-guide--row .testers-guide__body {
+    min-width: 0;
+    padding: 0 0 0.35rem 0.8rem;
+    border-left: 2px solid var(--mushi-vermillion);
+  }
+
+  .testers-guide--stack .testers-guide__body {
+    max-width: 24rem;
+  }
+
+  .testers-guide__name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mushi-ink-faint);
+  }
+
+  .testers-guide__line {
+    margin-top: 0.15rem;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: var(--mushi-ink-muted);
+    text-wrap: pretty;
+  }
 }
 
 @keyframes testers-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
+}
+
+@keyframes testers-guide-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes testers-guide-idle {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+
+/* One entrance, three slow sways, then rest. Still under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .testers-guide__figure {
+    animation: testers-guide-enter var(--mushi-duration-slow) var(--mushi-ease-stamp) both;
+  }
+  .testers-guide__figure img {
+    animation: testers-guide-idle 3600ms ease-in-out 900ms 3;
+  }
 }

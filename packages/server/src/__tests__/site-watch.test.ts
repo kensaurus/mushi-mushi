@@ -21,6 +21,8 @@ const sw = await import('../../supabase/functions/_shared/site-watch.ts')
 type Page = Parameters<typeof sw.classifyPage>[0]
 
 const BASE = 'https://kensaur.us/help-her-take-photo'
+/** What monitor-url.ts appends to every watch page load. */
+const WATCH_TAG = 'mushi_monitor=watch&utm_source=mushi-monitor&utm_medium=watch'
 const ok = (url: string, status = 'same'): Page => ({ url, status, statusCode: 200, error: null, judgment: null, metadata: { title: 'Page' } })
 
 describe('classifyPage', () => {
@@ -289,7 +291,8 @@ describe('confirmScrape', () => {
     expect(url).toBe('https://api.firecrawl.dev/v2/scrape')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fc-key')
     expect(JSON.parse(String(init.body))).toEqual({
-      url: `${BASE}/docs`,
+      // Marked as Mushi's watch traffic (monitor-url.ts).
+      url: `${BASE}/docs?${WATCH_TAG}`,
       formats: ['markdown'],
       onlyMainContent: true,
       waitFor: sw.CONFIRM_WAIT_MS,
@@ -926,7 +929,7 @@ describe('Firecrawl monitor calls', () => {
     expect(body).toMatchObject({
       schedule: { cron: '30 1 * * *', timezone: 'UTC' },
       goal: sw.SITE_WATCH_GOAL,
-      targets: [{ type: 'crawl', url: BASE, crawlOptions: { limit: 25, ignoreQueryParameters: true } }],
+      targets: [{ type: 'crawl', url: `${BASE}?${WATCH_TAG}`, crawlOptions: { limit: 25, ignoreQueryParameters: true } }],
     })
     expect(body).not.toHaveProperty('webhook')
   })
@@ -941,6 +944,7 @@ describe('Firecrawl monitor calls', () => {
     for (const call of fetchMock.mock.calls) {
       const body = JSON.parse(String((call as unknown as [string, RequestInit])[1].body))
       expect(body.targets[0].scrapeOptions).toEqual({ headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } })
+      expect(body.targets[0].url).toBe(`${BASE}?${WATCH_TAG}`)
     }
     expect(sw.SITE_WATCH_USER_AGENT).toMatch(/^Mozilla\/5\.0 .* Chrome\/[\d.]+ Safari\/537\.36 MushiSiteWatch\/1\.0 \(\+https:\/\/kensaur\.us\/mushi-mushi\)$/)
   })
@@ -958,6 +962,16 @@ describe('Firecrawl monitor calls', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('keys the seed page by its bare URL: the marker the crawl was sent with is removed', async () => {
+    // metadata form (utm_* already dropped by Firecrawl) and the as-sent form.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ data: { pages: [ok(`${BASE}?mushi_monitor=watch`), ok(`${BASE}/a?x=1&${WATCH_TAG}`)] } }))),
+    )
+    const pages = await sw.checkPages('fc-key', 'm', 'c')
+    expect(pages.map((p) => p.url)).toEqual([BASE, `${BASE}/a?x=1`])
+  })
+
   it('flags a live monitor that lacks the current User-Agent for reconcile', async () => {
     // The six 2026-10-10 monitors came back with scrapeOptions {} and their
     // crawls reached glot.it unmarked.
@@ -967,6 +981,10 @@ describe('Firecrawl monitor calls', () => {
     expect(
       sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } } }] }),
     ).toBe(false)
+    // Monitors created before 2026-11-13 crawl from the bare URL: patched once to the marked one.
+    const ua = { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } }
+    expect(sw.monitorNeedsReconcile({ targets: [{ url: BASE, scrapeOptions: ua }] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [{ url: `${BASE}?${WATCH_TAG}`, scrapeOptions: ua }] })).toBe(false)
 
     vi.stubGlobal(
       'fetch',

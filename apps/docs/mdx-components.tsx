@@ -28,6 +28,7 @@ import { InThirtySeconds, YouWillSee } from './components/OnboardingBoxes'
 import { Walkthrough } from './components/Walkthrough'
 import { HowItWorksFlow } from './components/HowItWorksFlow'
 import { FrameworkPicker } from './components/FrameworkPicker'
+import { Mascot } from './components/Mascot'
 import {
   CinematicEditorialHero,
   DiagnosisScrollStage,
@@ -79,6 +80,7 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   InThirtySeconds,
   YouWillSee,
   FrameworkPicker,
+  Mascot,
   CinematicEditorialHero,
   DiagnosisScrollStage,
   ScrollReveal,

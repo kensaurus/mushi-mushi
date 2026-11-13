@@ -47,6 +47,7 @@
  */
 
 import { errorPageReason } from './home-thumbnail.ts'
+import { monitorScrapeBody, untagMonitorUrl } from './monitor-url.ts'
 import { BlockedUrlError, checkPublicUrl, guardedFetch, type DnsResolver } from './public-url-guard.ts'
 import { htmlImageSrcs, isBrokenStatus, isUnreadableRender } from './site-audit.ts'
 
@@ -813,14 +814,16 @@ export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSign
   const res = await (deps.fetchImpl ?? fetch)('https://api.firecrawl.dev/v2/scrape', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deps.firecrawlKey}` },
-    body: JSON.stringify({
-      url,
-      formats: [...FIRECRAWL_FORMATS],
-      onlyMainContent: false,
-      parsers: [],
-      timeout: timeoutMs,
-      blockAds: true,
-    }),
+    body: JSON.stringify(
+      monitorScrapeBody('audit', {
+        url,
+        formats: [...FIRECRAWL_FORMATS],
+        onlyMainContent: false,
+        parsers: [],
+        timeout: timeoutMs,
+        blockAds: true,
+      }),
+    ),
     signal,
   })
   if (!res.ok) {
@@ -837,7 +840,8 @@ export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSign
   const json = (await res.json()) as { data?: { markdown?: string; links?: unknown; rawHtml?: unknown; metadata?: Record<string, unknown> } }
   const meta = json.data?.metadata ?? {}
   // Where Firecrawl ended up after redirects must still be a public address.
-  const landed = firstString(meta.url) ?? firstString(meta.sourceURL) ?? url
+  // It comes back with the mushi_monitor marker; the check reports the bare URL.
+  const landed = untagMonitorUrl(firstString(meta.url) ?? firstString(meta.sourceURL) ?? url)
   const landedCheck = checkPublicUrl(landed)
   if (!landedCheck.ok) throw new Error('REDIRECTED_TO_PRIVATE')
   const status = typeof meta.statusCode === 'number' ? meta.statusCode : null
@@ -851,7 +855,10 @@ export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSign
     description,
     language,
     markdown: typeof json.data?.markdown === 'string' ? json.data.markdown : '',
-    links: Array.isArray(json.data?.links) ? (json.data!.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+    // A "#top" or same-page href resolves against the marked page URL; untag it like the page.
+    links: Array.isArray(json.data?.links)
+      ? (json.data!.links as unknown[]).filter((l): l is string => typeof l === 'string').map(untagMonitorUrl)
+      : [],
     rendered: true,
     renderUnreadable: isUnreadableRender({ title, description, language }),
     html: typeof json.data?.rawHtml === 'string' ? json.data.rawHtml.slice(0, HTML_CAP_BYTES) : '',

@@ -53,6 +53,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { sendBotMessage, sendSlackText, buildQaStoryRunBlocks, sendDiscordNotification } from '../_shared/slack.ts'
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
+import { monitorScrapeBody } from '../_shared/monitor-url.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
 import { cronTickTime } from './cron-tick.ts'
 
@@ -390,7 +391,8 @@ async function runFirecrawl(story: QaStory, apiKey: string, targetUrl: string): 
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify(fcBody),
+      // Marked as Mushi's QA traffic (mushi_monitor=qa + User-Agent), see monitor-url.ts.
+      body: JSON.stringify(monitorScrapeBody('qa', fcBody)),
     })
 
     if (!res.ok) {

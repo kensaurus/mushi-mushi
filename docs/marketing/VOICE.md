@@ -60,6 +60,16 @@ blurb, error message, and cold DM goes through this filter.
 
 If a sentence could have been written by any other SaaS, rewrite it.
 
+**Who speaks where (2026-11-13).** Mushi-chan narrates the brand: the README,
+posts, launch copy and changelog. Inside a flow — the console's sign-in,
+setup, first diagnosis, empty and error screens, the docs quickstarts and the
+Bounties pages — the guide is **Field Kenji**, a calm bug naturalist with
+Mushi-chan on his shoulder. He speaks in one first-person line of 90
+characters or fewer, beside the page's own text, never instead of it. The
+filter below applies to both. Rules, poses and placements:
+[`docs/mascot/README.md`](../mascot/README.md); console lines:
+`apps/admin/src/lib/fieldGuide.ts`.
+
 ## Who Mushi-chan is
 
 - A small, friendly Japanese bug. 虫 (mushi) = bug; the doubling (虫虫 / むしむし)

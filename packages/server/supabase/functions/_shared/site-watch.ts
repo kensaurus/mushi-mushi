@@ -44,6 +44,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
+import { MONITOR_USER_AGENT, hasMonitorTag, monitorScrapeBody, tagMonitorUrl, untagMonitorUrl } from './monitor-url.ts';
 
 const log = rootLog.child('site-watch');
 
@@ -57,18 +58,16 @@ export const SITE_WATCH_GOAL =
   'content edits.';
 
 /**
- * The User-Agent every site-watch page fetch sends, so a host app can drop
- * the crawler from its error monitoring and analytics (match
- * "MushiSiteWatch"). A normal Chrome UA comes first so sites that sniff for
- * a browser still serve the real page.
+ * The User-Agent every site-watch page fetch sends (`MONITOR_USER_AGENT`),
+ * so a host app can drop the crawler from its error monitoring and
+ * analytics (match "MushiSiteWatch").
  *
- * This sets the HTTP request header. Whether the page's own JavaScript sees
- * it in `navigator.userAgent` depends on Firecrawl's browser engine, so a
- * client-side filter should not assume it does until that is verified.
+ * This sets the HTTP request header. The page's own JavaScript still sees
+ * Firecrawl's stock Linux Chrome `navigator.userAgent` (checked 2026-11-13),
+ * so a client-side filter matches the `mushi_monitor` URL marker instead
+ * (`monitor-url.ts`).
  */
-export const SITE_WATCH_USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 ' +
-  'MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)';
+export const SITE_WATCH_USER_AGENT = MONITOR_USER_AGENT;
 
 /** Default schedule: once a day at 01:30 UTC. */
 export const DEFAULT_SCHEDULE_CRON = '30 1 * * *';
@@ -242,7 +241,8 @@ export type ConfirmScrape =
  *   - `waitFor`: ms to wait on top of Firecrawl's smart wait (max 60000);
  *   - `timeout`: ms before Firecrawl gives up on the page (min 1000);
  *   - `maxAge: 0`: always a fresh fetch, never Firecrawl's 2-day cache;
- *   - `headers`: the site-watch User-Agent, so the host can filter it.
+ *   - `headers`: the site-watch User-Agent, so the host can filter it;
+ *   - the URL carries the `mushi_monitor=watch` marker (`monitorScrapeBody`).
  * The scrape endpoint has no viewport option (a viewport exists only for
  * the screenshot format), so none is set and none is put on the report.
  *
@@ -263,15 +263,16 @@ export async function confirmScrape(key: string, url: string): Promise<ConfirmSc
     res = await fetch(`${FIRECRAWL_BASE}/v2/scrape`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url,
-        formats: ['markdown'],
-        onlyMainContent: true,
-        waitFor: CONFIRM_WAIT_MS,
-        timeout: CONFIRM_TIMEOUT_MS,
-        maxAge: 0,
-        headers: { 'User-Agent': SITE_WATCH_USER_AGENT },
-      }),
+      body: JSON.stringify(
+        monitorScrapeBody('watch', {
+          url,
+          formats: ['markdown'],
+          onlyMainContent: true,
+          waitFor: CONFIRM_WAIT_MS,
+          timeout: CONFIRM_TIMEOUT_MS,
+          maxAge: 0,
+        }),
+      ),
       signal: AbortSignal.timeout(CONFIRM_WORST_CASE_MS),
     });
   } catch (err) {
@@ -471,7 +472,9 @@ function monitorBody(spec: MonitorSpec): Record<string, unknown> {
     targets: [
       {
         type: 'crawl',
-        url: spec.baseUrl,
+        // The marker reaches only this seed page: Firecrawl loads the pages
+        // it discovers by their bare links. Those carry the User-Agent below.
+        url: tagMonitorUrl(spec.baseUrl, 'watch'),
         // ignoreQueryParameters: "?utm_source=…" links are the same page;
         // without it they used crawl slots and came back as duplicate skips.
         crawlOptions: { limit: spec.pageLimit, maxDiscoveryDepth: 3, ignoreQueryParameters: true },
@@ -514,7 +517,7 @@ export async function updateMonitor(
 /** The parts of a live monitor that `monitorNeedsReconcile` reads. */
 export interface LiveMonitor {
   name?: string;
-  targets?: Array<{ scrapeOptions?: { headers?: Record<string, string> } }>;
+  targets?: Array<{ url?: string; scrapeOptions?: { headers?: Record<string, string> } }>;
 }
 
 export async function getMonitor(key: string, monitorId: string): Promise<LiveMonitor> {
@@ -527,10 +530,15 @@ export async function getMonitor(key: string, monitorId: string): Promise<LiveMo
  * lacks the current site-watch User-Agent. Monitors created before the header
  * shipped kept `scrapeOptions: {}` until someone re-saved them, so every crawl
  * reached host apps unmarked and their error monitoring counted it as users.
+ * Likewise a target URL without the `mushi_monitor=watch` marker (monitors
+ * created before 2026-11-13). Firecrawl stores the target URL as sent
+ * (checked 2026-11-13), so a reconciled monitor is not patched again.
  */
 export function monitorNeedsReconcile(monitor: LiveMonitor): boolean {
-  const headers = monitor.targets?.[0]?.scrapeOptions?.headers ?? {};
-  return headers['User-Agent'] !== SITE_WATCH_USER_AGENT;
+  const target = monitor.targets?.[0];
+  const headers = target?.scrapeOptions?.headers ?? {};
+  if (headers['User-Agent'] !== SITE_WATCH_USER_AGENT) return true;
+  return typeof target?.url === 'string' && !hasMonitorTag(target.url, 'watch');
 }
 
 export async function deleteMonitor(key: string, monitorId: string): Promise<void> {
@@ -581,7 +589,9 @@ export async function checkPages(
     `/v2/monitor/${encodeURIComponent(monitorId)}/checks/${encodeURIComponent(checkId)}?limit=100`;
   while (url && pages.length < maxPages) {
     const res: { data?: { pages?: MonitorPage[]; next?: string | null }; next?: string | null } = await fc(key, 'GET', url);
-    pages.push(...(res.data?.pages ?? []));
+    // The seed page comes back with the marker on its URL: key and report it
+    // by the address people use.
+    pages.push(...(res.data?.pages ?? []).map((p) => (typeof p?.url === 'string' ? { ...p, url: untagMonitorUrl(p.url) } : p)));
     const next = res.next ?? res.data?.next ?? null;
     // Only follow Firecrawl's own pagination links.
     url = next && next.startsWith(`${FIRECRAWL_BASE}/`) ? next : null;

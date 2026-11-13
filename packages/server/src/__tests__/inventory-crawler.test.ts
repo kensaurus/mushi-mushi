@@ -186,8 +186,15 @@ describe('Firecrawl render of unverified pages', () => {
     expect(String(input)).toBe(FIRECRAWL)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer fc-test')
     const body = JSON.parse(String(init.body)) as Record<string, unknown>
-    expect(body).toMatchObject({ url: 'https://example.com/practice', formats: ['rawHtml'], onlyMainContent: false })
-    expect(body).not.toHaveProperty('headers')
+    // Marked as Mushi's audit traffic (monitor-url.ts).
+    expect(body).toMatchObject({
+      url: 'https://example.com/practice?mushi_monitor=audit&utm_source=mushi-monitor&utm_medium=audit',
+      formats: ['rawHtml'],
+      onlyMainContent: false,
+    })
+    // The only header sent is the Mushi User-Agent: no crawler sign-in header or cookie.
+    expect(Object.keys(body.headers as Record<string, string>)).toEqual(['User-Agent'])
+    expect((body.headers as Record<string, string>)['User-Agent']).toMatch(/MushiSiteWatch\/1\.0/)
     expect(String(init.body)).not.toMatch(/cookie|authorization|fc-test/i)
   })
 

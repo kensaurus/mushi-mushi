@@ -64,29 +64,63 @@ lists `confirmScrapes` and `dismissed` per watch.
 
 ## Filter the crawler out of your monitoring and analytics
 
-Every page fetch the watch makes sends this `User-Agent` header (a normal
-Chrome UA with a Mushi token appended):
+Firecrawl's browser loads every page with `document.referrer` set to
+`https://www.google.com/` and a stock Linux Chrome `navigator.userAgent`. In
+your analytics, Mushi's scheduled jobs therefore look like Google visitors.
+Before 2026-11-13 that was about 5× the real traffic of each KENSAURUS app.
+
+Since 2026-11-13, every Mushi job that loads a page of your app through
+Firecrawl marks the request in two ways (`_shared/monitor-url.ts`).
+
+**The URL** gets these params, after any query the URL already has. The
+fragment stays last, and a param that is already there is not added again:
+
+```
+?mushi_monitor=<watch|audit|qa>&utm_source=mushi-monitor&utm_medium=<watch|audit|qa>
+```
+
+- Firecrawl strips `utm_*` (and `gclid`) before its browser navigates, so
+  filter on **`mushi_monitor`**. It reaches the server and `location.href`
+  (verified 2026-11-13).
+- The UTM pair is there for crawlers that keep it.
+
+| `mushi_monitor` | Job |
+| --- | --- |
+| `watch` | Live-site watch: crawl seed and confirm scrapes, and the Home card screenshot |
+| `audit` | Site audit batch, Production Check, inventory renders |
+| `qa` | QA stories (`firecrawl_actions`), story-mapper page scrapes |
+
+**The `User-Agent` request header** is a normal Chrome UA with a Mushi token
+appended:
 
 ```
 Mozilla/5.0 (…) Chrome/141.0.0.0 Safari/537.36 MushiSiteWatch/1.0 (+https://kensaur.us/mushi-mushi)
 ```
 
-Filter on the substring `MushiSiteWatch` so the daily crawl does not show up
-as visitors, sessions or errors:
+Filters to set:
 
-- **Sentry:** drop the event in `beforeSend` when the request's `User-Agent`
-  header contains `MushiSiteWatch`, or add an inbound filter on that string.
-- **Analytics** (PostHog, GA4, Plausible, …): exclude requests or sessions
-  whose user agent contains `MushiSiteWatch`.
-- **Server logs and rate limits:** match the same substring.
+- **Analytics** (PostHog, GA4, Plausible, …): exclude page views whose URL
+  contains `mushi_monitor=`.
+- **Sentry:** drop the event in `beforeSend` when the page URL contains
+  `mushi_monitor=` or the request's `User-Agent` contains `MushiSiteWatch`.
+- **Server logs and rate limits:** match either string.
 
-The header is set on the HTTP request. Whether the page's JavaScript sees it in
-`navigator.userAgent` depends on Firecrawl's browser engine and has not been
-verified yet, so prefer a server-side or request-header filter.
+Known limits:
 
-The constant is `SITE_WATCH_USER_AGENT` in
-`packages/server/supabase/functions/_shared/site-watch.ts`. Only the watch
-sends it; known-issue search, site maps and other Firecrawl calls do not.
+- **Discovered pages carry no marker.** The watch's crawl target carries the
+  marker only on its seed URL. Firecrawl loads the pages it discovers by their
+  bare links, so for those only the `User-Agent` header identifies Mushi.
+- **The page's JavaScript can't see the header.** It reads Firecrawl's stock
+  `navigator.userAgent` (verified 2026-11-13), so a client-side filter has to
+  match the URL marker.
+- **Map calls are not marked.** They discover URLs and render no page.
+- **Non-customer Firecrawl calls are not marked:** known-issue search,
+  research, changelogs.
+
+`monitor-url-guard.test.ts` fails when a new Firecrawl call site is neither
+marked nor classified as loading no customer page. The live-site watch's poll
+patches each existing monitor to the marked target URL once
+(`monitorNeedsReconcile`).
 
 ## Monitors created before the header existed
 
