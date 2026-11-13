@@ -9,9 +9,14 @@ description: "Free, open-source bug report widget for Vue 3: install mushi-mushi
 
 # Bug report widget for Vue 3
 
-This quickstart adds the Mushi Mushi bug-report widget to a Vue 3 app. The
-steps match the [React quickstart](/quickstart/react); only the install and the
-boot call differ.
+This page adds a report button to a Vue 3 app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply.
+
+The fastest way is `npx mushi-mushi` in your app's folder: it gets your keys,
+installs the package and prints the code below for you to paste. The steps
+match the [React quickstart](/quickstart/react); only the install and the
+start-up call differ.
 
 ## Get your project ID and API key
 
@@ -47,5 +52,10 @@ createApp(App)
   })
   .mount('#app')
 ```
+
+**You'll see:** a small report button in the corner of your app. Tap it, send one sentence, and the report shows in the [console](https://kensaur.us/mushi-mushi/admin) within seconds.
+
+Starting a new Vue app? `npx mushi-mushi --template vue my-app` makes one with
+Mushi Mushi already in it ([how](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it)).
 
 API detail: [`mushi-mushi/vue`](/sdks/vue). Widget behavior: [`mushi-mushi`](/sdks/web).

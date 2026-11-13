@@ -4,16 +4,18 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/launcher
 
 ---
 title: 'mushi-mushi (launcher)'
-description: npx mushi-mushi detects your framework, installs the matching Mushi Mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
+description: npx mushi-mushi signs you in, installs Mushi Mushi, writes your project ID and key to .env.local and shows the code to add. Plus flags and troubleshooting.
 ---
 
-# `mushi-mushi`: the one-command launcher
+# `mushi-mushi`: one command to set it up
 
-`npx mushi-mushi` is the single Mushi Mushi entry point on npm: it auto-detects
-your framework, picks the right `@mushi-mushi/*` SDK, writes your project ID
-and API key into `.env.local` (or an existing `.env`) as `MUSHI_PROJECT_ID` and
-`MUSHI_API_KEY` with your framework's env prefix, and prints the snippet to
-paste into your app.
+`mushi-mushi` is the one package you need. Run it once with `npx` and it adds
+Mushi Mushi to your app. Install it with `npm install` and it is the SDK (the
+code in your app that shows the report button).
+
+- Run `npx mushi-mushi` in your app's folder.
+- Approve the sign-in in your browser. Your free project and key are made for you.
+- Add the few lines of code it shows you. Your app now has a report button.
 
 ## Try it
 
@@ -21,14 +23,102 @@ paste into your app.
 npx mushi-mushi
 ```
 
-Equivalent commands. All three run the same wizard from
-[`@mushi-mushi/cli`](/sdks/cli):
+`npx` runs a tool from npm (the public library of JavaScript packages)
+without installing it for good.
+
+**You'll see:** a browser page asking you to approve the sign-in, then the code to add to your app, and an offer to send a test report.
+
+## What it does, step by step
+
+1. **Finds your framework** from your `package.json` (React, Next.js, Vue, Svelte, Angular, Expo and more; the full list is [below](#what-it-detects)).
+2. **Signs you in** through your browser, and makes a project and a key that can only send reports.
+3. **Installs `mushi-mushi`** with the package manager your lockfile uses. React Native and Capacitor apps get their own package, `@mushi-mushi/react-native` or `@mushi-mushi/capacitor`.
+4. **Writes two settings** (your project ID and key) to `.env.local`, or to `.env` if you already have one. Each name gets the prefix your framework needs, such as `VITE_` or `NEXT_PUBLIC_`.
+5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first. For React, Vue and the others it prints the code, because that code has to wrap your app and a wizard that rewrites your components can break them.
+6. **Offers to send a test report**, so you see your first report in the [console](https://kensaur.us/mushi-mushi/admin).
+
+Apart from that offer, it doesn't change your app's code. It warns you if
+the env file is not in `.gitignore`. Run again, it asks before replacing a
+Mushi Mushi setting that is already there, except with `--yes`
+([details](#running-it-again)).
+
+  **`.env.local` stays on your computer.** Before you deploy, add the same two
+  settings where your site is built (Vercel, Netlify), then redeploy. Without
+  them the report button does not show on your live site. The
+  [quickstart](/quickstart#add-your-keys-where-your-site-is-hosted) has the names for each framework.
+
+## Let your AI editor run it
+
+Paste this into Cursor, Claude Code or any AI editor that can run commands:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+`--yes` takes the default answers, which an AI editor's terminal needs because
+it cannot answer questions. It still opens the browser sign-in for you.
+
+## Start a new app with Mushi Mushi in it
+
+The commands above add Mushi Mushi to an app you already have. To start from
+nothing, `--template` makes a small starter app with Mushi Mushi already wired in:
 
 ```bash
-npx mushi-mushi              # the launcher (this package)
-npm create mushi-mushi       # via the npm-create convention
-npx @mushi-mushi/cli init    # the scoped name
+npx mushi-mushi --template vue my-app   # or: svelte, node
+cd my-app
+npm install
+npx mushi-mushi                         # sign in and write your settings
+npm run dev                             # npm start for the node starter
 ```
+
+The folder must not exist yet. Without a folder name you get
+`mushi-vue-app`, `mushi-svelte-app` or `mushi-node-app`.
+`npm create mushi-mushi -- --template vue` does the same. npm and pnpm need
+the `--` before the flags.
+
+A folder name on its own, as in `npm create mushi-mushi my-app`, does not
+make a new app. It runs the setup wizard in the folder you are in, after
+this hint:
+
+```text
+To start a new app instead: npx mushi-mushi --template <vue|svelte|node> my-app
+```
+
+## Other ways to run the same wizard
+
+```bash
+npx mushi-mushi              # this package
+npm create mushi-mushi       # the npm "create" convention
+npx @mushi-mushi/cli init    # the full CLI
+```
+
+Any other command is passed to the full CLI, so
+`npx mushi-mushi setup --ide cursor` and `npx mushi-mushi reports list` work
+without a global install. Install [`@mushi-mushi/cli`](/sdks/cli) globally
+(`npm install -g @mushi-mushi/cli`) when you use it every day and want the
+short `mushi` command.
+
+## Flags
+
+```bash
+npx mushi-mushi --framework next               # skip framework detection
+npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
+npx mushi-mushi --skip-install                 # print the install command, don't run it
+npx mushi-mushi --skip-test-report             # don't offer to send a test report
+npx mushi-mushi --audit                        # health-check an existing install instead
+npx mushi-mushi --cwd apps/web                 # run inside a monorepo package
+npx mushi-mushi --endpoint https://mushi.your-company.com   # self-hosted
+npx mushi-mushi -y                             # take the defaults (CI and AI-editor shells)
+npx mushi-mushi -v                             # print the version
+npx mushi-mushi --help
+```
+
+In CI, pass `--yes --project-id <project-uuid> --api-key mushi_xxx`. Without
+a terminal to answer questions, the wizard exits with a clear error instead
+of waiting.
 
 ## What it detects
 
@@ -56,37 +146,63 @@ order, and takes the first match:
 
 With no matching dependency it falls back to config files
 (`next.config.*`, `nuxt.config.*`, `svelte.config.js`, `angular.json`,
-`remix.config.*`, `astro.config.*`). Pass `--framework ` to skip
-detection.
+`remix.config.*`, `astro.config.*`).
 
-The package manager is detected from the lockfile (`bun.lockb` or
-`bun.lock`, `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var
-prefixes are chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`,
-`EXPO_PUBLIC_…`, `REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and
-`VITE_…` for the other browser frameworks. Server frameworks, bare React
-Native and Remix get plain `MUSHI_…` names.
+The package manager comes from the lockfile (`bun.lockb` or `bun.lock`,
+`pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var prefixes come
+from the framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`, `EXPO_PUBLIC_…`,
+`REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and `VITE_…` for the
+other browser frameworks. Server frameworks, bare React Native and Remix get
+plain `MUSHI_…` names.
 
 ## Running it again
 
 Running the wizard a second time is safe:
 
-- If `MUSHI_*` vars already exist in the env file, the wizard asks before
+- If `MUSHI_*` settings already exist in the env file, the wizard asks before
   replacing them. With `--yes` (and in non-interactive shells) it replaces them.
 - The install step runs again; pass `--skip-install` to print the install
-  command instead. When an `@mushi-mushi/*` package is already a dependency,
-  the wizard suggests `npx mushi-mushi --audit`, which runs health checks
-  instead of the setup.
-- After writing the env file it warns if that file isn't gitignored, so
-  secrets don't accidentally end up in source control.
+  command instead. When Mushi Mushi is already a dependency, the wizard
+  suggests `npx mushi-mushi --audit`, which runs health checks instead of the
+  setup.
 
-## When to use the launcher vs the CLI directly
+## Troubleshooting
 
-Use **the launcher** when you want one command to give a teammate
-("`npx mushi-mushi` and you're done"). Any other command is forwarded to
-`@mushi-mushi/cli`, so `npx mushi-mushi setup --ide cursor` or
-`npx mushi-mushi reports list` works without a global install.
+- **Wrong framework detected?** Pass `--framework ` with an id from the table above.
+- **Monorepo?** `cd` into the package first, or pass `--cwd apps/web`.
+- **An old version runs?** `npx mushi-mushi@latest`, or clear the cache with `npm cache clean --force`.
+- **Node version too old?** It needs Node 20.19 or newer. Get it at [nodejs.org](https://nodejs.org/).
+- **Sign-in does not finish?** Run `npx mushi-mushi doctor --auth` to check the sign-in path.
+- **Want the full error?** Run `DEBUG=mushi npx mushi-mushi`.
 
-Install **`@mushi-mushi/cli`** globally (`npm install -g @mushi-mushi/cli`)
-when you use it every day and want the short `mushi` command, for example
-`mushi reports list`, `mushi reports triage `, or the `mushi migrate`
-migration helper.
+## Security notes
+
+- A key passed with `--api-key` is visible to other users on the same machine
+  (`ps -ef`). On a shared machine, use the browser sign-in or the prompt.
+- The key the wizard writes into your app can only send reports. It cannot
+  read them, so it is safe in your app's code.
+- `~/.config/mushi/config.json`, where the CLI keeps your sign-in, is written
+  with mode `0o600` on macOS and Linux.
+- The wizard removes line breaks and other control characters from a pasted
+  key, so a paste cannot add extra lines to your env file.
+- Every release is published with
+  [npm provenance](https://docs.npmjs.com/generating-provenance-statements):
+  `npm audit signatures` checks that the package was built from this repo by
+  its CI.
+
+## What package scanners show
+
+`mushi-mushi` is both a library (the SDK, imported from subpaths such as
+`mushi-mushi/react`) and a command (`npx mushi-mushi`).
+
+- **Socket.dev** flags `child_process`, `process.env` and URL strings. They
+  come from the command: it runs `npm install` and passes other commands to
+  `@mushi-mushi/cli`, reads `DEBUG` and npm settings, and prints links. The
+  command's source is `packages/launcher/src/bin.ts`; the wizard it runs is
+  `packages/cli/src/init.ts`.
+- **Size.** The package itself is about 55 kB packed. A first
+  `npx mushi-mushi` downloads about 1.8 MB, mostly the web SDK and its source
+  maps. Your app's bundle gets only the subpath you import.
+
+If something looks wrong, [open an issue](https://github.com/kensaurus/mushi-mushi/issues).
+The source is public.

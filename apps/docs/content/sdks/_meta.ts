@@ -31,7 +31,7 @@ export default {
   skills: 'Agent skills',
   adapters: '@mushi-mushi/adapters',
   'wasm-classifier': '@mushi-mushi/wasm-classifier',
-  'eslint-plugin': 'eslint-plugin-mushi-mushi',
+  'eslint-plugin': 'mushi-mushi/eslint',
   'inventory-schema': '@mushi-mushi/inventory-schema',
   'inventory-auth-runner': '@mushi-mushi/inventory-auth-runner',
   'plugin-sdk': '@mushi-mushi/plugin-sdk',

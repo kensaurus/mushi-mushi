@@ -9,9 +9,13 @@ description: "Free, open-source bug report widget for Angular 17+: one provideMu
 
 # Bug report widget for Angular
 
-This quickstart adds the Mushi Mushi bug-report widget to an Angular 17+ app.
-The steps match the [React quickstart](/quickstart/react); only the install and
-the boot call differ.
+This page adds a report button to an Angular 17+ app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply. Uncaught errors are reported
+too.
+
+The steps match the [React quickstart](/quickstart/react); only the install
+and the start-up call differ.
 
 ## Get your project ID and API key
 
@@ -57,6 +61,8 @@ export const appConfig: ApplicationConfig = {
   ],
 }
 ```
+
+**You'll see:** a small report button in the corner of your app after `ng serve` reloads.
 
   **1.0.2 and earlier:** `provideMushi()` did not return Angular providers,
   and the package needed the JIT compiler in production builds. Upgrade to

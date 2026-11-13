@@ -9,6 +9,29 @@ description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, C
 
 # SDK reference
 
+An SDK is the small piece of code you add to your app. Mushi Mushi's SDK shows
+the report button and sends each report, with a screenshot and what the app
+was doing, to your project.
+
+**Most apps need one package: `mushi-mushi`.** Run `npx mushi-mushi` in your
+app's folder and it installs the SDK for you
+([how the setup works](/sdks/launcher)). Phone apps built with React Native,
+Expo or Capacitor get their own package, which the same command installs.
+
+| Your app | Install | Import from |
+| --- | --- | --- |
+| React, Next.js, Remix | `mushi-mushi` | `mushi-mushi/react` |
+| Vue, Nuxt | `mushi-mushi` | `mushi-mushi/vue` |
+| Svelte, SvelteKit | `mushi-mushi` | `mushi-mushi/svelte` |
+| Angular 17+ | `mushi-mushi` | `mushi-mushi/angular` |
+| Astro, Solid, plain JavaScript | `mushi-mushi` | `mushi-mushi` |
+| Node (Express, Fastify, Hono) | `mushi-mushi` | `mushi-mushi/node` |
+| React Native, Expo | `@mushi-mushi/react-native` | `@mushi-mushi/react-native` |
+| Capacitor, Ionic | `@mushi-mushi/capacitor` | `@mushi-mushi/capacitor` |
+
+The rest of this page is the full reference: every package, its version and
+how mature it is.
+
 Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
 
 | Package | Version |
@@ -78,10 +101,10 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
-| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard plus the web, framework and Node SDKs above |
+| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard, `--template` starter apps, and the web, framework and Node SDKs above |
 | [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server: triage reports from Cursor, Claude, Codex |
 | [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | GitHub Action: triage-coverage gate, fix dispatch, pre-release gates, crawler sign-in |
-| [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lint rules for empty event handlers (`no-dead-handler`) and leftover mock data (`no-mock-leak`) |
+| [`mushi-mushi/eslint`](/sdks/eslint-plugin) | npm (subpath of `mushi-mushi`; was `eslint-plugin-mushi-mushi`) | Lint rules for buttons whose click does nothing (`no-dead-handler`) and leftover fake data (`no-mock-leak`) |
 
 ## Infrastructure & advanced
 

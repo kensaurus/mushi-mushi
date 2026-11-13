@@ -67,8 +67,26 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 ## Quick start
 
 ```bash
-npx mushi-mushi                      # detects your framework, installs the SDK, writes env vars, sends a test report
+npx mushi-mushi
 ```
+
+Run it in your app's folder. What happens next:
+
+1. **You sign in through your browser.** Your free project and key are made for you. There is nothing to copy.
+2. **It installs Mushi Mushi and shows you a few lines of code.** Add them to your app (or ask your AI editor to). They show a small report button.
+3. **Your users tap the button when something is wrong** and write one sentence. Mushi Mushi adds a screenshot and what the app was doing.
+4. **You get the cause in plain English, and a fix your AI editor can apply.**
+
+Prefer to have your AI editor run it? Paste this into Cursor or Claude Code:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`, `node`) makes a starter app with Mushi Mushi already in it. Want your linter to catch the buttons that do nothing and the fake data AI tools leave behind? Add [`mushi-mushi/eslint`](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin) to `eslint.config.js`.
 
 Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
 
@@ -138,7 +156,7 @@ The pains each group has, and where each should start: [who it's for](https://ke
 
 | Package | For | What it does |
 | --- | --- | --- |
-| [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) | Your app | The one package: the setup wizard (`npx mushi-mushi`) and the bug widget for any site |
+| [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) | Your app | The one package: the setup wizard (`npx mushi-mushi`), starter apps (`--template`), the bug widget for any site, and lint rules for what AI tools leave behind (`mushi-mushi/eslint`) |
 | `mushi-mushi/react`, `/vue`, `/svelte`, `/angular` | Your app | The same widget wired into your framework |
 | `mushi-mushi/node` | Your server | Reports backend errors into the same queue |
 | [`@mushi-mushi/react-native`](./packages/react-native), [`@mushi-mushi/capacitor`](./packages/capacitor) | Your mobile app | The widget for native and hybrid apps (they ship native code, so they stay separate installs) |
