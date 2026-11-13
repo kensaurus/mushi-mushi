@@ -1,21 +1,27 @@
 /**
  * FILE: site-watch.ts
- * PURPOSE: Live-site watch (ADR 0024). A Firecrawl monitor crawls an app's
- *          live site on a schedule, billed to the project's own Firecrawl
- *          key. Mushi polls the monitor's finished checks (no webhook: those
- *          are signed with a secret only the Firecrawl dashboard shows) and
- *          files each newly broken page as a report with source
- *          'site_watch', before a user hits it.
+ * PURPOSE: Live-site watch (ADR 0024, monitor shape ADR 0059). A Firecrawl
+ *          monitor loads a list of the app's live pages on a schedule, billed
+ *          to the project's own Firecrawl key. Mushi polls the monitor's
+ *          finished checks (no webhook: those are signed with a secret only
+ *          the Firecrawl dashboard shows) and files each newly broken page as
+ *          a report with source 'site_watch', before a user hits it.
+ *
+ * The monitor is scrape targets over an explicit page list, every URL marked
+ * `mushi_monitor=watch` (ADR 0059): a crawl target marked only its seed, and
+ * the ~500 pages a day it found by following links reached the apps'
+ * analytics as Google visitors. The list comes from the app's map plus the
+ * pages already watched (`selectWatchUrls`), refreshed after each daily check.
  *
  * A page is broken when it:
  *   - returns a 5xx, or a 4xx other than 401/403/407/429 (auth walls and
- *     rate limits are not breakage); a crawl only reaches pages the app links
- *     to, so a 404 there is a broken link;
+ *     rate limits are not breakage); every watched page was linked or listed
+ *     by the site, so a 404 is a broken page or link;
  *   - fails to load (monitor status 'error');
  *   - changed and the monitor's judge says the change matches the goal
  *     below (error screen, blank page, lost main content).
- * A page that disappears from the crawl ('removed') is usually intentional
- * and is not reported.
+ * A page that left the site (unmapped, 404/410, nothing waiting to file) is
+ * dropped from the list and not reported.
  *
  * A broken page in a check is only a SUSPECT (ADR 0029). Of 23 site-watch
  * reports sent to coding agents in October 2026, 9 were pages that were
@@ -457,32 +463,46 @@ async function fc<T>(key: string, method: string, path: string, body?: unknown):
   return (text ? JSON.parse(text) : {}) as T;
 }
 
+/**
+ * The monitor Mushi keeps for a watch (ADR 0059, superseding ADR 0024's
+ * crawl): scrape targets over an explicit list of the app's page URLs, each
+ * sent with the `mushi_monitor=watch` marker, so every page load is marked
+ * as Mushi's traffic. A crawl target marked only its seed URL: Firecrawl
+ * loaded the pages it discovered by their bare links.
+ */
 export interface MonitorSpec {
   name: string;
-  baseUrl: string;
-  pageLimit: number;
+  /** The bare page URLs to load each check (`selectWatchUrls`), at most the watch's page limit. */
+  urls: string[];
   scheduleCron: string;
 }
 
+/**
+ * URLs per scrape target. Firecrawl accepted 100 in one target (probe,
+ * 2026-11-13; its docs give no limit), and a watch holds at most 100 pages
+ * (`site_watches.page_limit`), so a watch needs one target today. Longer
+ * lists are split; a monitor takes 1-50 targets.
+ */
+export const MONITOR_URLS_PER_TARGET = 100;
+export const MONITOR_MAX_TARGETS = 50;
+
 function monitorBody(spec: MonitorSpec): Record<string, unknown> {
+  const tagged = spec.urls.map((u) => tagMonitorUrl(u, 'watch'));
+  const targets: Array<Record<string, unknown>> = [];
+  for (let i = 0; i < tagged.length && targets.length < MONITOR_MAX_TARGETS; i += MONITOR_URLS_PER_TARGET) {
+    targets.push({
+      type: 'scrape',
+      urls: tagged.slice(i, i + MONITOR_URLS_PER_TARGET),
+      // Only the header: other scrape options keep Firecrawl's monitor
+      // defaults. Firecrawl does not cache a scrape sent with custom headers.
+      scrapeOptions: { headers: { 'User-Agent': SITE_WATCH_USER_AGENT } },
+    });
+  }
   return {
     name: spec.name.slice(0, 120),
     schedule: { cron: spec.scheduleCron, timezone: 'UTC' },
     goal: SITE_WATCH_GOAL,
-    targets: [
-      {
-        type: 'crawl',
-        // The marker reaches only this seed page: Firecrawl loads the pages
-        // it discovers by their bare links. Those carry the User-Agent below.
-        url: tagMonitorUrl(spec.baseUrl, 'watch'),
-        // ignoreQueryParameters: "?utm_source=…" links are the same page;
-        // without it they used crawl slots and came back as duplicate skips.
-        crawlOptions: { limit: spec.pageLimit, maxDiscoveryDepth: 3, ignoreQueryParameters: true },
-        // Only the header: other scrape options keep Firecrawl's monitor
-        // defaults. Firecrawl does not cache a scrape sent with custom headers.
-        scrapeOptions: { headers: { 'User-Agent': SITE_WATCH_USER_AGENT } },
-      },
-    ],
+    targets,
   };
 }
 
@@ -502,7 +522,11 @@ export async function updateMonitor(
 ): Promise<{ estimatedCreditsPerMonth: number | null }> {
   const body: Record<string, unknown> = {};
   if (patch.status) body.status = patch.status;
-  if (patch.baseUrl && patch.pageLimit && patch.scheduleCron && patch.name) {
+  // Sending targets gives them new ids and resets every page's history: the
+  // next check reports each page `new`, with no change judged (probe,
+  // 2026-11-13, also for an unchanged list). Send them only when the list
+  // really changed (`sameUrlSet`).
+  if (patch.urls && patch.urls.length > 0 && patch.scheduleCron && patch.name) {
     Object.assign(body, monitorBody(patch as MonitorSpec));
   }
   const res = await fc<{ data?: { estimatedCreditsPerMonth?: number } }>(
@@ -517,7 +541,14 @@ export async function updateMonitor(
 /** The parts of a live monitor that `monitorNeedsReconcile` reads. */
 export interface LiveMonitor {
   name?: string;
-  targets?: Array<{ url?: string; scrapeOptions?: { headers?: Record<string, string> } }>;
+  targets?: Array<{
+    type?: string;
+    /** A crawl target's seed (monitors before ADR 0059). */
+    url?: string;
+    /** A scrape target's pages. */
+    urls?: string[];
+    scrapeOptions?: { headers?: Record<string, string> };
+  }>;
 }
 
 export async function getMonitor(key: string, monitorId: string): Promise<LiveMonitor> {
@@ -526,19 +557,287 @@ export async function getMonitor(key: string, monitorId: string): Promise<LiveMo
 }
 
 /**
- * True when a live monitor no longer matches `monitorBody`: its crawl target
- * lacks the current site-watch User-Agent. Monitors created before the header
- * shipped kept `scrapeOptions: {}` until someone re-saved them, so every crawl
- * reached host apps unmarked and their error monitoring counted it as users.
- * Likewise a target URL without the `mushi_monitor=watch` marker (monitors
- * created before 2026-11-13). Firecrawl stores the target URL as sent
- * (checked 2026-11-13), so a reconciled monitor is not patched again.
+ * True when a live monitor no longer has the shape `monitorBody` builds:
+ *   - a crawl target (every monitor before ADR 0059, 2026-11-13);
+ *   - a target without the current site-watch User-Agent (monitors created
+ *     before the header shipped kept `scrapeOptions: {}`, and their crawls
+ *     reached host apps unmarked);
+ *   - a page URL without the `mushi_monitor=watch` marker.
+ * Firecrawl stores target URLs as sent (checked 2026-11-13), so a
+ * reconciled monitor is not patched again.
  */
 export function monitorNeedsReconcile(monitor: LiveMonitor): boolean {
-  const target = monitor.targets?.[0];
-  const headers = target?.scrapeOptions?.headers ?? {};
-  if (headers['User-Agent'] !== SITE_WATCH_USER_AGENT) return true;
-  return typeof target?.url === 'string' && !hasMonitorTag(target.url, 'watch');
+  const targets = monitor.targets ?? [];
+  if (targets.length === 0) return true;
+  for (const t of targets) {
+    if (t.type !== 'scrape') return true;
+    if ((t.scrapeOptions?.headers ?? {})['User-Agent'] !== SITE_WATCH_USER_AGENT) return true;
+    const urls = Array.isArray(t.urls) ? t.urls : [];
+    if (urls.length === 0 || urls.some((u) => !hasMonitorTag(u, 'watch'))) return true;
+  }
+  return false;
+}
+
+/** The bare page URLs a live monitor loads (none for a crawl target). */
+export function liveTargetUrls(monitor: LiveMonitor): string[] {
+  const out: string[] = [];
+  for (const t of monitor.targets ?? []) {
+    if (t.type !== 'scrape' || !Array.isArray(t.urls)) continue;
+    for (const u of t.urls) if (typeof u === 'string') out.push(untagMonitorUrl(u));
+  }
+  return out;
+}
+
+// ── Choosing the pages a watch loads (ADR 0059) ─────────────────────────
+
+/** A URL's identity: no fragment, no query, no trailing slash. */
+function pageKey(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.hostname.toLowerCase().replace(/^www\./, '')}${u.port ? `:${u.port}` : ''}${u.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Not a page a person reads: sitemaps, feeds, images, scripts. */
+const NOT_A_PAGE = /\.(?:xml|txt|md|json|pdf|png|jpe?g|gif|webp|avif|svg|ico|css|js|map|zip|mp4|webm|woff2?|ttf|webmanifest)$/i;
+
+/** The same page under both spellings: the trailing-slash form wins (redirects drop the marker). */
+function preferForm(a: string, b: string): string {
+  const slash = (s: string) => /\/$/.test(s.split(/[?#]/)[0]);
+  return slash(b) && !slash(a) ? b : a;
+}
+
+function pathDepth(url: string): number {
+  try {
+    return new URL(url).pathname.split('/').filter(Boolean).length;
+  } catch {
+    return 99;
+  }
+}
+
+/** True when both lists name the same pages, in any order and spelling. */
+export function sameUrlSet(a: string[], b: string[]): boolean {
+  const ka = new Set(a.map((u) => pageKey(u) ?? u));
+  const kb = new Set(b.map((u) => pageKey(u) ?? u));
+  return ka.size === kb.size && [...ka].every((k) => kb.has(k));
+}
+
+export interface WatchUrlInput {
+  baseUrl: string;
+  /** site_watches.page_limit. */
+  limit: number;
+  /** The bare URLs the monitor loads now (`liveTargetUrls`); empty for a crawl monitor. */
+  current: string[];
+  /**
+   * The newest check's pages (bare URLs). On the switch from a crawl these
+   * are the pages the crawl reached by following the site's links.
+   */
+  lastPages: Array<{ url: string; statusCode?: number | null }>;
+  /** `firecrawlMapOwnSite` result, or null when the map failed. */
+  mapped: string[] | null;
+  /** URLs with an open finding not filed yet (a suspect, ADR 0029). */
+  pending?: string[];
+}
+
+/** Same-site, under the base path, and a page (not a sitemap, feed or file). */
+function scopeFor(baseUrl: string): ((url: string) => boolean) | null {
+  const baseKey = pageKey(baseUrl);
+  if (!baseKey) return null;
+  return (url: string) => {
+    const k = pageKey(url);
+    if (!k || NOT_A_PAGE.test(k)) return false;
+    return k === baseKey || k.startsWith(`${baseKey}/`);
+  };
+}
+
+/**
+ * The page URLs a watch loads (ADR 0059), bare, base first, at most `limit`.
+ * The list stays stable, because every change to it resets each page's
+ * history (`updateMonitor`).
+ *
+ * Kept, in this order, while there is room:
+ *   1. the base URL, always;
+ *   2. every page already watched, unless it LEFT the site: the map no
+ *      longer lists it, its last answer was 404 or 410, and it has no finding
+ *      still waiting to file. A page that still loads, fails with a 5xx, or
+ *      404s while its suspect is unfiled stays: the map reads the sitemap
+ *      and Firecrawl's index and does not follow links, so "not mapped" alone
+ *      is no proof a page is gone, and a 404 must reach its report first;
+ *   3. the newest check's pages, by the same rule (on the switch from a
+ *      crawl: every page the crawl found by following links, 404s included);
+ *   4. mapped pages, shallow paths first. A mapped URL that is dead is loaded
+ *      like any other, and its 404 files.
+ * Same-site pages under the base path only; no sitemaps, feeds or files.
+ */
+export function selectWatchUrls(input: WatchUrlInput): string[] {
+  const inScope = scopeFor(input.baseUrl);
+  if (!inScope) return [];
+  const limit = Math.max(1, Math.floor(input.limit));
+  const strip = (url: string) => url.split('#')[0].split('?')[0];
+  const key = (url: string) => pageKey(url) ?? url;
+  const mapped = (input.mapped ?? []).filter(inScope);
+  const mappedKeys = new Set(mapped.map(key));
+  const pendingKeys = new Set((input.pending ?? []).map(key));
+  const left = new Set(
+    input.lastPages
+      .filter((p) => (p.statusCode === 404 || p.statusCode === 410) && !mappedKeys.has(key(p.url)) && !pendingKeys.has(key(p.url)))
+      .map((p) => key(p.url)),
+  );
+
+  const chosen = new Map<string, string>();
+  const add = (url: string, force = false): void => {
+    if (!inScope(url)) return;
+    const k = key(url);
+    const had = chosen.get(k);
+    if (had !== undefined) {
+      chosen.set(k, preferForm(had, strip(url)));
+      return;
+    }
+    if (!force && (left.has(k) || chosen.size >= limit)) return;
+    chosen.set(k, strip(url));
+  };
+
+  add(input.baseUrl, true);
+  for (const u of input.current) add(u);
+  for (const p of input.lastPages) add(p.url);
+  for (const u of mapped.slice().sort((a, b) => pathDepth(a) - pathDepth(b) || (a < b ? -1 : a > b ? 1 : 0))) add(u);
+  // A spelling seen later can still win the slash form for a chosen page.
+  for (const u of [...input.current, ...input.lastPages.map((p) => p.url), ...mapped]) {
+    const k = key(u);
+    if (chosen.has(k)) chosen.set(k, preferForm(chosen.get(k)!, strip(u)));
+  }
+  return [...chosen.values()].slice(0, limit);
+}
+
+/**
+ * The page list to PATCH, or null to leave the monitor alone.
+ *   - Same pages as now: null (a PATCH would reset every page's history).
+ *   - The map failed or found fewer than 2 pages, or fewer than half the
+ *     watched ones: it is not used, so a flaky map cannot shrink the list.
+ *   - Switching from a crawl with nothing to build a list from (no check
+ *     pages and no usable map): null, retried at the next poll, rather than a
+ *     one-page watch.
+ */
+export function nextWatchUrls(input: WatchUrlInput): string[] | null {
+  const inScope = scopeFor(input.baseUrl);
+  if (!inScope) return null;
+  const mappedCount = new Set((input.mapped ?? []).filter(inScope).map((u) => pageKey(u))).size;
+  const trustMap = input.mapped !== null && mappedCount >= Math.max(2, Math.ceil(input.current.length / 2));
+  const next = selectWatchUrls(trustMap ? input : { ...input, mapped: null });
+  if (input.current.length > 0 && sameUrlSet(input.current, next)) return null;
+  if (input.current.length === 0 && next.length < 2 && Math.floor(input.limit) > 1 && !trustMap) return null;
+  return next;
+}
+
+/**
+ * Close the open findings of every page the watch no longer loads (not in
+ * `watched`, any spelling): no check reads them again, so they would stay
+ * open, or a suspect would file from a page that left the site. Covers the
+ * switch from a crawl too, whose pages were never in a target list. A filed
+ * page's report stays. Returns how many findings were closed. Run before
+ * `settleSuspects`.
+ */
+export async function resolvePagesOutside(db: SupabaseClient, watchId: string, watched: string[], nowIso: string): Promise<number> {
+  const keep = new Set(watched.map((u) => pageKey(u) ?? u));
+  const { data, error } = await db.from('site_watch_pages').select('id, url').eq('watch_id', watchId).is('resolved_at', null);
+  if (error) throw new Error(`site_watch_pages read failed: ${error.message}`);
+  const ids = ((data ?? []) as Array<{ id: string; url: string }>).filter((r) => !keep.has(pageKey(r.url) ?? r.url)).map((r) => r.id);
+  if (ids.length === 0) return 0;
+  await db.from('site_watch_pages').update({ resolved_at: nowIso, fail_streak: 0, confirm_attempts: 0 }).in('id', ids).is('resolved_at', null);
+  return ids.length;
+}
+
+/** Map results to ask for: room to choose `page_limit` pages from (1 credit a call). */
+export function mapLimit(pageLimit: number): number {
+  return Math.min(500, Math.max(100, pageLimit * 5));
+}
+
+export interface RefreshDeps {
+  /** `firecrawlMapOwnSite` for the watch's project. Renders no page, so not marked. */
+  map: (baseUrl: string, limit: number) => Promise<string[]>;
+  now: () => Date;
+}
+
+export interface RefreshWatch {
+  id: string;
+  base_url: string;
+  page_limit: number;
+  schedule_cron: string;
+  firecrawl_monitor_id: string | null;
+}
+
+/**
+ * Refresh one watch's page list (ADR 0059). Runs when a new check was read
+ * this poll (once a day, after the scheduled check), or when the live monitor
+ * has a stale shape (a crawl from before ADR 0059, a missing User-Agent or
+ * marker). PATCHes the monitor only when the page list changed, or to fix a
+ * stale shape, because a PATCH resets every page's history; then closes the
+ * open findings of pages outside the new list. Returns what it did, or null
+ * when nothing was due.
+ */
+export async function refreshWatchPages(
+  db: SupabaseClient,
+  w: RefreshWatch,
+  key: string,
+  checks: MonitorCheck[],
+  lastPagesRead: MonitorPage[] | null,
+  deps: RefreshDeps,
+): Promise<{ pages: number; mapped: number | null; mapFailed?: boolean; reconciled?: boolean; closedFindings?: number } | null> {
+  if (!w.firecrawl_monitor_id) return null;
+  const live = await getMonitor(key, w.firecrawl_monitor_id);
+  const stale = monitorNeedsReconcile(live);
+  if (!stale && !lastPagesRead) return null;
+
+  // A stale monitor with no check read this poll (the first poll after the
+  // deploy): the newest finished check still holds the crawl's pages.
+  let lastPages = lastPagesRead;
+  if (!lastPages) {
+    const newest = checks.find((c) => c.status === 'completed' || c.status === 'partial');
+    lastPages = newest ? await checkPages(key, w.firecrawl_monitor_id, newest.id) : [];
+  }
+  let mapFailed = false;
+  const mapped = await deps.map(w.base_url, mapLimit(w.page_limit)).catch(() => {
+    mapFailed = true;
+    return null;
+  });
+  const { data: openRows, error } = await db
+    .from('site_watch_pages')
+    .select('url')
+    .eq('watch_id', w.id)
+    .is('resolved_at', null)
+    .is('confirmed_at', null)
+    .is('report_id', null);
+  // Without the pending list a 404 could be dropped before it files: wait.
+  if (error) throw new Error(`site_watch_pages pending read failed: ${error.message}`);
+
+  const current = liveTargetUrls(live);
+  const input: WatchUrlInput = {
+    baseUrl: w.base_url,
+    limit: w.page_limit,
+    current,
+    lastPages: lastPages.map((p) => ({ url: p.url, statusCode: typeof p.statusCode === 'number' ? p.statusCode : null })),
+    mapped,
+    pending: ((openRows ?? []) as Array<{ url: string }>).map((r) => r.url),
+  };
+  let next = nextWatchUrls(input);
+  // A stale shape is fixed even when the page set is unchanged, as long as
+  // there is a real list to send (never a one-page watch from nothing).
+  if (!next && stale) {
+    const list = current.length > 0 ? current : selectWatchUrls(input);
+    if (current.length > 0 || list.length >= Math.min(2, Math.floor(w.page_limit))) next = list;
+  }
+  const base = { pages: current.length, mapped: mapped?.length ?? null, ...(mapFailed ? { mapFailed } : {}) };
+  if (!next) return base;
+
+  await updateMonitor(key, w.firecrawl_monitor_id, {
+    name: live.name ?? `Mushi live-site watch: ${w.base_url}`,
+    urls: next,
+    scheduleCron: w.schedule_cron,
+  });
+  const closedFindings = await resolvePagesOutside(db, w.id, next, deps.now().toISOString());
+  return { ...base, pages: next.length, reconciled: true, closedFindings };
 }
 
 export async function deleteMonitor(key: string, monitorId: string): Promise<void> {

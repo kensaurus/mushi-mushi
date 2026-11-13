@@ -6,10 +6,11 @@
 //          POST {"projectId": "<uuid>"} from the api after "Check now".
 // Auth:    requireServiceRoleAuth (internal only).
 //
-// Firecrawl runs each watch's crawl on its own schedule and bills the
+// Firecrawl loads each watch's page list on its own schedule and bills the
 // project's Firecrawl key. For each active watch this function reads the
 // checks finished since the last one read, oldest first, and records each
-// broken page as a suspect. Then it settles every watch's suspects in
+// broken page as a suspect. Then it refreshes the watch's page list (ADR
+// 0059: scrape targets, every URL marked; once a day, or on a stale shape). Then it settles every watch's suspects in
 // parallel: a confirm scrape on the project's own key (at most
 // CONFIRM_SCRAPES_PER_RUN per run shared fairly across watches, 1 credit
 // each, none on the platform env key, none that could overrun the run
@@ -22,7 +23,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { resolveFirecrawl } from '../_shared/firecrawl.ts'
+import { firecrawlMapOwnSite, resolveFirecrawl } from '../_shared/firecrawl.ts'
 import { queueReportClassification } from '../_shared/report-classification.ts'
 import {
   allocateConfirms,
@@ -32,14 +33,13 @@ import {
   CONFIRM_SCRAPES_PER_RUN,
   confirmScrape,
   FirecrawlMonitorError,
-  getMonitor,
   listChecks,
-  monitorNeedsReconcile,
   pendingConfirmsByWatch,
   processCheck,
+  refreshWatchPages,
   settleSuspects,
-  updateMonitor,
   type ConfirmBudget,
+  type MonitorPage,
   type ProcessDeps,
 } from '../_shared/site-watch.ts'
 
@@ -72,6 +72,7 @@ interface WatchRow {
   firecrawl_monitor_id: string | null
   last_check_id: string | null
 }
+
 
 Deno.serve(
   withSentry('site-watch-poll', async (req: Request) => {
@@ -113,32 +114,13 @@ Deno.serve(
           results.push({ ...line, status: 'no_key' })
           continue
         }
-        // Keep the live monitor on the current config (today: the site-watch
-        // User-Agent), so a change to monitorBody reaches watches created
-        // before it without anyone re-saving them. Reading results still
-        // runs if this fails; the next hourly poll retries.
-        try {
-          const live = await getMonitor(fc.key, w.firecrawl_monitor_id!)
-          if (monitorNeedsReconcile(live)) {
-            await updateMonitor(fc.key, w.firecrawl_monitor_id!, {
-              name: live.name ?? `Mushi live-site watch: ${w.base_url}`,
-              baseUrl: w.base_url,
-              pageLimit: w.page_limit,
-              scheduleCron: w.schedule_cron,
-            })
-            line.reconciled = true
-          }
-        } catch (err) {
-          if (err instanceof FirecrawlMonitorError && err.status === 404) throw err
-          plog.warn('site watch reconcile failed', {
-            projectId: w.project_id,
-            err: (err instanceof Error ? err.message : String(err)).slice(0, 300),
-          })
-        }
         const checks = await listChecks(fc.key, w.firecrawl_monitor_id!, 10)
         const todo = checksToProcess(checks, w.last_check_id)
+        // The newest check's pages, for the page-list refresh below.
+        let lastPages: MonitorPage[] | null = null
         for (const check of todo) {
           const pages = await checkPages(fc.key, w.firecrawl_monitor_id!, check.id)
+          lastPages = pages
           const r = await processCheck(db, w, pages, deps, check.id)
           line.checks = (line.checks as number) + 1
           line.resolved = (line.resolved as number) + r.resolved
@@ -170,6 +152,28 @@ Deno.serve(
                   : `The last check failed: ${newest.error ?? 'no reason given'}`.slice(0, 300),
             })
             .eq('id', w.id)
+        }
+        // Keep the monitor on its current shape and page list (ADR 0059):
+        // scrape targets, every URL marked, refreshed from the map once a day
+        // (after a new check was read) or whenever the shape is stale (a crawl
+        // monitor from before ADR 0059, a missing User-Agent or marker).
+        // Reading results already ran; a failure here retries next poll.
+        try {
+          const refreshed = await refreshWatchPages(db, w, fc.key, checks, lastPages, {
+            // URL discovery: renders no page, so not marked (monitor-url.ts).
+            map: (baseUrl, limit) => firecrawlMapOwnSite(db, w.project_id, baseUrl, { limit }),
+            now: () => new Date(),
+          })
+          if (refreshed) {
+            Object.assign(line, refreshed)
+            if (refreshed.mapFailed) plog.warn('site watch map failed', { projectId: w.project_id })
+          }
+        } catch (err) {
+          if (err instanceof FirecrawlMonitorError && err.status === 404) throw err
+          plog.warn('site watch page-list refresh failed', {
+            projectId: w.project_id,
+            err: (err instanceof Error ? err.message : String(err)).slice(0, 300),
+          })
         }
         // Confirm scrapes bill the project's own key (own or shared, ADR
         // 0023), never the platform's FIRECRAWL_API_KEY fallback.
