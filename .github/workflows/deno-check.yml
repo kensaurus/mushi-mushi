@@ -76,7 +76,7 @@ jobs:
       # into a local node_modules directory (--node-modules-dir) rather than the
       # global DENO_DIR cache, so we restore it as part of the same key.
       - name: Cache Deno deps
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/deno
