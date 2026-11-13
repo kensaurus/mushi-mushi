@@ -159,6 +159,18 @@ describe('NeedsYouCard', () => {
     expect(byTestId('home-needs-you-clear')!.textContent).toBe('Nothing else needs you right now.')
   })
 
+  it('lets the field guide say all clear only for a watched app with every read answered', async () => {
+    await render(createElement(NeedsYouCard, { section: ok([]), hasReports: true }))
+    expect(byTestId('home-needs-you-clear')!.querySelector('[data-mascot-pose="allclear"]')).toBeTruthy()
+    expect(text()).toContain("I'll list it here the moment something does.")
+    // A new app with no reports is unchecked, not clear.
+    await render(createElement(NeedsYouCard, { section: ok([]) }))
+    expect(byTestId('home-needs-you-clear')!.querySelector('[data-mascot-pose]')).toBeNull()
+    // A read that failed may hide an item, so no all-clear either.
+    await render(createElement(NeedsYouCard, { section: ok([]), partial: ['pipeline'], hasReports: true }))
+    expect(byTestId('home-needs-you-clear')!.querySelector('[data-mascot-pose]')).toBeNull()
+  })
+
   it('shows no Fix these first block without root causes (or from an older server)', async () => {
     await render(createElement(NeedsYouCard, { section: ok([need('a', 80)]) }))
     expect(byTestId('home-fix-first')).toBeNull()

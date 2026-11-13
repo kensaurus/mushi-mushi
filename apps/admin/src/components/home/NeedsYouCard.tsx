@@ -14,6 +14,8 @@
 import { Btn, Section, Skeleton } from '../ui'
 import type { FixFirstItem, HomeSection, NeedsYouItem } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
+import { Mascot } from '../mascot/Mascot'
+import { HOME_ALL_CLEAR } from '../../lib/fieldGuide'
 
 const NEEDS_YOU_LIMIT = 5
 
@@ -25,6 +27,12 @@ interface Props {
   leading?: NeedsYouItem[]
   /** Reads the list could not use; it may be missing an item. */
   partial?: string[]
+  /**
+   * The app has received real reports. The field guide only says "all clear"
+   * for an app that has been watched: a brand-new app with nothing in it is
+   * not clear, it is unchecked (never fake healthy, docs/DESIGN-SYSTEM.md).
+   */
+  hasReports?: boolean
 }
 
 function waitingLine(n: number | null): string | null {
@@ -82,8 +90,10 @@ function FixFirst({ section }: { section: HomeSection<FixFirstItem[]> | undefine
   )
 }
 
-export function NeedsYouCard({ section, fixFirst, leading = [], partial = [] }: Props) {
+export function NeedsYouCard({ section, fixFirst, leading = [], partial = [], hasReports = false }: Props) {
   const hasRootCauses = fixFirst?.status === 'ok' && (fixFirst.data ?? []).length > 0
+  // Every read answered, nothing waits, and the app has real reports.
+  const trulyClear = !hasRootCauses && partial.length === 0 && hasReports
   return (
     <Section title="Needs you" id="home-needs-you">
       <FixFirst section={fixFirst} />
@@ -92,7 +102,11 @@ export function NeedsYouCard({ section, fixFirst, leading = [], partial = [] }: 
           const all = [...leading, ...items].slice(0, NEEDS_YOU_LIMIT)
           return (
             <>
-              {all.length === 0 ? (
+              {all.length === 0 && trulyClear ? (
+                <div data-testid="home-needs-you-clear">
+                  <Mascot {...HOME_ALL_CLEAR} size="md" />
+                </div>
+              ) : all.length === 0 ? (
                 <p className="text-sm text-fg-secondary" data-testid="home-needs-you-clear">
                   {hasRootCauses ? 'Nothing else needs you right now.' : 'Nothing needs you right now. Mushi Mushi will list it here when something does.'}
                 </p>

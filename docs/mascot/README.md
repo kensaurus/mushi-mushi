@@ -1,8 +1,17 @@
-# Mushi-chan mascot kit 🐛
+# Mascots: Mushi-chan and Field Kenji 🐛
 
-The four canonical expressions of Mushi-chan, generated as a consistent
-character set and used across the README, the admin console first-run tour,
-and Bluesky / X posts.
+Mushi Mushi has two characters with two jobs.
+
+| Character | Who | Job | Where |
+| --- | --- | --- | --- |
+| **Mushi-chan** | A small red ladybug | The product mascot and the brand's narrator | README, social posts, launch art, changelog voice |
+| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next | The console, the docs quickstarts, the Bounties pages |
+
+Kenji is the human guide beside Mushi-chan. She stays the mark; he explains.
+
+## Mushi-chan
+
+The four canonical expressions, generated as a consistent character set.
 
 | File | When to use |
 | --- | --- |
@@ -11,15 +20,15 @@ and Bluesky / X posts.
 | [`mushi-sleeping.png`](./mushi-sleeping.png) | "All systems quiet" / "no bugs in the last 24h" / late-night posts. Pairs with the *All Clear* admin banner. |
 | [`mushi-waving.png`](./mushi-waving.png) | Welcome moments — first-run tour, onboarding success screen, `npx mushi-mushi` finished, launch-day tweet. |
 
-## Character notes
+### Character notes
 
 - **Species:** stylised ladybug (`mushi` = bug in Japanese; the red-and-black palette is on-brand).
 - **Vibe:** kawaii but competent. Yuru-kyara energy, not sticker-pack energy.
 - **Palette:** red shell `#d94545`, cream-pink belly `#fce6dd`, black eyes, deep-burgundy soft outline. The shell colour matches the `severity=high` accent in the admin console (`tw-red-500`).
 - **Always:** centred, transparent background, soft drop-shadow underneath, looking at the viewer (except `mushi-sleeping.png`).
-- **Never:** holding tools, "fixing" anything literal, sad/angry. Mushi catches bugs *empathetically* — she's the friendly observer, not the exterminator.
+- **Never:** holding tools, "fixing" anything literal, sad/angry. Mushi catches bugs *empathetically* — she's the friendly observer, not the exterminator. This holds in Kenji's art too: she rides on his shoulder, cheers on his notebook, or sleeps on his knee; the magnifying glass and the laptop are always his.
 
-## Regeneration
+### Regeneration
 
 These were generated via the agent loop on **2026-04-23** with explicit
 character-consistency anchors. To regenerate (e.g. for a new pose) keep:
@@ -29,3 +38,80 @@ character-consistency anchors. To regenerate (e.g. for a new pose) keep:
 - A 1024×1024 transparent canvas request.
 
 The 1200×630 GitHub social preview lives in [`../social-preview/og-card.png`](../social-preview/og-card.png) (rendered by `scripts/gen-og-card.mjs`; it uses the 虫 stamp, not Mushi-chan).
+
+## Field Kenji
+
+Kenji is the same character as in the other KENSAURUS apps (top-knot bun,
+rectangular dark glasses, a calm half-smile, head a little large for his
+body), drawn here as a bug naturalist: white turtleneck, khaki field vest,
+brass magnifying glass, field notebook, vermillion `#E03C2C` as the one strong
+accent. Each app draws him in its own art style; this is Mushi Mushi's.
+
+### Poses
+
+| Pose | Journey state | Console | Docs | Bounties |
+| --- | --- | --- | --- | --- |
+| `wave` | Welcome, first open | Sign-in; Set up overview before any app exists | Quickstart | Join |
+| `point` | A setup step or a tip | First run "Name your project"; Set up tabs; first diagnosis before sending | | Empty leaderboard |
+| `magnify` | Diagnosing, loading | First diagnosis while sending, queued and classifying; Set up "Test it" tab | | |
+| `found` | Diagnosis ready, success | First diagnosis ready; setup complete; editor connected | | |
+| `think` | Waiting, nothing found | Offline, quota used, slow diagnosis; 404; editor on an old address; Set up "Fix a problem" tab | 404 | |
+| `allclear` | Empty because nothing is wrong (Mushi-chan asleep on his knee) | Home "Needs you", only when every read answered and the app has real reports | | |
+| `oops` | Something failed | Crash screen; test report or diagnosis failed | | |
+| `laptop` | Connect an editor, install | Connect page; Set up "Install" tab | MCP quickstart | |
+
+Files: `apps/admin/src/assets/mascot/`, `apps/docs/assets/mascot/`,
+`apps/testers/app/assets/mascot/`. Each app ships only the poses it uses, as
+a 600 px WebP plus a 300 px `-sm` WebP (transparent, square, feet on one
+baseline), imported so the URL is hashed. Assets live inside each app, never
+on a CDN: error and empty states must render offline.
+
+### Component
+
+- Console: `Mascot` in `apps/admin/src/components/mascot/Mascot.tsx`. Props:
+  `pose`, `line`, `size` (`sm` 64 / `md` 96 / `lg` 144 px), `surface`
+  (`console` adds a paper spot behind him so the watercolour reads on the dark
+  theme; `paper` for the editorial 404 and crash screens), `layout`.
+- Docs: `<Mascot pose line />`, registered in `apps/docs/mdx-components.tsx`.
+- Bounties: `apps/testers/app/components/Mascot.tsx`.
+
+The figure is decorative (empty `alt`, hidden from assistive tech). The line is
+real text, with a small "Kenji" name above it and a vermillion margin rule.
+If the image fails to load, the figure is dropped and the line stays.
+
+Motion is CSS only: a short entrance, then a 2 px sway for three slow cycles,
+then rest. Under `prefers-reduced-motion` he is a still image.
+
+### Voice
+
+Every console line lives in `apps/admin/src/lib/fieldGuide.ts`, keyed by
+journey state; `fieldGuide.test.ts` checks each one.
+
+- First person, one line, **90 characters at most** (fits a phone).
+- A calm, curious naturalist. Plain over precise: what happened, what to do next.
+- Never blames the developer. A failure on our side is "on us".
+- Never cutesy, no exclamation marks, no hype (the VOICE.md banned list applies).
+- Only mentions buttons that are on that screen.
+- Writes "Mushi Mushi", never a bare "Mushi".
+
+### Placement rules
+
+- **At most one Kenji per screen.** Each route has one owner.
+- **Never in a customer's app.** Not in the SDK widget (`packages/web`,
+  `packages/core`, `packages/react-native`) and not in the "powered by"
+  footer (`_shared/brand-footer.ts`). Customers' apps are not our canvas.
+- **Never fake a state.** "All clear" needs every read to have answered and an
+  app that has received real reports; a new, empty app is unchecked, not clear.
+- Not on inline panel errors (`PageLoadError`): a page can show several, and
+  that would put several Kenjis on one screen.
+- Idle motion rests after three cycles; reduced motion shows a still frame.
+
+### Where the art came from
+
+Generated 2026-11-13 for the KENSAURUS mascot family: one fal
+`nano-banana-2.1` edit call per pose (2K, square), with the approved
+Mushi Mushi style sheet and `mushi-happy.png` as references, then background
+removal with `fal-ai/birefnet/v2`, trimmed and padded to a common baseline.
+The pipeline, prompts and spend log live in the glot.it repo
+(`scripts/kensaurus-mascot/`). Like Mushi-chan, the art is all rights reserved
+(see [`TRADEMARK.md`](../../TRADEMARK.md)).

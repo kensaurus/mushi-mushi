@@ -54,6 +54,8 @@ import { clearStoredInstanceConfig } from '../lib/env'
 import { IconChat, IconBolt } from '../components/icons'
 import { askMushiPanel } from '../lib/useAskMushiPanel'
 import { PageLoadError } from '../components/PageLoadError'
+import { Mascot } from '../components/mascot/Mascot'
+import { FIRST_RUN_NAME_PROJECT, onboardingTabGuide } from '../lib/fieldGuide'
 
 const SetupCopilotPage = lazy(() => import('./SetupCopilotPage').then((m) => ({ default: m.SetupCopilotPage })))
 
@@ -537,10 +539,12 @@ export function OnboardingPage() {
           <div>
             <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
             <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
-            <p className="mt-1 text-xs text-fg-muted">
-              That is the only input we need. Your report key is minted for you.
-            </p>
           </div>
+          {/* The field guide says what this step does: the name is the only
+              input, and the report key is made for you. */}
+          {!createdProject && (
+            <Mascot {...FIRST_RUN_NAME_PROJECT} size="md" data-testid="onboarding-first-run-guide" />
+          )}
           {createdProject ? (
             <Card className="p-4 border-ok/30 bg-ok/5">
               <p className="text-sm font-medium text-fg">
@@ -657,6 +661,13 @@ export function OnboardingPage() {
           size="sm"
         />
       ) : null}
+
+      {/* One field-guide line for the open tab: what this step is for. */}
+      <Mascot
+        {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: setupComplete })}
+        size="sm"
+        data-testid="onboarding-tab-guide"
+      />
 
       {effectiveTab === 'overview' && (
         <>
