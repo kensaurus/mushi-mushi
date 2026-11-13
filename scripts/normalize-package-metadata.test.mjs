@@ -39,7 +39,7 @@ function legacyManifest(overrides = {}) {
 test('the npm pitch is composed from the brand SSOT, not hand-written', () => {
   assert.equal(
     NPM_PITCH,
-    'Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
+    'One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.',
   )
   assert.equal(NPM_PITCH, MUSHI_TAGLINE_V2.pitch)
   assert.ok(NPM_PITCH.startsWith(`${MUSHI_TAGLINE_V2.category}: `))

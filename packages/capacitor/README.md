@@ -1,6 +1,6 @@
 # @mushi-mushi/capacitor
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The Capacitor and Ionic plugin for [Mushi Mushi](https://kensaur.us/mushi-mushi). Users shake the phone or tap a button to report a bug. Mushi Mushi gets a screenshot and their note, explains the cause in plain English, and hands your editor a fix to start from.
 
@@ -104,4 +104,4 @@ MIT — see [LICENSE](./LICENSE).
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (October 2026): 77 edge functions · 563 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 567 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

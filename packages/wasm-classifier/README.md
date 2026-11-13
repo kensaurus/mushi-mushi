@@ -1,6 +1,6 @@
 # @mushi-mushi/wasm-classifier
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 An optional junk filter for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) bug reports, for web apps that get a lot of "hi" and "asdf". It runs in the browser and stops empty or nonsense reports before they are sent, so they never reach the server or an LLM. Most apps do not need it: the web SDK already runs its own pattern filter first.
 
@@ -118,4 +118,4 @@ MIT.
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 563 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 567 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

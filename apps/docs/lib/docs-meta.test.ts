@@ -137,7 +137,7 @@ describe('structured data describes Mushi only', () => {
     expect(SOFTWARE_APPLICATION_JSONLD.description).toBe(MUSHI_TAGLINE_V2.pitch)
     // Category line from ADR 0056 (was "The bug mediator for AI-built apps").
     expect(MUSHI_TAGLINE_V2.pitch).toBe(
-      'Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.',
+      'One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.',
     )
   })
 

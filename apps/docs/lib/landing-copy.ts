@@ -293,7 +293,7 @@ export const LANDING_WHAT_THIS_IS = {
    * definition. Category and promise come from the brand SSOT so it cannot
    * drift from the eyebrow, the npm cards or the JSON-LD.
    */
-  definition: `Mushi Mushi is an open-source tool for ${lowerFirst(MUSHI_TAGLINE_V2.category)}: every bug your users report gets a ${lowerFirst(MUSHI_TAGLINE_V2.promise)}.`,
+  definition: `Mushi Mushi is open source and ${lowerFirst(MUSHI_TAGLINE_V2.category)}: ${lowerFirst(MUSHI_TAGLINE_V2.promise)}, each with a plain-English explanation and a fix your AI can apply.`,
   who: 'Solo founders who build with AI tools and then lose whole afternoons fixing code they did not fully write themselves. People who work this way are often called vibe coders.',
   boundary:
     'It works where you already build: you paste the fix into Lovable or Bolt, or your code editor (Cursor, Claude Code) reads it itself. It is not one more dashboard you have to keep checking. Sentry, Linear and Slack can feed into the same list, but you need none of them to start.',

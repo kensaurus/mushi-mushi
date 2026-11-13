@@ -72,6 +72,7 @@ const NO_CUSTOMER_PAGE_LOAD: Record<string, string> = {
   'api/routes/production-check.ts': 'resolves the key only; pages load in _shared/production-check.ts',
   'api/routes/project-home.ts': 'resolves the key only; the screenshot is taken in _shared/home-thumbnail.ts',
   'story-mapper/index.ts': 'pages only through firecrawlScrapeOwnSite (marked in _shared/firecrawl.ts) and the map',
+  'api/routes/journeys.ts': 'the Journey optimizer scan: pages only through firecrawlScrapeOwnSite (marked in _shared/firecrawl.ts) and the map',
   '_shared/byok-validation.ts': 'key check on the credit-usage endpoint',
   '_shared/provider-credits.ts': 'reads the credit-usage endpoint',
 }

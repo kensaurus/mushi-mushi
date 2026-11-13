@@ -76,6 +76,10 @@ export const TOOL_FEATURE_MAP: Record<string, FeatureGroup> = {
   suggest_fix: 'triage',
   get_graph_neighborhood: 'triage',
   get_graph_node: 'triage',
+  // Journey optimizer (ADR 0058): where people get stuck, with fix prompts.
+  get_journeys: 'triage',
+  scan_site_journeys: 'triage',
+  record_journeys: 'triage',
 
   // inventory
   get_inventory: 'inventory',

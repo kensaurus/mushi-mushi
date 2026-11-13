@@ -64,7 +64,7 @@ export const PRIMARY_DESCRIPTION_MAX = 140
 export const BANNED_KEYWORDS = ['sentry-alternative']
 
 /**
- * "The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor."
+ * "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code."
  * Composed once in the brand package (category + promise) so the docs site's
  * JSON-LD and meta description quote the same sentence as the npm cards.
  */

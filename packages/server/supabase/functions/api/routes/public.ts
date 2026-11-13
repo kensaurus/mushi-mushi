@@ -276,7 +276,8 @@ export function registerPublicRoutes(app: Hono<{ Variables: Variables }>): void 
           'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at, ' +
           'reporter_notifications_enabled, widget_brand_footer, ' +
           'assistant_enabled, assistant_label, assistant_greeting, assistant_suggestions, ' +
-          'reporter_email_enabled, reporter_push_enabled',
+          'reporter_email_enabled, reporter_push_enabled, ' +
+          'journey_recording_until, journey_recording_sample',
       )
       .eq('project_id', projectId)
       .maybeSingle();

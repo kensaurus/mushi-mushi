@@ -1,6 +1,6 @@
 # @mushi-mushi/agents
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Internal package, not published to npm. It is the Node-side fix pipeline for
 Mushi Mushi: it hands a triaged bug report to a coding agent, checks the

@@ -31,16 +31,16 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 236 pages, generated from llms.txt. */
+/** 237 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
-    title: "Mushi Mushi — know why your AI-built app broke, with the fix ready",
+    title: "Mushi Mushi — one place to improve your AI-built app",
     url: docUrl("/"),
     route: "/",
     markdown: "index.md",
-    keywords: ["know", "ai-built", "app", "broke", "fix", "ready"],
+    keywords: ["one", "place", "improve", "ai-built", "app"],
     headings: ["Will my customers actually report bugs?", "See it work, on a real bug", "What it takes", "Why I built it", "What this is (and is not)"],
-    excerpt: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.",
+    excerpt: "Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands you the fix.",
   },
   {
     title: "Mushi Mushi admin console",
@@ -338,6 +338,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "iterate", "improvement", "runs"],
     headings: ["Understanding the score", "Runs table", "Run detail drawer", "Score timeline", "Iterations list", "Succeeded run", "Creating a run", "Common tasks"],
     excerpt: "The Improvement runs page in Mushi Mushi queues runs where one AI critiques a live URL against your goal and a second scores it, iteration by iteration.",
+  },
+  {
+    title: "Journey optimizer",
+    url: docUrl("/admin/journeys"),
+    route: "/admin/journeys",
+    markdown: "admin/journeys.md",
+    keywords: ["admin", "journeys", "journey", "optimizer"],
+    headings: ["Record visits only when you need them", "Scan your site", "Read the map", "What it finds", "Hand it to your coding agent", "Related"],
+    excerpt: "Map how people move through your app, then fix dead ends, pages people leave, duplicate pages and pages nothing links to, with prompts for your coding agent.",
   },
   {
     title: "Triage grading",

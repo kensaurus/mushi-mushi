@@ -22,6 +22,7 @@ export default {
   inbox: 'To-do',
   reports: 'Bugs',
   graph: 'Bug clusters',
+  journeys: 'Journey optimizer',
   voice: 'Voice reports',
   'anti-gaming': 'Spam & abuse',
 

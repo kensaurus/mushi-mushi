@@ -49,6 +49,9 @@ Backed by the `project_activity_summary` RPC.
 
 If numbers are zero after a real install, confirm the SDK has `trackSessions`
 enabled (default on) and that ingest is healthy under [SDK health](/admin/sdk-health).
+With `trackSessions: 'on-demand'` visits are recorded only while a recording
+window is open on the [Journey optimizer](/admin/journeys) page, or in a tab
+opened with `?mushi_journeys=1`.
 
 ---
 

@@ -16,7 +16,7 @@ your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
 The page has four tabs: **Summary**, **Setup**, **Catalog** and **Examples**. The
-**Catalog** tab mirrors the server registry (**130 tools**, 8 resources, 4 prompts).
+**Catalog** tab mirrors the server registry (**133 tools**, 8 resources, 4 prompts).
 
 ---
 

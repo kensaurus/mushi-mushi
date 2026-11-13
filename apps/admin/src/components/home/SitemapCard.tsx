@@ -3,7 +3,8 @@
  * PURPOSE: A small map of the app's busiest pages (last 7 days of visits,
  *          14 days of bug reports, the live-site watch's broken pages), as
  *          a two-level tree with a badge for visits, bugs and broken pages.
- *          Plain list markup: no canvas, works at phone width.
+ *          Plain list markup: no canvas, works at phone width. The full
+ *          picture (moves between pages, findings) is /journeys.
  */
 
 import { Link } from 'react-router-dom'
@@ -15,7 +16,15 @@ const INDENT = ['pl-0', 'pl-4', 'pl-8'] as const
 
 export function SitemapCard({ section }: { section: HomeSection<HomeSitemap> }) {
   return (
-    <Section title="Pages" id="home-sitemap">
+    <Section
+      title="Pages"
+      id="home-sitemap"
+      action={
+        <Link to="/journeys" className="text-2xs text-brand hover:underline">
+          Open the journey map →
+        </Link>
+      }
+    >
       <HomeSectionBody
         section={section}
         what="your pages"
@@ -29,13 +38,24 @@ export function SitemapCard({ section }: { section: HomeSection<HomeSitemap> }) 
               ))}
             </ul>
             <p className="mt-2 text-2xs text-fg-faint">
-              {map.pages.length} of {map.totalPages} pages, by visits in the last 7 days{map.sampled ? ' (from the latest 5,000 visits)' : ''}, bug reports in the last 14 days and broken pages.
+              {shownPages(map)} of {map.totalPages} pages, by visits in the last 7 days{map.sampled ? ' (from the latest 5,000 visits)' : ''}, bug reports in the last 14 days and broken pages.
             </p>
           </>
         )}
       </HomeSectionBody>
     </Section>
   )
+}
+
+/**
+ * @internal Exported for tests.
+ * Pages with their own counts. The tree adds the Home row and a row per
+ * section head even when nothing was seen there; counting those gave
+ * "4 of 3 pages" (2026-11-13).
+ */
+export function shownPages(map: HomeSitemap): number {
+  const n = map.pages.filter((p) => p.views > 0 || p.bugs > 0 || p.broken).length
+  return Math.min(n, map.totalPages)
 }
 
 function PageRow({ page: p }: { page: SitemapNode }) {

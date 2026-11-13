@@ -16,9 +16,14 @@ can execute without additional context.
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
-**North star.** Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your editor, with the fix ready to go — so a bug costs you five minutes instead of your whole afternoon.
+**North star.** Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands your editor the fix in plain English.
 
-**Category we own.** Bug fixing for AI-built apps (ADR 0056; "bug mediator" is the inside view, never a hero word) — one queue between your users, your monitoring (Sentry/Crashlytics/Rollbar), your tracker (Linear/Jira/GitHub), your chat (Slack/Discord/Teams), and your coding agents, where every bug gets a plain-English diagnosis and a ready fix. (Not "error monitoring", not "observability" — those are someone else's ops-coded words.)
+**Category we own.** One place to improve AI-built apps ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md), the owner, 2026-11-13; it superseded "Bug fixing for AI-built apps", ADR 0056). Bug fixing is one pillar, not the category. Three pillars, inside the editor or agent the user already has (MCP, CLI, skills):
+1. **Fix what breaks** — bug reports, the free Production Check, the live-site watch, Sentry; each bug gets a plain-English diagnosis and a ready fix.
+2. **Improve the journeys people take** — the Journey optimizer (`/journeys`), the first-time user test (`/first-user-test`).
+3. **Improve the code** — known holes, code audits, design system, repo clean-up, CI cost; changes land as reviewed draft PRs.
+
+"Bug mediator" is the inside view (one queue between your users, your monitoring, your tracker, your chat and your coding agents), never a hero word. (Not "error monitoring", not "observability", not "growth analytics" — those are someone else's words.)
 
 **The app recipe** (ADR 0016) is diagnosis context, not a new category: every
 recipe element is optional, renders "not connected" when empty, and changes
@@ -26,11 +31,12 @@ ship only as reviewed draft PRs. It never leads a public surface.
 
 **Primary buyer.** The solo / indie **vibe coder** who builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses afternoons when something breaks because they don't fully grasp the generated code. Small teams and agencies are secondary; the enterprise SRE running Sentry + Datadog + Firebase is explicitly *not* who we lead with.
 
-**The public surface leads with one job** ([ADR 0052](./docs/adr/0052-public-surface-leads-with-one-job.md)):
-the landing and the README's first screen say only "a user said your app is
-broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
-Lovable the fix", with one install action and one readable sample diagnosis.
-Integrations, CI cost, voice, rewards and self-host live on docs pages one
+**The public surface leads with the category and its three pillars** ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md), replacing the one job of ADR 0056 and ADR 0052):
+the free Production Check stays the first action (ADR 0056), and each pillar
+is named with what it needs. Only what works free with no key of the user's
+own is promised as free (for example: the journey map from real visits is
+keyless, the site scan needs a Firecrawl key, code audits need the user's own
+agent). Integrations, voice, rewards and self-host live on docs pages one
 click away; the operator cockpit never appears on the public path.
 
 **Portfolio operator** (ADR 0017) is the same vibe coder with several apps.
@@ -43,7 +49,7 @@ Portfolio and radar features never lead a public surface; the claim is
 2. **We will not make you rip anything out.** Sentry, Linear, Slack, your agents all stay — Mushi mediates between them. Enterprise plumbing (SSO, region routing, Helm) still lives in `docs/operators/` and never leads.
 3. **We will not let the surfaces diverge.** The tagline, the north-star sentence, and the buyer stay identical across npm, repo, landing, and this file.
 
-The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder understand and fix a bug faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
+The "is this drift?" test for any feature you build or surface you write: *"Does this help a solo vibe-coder find and fix what is wrong with their app — a bug, a journey where people get stuck, or a code problem — faster, without leaving their editor?"* Yes → it can lead. No, but operators need it → `docs/operators/`, never the hero.
 
 **Engineering yardstick** ([ADR 0039](./docs/adr/0039-better-models-make-mushi-better.md)). Before you build or change a feature, ask: *"When the models get better, does this get better on its own?"* The model is a setting, never a constant (project or organization column → edge secret → code default). Facts and safety (advisory matching, merge gates, test proof, budgets, permissions) are deterministic code; judgement (diagnosis, fix plans, review) goes to the model. Feed the model evidence, not prompt workarounds, and store outcomes per model so "better" shows.
 
@@ -298,6 +304,7 @@ Live App URL
 | **Setup & account** | `mushi init`, `mushi setup`, `mushi connect`, `mushi login`, `mushi upgrade`, `mushi reset`, `mushi whoami`, `mushi status`, `mushi doctor`, `mushi ping`, `mushi test` (synthetic report through ingest), `mushi migrate` (suggests a migration guide), `mushi completion`, `mushi nudge`, `mushi profile list/current/use` |
 | **Project & deploy** | `mushi project`, `mushi config`, `mushi deploy check`, `mushi selfhost up/doctor`, `mushi index`, `mushi sourcemaps upload`, `mushi audit`, `mushi radar scan/show`, `mushi recipe init/check/show/sources/change`, `mushi store pull/reviews/reviews-pull/reviews-set`, `mushi repo digest/cleanup/diagram`, `mushi code-health show/stats`, `mushi design settings/set/dispatch-findings` |
 | **Reports & lessons** | `mushi reports list/show/search/triage/file/…`, `mushi lessons list/show`, `mushi sync-lessons`, `mushi feedback board`, `mushi sentry import`, `mushi outbox list/edit/release/discard` |
+| **Journeys** | `mushi journeys`, `mushi journeys scan`, `mushi journeys record` |
 | **Fixes & releases** | `mushi fix`, `mushi fixes tail/refresh-ci/rerun-ci/merge/review/verify`, `mushi work` (a local Cursor CLI agent; you push and open the PR; `--followups` fixes Opus "fix first" findings on those PRs, and on cloud-agent PRs while cloud follow-ups are off), `mushi work --daemon` and `mushi worker install/status/revoke` (a local worker the console steers, ADR 0048; lanes fix reports, run follow-ups, resolve merge-queue conflicts (ADR 0049), audit the code (ADR 0050) or run skill-run rounds; any claiming lane also runs the first-time user tests the console queues, ADR 0053 amendment), `mushi console watch <reportId>`, `mushi releases draft/list/show/edit/publish/delete/stats/auto-release/calendar` |
 | **QA / TDD** | `mushi qa stories/runs/run`, `mushi tdd gen/pending/approve/improve/run`, `mushi stories map`, `mushi ux discover/login/run/open` (local UX loop, `@mushi-mushi/ux`, ADR 0020), `mushi ux-runs list/show/file` |
 | **Skills / pipeline** | `mushi skills list/show/sync`, `mushi pipeline start/watch/checkin` |
@@ -378,11 +385,13 @@ mushi billing cap 0                    # clear spend cap
 
 ### MCP Tools
 
-Full catalog: **130 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
+Full catalog: **133 tools** in [`packages/mcp/src/catalog.ts`](packages/mcp/src/catalog.ts) — generated docs at [`apps/docs/content/sdks/mcp-tools.mdx`](apps/docs/content/sdks/mcp-tools.mdx). Vibe-coder incident loop: [`apps/docs/content/quickstart/incident-loop.mdx`](apps/docs/content/quickstart/incident-loop.mdx) (`get_fix_context` → prompt `summarize_report_for_fix`).
 
 Core MCP tools (`mcp:read` scope): `get_recent_reports`, `get_report_detail`, `get_fix_context`, `query_lessons`, `list_lessons`, `list_qa_story_runs`, `get_qa_story_run`
 
 Notification tools (`mcp:write` scope): `test_notification_channel`
+
+Journey optimizer tools: `get_journeys` (`mcp:read`), `scan_site_journeys` and `record_journeys` (`mcp:write`).
 
 Usage / billing tool (`mcp:read` scope): `get_usage` — diagnoses used / limit / spend cap for the current period.
 
@@ -1012,6 +1021,26 @@ automations it `blocks` and its part. Route in `api/routes/health-checks.ts`
 | `_shared/health-gate.ts` | Stop the line: `fix-worker` (automatic dispatches), `review-followup`, `merge-queue` (train tick, a PR's turn, a conflict agent) and `spend-down-worker` ask it before starting work for an app. Switch `mushi_runtime_config.health_gate_mode`: `off` (default; missing row, failed read or any other value), `observe` (records, runs as before), `enforce` (withholds; the work stays where it was and resumes on its own). Reads the stored `setup_gap_results` (over an hour old = `unknown`) and the follow-up key live; `unknown` never pauses. Only withholds: never around `gatedMergePullRequest` / `gatedTrainMerge`, the Opus hold, verified merge or draft → ready |
 | `health_gate_shadow` | Per app, automation, check, UTC day and mode: how often the gate would pause (observe) or paused (enforce); `health_gate_record()` RPC. Service role only. Migration `20261029150000_health_gate_shadow.sql` |
 | `pipeline-view.ts` `tagRootCauses` | A stuck /pipeline group gets `rootCause: { checkId, count }` when that check is a problem for every item's app; Home then shows the cause once instead of the group |
+
+## Journey optimizer (Nov 2026)
+
+Pillar 2 of [ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md):
+how people move through the app, and what in the site map gets in their way.
+Console page `/journeys` (`apps/admin/src/pages/JourneysPage.tsx`). Routes in
+`api/routes/journeys.ts`, served by `api-ext` (`api` forwards these paths).
+
+| Route | Auth | Role |
+| --- | --- | --- |
+| `GET /v1/admin/projects/:id/journeys?days=7|30|90` | `adminOrApiKey(mcp:read)` (members) | The map: page-to-page moves from real visits (`session_page_views`), the newest finished scan's links, and findings, each with a plain-English suggestion and a copy-ready prompt for the coding agent. No key needed |
+| `POST /v1/admin/projects/:id/journeys/scan` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ base_url? }`. Starts a site scan: Firecrawl maps the live site and starts a batch scrape of up to 40 pages, no LLM. Firecrawl runs the batch on its side; each GET of the journeys route checks it (`advanceScan`) and saves the pages once it is done, so no edge isolate waits on slow pages. One scan at a time per app, at most one every 10 minutes. Needs a Firecrawl key (`FIRECRAWL_NOT_CONFIGURED` otherwise) |
+| `PUT /v1/admin/projects/:id/journeys/recording` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ hours: 0–168, sample_rate?: (0,1] }`. Opens, extends or stops (hours 0) the on-demand visit recording window for apps whose SDK runs `trackSessions: 'on-demand'`. Returns `{ recording: { until, sampleRate } }`; GET returns the same block |
+
+| Object | Role |
+| --- | --- |
+| `_shared/journey-map.ts` | Pure. Builds transitions from `session_page_views` and the findings: `broken`, `dead_end`, `high_exit`, `loop`, `reload`, `duplicate_page` (content fingerprint), `route_variant`, `duplicate_title`, `orphan`, `deep_page`, `unvisited`; `agentPrompt()` writes the prompt for each |
+| `site_structure_scans` | One row per scan: status, base URL, the Firecrawl `batch_id`, and per page its title, internal links and a content fingerprint |
+
+Also from the editor: MCP `get_journeys` (`mcp:read`), `scan_site_journeys` and `record_journeys` (`mcp:write`); CLI `mushi journeys`, `mushi journeys scan` and `mushi journeys record`.
 
 ---
 

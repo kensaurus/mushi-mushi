@@ -1,6 +1,6 @@
 # `@mushi-mushi/node`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The server-side SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Browser SDKs report the bugs users see; this one reports the bugs your backend sees: uncaught exceptions, failed webhooks, broken integrations. They land in the same queue and get the same plain-English diagnosis and fix.
 

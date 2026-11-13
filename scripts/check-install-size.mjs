@@ -107,7 +107,12 @@ export const BUDGETS = [
   // Lovable (ADR 0056). Text only, no dependency change; measured 986.2 kB.
   // 2026-11-11 (round 2): packed 250 → 255 kB: the docs index gained the agency
   // compare page and the Japanese page. Text only; measured 250.2 kB packed.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 255_000, unpacked: 995_000 },
+  // 2026-11-13: packed 255 → 262 kB, unpacked 995 → 1,025 kB: the Journey
+  // optimizer (ADR 0058): three tools (get_journeys, scan_site_journeys,
+  // record_journeys) with their shaping in report-shapes.ts, and the docs index
+  // gained the Journeys page plus the repositioned landing copy. No new
+  // dependencies; measured 257.8 kB packed, 1,015.8 kB unpacked.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 262_000, unpacked: 1_025_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check
@@ -122,7 +127,10 @@ export const BUDGETS = [
   // `gone` outcome, `--recheck` sweep; ADR 0048 amendment b), plus the 0.36.x
   // CHANGELOG entries. No new dependencies; measured 275.1 kB packed,
   // 1,013.9 kB unpacked in CI.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 280_000, unpacked: 1_020_000 },
+  // 2026-11-13: unpacked 1,020 → 1,030 kB: `mushi journeys` (show, scan,
+  // record; ADR 0058). No new dependencies; measured 269.1 kB packed,
+  // 1,022.9 kB unpacked.
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 280_000, unpacked: 1_030_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`
