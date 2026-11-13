@@ -7,8 +7,14 @@ was deleted; every remaining finding is the A2 register or debt to pay down.
 
 | Mode | Command | Error-level issues | CI threshold |
 |---|---|---:|---|
-| production | `pnpm exec knip --production --reporter json` | **43** | `--max-issues 43` |
+| production | `pnpm exec knip --production --reporter json` | **40** | `--max-issues 40` |
 | default | `pnpm exec knip --reporter json` | **29** | `--max-issues 29 --treat-config-hints-as-errors` |
+
+> **Re-measured 2026-11-13: 40 production / 29 default** (ceiling 43 → 40; 39 fails).
+> packages/server now excludes `src/__tests__/**` from production mode (`!src/__tests__/**!`):
+> test stubs and fixtures are not production code. That dropped four unused-file false
+> positives, three already counted (`__stubs__/fake-query-recorder.ts`, `__stubs__/fake-supabase.ts`,
+> `fixtures/glot-fix-attempts.ts`) and the new `fixtures/sns-test-cert.ts`. Default mode is unchanged.
 
 > **Re-measured 2026-11-11 (housekeeping pass): 43 production / 29 default**
 > (ceilings 45 → 43 and 31 → 29; 42 and 28 fail). This pass deleted the unimported

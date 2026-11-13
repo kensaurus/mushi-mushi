@@ -108,6 +108,60 @@ on its side. If our 55 s abort fires first, Firecrawl may still charge.
 `site_watch_pages.last_confirm` keeps the last verdict. The poll's response
 lists `confirmScrapes` and `dismissed` per watch.
 
+## Edge canaries (ADR 0061)
+
+The watch's pages go through Firecrawl's browser, which follows every
+redirect. A CDN rule that answers the wrong status or Location (a slash
+redirect that drops the query, a missing asset that returns 200 HTML or a
+5xx) is invisible to it. Edge canaries check that directly
+([ADR 0061](../adr/0061-cloudwatch-alarms-and-edge-canaries-file-reports.md)).
+
+- **What runs:** `site-watch-poll`'s hourly cron pass (not "Check now") does
+  one GET per enabled `edge_canaries` row. It uses `redirect: 'manual'` and
+  the MushiSiteWatch User-Agent, and runs no page script. A canary passes
+  when the status is in `expect_status` and, when set, the Location (resolved
+  against the URL) equals `expect_location`.
+- **When it files:** a failure is fetched again 3 s later. A canary files as a
+  `site_watch` report (`custom_metadata.source = 'edge_canary'`) on its second
+  failing run in a row. Five or more failing together in one app file one
+  report. Passing again resets `fail_streak` and leaves the report open.
+- **Cost:** no Firecrawl credits.
+- **Adding one:** insert a row, since there is no console screen yet:
+
+  ```sql
+  insert into edge_canaries (project_id, label, url, expect_status, expect_location)
+  values ('<project uuid>', 'Bare app root keeps its query',
+          'https://example.com/app?utm_source=canary', '{301}',
+          'https://example.com/app/?utm_source=canary');
+  ```
+
+- **State:** each row's `last_status`, `last_location`, `last_detail` and
+  `fail_streak` show the newest answer. The poll's JSON response has a
+  `canaries` summary.
+
+## CloudWatch alarms (ADR 0061)
+
+`webhooks-cloudwatch` files CloudWatch alarm state changes delivered by
+Amazon SNS. To connect one:
+
+1. Bind the topic to the app:
+   `update project_settings set cloudwatch_sns_topic_arn = '<topic arn>' where project_id = '<uuid>'`.
+   One app per topic.
+2. Subscribe the topic, protocol HTTPS, endpoint
+   `https://<project-ref>.supabase.co/functions/v1/webhooks-cloudwatch`. The
+   function verifies the SubscriptionConfirmation and confirms it itself.
+
+Each alarm gets one `source = 'cloudwatch'` report (`cloudwatch_alarms` keeps
+its state):
+
+- ALARM files the report, or dedupes onto the one still open.
+- ALARM after the report is closed reopens it.
+- OK annotates `custom_metadata.cloudwatch` and leaves the report open.
+- Any other message on the topic is answered 200 and ignored.
+
+Each delivery leaves a row in `webhook_audit_log` with
+`webhook_source = 'cloudwatch'`.
+
 ## Filter the crawler out of your monitoring and analytics
 
 Firecrawl's browser loads every page with `document.referrer` set to

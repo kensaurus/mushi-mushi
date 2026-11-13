@@ -65,6 +65,8 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['site-audit/index.ts reporter_token_hash', 'sentinel'], // 'site-audit' (ADR 0040: no reporter behind an audit report)
   ['_shared/store-review-intake.ts reporter_token_hash', 'sentinel'], // 'store-review'; the reviewer's identity is never stored
   ['_shared/site-watch.ts reporter_token_hash', 'sentinel'], // 'site-watch'; a crawl, no person reported it
+  ['_shared/edge-canary.ts reporter_token_hash', 'sentinel'], // 'site-watch' (ADR 0061): an edge canary request, no person reported it
+  ['_shared/cloudwatch-ingest.ts reporter_token_hash', 'sentinel'], // 'cloudwatch-webhook' (ADR 0061): an AWS alarm, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
   ['_shared/fresh-eyes.ts reporter_token_hash', 'sentinel'], // 'fresh-eyes' (ADR 0053): a first-time-visitor run found it, no person reported it
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'

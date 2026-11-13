@@ -51,6 +51,7 @@ const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
   site_watch: { title: 'Found by the live-site watch', detail: 'no user reported it' },
   site_audit: { title: 'Found by the site audit', detail: 'no user reported it' },
   sentry: { title: 'Imported from Sentry', detail: 'production error' },
+  cloudwatch: { title: 'From an AWS CloudWatch alarm', detail: 'no user reported it' },
   store_review: { title: 'From an app store review', detail: 'low-star review' },
   voice: { title: 'Filed by voice', detail: 'transcribed request' },
   ux_loop: { title: 'Found by a UX run', detail: 'screen check' },
