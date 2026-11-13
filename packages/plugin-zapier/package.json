@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/plugin-zapier",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "license": "MIT",
-  "description": "Mushi Mushi plugin for Zapier — checks the signature on Mushi Mushi bug events and forwards them, flattened, to a Zapier Catch Hook.",
+  "description": "Optional, runs on your own server: Mushi Mushi plugin for Zapier — checks the signature on Mushi Mushi bug events and forwards them, flattened, to a Zapier Catch Hook.",
   "type": "module",
   "exports": {
     ".": {

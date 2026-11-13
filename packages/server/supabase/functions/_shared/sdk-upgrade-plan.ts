@@ -1,6 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/sdk-upgrade-plan.ts
- * PURPOSE: Pure bump-plan logic for @mushi-mushi/* packages.
+ * PURPOSE: Pure bump-plan logic for the `mushi-mushi` package and the scoped
+ *          @mushi-mushi/* packages.
  *          Mirrors the CLI's `planUpgrade()` in packages/cli/src/upgrade.ts
  *          so both paths apply identical safety guards.
  *
@@ -22,8 +23,35 @@ function majorOf(version: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** Scoped SDK → the `mushi-mushi` subpath that ships the same code. */
+export const UMBRELLA_PATHS: Readonly<Record<string, string>> = {
+  '@mushi-mushi/web': 'mushi-mushi',
+  '@mushi-mushi/core': 'mushi-mushi/core',
+  '@mushi-mushi/react': 'mushi-mushi/react',
+  '@mushi-mushi/vue': 'mushi-mushi/vue',
+  '@mushi-mushi/svelte': 'mushi-mushi/svelte',
+  '@mushi-mushi/angular': 'mushi-mushi/angular',
+  '@mushi-mushi/node': 'mushi-mushi/node',
+}
+
+/**
+ * True for a `mushi-mushi` dependency below 1.0. Before ADR 0060 that package
+ * was only the `npx mushi-mushi` setup command; the SDK ships in it from 1.x.
+ * A host that lists `mushi-mushi@^0.8` to run the wizard has no SDK from it,
+ * so detection, health and upgrade PRs ignore it. A spec with no version
+ * (`workspace:`, `latest`, git) is not judged here.
+ */
+export function isUmbrellaLauncherOnly(name: string, spec: string | null | undefined): boolean {
+  if (name !== 'mushi-mushi' || !spec) return false
+  const m = /^[\^~>=<\sv]*(\d+)\./.exec(spec)
+  return m ? Number(m[1]) === 0 : false
+}
+
 /** Package names the bump plan considers. */
 export const UPGRADEABLE_PACKAGES = [
+  // The one package users install (ADR 0060). Hosts that installed the scoped
+  // packages below before keep getting them bumped.
+  'mushi-mushi',
   '@mushi-mushi/core',
   '@mushi-mushi/web',
   '@mushi-mushi/react',
@@ -43,8 +71,12 @@ export interface BumpEntry {
   package: string
   from: string
   to: string
-  /** Legacy @mushi-mushi/react package — include migration note in PR body. */
-  migrateToWeb?: boolean
+  /**
+   * Set for a scoped SDK whose code also ships in `mushi-mushi`: the umbrella
+   * import path (e.g. `mushi-mushi/react`) the PR body points to. A pointer,
+   * not a migration: the scoped package keeps working.
+   */
+  umbrellaPath?: string
   /** package.json the bump was made in. Set by the runner, not computeBumpPlan. */
   path?: string
 }
@@ -106,6 +138,9 @@ export function computeBumpPlan(
       if (!(name in section)) continue
       const current = section[name]
       if (!isRegistrySpecifier(current)) continue
+      // The pre-1.0 launcher is a wizard devDependency, not the SDK: bumping it
+      // to the umbrella would add the whole SDK to the host (ADR 0060).
+      if (isUmbrellaLauncherOnly(name, current)) continue
 
       const currentCore = current.replace(/^[\^~>=<\s*]+/, '').trim()
       const latest = latestVersions[name]
@@ -128,7 +163,7 @@ export function computeBumpPlan(
         package: name,
         from: currentCore,
         to: latest,
-        ...(name === '@mushi-mushi/react' ? { migrateToWeb: true } : {}),
+        ...(UMBRELLA_PATHS[name] ? { umbrellaPath: UMBRELLA_PATHS[name] } : {}),
       })
     }
   }
@@ -220,7 +255,7 @@ export async function fetchLatestNpmVersion(
 }
 
 /**
- * Fetch latest versions for all known @mushi-mushi/* packages in parallel.
+ * Fetch latest versions for `mushi-mushi` and every known @mushi-mushi/* package in parallel.
  * Returns a map of package name → latest version (omits failures).
  */
 export async function fetchAllLatestVersions(): Promise<Record<string, string>> {

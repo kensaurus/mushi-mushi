@@ -20,7 +20,7 @@ npx mushi-mushi
 
 <sub>Built for the vibe coder who ships fast with Cursor, Claude Code, Lovable or Bolt.</sub>
 
-[![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
+[![npm](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
 [![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
@@ -96,8 +96,12 @@ The skills also add `/mushi-debug` (why ingest or MCP fails), `/mushi-health` (p
 <details>
 <summary><b>Add it by hand</b> (React shown; Vue, Svelte, Angular, React Native, vanilla JS, native)</summary>
 
+```bash
+npm install mushi-mushi        # React Native: npm install @mushi-mushi/react-native
+```
+
 ```tsx
-import { MushiProvider } from '@mushi-mushi/react';
+import { MushiProvider } from 'mushi-mushi/react';
 
 export function App() {
   return (
@@ -109,16 +113,18 @@ export function App() {
 ```
 
 ```ts
-import { MushiPlugin } from '@mushi-mushi/vue';        // Vue 3 / Nuxt: app.use(MushiPlugin, { projectId, apiKey })
-import { initMushi } from '@mushi-mushi/svelte';       // Svelte / SvelteKit: initMushi({ projectId, apiKey })
-import { provideMushi } from '@mushi-mushi/angular';   // Angular 17+: providers: [provideMushi({ projectId, apiKey })]
-import { MushiProvider } from '@mushi-mushi/react-native';
-import { Mushi } from '@mushi-mushi/web';              // any framework: Mushi.init({ projectId, apiKey })
+import { MushiPlugin } from 'mushi-mushi/vue';             // Vue 3 / Nuxt: app.use(MushiPlugin, { projectId, apiKey })
+import { initMushi } from 'mushi-mushi/svelte';            // Svelte / SvelteKit: initMushi({ projectId, apiKey })
+import { provideMushi } from 'mushi-mushi/angular';        // Angular 17+: providers: [provideMushi({ projectId, apiKey })]
+import { MushiProvider } from '@mushi-mushi/react-native';  // React Native: its own package (native code)
+import { Mushi } from 'mushi-mushi';                       // any framework: Mushi.init({ projectId, apiKey })
 ```
 
 Native SDKs (iOS, Android, Flutter) are a preview and install from this repository: see [`packages/ios`](./packages/ios), [`packages/android`](./packages/android/README.md#install) and [`packages/flutter`](./packages/flutter/README.md#install). A runnable demo lives in [`examples/react-demo`](./examples/react-demo).
 
 </details>
+
+Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another `@mushi-mushi/*` SDK? It keeps working and keeps getting updates. `mushi-mushi` ships the same code; switch when you like by changing the import path.
 
 ## Who it's for
 
@@ -132,10 +138,10 @@ The pains each group has, and where each should start: [who it's for](https://ke
 
 | Package | For | What it does |
 | --- | --- | --- |
-| [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) | Setup | One-command wizard (`npx mushi-mushi`) |
-| [`@mushi-mushi/react`](./packages/react), `vue`, `svelte`, `angular`, `react-native`, `capacitor` | Your app | The bug widget for your framework |
-| [`@mushi-mushi/web`](./packages/web) | Your app | The same widget for any site, no framework needed |
-| [`@mushi-mushi/node`](./packages/node) | Your server | Reports backend errors into the same queue |
+| [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) | Your app | The one package: the setup wizard (`npx mushi-mushi`) and the bug widget for any site |
+| `mushi-mushi/react`, `/vue`, `/svelte`, `/angular` | Your app | The same widget wired into your framework |
+| `mushi-mushi/node` | Your server | Reports backend errors into the same queue |
+| [`@mushi-mushi/react-native`](./packages/react-native), [`@mushi-mushi/capacitor`](./packages/capacitor) | Your mobile app | The widget for native and hybrid apps (they ship native code, so they stay separate installs) |
 | [`@mushi-mushi/mcp`](./packages/mcp) | Your editor | Gives Cursor and Claude Code the diagnosis and fix tools |
 | [`@mushi-mushi/cli`](./packages/cli) | Your terminal | Setup, reports, fixes and health checks |
 | [`@mushi-mushi/ux`](./packages/ux) | Your app's screens | Runs your coding agent over every screen and keeps only measured improvements |
@@ -197,7 +203,7 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~620K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 567 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~630K TS lines · ~2,700 source files · 45 workspace / 37 npm packages · 77 edge functions · 567 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

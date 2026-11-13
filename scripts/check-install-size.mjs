@@ -3,7 +3,8 @@
  * FILE: scripts/check-install-size.mjs
  * PURPOSE: Size budget for the packages people run through `npx`, where every
  *          byte is downloaded on each cold start: @mushi-mushi/mcp (spawned by
- *          the editor) and @mushi-mushi/cli (behind `npx mushi-mushi`).
+ *          the editor), @mushi-mushi/cli (behind `npx mushi-mushi`) and
+ *          `mushi-mushi` itself (the launcher and the one SDK package).
  *
  * Packs each package with `pnpm pack` (the release's own packer) and fails
  * when the tarball (download) or its unpacked contents (node_modules) exceed
@@ -131,6 +132,17 @@ export const BUDGETS = [
   // record; ADR 0058). No new dependencies; measured 269.1 kB packed,
   // 1,022.9 kB unpacked.
   { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 280_000, unpacked: 1_030_000 },
+  // 2026-11-13 (ADR 0060): `mushi-mushi` is the one package users install and
+  // the `npx mushi-mushi` launcher. Its own tarball is the bin plus thin
+  // re-exports and the four small framework adapters bundled in; measured
+  // 31.2 kB packed, 110.1 kB unpacked (60 files) before the README rewrite.
+  // `npx mushi-mushi` now also downloads its SDK dependencies: with cli,
+  // core, web and node the cold start is about 1,767 kB packed (web alone is
+  // 979 kB, mostly source maps), up from about 300 kB (launcher + cli). This
+  // budget guards what the umbrella itself adds; the SDK tarballs are not
+  // budgeted here (their size-limit checks cover the shipped bundle, not the
+  // tarball).
+  { name: 'mushi-mushi', dir: 'packages/launcher', packed: 38_000, unpacked: 135_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For teams who live in Bugsnag and want to see what users report there too.
 This copies each bug Mushi Mushi triages into Bugsnag as an error, next to
 your Bugsnag crashes, and marks it `fixed` when Mushi Mushi applies a fix.

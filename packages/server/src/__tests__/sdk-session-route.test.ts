@@ -122,3 +122,21 @@ describe('POST /v1/sdk/session user_id_hash', () => {
     expect(res.status).toBe(200)
   })
 })
+
+describe('POST /v1/sdk/session client time', () => {
+  const pageViews = () => (fake as unknown as { tables: Record<string, Array<Record<string, unknown>>> }).tables.session_page_views
+
+  it('keeps a client time that is not ahead of the server', async () => {
+    const ts = new Date(Date.now() - 30_000).toISOString()
+    await send({ kind: 'page_view', route: '/a', ts })
+    expect(pageViews()[0]!.ts).toBe(ts)
+  })
+
+  it('replaces a client time weeks in the future with the server time', async () => {
+    const before = Date.now()
+    await send({ kind: 'page_view', route: '/a', ts: new Date(before + 20 * 86_400_000).toISOString() })
+    const stored = Date.parse(String(pageViews()[0]!.ts))
+    expect(stored).toBeGreaterThanOrEqual(before)
+    expect(stored).toBeLessThan(before + 60_000)
+  })
+})

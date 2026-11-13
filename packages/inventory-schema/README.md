@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional tooling:** you need this only to validate an `inventory.yaml` in your own scripts or CI. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 AI-built apps often ship a button that looks finished but is wired to
 nothing. An `inventory.yaml` lists your app's pages, the buttons and forms on
 each one, what each should do, and the test that proves it, so Mushi Mushi can

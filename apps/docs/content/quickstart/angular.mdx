@@ -27,7 +27,7 @@ Angular keeps them in an environment file, shown below.
 ## Install and register
 
 ```bash
-pnpm add @mushi-mushi/angular
+pnpm add mushi-mushi
 ```
 
 Angular CLI does not expose `import.meta.env`, so keep the project ID and the
@@ -46,7 +46,7 @@ Register Mushi Mushi once in your app config. `provideMushi()` provides
 
 ```ts filename="src/app/app.config.ts"
 import { type ApplicationConfig } from '@angular/core'
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 import { environment } from '../environments/environment'
 
 export const appConfig: ApplicationConfig = {
@@ -63,7 +63,7 @@ export const appConfig: ApplicationConfig = {
 
   ```ts snippet-skip="1.0.2 fallback; the same file as the example above"
   import { ErrorHandler, type ApplicationConfig } from '@angular/core'
-  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from 'mushi-mushi/angular'
   import { environment } from '../environments/environment'
 
   const mushiConfig: MushiConfig = {
@@ -85,7 +85,7 @@ Report from a component:
 
 ```ts filename="src/app/feedback-button.component.ts"
 import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 @Component({
   selector: 'app-feedback-button',
@@ -100,4 +100,4 @@ export class FeedbackButtonComponent {
 }
 ```
 
-API detail: [`@mushi-mushi/angular`](/sdks/angular). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/angular`](/sdks/angular). Widget behavior: [`mushi-mushi`](/sdks/web).

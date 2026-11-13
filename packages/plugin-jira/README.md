@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For teams that track bugs in Jira Cloud. This opens a Jira issue for each new
 Mushi Mushi bug report, moves it through your Jira workflow as the report
 changes status, and comments when the fix lands. It is a library: you write

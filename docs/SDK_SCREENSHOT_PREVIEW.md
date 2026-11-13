@@ -61,7 +61,7 @@ The privacy caption is controlled separately via `screenshotSensitiveHint`.
 
 ## Configuration
 
-`screenshotSensitiveHint` lives on `MushiWidgetConfig` in `@mushi-mushi/core`:
+`screenshotSensitiveHint` lives on `MushiWidgetConfig` in `mushi-mushi/core`:
 
 ```typescript
 widget: {
@@ -79,7 +79,7 @@ widget: {
 ### SDK init (host app)
 
 ```typescript
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: 'proj_xxx',

@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For teams with someone on call. This pages whoever is on call in PagerDuty
 when Mushi Mushi triages a bug as critical, and resolves the page when the fix
 lands.

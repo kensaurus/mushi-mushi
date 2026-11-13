@@ -20,6 +20,7 @@ import {
   envVarsToWrite,
   FRAMEWORKS,
   installCommand,
+  isMushiSdkPackage,
   readPackageJson,
   type Framework,
   type FrameworkId,
@@ -182,7 +183,7 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
 
   const pm = detectPackageManager(cwd);
   const packagesToInstall = framework.needsWebPackage
-    ? [framework.packageName, '@mushi-mushi/web']
+    ? [framework.packageName, 'mushi-mushi']
     : [framework.packageName];
 
   if (!options.skipInstall) {
@@ -251,7 +252,7 @@ function maybeSuggestAudit(pkg: ReturnType<typeof readPackageJson>): void {
     ...pkg?.dependencies,
     ...pkg?.devDependencies,
   };
-  if (Object.keys(deps).some((d) => d.startsWith('@mushi-mushi/'))) {
+  if (Object.keys(deps).some(isMushiSdkPackage)) {
     p.log.info(
       'A Mushi SDK is already installed here. To health-check the existing setup instead, run `npx mushi-mushi --audit`.',
     );
@@ -300,7 +301,7 @@ async function chooseFramework(detected: Framework, options: InitOptions): Promi
     options: Object.values(FRAMEWORKS).map((fw) => ({
       value: fw.id,
       label: `${fw.id === detected.id ? '✓ ' : '  '}${fw.label}`,
-      hint: fw.packageName,
+      hint: fw.importPath,
     })),
   });
 
@@ -1193,8 +1194,8 @@ function printNextSteps(framework: Framework, consoleBase: string, enableRewards
   if (enableRewards) {
     const badgeSnippet =
       framework.id === 'react'
-        ? `// Add to your user menu or profile UI:\nimport { MushiRewardsBadge } from '@mushi-mushi/react';\n\n// Inside your component:\n<MushiRewardsBadge showPoints />`
-        : `// Add to your user menu:\n// import { MushiRewardsBadge } from '@mushi-mushi/react';\n// <MushiRewardsBadge showPoints />`;
+        ? `// Add to your user menu or profile UI:\nimport { MushiRewardsBadge } from 'mushi-mushi/react';\n\n// Inside your component:\n<MushiRewardsBadge showPoints />`
+        : `// Add to your user menu:\n// import { MushiRewardsBadge } from 'mushi-mushi/react';\n// <MushiRewardsBadge showPoints />`;
     p.note(badgeSnippet, 'Rewards badge snippet:');
     p.log.info(`Enable rewards in your project settings at ${consoleUrl(consoleBase, '/rewards')}`);
     p.log.info('Users will earn points for bug reports, screen navigation, and app activity.');

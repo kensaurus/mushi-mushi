@@ -79,7 +79,7 @@ a week in beta.
 
 You'll touch the Mushi Mushi SDK exactly once per hop:
 
-- **Hop 1 (Cordova → Capacitor):** replace `@mushi-mushi/web` in the
+- **Hop 1 (Cordova → Capacitor):** replace the web SDK (`mushi-mushi`) in the
   WebView (if you used it) with [`@mushi-mushi/capacitor`](/sdks/capacitor)
   and call `Mushi.configure({ projectId, apiKey })`.
 - **Hop 2 (Capacitor → React Native):** swap that for

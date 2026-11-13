@@ -102,7 +102,7 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
         toast.error(h === 0 ? "Couldn't stop recording" : "Couldn't start recording", res.error?.message)
         return
       }
-      toast.success(h === 0 ? 'Recording stopped' : 'Recording visits', h === 0 ? undefined : 'Apps using trackSessions on-demand start within a minute.')
+      toast.success(h === 0 ? 'Recording stopped' : 'Recording visits', h === 0 ? 'Pages loaded from now on record nothing; open pages stop when reloaded.' : 'Pages loaded from now on start recording.')
       onChanged()
     },
     [projectId, sample, toast, onChanged],

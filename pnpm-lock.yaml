@@ -814,13 +814,61 @@ importers:
 
   packages/launcher:
     dependencies:
+      '@angular/core':
+        specifier: '>=22.1.0 <23'
+        version: 22.1.6(rxjs@7.8.2)
       '@mushi-mushi/cli':
         specifier: workspace:^
         version: link:../cli
+      '@mushi-mushi/core':
+        specifier: workspace:^
+        version: link:../core
+      '@mushi-mushi/node':
+        specifier: workspace:^
+        version: link:../node
+      '@mushi-mushi/web':
+        specifier: workspace:^
+        version: link:../web
+      '@opentelemetry/api':
+        specifier: '>=1.0.0'
+        version: 1.9.1
+      express:
+        specifier: '>=4.18.0'
+        version: 5.2.1
+      fastify:
+        specifier: '>=5.12.5 <6'
+        version: 5.12.5
+      hono:
+        specifier: '>=4.13.11 <5'
+        version: 4.13.13
+      react:
+        specifier: ^18.0.0 || ^19.0.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^18.0.0 || ^19.0.0
+        version: 19.2.7(react@19.2.7)
+      svelte:
+        specifier: '>=4'
+        version: 5.56.4(@typescript-eslint/types@8.62.0)
+      vue:
+        specifier: '>=3.5.42 <4'
+        version: 3.5.43(typescript@6.0.3)
     devDependencies:
+      '@mushi-mushi/angular':
+        specifier: workspace:^
+        version: link:../angular
       '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
+      '@mushi-mushi/react':
+        specifier: workspace:^
+        version: link:../react
+      '@mushi-mushi/svelte':
+        specifier: workspace:^
+        version: link:../svelte
+      '@mushi-mushi/vue':
+        specifier: workspace:^
+        version: link:../vue
       '@types/node':
         specifier: ^22.20.0
         version: 22.20.0

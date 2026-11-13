@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isNewerStableVersion } from './freshness.js'
 import {
   evaluateUpgradeCheckExit,
+  umbrellaNote,
   type UpgradePlan,
 } from './upgrade.js'
 
@@ -56,5 +57,21 @@ describe('evaluateUpgradeCheckExit', () => {
     expect(evaluateUpgradeCheckExit(plan([
       { name: '@mushi-mushi/core', current: 'file:../../vendor/core.tgz', latest: null, willUpgrade: false },
     ]))).toBe(0)
+  })
+})
+
+describe('umbrellaNote', () => {
+  it('is empty when the app already installs mushi-mushi', () => {
+    expect(umbrellaNote([{ name: 'mushi-mushi' }, { name: '@mushi-mushi/react' }])).toBe('')
+  })
+
+  it('is empty when only native or tool packages are installed', () => {
+    expect(umbrellaNote([{ name: '@mushi-mushi/react-native' }, { name: '@mushi-mushi/cli' }])).toBe('')
+  })
+
+  it('names the scoped SDKs and says they keep working', () => {
+    const note = umbrellaNote([{ name: '@mushi-mushi/react' }, { name: '@mushi-mushi/web' }])
+    expect(note).toContain('npm install mushi-mushi')
+    expect(note).toContain('@mushi-mushi/react, @mushi-mushi/web install keeps working')
   })
 })

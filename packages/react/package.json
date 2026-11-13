@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/react",
-  "version": "1.34.0",
+  "version": "1.35.0",
   "description": "React and Next.js bug report widget and hooks. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "license": "MIT",
   "type": "module",

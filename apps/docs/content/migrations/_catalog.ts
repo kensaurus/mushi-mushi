@@ -165,7 +165,7 @@ export const CATALOG: readonly GuideMeta[] = [
     slug: 'vue-2-to-vue-3',
     title: 'Vue 2 → Vue 3',
     summary:
-      'Vue 3 upgrade via the compat build, then the `@mushi-mushi/vue` plugin: one `app.use(MushiPlugin, ...)` call.',
+      'Vue 3 upgrade via the compat build, then the `mushi-mushi/vue` plugin: one `app.use(MushiPlugin, ...)` call.',
     category: 'web',
     effort: 'Days',
     risk: 'Med',

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import { parseArgs, FLAGS_HELP, MIN_NODE_MAJOR } from '@mushi-mushi/cli/wizard-args'
 
-const BIN = fileURLToPath(new URL('../dist/index.js', import.meta.url))
+const BIN = fileURLToPath(new URL('../dist/bin.js', import.meta.url))
 
 function run(args: string[]): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(process.execPath, [BIN, ...args], {

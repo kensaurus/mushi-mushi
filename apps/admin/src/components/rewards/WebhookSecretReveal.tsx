@@ -57,7 +57,7 @@ export function WebhookSecretReveal({
           <span className="font-mono wrap-anywhere">{revealed.url}</span>, then verify the{' '}
           <code className="font-mono">X-Mushi-Signature</code> header with{' '}
           <code className="font-mono">createMushiRewardsHandler</code> from{' '}
-          <code className="font-mono">@mushi-mushi/node</code>. If you lose it, delete this webhook and add it again.
+          <code className="font-mono">mushi-mushi/node</code>. If you lose it, delete this webhook and add it again.
         </p>
       </Callout>
       {/* data-auth-token: the console's own Mushi SDK blocks this element from

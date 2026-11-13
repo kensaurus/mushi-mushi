@@ -69,6 +69,8 @@ interface ProposedPage {
   title?: string
   user_story?: string
   elements?: ProposedElement[]
+  /** Live-crawl drafts list a page's actions here as `{ id, label }`. */
+  actions?: Array<{ id: string; label?: string }>
 }
 
 interface ProposedElement {
@@ -120,7 +122,7 @@ export function ProposalReviewModal({
   const isDraft = q.data?.status === 'draft'
   const parsed = q.data?.proposed_parsed
   const stories: ProposedStory[] = parsed?.user_stories ?? []
-  const pages: ProposedPage[] = parsed?.pages ?? []
+  const pages = useMemo(() => proposedPages(parsed?.pages), [parsed?.pages])
 
   const summary = useMemo(() => summarise(stories, pages), [stories, pages])
 
@@ -323,6 +325,19 @@ export function ProposalReviewModal({
 }
 
 // ---------- summary helpers -----------------------------------------
+
+/**
+ * Pages with their actions under `elements`. Passive-discovery drafts write
+ * `elements`; live-crawl drafts (story-mapper) write `actions: [{ id, label }]`,
+ * which the modal used to ignore and so showed "0 actions" for a draft with 22.
+ */
+export function proposedPages(raw: ProposedPage[] | undefined): ProposedPage[] {
+  return (raw ?? []).map((page) =>
+    page.elements?.length || !page.actions?.length
+      ? page
+      : { ...page, elements: page.actions.map((a) => ({ id: a.id, action: a.label ?? a.id })) },
+  )
+}
 
 function summarise(stories: ProposedStory[], pages: ProposedPage[]) {
   let actionCount = 0

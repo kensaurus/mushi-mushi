@@ -43,11 +43,11 @@ npx mushi-mushi
 Or by hand, for any browser app:
 
 ```bash
-npm install @mushi-mushi/web
+npm install mushi-mushi
 ```
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: 'YOUR_PROJECT_ID',

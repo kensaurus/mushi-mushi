@@ -70,7 +70,7 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 <MushiProvider config={{
   projectId: '…',

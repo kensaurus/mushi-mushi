@@ -58,7 +58,7 @@ triagers can open the replay from the report.
 
 ```ts
 import LogRocket from 'logrocket'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 LogRocket.init('your-app/id')
 const mushi = Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -80,10 +80,10 @@ Every Mushi Mushi report now carries the LogRocket session URL in its metadata.
   id="logrocket-feedback-to-mushi"
   steps={[
     { id: 'create-project', label: 'Create a Mushi Mushi project', content: <><a href="https://kensaur.us/mushi-mushi/admin/signup?src=migration-logrocket-feedback-to-mushi">Create a free account</a> (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy <code>projectId</code> + <code>apiKey</code> from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: <pre className="text-xs">{`npm install @mushi-mushi/web
-# Or @mushi-mushi/react if you're on React`}</pre> },
+    { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: <pre className="text-xs">{`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'`}</pre> },
     { id: 'mount-mushi', label: 'Mount Mushi Mushi (LogRocket stays as-is)', content: <pre className="text-xs">{`import LogRocket from 'logrocket'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 LogRocket.init('your-app/id')
 const mushi = Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })`}</pre> },

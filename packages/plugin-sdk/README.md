@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**For plugin authors:** you need this only to write a plugin for a tool Mushi Mushi does not connect to. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For developers who want Mushi Mushi to drive a tool it does not connect to
 yet. Write a small HTTPS server that reacts when Mushi Mushi files, triages or fixes
 a bug; the SDK checks Mushi Mushi's signature on each request, drops repeat

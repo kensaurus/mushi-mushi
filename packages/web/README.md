@@ -4,6 +4,8 @@
 
 A bug widget for any website. When a user reports a problem, it sends a screenshot, the route, their note and the last console and network events to [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Mushi Mushi explains the cause in plain English and hands your editor a fix. It renders in a Shadow DOM, so your CSS and the widget's never mix.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { Mushi } from 'mushi-mushi'`. This package keeps working and keeps getting updates.
+
 ```mermaid
 flowchart LR
     A["User taps the widget"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
@@ -12,12 +14,13 @@ flowchart LR
 ## Quick start
 
 ```bash
-npx mushi-mushi              # wizard: picks the right SDK, installs it, writes env vars
-# or: npm install @mushi-mushi/web
+npm install mushi-mushi      # then import from 'mushi-mushi'
+# or: npx mushi-mushi        # wizard: picks the right SDK, installs it, writes env vars
+# or: npm install @mushi-mushi/web   # same code; import from '@mushi-mushi/web'
 ```
 
 ```ts
-import { Mushi } from '@mushi-mushi/web';
+import { Mushi } from 'mushi-mushi';
 
 Mushi.init({
   projectId: '00000000-0000-0000-0000-000000000000', // from the console's Manage apps page
