@@ -35,6 +35,8 @@ import {
   type SignupMeta,
   type SignupSource,
 } from '../lib/signupAttribution'
+import { Mascot } from '../components/mascot/Mascot'
+import { loginGuide } from '../lib/fieldGuide'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
 type FormMode = LoginFormMode
@@ -265,6 +267,10 @@ export function LoginPage() {
             </p>
           )}
         </div>
+
+        {/* The field guide greets a first visit and says what this form does.
+            Gone once a success message replaces the form. */}
+        {!success && <Mascot {...loginGuide(mode, track)} size="md" className="mb-5" data-testid="login-guide" />}
 
         {/* Success: signup confirmation */}
         {success === 'signup-confirm' && (

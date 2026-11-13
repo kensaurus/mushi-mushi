@@ -38,6 +38,7 @@ Both patterns are supported. Register new shared components in `mdx-components.t
 | `ComparisonTable` | Foil vs Mushi comparison | `/` |
 | `DocScreenshot` | Screenshot with lightbox | Home, admin docs |
 | `DocsMediaShowcase` | Animated tour + SDK dogfood + theme-aware stills | Home (`index.mdx`) after 60-second proof |
+| `Mascot` | Field Kenji beside one first-person guide line (`pose`: `wave`, `laptop`, `think`; `line` ≤ 90 chars, a prop so the llms mirrors skip it). One per page; rules in [`docs/mascot/README.md`](../mascot/README.md) | `/quickstart`, `/quickstart/mcp`, 404 |
 | `MigrationHub` | Filterable migration guide grid | `/migrations` |
 | `MigrationChecklist` | Per-guide interactive checklist | `/migrations/*` |
 | `EffortBadge` / `RiskBadge` | Migration effort/risk chips | Hub + guide headers |

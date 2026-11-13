@@ -1,6 +1,30 @@
 {
   "entries": [
     {
+      "id": "2026-11-13-field-guide",
+      "date": "2026-11-13",
+      "title": "Meet Kenji, your field guide through setup",
+      "summary": "Kenji, a bug naturalist with Mushi-chan on his shoulder, now walks you through sign-in, setup and your first diagnosis, one short line at a time.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Your first diagnosis is narrated: Kenji points at the button, looks closely while the report is classified, and holds up his notebook when the diagnosis is ready."
+        },
+        {
+          "tone": "feature",
+          "text": "Each Set up tab and the Connect page say in one line what that step is for and what to do next."
+        },
+        {
+          "tone": "feature",
+          "text": "Home says \"nothing needs you\" with Mushi-chan asleep on Kenji's knee, but only once your app has real reports and every check answered."
+        },
+        {
+          "tone": "feature",
+          "text": "The not-found and crash screens explain what happened and the way back. With reduced motion on, Kenji is a still picture."
+        }
+      ]
+    },
+    {
       "id": "2026-10-22-model-pickers",
       "date": "2026-10-22",
       "title": "Model pickers show every current Claude model, with a recommendation",

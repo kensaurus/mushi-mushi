@@ -1283,6 +1283,34 @@
 @utility animate-mushi-row-flash { animation: mushi-row-flash 650ms var(--ease-out-expo) 1; }
 
 /* ---------------------------------------------------------------------------
+   MASCOT (field guide)
+   `components/mascot/Mascot.tsx`. The figure steps in once (opacity + a 6 px
+   rise), then sways by 2 px for three slow cycles and rests: an idle that
+   loops forever pulls the eye off the task. Transform and opacity only
+   (docs/MOTION.md). Under reduced motion nothing animates: a still image.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-mascot-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mushi-mascot-idle {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .mushi-mascot-figure {
+    animation: mushi-mascot-enter var(--duration-slow) var(--ease-stamp) both;
+  }
+  .mushi-mascot-figure > img {
+    transform-origin: 50% 100%;
+    animation: mushi-mascot-idle 3600ms ease-in-out 900ms 3;
+  }
+}
+
+/* ---------------------------------------------------------------------------
    DAV SPOTLIGHT  (Decide → Act → Verify on-page anchor highlight)
    Applied via JS to [data-dav-anchor] elements when the operator clicks a
    hero tile. The keyframe pulses in then fades the branded outline so the

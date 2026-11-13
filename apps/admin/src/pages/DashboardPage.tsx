@@ -179,7 +179,12 @@ export function DashboardPage() {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <NeedsYouCard section={data.needsYou} fixFirst={data.fixFirst} partial={data.partial} />
+            <NeedsYouCard
+              section={data.needsYou}
+              fixFirst={data.fixFirst}
+              partial={data.partial}
+              hasReports={!!project && project.report_count > 0}
+            />
             <ReleaseCard section={data.release} projectId={activeProjectId} />
           </div>
 

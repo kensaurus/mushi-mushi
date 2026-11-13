@@ -44,6 +44,8 @@ import { isExpoReporterProject } from '../lib/projectMushiEnv'
 import { isSdkKeyScopes, latestHeartbeatAt } from '../lib/heartbeat'
 import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { useScrollToHash } from '../lib/useScrollToHash'
+import { Mascot } from '../components/mascot/Mascot'
+import { editorConnectGuide } from '../lib/fieldGuide'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -260,6 +262,11 @@ export function ConnectPage() {
           },
         ]}
       />
+
+      {/* The field guide's next step for the editor, once the MCP state is known. */}
+      {mcpStatsQuery.data && !mcpStatsQuery.loading ? (
+        <Mascot {...editorConnectGuide(mcpStats.topPriority)} size="sm" data-testid="connect-editor-guide" />
+      ) : null}
 
       <SectionAnchorNav sections={visibleSections} ariaLabel="Connect page sections" />
 

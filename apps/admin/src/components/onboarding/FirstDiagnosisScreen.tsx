@@ -46,6 +46,8 @@ import { isReturningFromGithub } from '../../lib/githubConnect'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { startFirstRunTour } from '../FirstRunTour'
 import { recordDiagnosisViewed, type DiagnosisSurface } from '../../lib/diagnosisViewed'
+import { firstDiagnosisGuide } from '../../lib/fieldGuide'
+import { Mascot } from '../mascot/Mascot'
 
 const CURSOR_SETUP_COMMAND = 'npx mushi-mushi setup --ide cursor'
 
@@ -336,6 +338,8 @@ export function FirstDiagnosisScreen({
           </ContainedBlock>
         </div>
 
+        <Mascot {...firstDiagnosisGuide(state)} size="md" data-testid="first-diagnosis-guide" />
+
         {!diagnosed && (
           <div className="flex flex-wrap items-center gap-3">
             <Btn
@@ -480,6 +484,8 @@ export function FirstDiagnosisInline({
           </Btn>
         )}
       </div>
+
+      <Mascot {...firstDiagnosisGuide(state)} size="sm" data-testid="first-diagnosis-guide" />
 
       <PhaseRow
         state={state}
