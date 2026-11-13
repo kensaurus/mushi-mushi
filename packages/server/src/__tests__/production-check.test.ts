@@ -251,7 +251,12 @@ describe('runProductionCheck on a fixture site', () => {
       const formats = b.formats as unknown[]
       expect(formats.every((f) => typeof f === 'string' && ['markdown', 'links', 'rawHtml', 'html'].includes(f))).toBe(true)
       expect(b.parsers).toEqual([])
+      // Marked as Mushi's audit traffic (monitor-url.ts) ...
+      expect(b.url).toMatch(/\?mushi_monitor=audit&utm_source=mushi-monitor&utm_medium=audit$/)
+      expect((b.headers as Record<string, string>)['User-Agent']).toMatch(/MushiSiteWatch\/1\.0/)
     }
+    // ... and the marker Firecrawl echoes back never reaches the result.
+    expect(JSON.stringify(result)).not.toContain('mushi_monitor')
     // The image on a CDN is requested (the visitor's browser loads it too); /admin never is.
     expect(site.requested).toContain('HEAD https://images.acme-cdn.com/hero.jpg')
     expect(site.requested.some((r) => r.includes('/admin'))).toBe(false)
