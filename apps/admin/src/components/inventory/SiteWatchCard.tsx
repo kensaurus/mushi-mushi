@@ -1,8 +1,8 @@
 /**
  * FILE: apps/admin/src/components/inventory/SiteWatchCard.tsx
- * PURPOSE: "Watch your live site" (ADR 0024). Turns a daily Firecrawl crawl
- *          of the app's live site on or off. A page that errors, 404s from
- *          the app's own links, fails to load or turns blank becomes a bug
+ * PURPOSE: "Watch your live site" (ADR 0024; a marked page list, not a
+ *          crawl, ADR 0059). Turns a daily Firecrawl check of the app's live
+ *          pages on or off. A page that errors, 404s, fails to load or turns blank becomes a bug
  *          report before a user finds it. Billed to the project's Firecrawl
  *          key; lists the pages that are broken right now.
  */
@@ -138,7 +138,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       toast.error('The watch was not turned off', res.error?.message ?? 'Retry in a moment.')
       return
     }
-    toast.success('Watch turned off', 'Firecrawl no longer crawls this site. Existing reports stay.')
+    toast.success('Watch turned off', 'Firecrawl no longer checks this site. Existing reports stay.')
     state.reload()
   }
 
@@ -159,8 +159,8 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
             </SignalChip>
           </div>
           <p className="text-2xs text-fg-muted mt-0.5">
-            Firecrawl checks your live pages once a day. A page that errors, 404s from your own links, fails to load or
-            turns blank becomes a bug report before a user finds it.
+            Firecrawl checks your live pages once a day. A page that errors, 404s, fails to load or turns blank becomes a
+            bug report before a user finds it.
           </p>
         </div>
         {data && (data.firecrawlReady || watch) && !editing && (
@@ -253,7 +253,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
             />
           </div>
           <p className="text-2xs text-fg-muted">
-            Firecrawl follows your site's own links from this address. About {creditRange(pagesValid ? pages : 25)} credits a month on
+            Firecrawl loads the pages your site lists under this address, up to this many. About {creditRange(pagesValid ? pages : 25)} credits a month on
             your Firecrawl key: one per page each day, plus one per changed page it checks for breakage.
           </p>
           <div className="flex items-center gap-2">
@@ -292,7 +292,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
       {confirmOff && (
         <ConfirmDialog
           title="Turn off the live-site watch?"
-          body="Firecrawl stops crawling this site, and Mushi Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
+          body="Firecrawl stops checking this site, and Mushi Mushi stops filing broken pages. Reports already filed stay. You can turn it on again any time."
           confirmLabel="Turn off"
           cancelLabel="Keep watching"
           tone="danger"

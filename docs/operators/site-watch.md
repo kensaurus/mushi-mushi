@@ -1,11 +1,57 @@
 # Live-site watch: operator notes
 
 The live-site watch ([ADR 0024](../adr/0024-live-site-watch-files-broken-pages-as-reports.md))
-crawls an app's public pages once a day through a Firecrawl monitor on the
+loads an app's public pages once a day through a Firecrawl monitor on the
 project's own Firecrawl key, and files each newly broken page as a report.
 Users turn it on from **Inventory → Discovery → Watch your live site**; the
 user-facing description is in
 [`apps/docs/content/admin/inventory.mdx`](../../apps/docs/content/admin/inventory.mdx).
+
+## The page list (ADR 0059)
+
+Since 2026-11-13 the monitor is not a crawl. It is scrape targets over an
+explicit page list, and every URL carries `mushi_monitor=watch`
+([ADR 0059](../adr/0059-site-watch-loads-a-marked-page-list-not-a-crawl.md)).
+A crawl marked only its seed URL, so about 500 page loads a day reached the
+apps unmarked.
+
+- **Building the list** (`selectWatchUrls`). The list holds at most
+  `page_limit` pages, base first. It takes:
+  1. the pages already watched;
+  2. the newest check's pages (on the switch, the crawl's link-found pages);
+  3. `/v2/map` pages, shallow first.
+
+  Sitemaps, feeds, data downloads and files are left out. Each new page is
+  resolved to the site's own spelling first (`resolveSameSiteRedirects`: a
+  HEAD, no redirect followed, no page script), because kensaur.us 301s
+  `/glot-it` to `/glot-it/` and drops the query, and with it the marker.
+- **When a page leaves:** only when the map no longer lists it, it answered
+  404/410, and it holds no open finding: a suspect, or filed with its report
+  still open. A broken link stays watched, with its finding open, until a
+  person closes its report, so link-found 404s still reach a report and stay
+  visible. A dead URL the map lists is
+  loaded, and its 404 files.
+- **Refresh** (`refreshWatchPages`). The list refreshes once a day, after the
+  poll reads the scheduled check (1 map credit), and on a stale shape (the old
+  crawl, a missing UA or marker). The console's Save builds it the same way.
+- **Every PATCH resets every page's history**, even with an unchanged list
+  (verified 2026-11-13: the next check reports all pages `new`). So the poll
+  PATCHes only when the page set changes or the shape is stale.
+  - A failed or thin map (under 2 pages, or under half the watched ones)
+    cannot shrink the list.
+- **Closed on PATCH:** open findings of pages outside the new list
+  (`resolvePagesOutside`).
+- **Limits:** 100 URLs per scrape target (Firecrawl accepted 100 on
+  2026-11-13; its docs name no limit), up to 50 targets per monitor. With
+  `page_limit` ≤ 100, one target holds a watch.
+- **Budget:** unchanged. The cap is 800 page loads a day over 8 watches, about
+  529 computed from the 2026-11-13 checks and maps (509 loaded today),
+  plus 8 map credits a day. The +20 is mostly tsumagoi, whose crawl stopped
+  at 79 pages while the map lists 98. Lower `page_limit` to trim a watch.
+
+**First poll after the deploy:** each crawl monitor is switched to a page
+list. The next check reports every page `new`, so open judged-break findings
+resolve once and the judge starts over for one check.
 
 ## A broken page files only when it is seen failing twice
 
@@ -86,7 +132,7 @@ fragment stays last, and a param that is already there is not added again:
 
 | `mushi_monitor` | Job |
 | --- | --- |
-| `watch` | Live-site watch: crawl seed and confirm scrapes, and the Home card screenshot |
+| `watch` | Live-site watch: every listed page and the confirm scrapes, and the Home card screenshot |
 | `audit` | Site audit batch, Production Check, inventory renders |
 | `qa` | QA stories (`firecrawl_actions`), story-mapper page scrapes |
 
@@ -107,9 +153,13 @@ Filters to set:
 
 Known limits:
 
-- **Discovered pages carry no marker.** The watch's crawl target carries the
-  marker only on its seed URL. Firecrawl loads the pages it discovers by their
-  bare links, so for those only the `User-Agent` header identifies Mushi.
+- **A redirect can drop the marker.** A host redirect that drops the query
+  string, such as kensaur.us's slash redirect, removes it. The watch resolves
+  each new page to its redirect target first; other jobs (site audit,
+  Production Check) send the URL as given.
+- **The User-Agent header is unverified at the HTTP level.** Mushi sends it on
+  every page load, but there was no Firecrawl key to check what Firecrawl's
+  browser actually sends.
 - **The page's JavaScript can't see the header.** It reads Firecrawl's stock
   `navigator.userAgent` (verified 2026-11-13), so a client-side filter has to
   match the URL marker.
@@ -118,16 +168,14 @@ Known limits:
   research, changelogs.
 
 `monitor-url-guard.test.ts` fails when a new Firecrawl call site is neither
-marked nor classified as loading no customer page. The live-site watch's poll
-patches each existing monitor to the marked target URL once
-(`monitorNeedsReconcile`).
+marked nor classified as loading no customer page. It also fails when anything
+starts a crawl or builds a crawl monitor target.
 
-## Monitors created before the header existed
+## Monitors created before ADR 0059
 
-The header is part of the monitor's crawl target, so a monitor created before
-it was added does not send it until its target is saved again. Turning the
-watch off and on, or saving it again from the console, sends the full target
-to Firecrawl.
+The poll switches a stale monitor itself (`monitorNeedsReconcile`). Stale
+means a crawl target, a target without the current User-Agent, or an unmarked
+URL. Nobody needs to re-save a watch.
 
 Firecrawl does not cache a scrape sent with custom headers, so each check is a
 live fetch. Credit use is unchanged.

@@ -1,7 +1,9 @@
 # 0024. The live-site watch files broken pages as reports
 
 Status: Accepted (owner, 2026-10-10); filing rule amended by
-[ADR 0029](0029-site-watch-files-a-page-only-after-a-second-failure.md)
+[ADR 0029](0029-site-watch-files-a-page-only-after-a-second-failure.md);
+monitor shape (a crawl target) superseded by
+[ADR 0059](0059-site-watch-loads-a-marked-page-list-not-a-crawl.md)
 Date: 2026-10-10
 
 Related: migration `20261010190000_site_watch.sql`,
