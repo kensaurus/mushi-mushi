@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   inventory: null as unknown,
   findings: { runs: [], findings: [] } as unknown,
+  proposals: { proposals: [] } as unknown,
 }))
 
 vi.mock('../lib/supabase', () => ({ apiFetch: vi.fn(async () => ({ ok: true, data: {} })) }))
@@ -28,6 +29,7 @@ vi.mock('../lib/usePageData', () => ({
     if (path === '/v1/admin/inventory/p1') return { ...base, data: mocks.inventory }
     if (path === '/v1/admin/inventory/p1/user-stories') return { ...base, data: { tree: [] } }
     if (path === '/v1/admin/inventory/p1/findings') return { ...base, data: mocks.findings }
+    if (path === '/v1/admin/inventory/p1/proposals') return { ...base, data: mocks.proposals }
     return { ...base, data: null }
   },
 }))
@@ -98,6 +100,17 @@ describe('InventoryPage', () => {
     expect(host.querySelector('[data-testid="inventory-status"]')).toBeNull()
     expect(host.textContent).not.toContain('not tied to')
     expect(host.textContent).not.toContain('Check every action')
+  })
+
+  it('points an app with no inventory at a waiting draft instead of saying there are no stories', async () => {
+    mocks.inventory = { snapshot: null, summary: null }
+    mocks.proposals = { proposals: [{ id: 'd1', status: 'draft' }, { id: 'd0', status: 'discarded' }] }
+    await render()
+    const step = host.querySelector('[data-testid="inventory-first-step"]')
+    expect(step?.textContent).toContain('Your user stories are drafted')
+    expect(step?.querySelector('a[href="/inventory?tab=discovery"]')).not.toBeNull()
+    expect(host.textContent).not.toContain('No user stories yet')
+    mocks.proposals = { proposals: [] }
   })
 
   it('names the tabs in plain words', async () => {

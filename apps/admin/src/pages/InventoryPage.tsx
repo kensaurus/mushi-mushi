@@ -224,6 +224,13 @@ export function InventoryPage() {
   const payload = mainQuery.data
   const summary = payload?.summary ?? {}
   const snapshot = payload?.snapshot ?? null
+  // With no accepted inventory, a draft may already be waiting in Discovery;
+  // the Stories tab must point at it instead of saying there is nothing.
+  const draftsQuery = usePageData<{ proposals: Array<{ id: string; status: string }> }>(
+    basePath && tab === 'stories' && mainQuery.data && snapshot == null ? `${basePath}/proposals` : null,
+    { deps: [projectId ?? '', tab, snapshot == null ? 'none' : 'some'] },
+  )
+  const waitingDrafts = (draftsQuery.data?.proposals ?? []).filter((p) => p.status === 'draft').length
   const treeRows = useMemo(() => buildTreeRows(snapshot?.parsed as Record<string, unknown>), [snapshot])
 
   const reloadAll = useCallback(() => {
@@ -516,6 +523,13 @@ export function InventoryPage() {
             </span>
           }
           data-testid="inventory-status"
+        />
+      ) : tab === 'stories' && waitingDrafts > 0 ? (
+        <PageFirstStep
+          title={waitingDrafts === 1 ? 'Your user stories are drafted' : `${waitingDrafts} drafts of your user stories are waiting`}
+          sentence="Mushi Mushi drafted your user stories. Review the draft in Discovery and accept it to see them here."
+          action={{ label: 'Review the draft', to: '/inventory?tab=discovery' }}
+          data-testid="inventory-first-step"
         />
       ) : tab === 'stories' ? (
         <PageFirstStep
