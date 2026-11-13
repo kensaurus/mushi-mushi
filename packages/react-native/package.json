@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/react-native",
-  "version": "0.24.5",
+  "version": "0.24.6",
   "license": "MIT",
   "description": "Bug report widget for React Native and Expo. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
   "main": "./dist/index.cjs",

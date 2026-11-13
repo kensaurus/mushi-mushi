@@ -1,5 +1,15 @@
 # @mushi-mushi/react
 
+## 1.34.0
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/core@1.34.0
+  - @mushi-mushi/web@1.34.0
+
 ## 1.33.6
 
 ### Patch Changes
