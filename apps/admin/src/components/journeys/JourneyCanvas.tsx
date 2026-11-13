@@ -9,7 +9,7 @@
  */
 
 import { createContext, memo, useContext, useMemo } from 'react'
-import { BaseEdge, EdgeLabelRenderer, Handle, Position, ReactFlow, ReactFlowProvider, getBezierPath, type EdgeProps, type NodeProps } from '@xyflow/react'
+import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, ReactFlowProvider, getBezierPath, getSmoothStepPath, type EdgeProps, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { FlowCanvasBackground } from '../flow-primitives/FlowCanvasBackground'
 import { TONE_HEX } from '../flow-primitives/flowTokens'
@@ -19,7 +19,7 @@ import { KIND_LABEL, percent, type JourneyFinding, type JourneyMap } from '../..
 import { buildJourneyLayout, type JourneyEdgeData, type JourneyNodeData } from './journeyLayout'
 
 const HANDLE_CLS = '!h-1.5 !w-1.5 !min-h-0 !min-w-0 !border-0 !bg-transparent'
-const FIT_VIEW_OPTIONS = { padding: 0.12, maxZoom: 1.1, minZoom: 0.3 }
+const FIT_VIEW_OPTIONS = { padding: 0.08, maxZoom: 1.1, minZoom: 0.12 }
 const PRO_OPTIONS = { hideAttribution: true }
 
 interface Selection {
@@ -82,7 +82,9 @@ function PageNodeInner({ data }: NodeProps) {
 function JourneyEdgeInner({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }: EdgeProps) {
   const d = data as JourneyEdgeData
   const sel = useContext(SelectionContext)
-  const [path, labelX, labelY] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
+  const [path, labelX, labelY] = d.tree
+    ? getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 8 })
+    : getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition })
   const [from, to] = id.split('->')
   const focused = sel?.selected != null && (sel.selected === from || sel.selected === to)
   const dimmed = sel?.selected != null && !focused
@@ -95,8 +97,8 @@ function JourneyEdgeInner({ id, sourceX, sourceY, targetX, targetY, sourcePositi
         style={{
           stroke: color,
           strokeWidth: d.width,
-          opacity: dimmed ? 0.12 : used ? 0.75 : 0.35,
-          strokeDasharray: used && d.hasScan && !d.linked ? '6 4' : !used ? '2 4' : undefined,
+          opacity: dimmed ? 0.12 : used ? 0.75 : d.tree ? 0.55 : 0.35,
+          strokeDasharray: used && d.hasScan && !d.linked ? '6 4' : !used && !d.tree ? '2 4' : undefined,
         }}
       />
       {used && (focused || d.width >= 4) && (
@@ -148,11 +150,18 @@ export function JourneyCanvas({ map, hasScan, findings, selected, onSelect }: Pr
             panOnScroll={false}
             zoomOnScroll={false}
             zoomOnPinch
-            minZoom={0.3}
+            minZoom={0.12}
             maxZoom={1.6}
             onPaneClick={() => onSelect(null)}
           >
             <FlowCanvasBackground />
+            {layout.mode === 'sitemap' && (
+              <Panel position="top-left">
+                <span className="rounded-sm border border-edge-subtle bg-surface-raised/90 px-1.5 py-0.5 text-2xs text-fg-muted">
+                  Site hierarchy from the scan. Real paths appear once visits are recorded.
+                </span>
+              </Panel>
+            )}
           </ReactFlow>
         </ReactFlowProvider>
       </div>

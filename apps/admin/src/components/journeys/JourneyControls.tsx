@@ -39,7 +39,7 @@ export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; pr
       toast.error("Couldn't start the scan", res.error?.message)
       return
     }
-    toast.success('Scanning your site', 'This usually takes under a minute.')
+    toast.success('Scanning your site', 'Firecrawl reads the pages on its side; it usually takes a few minutes. The map updates by itself.')
     onStarted()
   }, [url, projectId, data.liveUrl, toast, onStarted])
 

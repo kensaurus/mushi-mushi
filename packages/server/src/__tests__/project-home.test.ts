@@ -242,6 +242,9 @@ describe('sitemap', () => {
   it('normalises URLs and routes to page paths with ids collapsed', () => {
     expect(normalizeRoute('https://glot.it/lessons/42?x=1#top')).toBe('/lessons/:id')
     expect(normalizeRoute('/u/0b6f3c8e-1d2a-4b3c-8d9e-0f1a2b3c4d5e/settings')).toBe('/u/:id/settings')
+    // A long kebab-case slug of words is a page; a long token with digits is an id.
+    expect(normalizeRoute('/docs/director-housing-rent-and-company-cars')).toBe('/docs/director-housing-rent-and-company-cars')
+    expect(normalizeRoute('/share/aB3dE5fG7hJ9kL1mN3pQ5rS7tU')).toBe('/share/:id')
     expect(normalizeRoute('practice')).toBe('/practice')
     expect(normalizeRoute('')).toBeNull()
     expect(normalizeRoute('https://')).toBeNull()

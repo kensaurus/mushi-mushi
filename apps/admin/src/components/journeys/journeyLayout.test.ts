@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildJourneyLayout, edgeWidth, JOURNEY_NODE_SIZE } from './journeyLayout'
+import { buildJourneyLayout, edgeWidth, JOURNEY_NODE_SIZE, SITEMAP_MAX_ROWS, sitemapParents } from './journeyLayout'
 import { allFindingsPrompt, nodeSeverity, type JourneyFinding, type JourneyMap, type JourneyNode } from '../../lib/journeys'
 
 const node = (path: string, over: Partial<JourneyNode> = {}): JourneyNode => ({
@@ -77,18 +77,39 @@ describe('buildJourneyLayout', () => {
     expect(l.nodes.find((n) => n.id === '/')!.data.share).toBeCloseTo(20 / 40)
   })
 
-  it('lays out a scan-only map on its links', () => {
+  it('draws a scan-only map as the site hierarchy, every page placed', () => {
     const l = buildJourneyLayout(map({ edges: [{ from: '/', to: '/pricing', moves: 0, linked: true }] }), true)
+    expect(l.mode).toBe('sitemap')
     const x = (id: string) => l.nodes.find((n) => n.id === id)!.position.x
     expect(x('/')).toBeLessThan(x('/pricing'))
+    expect(l.nodes).toHaveLength(4)
+    expect(l.edges.every((e) => e.data?.tree)).toBe(true)
+    expect(l.edges.map((e) => e.id).sort()).toEqual(['/->/lonely', '/->/pricing', '/->/signup'])
+  })
+
+  it('nests pages under their nearest parent path and wraps a big group of siblings', () => {
+    const docs = Array.from({ length: SITEMAP_MAX_ROWS + 3 }, (_, i) => node(`/docs/p${String(i).padStart(2, '0')}`))
+    const l = buildJourneyLayout(map({ nodes: [node('/'), node('/docs'), ...docs], edges: [], findings: [] }), true)
+    const edge = (child: string) => l.edges.find((e) => e.target === child)?.source
+    expect(edge('/docs')).toBe('/')
+    expect(edge('/docs/p00')).toBe('/docs')
+    const xs = new Set(docs.map((d) => l.nodes.find((n) => n.id === d.path)!.position.x))
+    expect(xs.size).toBe(2)
   })
 
   it('handles an empty map', () => {
-    expect(buildJourneyLayout(map({ nodes: [], edges: [], findings: [] }), false)).toEqual({ nodes: [], edges: [], width: 0, height: 0 })
+    expect(buildJourneyLayout(map({ nodes: [], edges: [], findings: [] }), false)).toEqual({ mode: 'flow', nodes: [], edges: [], width: 0, height: 0 })
   })
 })
 
 describe('helpers', () => {
+  it('finds the parent path of each page, falling back to the start page', () => {
+    const parents = sitemapParents(['/', '/docs', '/docs/a', '/docs/a/b', '/about', '/legal/terms'], '/')
+    expect(Object.fromEntries(parents)).toEqual({ '/docs': '/', '/docs/a': '/docs', '/docs/a/b': '/docs/a', '/about': '/', '/legal/terms': '/' })
+    // An app on a shared host: its base path is the start page.
+    expect(sitemapParents(['/glot-it', '/glot-it/learn'], '/glot-it').get('/glot-it/learn')).toBe('/glot-it')
+  })
+
   it('scales edge width on a log curve between 1 and 7', () => {
     expect(edgeWidth(0, 10)).toBe(1)
     expect(edgeWidth(10, 10)).toBe(7)

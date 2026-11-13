@@ -19,7 +19,7 @@ The Journey optimizer builds one map from two sources. Either one is enough on i
 
 | Source | What it adds | What you need |
 | --- | --- | --- |
-| **Real visits** | Where people arrive, the paths they take, where they leave, pages they go back and forth between, pages they reload | The Mushi Mushi SDK with session tracking on (`trackSessions`, on by default), or `'on-demand'` with a recording window |
+| **Real visits** | Where people arrive, the paths they take, where they leave, pages they open by mistake (wrong doors), pages they reload | The Mushi Mushi SDK with session tracking on (`trackSessions`, on by default), or `'on-demand'` with a recording window |
 | **Site scan** | Your site map from its own links, pages nothing links to, pages too many clicks deep, duplicate and near-duplicate pages, pages that share a title | A Firecrawl key in **Settings → AI keys** |
 | **Live-site watch** (optional) | Broken pages on the map | The watch turned on under **User stories → Discovery** |
 
@@ -47,8 +47,9 @@ window it adds no request at all.
 ## Scan your site
 
 Type your live address (Mushi Mushi fills it in when it knows it) and press **Scan my site**.
-The scan reads up to 40 public pages, about 41 Firecrawl credits, and usually finishes in
-under a minute. It uses no AI model and changes nothing on your site. Mushi Mushi keeps
+The scan reads up to 40 public pages, about 41 Firecrawl credits. Firecrawl reads them on
+its side, slow pages included, and the map fills in by itself when it is done, usually within
+a few minutes. It uses no AI model and changes nothing on your site. Mushi Mushi keeps
 each page's title, its links and a fingerprint of its text, never the text itself, and
 keeps the newest 10 scans. One scan runs at a time, at most one every 10 minutes.
 
@@ -69,7 +70,7 @@ keeps the newest 10 scans. One scan runs at a time, at most one every 10 minutes
 | Broken page | The live-site watch found the page failing | Fix the page, then the links to it |
 | Dead end | Most visits end here and the page links nowhere but the menu | Add one clear next step |
 | People leave | Most visits end here | Make the main action easy to see; check the page answers what people came for |
-| Back and forth | People open a page and go straight back | Say on the link what the page holds, or put the missing part on it |
+| Wrong door | People open a page, come back within seconds and pick a different one | Make the way to the page they wanted easier to see, and say on the link what the first page holds |
 | Reloaded | People open the same page again right away | Check for slow loading or a form that seems not to save |
 | Duplicate pages | Two or more pages share most of their text | Merge and redirect, or make each page about one thing |
 | Same page, two addresses | `/About` and `/about`, `/pricing.html` and `/pricing` | Pick one address and redirect the others |

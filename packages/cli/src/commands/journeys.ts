@@ -91,7 +91,7 @@ function renderJourneys(data: JourneysData, findings: JourneyFinding[], opts: { 
   } else {
     lines.push('No site scan yet. Run: mushi journeys scan')
   }
-  if (data.scan?.status === 'running') lines.push('A scan is running; it usually takes under a minute.')
+  if (data.scan?.status === 'running') lines.push('A scan is running; it usually takes a few minutes.')
   else if (data.scan?.status === 'failed' && data.scan.error) lines.push(`The last scan failed: ${oneLine(data.scan.error, 160)}`)
 
   if (flows.length > 0) {
@@ -171,7 +171,7 @@ Examples:
       }
       const s = result.data.scan
       console.log(`Scan started for ${oneLine(s.baseUrl, 100)} [${s.id}].`)
-      console.log('It usually takes under a minute. Then run: mushi journeys')
+      console.log('It usually takes a few minutes. Then run: mushi journeys')
     })
 
   journeys

@@ -26,7 +26,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { log as rootLog } from './logger.ts';
 import { createTrace } from './observability.ts';
 import { markKeyUsed, resolveLlmKey } from './byok.ts';
-import { monitorScrapeBody, type MonitorJobKind } from './monitor-url.ts';
+import { monitorScrapeBody, untagMonitorUrl, type MonitorJobKind } from './monitor-url.ts';
 
 const log = rootLog.child('firecrawl');
 
@@ -448,6 +448,108 @@ async function scrapeAllowed(
     }
     throw err;
   }
+}
+
+/** One page of a finished batch scrape of the project's own app. */
+export interface FirecrawlBatchPage {
+  /** The page as requested, without the mushi_monitor marker. */
+  url: string;
+  title: string | null;
+  markdown: string;
+  /** Every link on the page, unmarked. */
+  links: string[];
+  statusCode: number | null;
+}
+
+export type FirecrawlBatchState =
+  | { status: 'scraping'; completed: number; total: number }
+  | { status: 'completed'; pages: FirecrawlBatchPage[] }
+  | { status: 'failed'; error: string };
+
+/**
+ * Start a batch scrape of pages of the project's own app (Journey optimizer
+ * site scan): markdown plus every link, from the whole page. Firecrawl runs
+ * it on its side, so no edge isolate waits on slow pages; read it later with
+ * firecrawlBatchStatus. Only URLs on the site's own host are sent, each
+ * marked as Mushi's traffic (monitor-url.ts). Returns the batch id.
+ */
+export async function firecrawlBatchScrapeOwnSite(
+  db: SupabaseClient,
+  projectId: string,
+  urls: string[],
+  siteUrl: string,
+): Promise<{ id: string; sent: number }> {
+  const resolved = await resolveFirecrawl(db, projectId);
+  if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
+  const host = siteHost(siteUrl);
+  const own = urls.filter((u) => isHostAllowed(u, [host]));
+  if (own.length === 0) throw new Error('NO_PAGES');
+  const res = await fetch(`${FIRECRAWL_BASE}/v2/batch/scrape`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resolved.key}` },
+    body: JSON.stringify(
+      monitorScrapeBody('qa', {
+        urls: own,
+        formats: ['markdown', 'links'],
+        onlyMainContent: false,
+        maxAge: 0,
+        timeout: 45_000,
+      }),
+    ),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const body = (await res.json().catch(() => ({}))) as { id?: unknown; error?: unknown };
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) throw new Error('FIRECRAWL_AUTH_FAILED');
+    if (res.status === 402) throw new Error('FIRECRAWL_NO_CREDITS');
+    if (res.status === 429) throw new Error('FIRECRAWL_RATE_LIMITED');
+    throw new Error(`FIRECRAWL_HTTP_${res.status}`);
+  }
+  if (typeof body.id !== 'string') throw new Error('FIRECRAWL_NO_BATCH_ID');
+  if (resolved.source === 'byok') {
+    await markKeyUsed(db, projectId, 'firecrawl', resolved.keyId).catch((error) => {
+      log.warn('Firecrawl usage bookkeeping failed (non-fatal)', { projectId, error: String(error) });
+    });
+  }
+  return { id: body.id, sent: own.length };
+}
+
+/** Where a batch scrape stands; the pages once it completed (all result pages followed). */
+export async function firecrawlBatchStatus(db: SupabaseClient, projectId: string, batchId: string): Promise<FirecrawlBatchState> {
+  const resolved = await resolveFirecrawl(db, projectId);
+  if (!resolved) throw new Error('FIRECRAWL_NOT_CONFIGURED');
+  const pages: FirecrawlBatchPage[] = [];
+  let next: string | null = `${FIRECRAWL_BASE}/v2/batch/scrape/${encodeURIComponent(batchId)}`;
+  for (let hops = 0; next && hops < 20; hops++) {
+    // Only Firecrawl's own pagination URLs are followed.
+    if (!next.startsWith(`${FIRECRAWL_BASE}/`)) break;
+    const res: Response = await fetch(next, { headers: { Authorization: `Bearer ${resolved.key}` }, signal: AbortSignal.timeout(20_000) });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      if (res.status === 404) return { status: 'failed', error: 'FIRECRAWL_BATCH_GONE' };
+      throw new Error(`FIRECRAWL_HTTP_${res.status}`);
+    }
+    const status = String(body.status ?? 'scraping');
+    if (status === 'failed' || status === 'cancelled') return { status: 'failed', error: `FIRECRAWL_BATCH_${status.toUpperCase()}` };
+    if (status !== 'completed') {
+      return { status: 'scraping', completed: Number(body.completed ?? 0) || 0, total: Number(body.total ?? 0) || 0 };
+    }
+    for (const raw of (body.data as Array<Record<string, unknown>> | undefined) ?? []) {
+      const m = (raw.metadata ?? {}) as Record<string, unknown>;
+      const tagged = (m.sourceURL ?? m.url) as string | undefined;
+      if (typeof tagged !== 'string') continue;
+      const title = typeof m.title === 'string' ? m.title : Array.isArray(m.title) && typeof m.title[0] === 'string' ? m.title[0] : null;
+      pages.push({
+        url: untagMonitorUrl(tagged),
+        title,
+        markdown: typeof raw.markdown === 'string' ? raw.markdown : '',
+        links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string').map(untagMonitorUrl) : [],
+        statusCode: typeof m.statusCode === 'number' ? m.statusCode : null,
+      });
+    }
+    next = typeof body.next === 'string' ? body.next : null;
+  }
+  return { status: 'completed', pages };
 }
 
 export interface FirecrawlMapOptions {

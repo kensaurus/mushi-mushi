@@ -7,8 +7,9 @@
  *              reads as failed, and another app's data never leaks in;
  *            - POST refuses viewers, a missing or unsafe address, a second
  *              scan while one runs and a re-scan inside 10 minutes;
- *            - the scan worker stores links and fingerprints (never page
- *              text), records a missing key as a plain-words failure, and
+ *            - the scan is a Firecrawl batch finished on a later read: it
+ *              stores links and fingerprints (never page text), refuses a
+ *              missing key in plain words, gives up after 20 minutes and
  *              keeps the newest 10 scans.
  */
 
@@ -19,10 +20,12 @@ const state = vi.hoisted(() => ({
   db: null as unknown,
   accessible: [] as string[],
   roles: {} as Record<string, string>,
-  background: [] as Array<Promise<unknown>>,
   mapLinks: [] as string[],
-  pages: {} as Record<string, { title: string; markdown: string; links: string[] } | Error>,
-  scraped: [] as Array<{ url: string; links?: boolean }>,
+  pages: {} as Record<string, { title: string; markdown: string; links: string[] }>,
+  batchSent: [] as string[],
+  batchStatus: 'completed' as 'scraping' | 'completed' | 'failed',
+  startError: null as Error | null,
+  statusCalls: 0,
 }))
 
 const fakeLog = vi.hoisted(() => {
@@ -36,19 +39,23 @@ vi.mock('../../supabase/functions/_shared/db.ts', () => ({ getServiceClient: () 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => ({ log: fakeLog, createLogger: () => fakeLog }))
 vi.mock('../../supabase/functions/_shared/auth.ts', () => ({ adminOrApiKey: () => async (_c: unknown, next: () => Promise<void>) => next() }))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => {} }))
-vi.mock('../../supabase/functions/_shared/background.ts', () => ({
-  runInBackground: (p: Promise<unknown>) => {
-    state.background.push(p)
-  },
-}))
 vi.mock('../../supabase/functions/_shared/firecrawl.ts', () => ({
-  firecrawlMapOwnSite: async () => state.mapLinks,
-  firecrawlScrapeOwnSite: async (_db: unknown, _p: string, url: string, _base: string, opts?: { links?: boolean }) => {
-    state.scraped.push({ url, links: opts?.links })
-    const page = state.pages[url]
-    if (page instanceof Error) throw page
-    if (!page) throw new Error('FIRECRAWL_HTTP_404')
-    return { url, ...page }
+  firecrawlMapOwnSite: async () => {
+    if (state.startError) throw state.startError
+    return state.mapLinks
+  },
+  firecrawlBatchScrapeOwnSite: async (_db: unknown, _p: string, urls: string[]) => {
+    state.batchSent = urls
+    return { id: 'batch-1', sent: urls.length }
+  },
+  firecrawlBatchStatus: async () => {
+    state.statusCalls += 1
+    if (state.batchStatus === 'scraping') return { status: 'scraping', completed: 1, total: 3 }
+    if (state.batchStatus === 'failed') return { status: 'failed', error: 'FIRECRAWL_BATCH_FAILED' }
+    return {
+      status: 'completed',
+      pages: state.batchSent.filter((u) => state.pages[u]).map((u) => ({ url: u, statusCode: 200, ...state.pages[u]! })),
+    }
   },
 }))
 vi.mock('../../supabase/functions/api/shared.ts', () => ({
@@ -132,8 +139,10 @@ beforeEach(() => {
   state.db = db
   state.accessible = [P]
   state.roles = {}
-  state.background = []
-  state.scraped = []
+  state.batchSent = []
+  state.batchStatus = 'completed'
+  state.startError = null
+  state.statusCalls = 0
   state.mapLinks = [`${BASE}/`, `${BASE}/pricing`, `${BASE}/plans`, `${BASE}/logo.png`]
   const lorem = 'our pricing is simple you pay one flat fee each month for every project and every teammate you add there are no hidden costs and you can cancel at any time from the settings page with one click and keep your data for thirty days after'
   state.pages = {
@@ -170,34 +179,45 @@ describe('GET /v1/admin/projects/:id/journeys', () => {
     expect((await app.call('GET', '/v1/admin/projects/:id/journeys', { id: OTHER })).status).toBe(404)
   })
 
-  it('reports a scan stuck in running as failed', async () => {
-    db.table('site_structure_scans').push({ id: 'old', project_id: P, base_url: BASE, status: 'running', page_count: 0, error: null, created_at: ago(30), finished_at: null, pages: [] })
+  it('gives up on a batch still running after 20 minutes, and on a scan with no batch', async () => {
+    db.table('site_structure_scans').push({ id: 'old', project_id: P, base_url: BASE, status: 'running', page_count: 0, error: null, created_at: ago(30), finished_at: null, pages: [], batch_id: 'b', checked_at: null })
     const res = await app.call('GET', '/v1/admin/projects/:id/journeys')
     expect(res.body.data.scan).toMatchObject({ id: 'old', status: 'failed' })
-    expect(res.body.data.scan.error).toContain('stopped')
+    expect(res.body.data.scan.error).toContain('20 minutes')
+    db.table('site_structure_scans').push({ id: 'nobatch', project_id: P, base_url: BASE, status: 'running', page_count: 0, error: null, created_at: ago(2), finished_at: null, pages: [], batch_id: null, checked_at: null })
+    expect((await app.call('GET', '/v1/admin/projects/:id/journeys')).body.data.scan).toMatchObject({ id: 'nobatch', status: 'failed' })
   })
 })
 
 describe('POST /v1/admin/projects/:id/journeys/scan', () => {
   const scan = (body?: unknown, id?: string) => app.call('POST', '/v1/admin/projects/:id/journeys/scan', { body: body === undefined ? '' : JSON.stringify(body), id })
 
-  it('scans the live site and stores links and fingerprints, not page text', async () => {
+  it('starts a batch, finishes it on a later read, and stores links and fingerprints, not page text', async () => {
+    state.batchStatus = 'scraping'
     const res = await scan()
     expect(res.status).toBe(202)
     expect(res.body.data.scan).toMatchObject({ status: 'running', baseUrl: BASE })
-    await Promise.all(state.background)
+    // Files are skipped; the start page is first.
+    expect(state.batchSent).toEqual([`${BASE}/`, `${BASE}/pricing`, `${BASE}/plans`])
+    expect(db.table('site_structure_scans')[0]).toMatchObject({ status: 'running', batch_id: 'batch-1', pages_sent: 3 })
+
+    // While Firecrawl is still scraping, a read leaves the scan running.
+    expect((await app.call('GET', '/v1/admin/projects/:id/journeys')).body.data.scan.status).toBe('running')
+    // A read right after reuses that check instead of asking Firecrawl again.
+    await app.call('GET', '/v1/admin/projects/:id/journeys')
+    expect(state.statusCalls).toBe(1)
+
+    state.batchStatus = 'completed'
+    db.table('site_structure_scans')[0]!.checked_at = ago(1)
+    const map = (await app.call('GET', '/v1/admin/projects/:id/journeys')).body.data
     const row = db.table('site_structure_scans')[0]!
     expect(row).toMatchObject({ status: 'done', page_count: 3, error: null })
-    // Files are skipped; every page was read with links.
-    expect(state.scraped.map((s) => s.url).sort()).toEqual([`${BASE}/`, `${BASE}/plans`, `${BASE}/pricing`])
-    expect(state.scraped.every((s) => s.links === true)).toBe(true)
     const pages = row.pages as Array<Record<string, unknown>>
     const home = pages.find((p) => p.path === '/')!
     expect(home.links).toEqual(['/pricing'])
     expect(JSON.stringify(pages)).not.toContain('pay one flat fee')
 
-    // The map now carries the scan: /plans duplicates /pricing and nothing links to it.
-    const map = (await app.call('GET', '/v1/admin/projects/:id/journeys')).body.data
+    // The same read already carries the scan: /plans duplicates /pricing and nothing links to it.
     expect(map.mapScan).toMatchObject({ status: 'done', pageCount: 3 })
     const kinds = map.map.findings.map((f: { kind: string; pages: string[] }) => `${f.kind}:${f.pages.join(',')}`)
     expect(kinds).toContain('duplicate_page:/plans,/pricing')
@@ -215,7 +235,7 @@ describe('POST /v1/admin/projects/:id/journeys/scan', () => {
   })
 
   it('allows one scan at a time and none within 10 minutes of the last', async () => {
-    db.table('site_structure_scans').push({ id: 'run', project_id: P, base_url: BASE, status: 'running', page_count: 0, error: null, created_at: ago(1), finished_at: null, pages: [] })
+    db.table('site_structure_scans').push({ id: 'run', project_id: P, base_url: BASE, status: 'running', page_count: 0, error: null, created_at: ago(1), finished_at: null, pages: [], batch_id: 'b', checked_at: null })
     expect((await scan()).body.error?.code).toBe('SCAN_RUNNING')
     db.table('site_structure_scans')[0]!.status = 'done'
     db.table('site_structure_scans')[0]!.finished_at = ago(2)
@@ -225,13 +245,21 @@ describe('POST /v1/admin/projects/:id/journeys/scan', () => {
     expect(app.headers['Retry-After']).toBe('480')
   })
 
-  it('records a missing Firecrawl key in plain words', async () => {
-    state.pages[`${BASE}/`] = new Error('FIRECRAWL_NOT_CONFIGURED')
+  it('says in plain words when there is no Firecrawl key, and stores no scan', async () => {
+    state.startError = new Error('FIRECRAWL_NOT_CONFIGURED')
+    const res = await scan()
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatchObject({ code: 'FIRECRAWL_NOT_CONFIGURED' })
+    expect(res.body.error?.message).toContain('Settings → AI keys')
+    expect(db.table('site_structure_scans')).toHaveLength(0)
+  })
+
+  it('records a batch Firecrawl stopped as a failed scan', async () => {
+    state.batchStatus = 'failed'
     await scan()
-    await Promise.all(state.background)
-    const row = db.table('site_structure_scans')[0]!
-    expect(row.status).toBe('failed')
-    expect(row.error).toContain('Settings → AI keys')
+    await app.call('GET', '/v1/admin/projects/:id/journeys')
+    expect(db.table('site_structure_scans')[0]).toMatchObject({ status: 'failed' })
+    expect(String(db.table('site_structure_scans')[0]!.error)).toContain('stopped the scan')
   })
 
   it('keeps the newest 10 scans', async () => {
@@ -239,7 +267,7 @@ describe('POST /v1/admin/projects/:id/journeys/scan', () => {
       db.table('site_structure_scans').push({ id: `old${i}`, project_id: P, base_url: BASE, status: 'done', page_count: 1, error: null, created_at: ago(60 + i), finished_at: ago(60 + i), pages: [] })
     }
     await scan()
-    await Promise.all(state.background)
+    await app.call('GET', '/v1/admin/projects/:id/journeys')
     const left = db.table('site_structure_scans').filter((r) => r.project_id === P)
     expect(left).toHaveLength(10)
     expect(left.some((r) => r.id === 'old11')).toBe(false)

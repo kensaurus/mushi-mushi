@@ -401,7 +401,7 @@ const JOURNEY_MAX_FLOWS = 10
 const JOURNEY_DEFAULT_LIMIT = 20
 export const JOURNEY_MAX_LIMIT = 100
 /** scan_site_journeys' hint: the scan runs in the background. */
-export const JOURNEY_SCAN_NEXT = 'The scan runs in the background, usually under a minute. Call get_journeys in about a minute.'
+export const JOURNEY_SCAN_NEXT = 'Firecrawl reads the pages on its side, usually in a few minutes. Call get_journeys in about two minutes; each call moves the scan on and returns the map once it is done.'
 
 /** Longest on-demand recording window the route accepts: one week. */
 export const JOURNEY_RECORDING_MAX_HOURS = 168

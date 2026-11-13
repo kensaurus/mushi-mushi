@@ -133,7 +133,7 @@ export const KIND_LABEL: Record<JourneyFindingKind, string> = {
   broken: 'Broken page',
   dead_end: 'Dead end',
   high_exit: 'People leave',
-  loop: 'Back and forth',
+  loop: 'Wrong door',
   reload: 'Reloaded',
   duplicate_page: 'Duplicate pages',
   route_variant: 'Same page, two addresses',

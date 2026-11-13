@@ -11,7 +11,7 @@
  *       (api/routes/journeys.ts, served by api-ext).
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -24,6 +24,8 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { JOURNEY_DAYS, journeysPath, percent, scoreTone, type JourneyDays, type JourneysData } from '../lib/journeys'
 
 const SCAN_POLL_MS = 4_000
+/** Keep checking a scan this long after starting it, even if a refresh fails. */
+const SCAN_WATCH_MS = 25 * 60_000
 
 export function JourneysPage() {
   const projectId = useActiveProjectId()
@@ -52,13 +54,29 @@ function JourneysBody({ projectId }: { projectId: string }) {
   const { data, loading, error, reload } = usePageData<JourneysData>(journeysPath(projectId, days), { deps: [days] })
   const [selected, setSelected] = useState<string | null>(null)
   const scanRunning = data?.scan?.status === 'running'
+  // When this tab started a scan: polling continues until a scan created
+  // after that time has finished, so one failed refresh (which keeps the old
+  // data, scan 'done') cannot stop it (seen on Solo Boss Cloud, 2026-11-13).
+  const [watchingSince, setWatchingSince] = useState<number | null>(null)
+  const ownScanDone =
+    watchingSince != null && data?.scan != null && data.scan.status !== 'running' && Date.parse(data.scan.createdAt) >= watchingSince - 60_000
+  const watching = watchingSince != null && !ownScanDone
+  const onScanStarted = useCallback(() => {
+    setWatchingSince(Date.now())
+    reload()
+  }, [reload])
+  useEffect(() => {
+    if (watchingSince == null) return
+    const t = setTimeout(() => setWatchingSince(null), SCAN_WATCH_MS)
+    return () => clearTimeout(t)
+  }, [watchingSince])
 
   // While a scan runs, refresh until it lands.
   useEffect(() => {
-    if (!scanRunning) return
+    if (!scanRunning && !watching) return
     const t = setInterval(reload, SCAN_POLL_MS)
     return () => clearInterval(t)
-  }, [scanRunning, reload])
+  }, [scanRunning, watching, reload])
 
   if (loading && !data) return <JourneysSkeleton />
   if (error && !data) return <ErrorAlert title="Couldn't load journeys" message={error} onRetry={reload} />
@@ -72,7 +90,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
   return (
     <>
       <div className="grid gap-3 lg:grid-cols-2">
-        <ScanBar data={data} projectId={projectId} onStarted={reload} />
+        <ScanBar data={data} projectId={projectId} onStarted={onScanStarted} />
         <RecordingCard data={data} projectId={projectId} onChanged={reload} />
       </div>
       {!hasAnything ? (

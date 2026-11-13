@@ -1032,13 +1032,13 @@ Console page `/journeys` (`apps/admin/src/pages/JourneysPage.tsx`). Routes in
 | Route | Auth | Role |
 | --- | --- | --- |
 | `GET /v1/admin/projects/:id/journeys?days=7|30|90` | `adminOrApiKey(mcp:read)` (members) | The map: page-to-page moves from real visits (`session_page_views`), the newest finished scan's links, and findings, each with a plain-English suggestion and a copy-ready prompt for the coding agent. No key needed |
-| `POST /v1/admin/projects/:id/journeys/scan` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ base_url? }`. Starts a site scan: Firecrawl maps the live site and reads up to 40 pages, no LLM. One scan at a time per app, at most one every 10 minutes. Needs a Firecrawl key (`FIRECRAWL_NOT_CONFIGURED` otherwise) |
+| `POST /v1/admin/projects/:id/journeys/scan` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ base_url? }`. Starts a site scan: Firecrawl maps the live site and starts a batch scrape of up to 40 pages, no LLM. Firecrawl runs the batch on its side; each GET of the journeys route checks it (`advanceScan`) and saves the pages once it is done, so no edge isolate waits on slow pages. One scan at a time per app, at most one every 10 minutes. Needs a Firecrawl key (`FIRECRAWL_NOT_CONFIGURED` otherwise) |
 | `PUT /v1/admin/projects/:id/journeys/recording` | `adminOrApiKey(mcp:write)` (non-viewers) | `{ hours: 0–168, sample_rate?: (0,1] }`. Opens, extends or stops (hours 0) the on-demand visit recording window for apps whose SDK runs `trackSessions: 'on-demand'`. Returns `{ recording: { until, sampleRate } }`; GET returns the same block |
 
 | Object | Role |
 | --- | --- |
 | `_shared/journey-map.ts` | Pure. Builds transitions from `session_page_views` and the findings: `broken`, `dead_end`, `high_exit`, `loop`, `reload`, `duplicate_page` (content fingerprint), `route_variant`, `duplicate_title`, `orphan`, `deep_page`, `unvisited`; `agentPrompt()` writes the prompt for each |
-| `site_structure_scans` | One row per scan: status, base URL, and per page its title, internal links and a content fingerprint |
+| `site_structure_scans` | One row per scan: status, base URL, the Firecrawl `batch_id`, and per page its title, internal links and a content fingerprint |
 
 Also from the editor: MCP `get_journeys` (`mcp:read`), `scan_site_journeys` and `record_journeys` (`mcp:write`); CLI `mushi journeys`, `mushi journeys scan` and `mushi journeys record`.
 

@@ -25,16 +25,24 @@ import {
 const NOW = new Date('2026-11-13T12:00:00Z')
 let clock = NOW.getTime() - 3 * 86_400_000
 
-/** One session visiting `routes` in order, a minute apart. */
-function session(id: string, ...routes: string[]): PageViewRow[] {
+/** One session visiting `routes` in order, `gapMs` apart (a minute by default). */
+function sessionAt(id: string, gapMs: number, ...routes: string[]): PageViewRow[] {
   return routes.map((route) => {
-    clock += 60_000
+    clock += gapMs
     return { session_id: id, route, ts: new Date(clock).toISOString() }
   })
 }
 
+function session(id: string, ...routes: string[]): PageViewRow[] {
+  return sessionAt(id, 60_000, ...routes)
+}
+
 function many(n: number, prefix: string, ...routes: string[]): PageViewRow[] {
   return Array.from({ length: n }, (_, i) => session(`${prefix}${i}`, ...routes)).flat()
+}
+
+function manyAt(n: number, prefix: string, gapMs: number, ...routes: string[]): PageViewRow[] {
+  return Array.from({ length: n }, (_, i) => sessionAt(`${prefix}${i}`, gapMs, ...routes)).flat()
 }
 
 function page(path: string, links: string[], text = '', title: string | null = null): ScannedPage {
@@ -95,18 +103,54 @@ describe('buildJourneyMap from visits', () => {
     expect(map.findings.filter((f) => f.pages.includes('/thank-you'))).toEqual([])
   })
 
-  it('finds back-and-forth loops and reloads', () => {
+  it('finds wrong doors (a bounce within seconds, then another page) and reloads', () => {
     const views = [
-      ...many(5, 'l', '/settings', '/billing', '/settings', '/done'),
+      ...manyAt(5, 'l', 5_000, '/settings', '/billing', '/settings', '/invoices'),
+      // Under the bar (5 cases): two bounces are not a finding.
+      ...manyAt(2, 'q', 5_000, '/settings', '/help', '/settings', '/invoices'),
       ...many(5, 'r', '/editor', '/editor', '/editor'),
     ]
     const map = buildJourneyMap({ views, viewsSampled: false, scan: null, brokenUrls: [], now: NOW })
+    expect(map.findings.filter((f) => f.kind === 'loop')).toHaveLength(1)
     const loop = map.findings.find((f) => f.kind === 'loop')!
-    expect(loop.pages).toEqual(['/billing', '/settings'])
+    expect(loop.pages).toEqual(['/billing', '/settings', '/invoices'])
+    expect(loop.severity).toBe('low')
+    expect(loop.title).toBe('People open /billing by mistake and go to /invoices instead')
     expect(loop.detail).toContain('5 times')
+    expect(loop.detail).toContain('within 15 seconds')
     const reload = map.findings.find((f) => f.kind === 'reload')!
     expect(reload.pages).toEqual(['/editor'])
     expect(map.nodes.find((n) => n.path === '/editor')!.issues).toContain('reload')
+  })
+
+  it('does not call normal list and hub use a wrong door, and reports a pair of pages once', () => {
+    // Home → new transaction → home after using the form (a tab app): normal.
+    const hub = buildJourneyMap({ views: many(10, 'h', '/(tabs)', '/transaction/new', '/(tabs)', '/(tabs)/plan'), viewsSampled: false, scan: null, brokenUrls: [], now: NOW })
+    expect(hub.findings.filter((f) => f.kind === 'loop')).toEqual([])
+    // List → item → list → another item, quickly: browsing, not confusion.
+    const list = buildJourneyMap({ views: manyAt(10, 'l', 3_000, '/orders', '/orders/101', '/orders', '/orders/102'), viewsSampled: false, scan: null, brokenUrls: [], now: NOW })
+    expect(list.findings.filter((f) => f.kind === 'loop')).toEqual([])
+    // A bounce and then leaving the app is not a wrong door either.
+    const leave = buildJourneyMap({ views: manyAt(10, 'x', 3_000, '/a', '/b', '/a'), viewsSampled: false, scan: null, brokenUrls: [], now: NOW })
+    expect(leave.findings.filter((f) => f.kind === 'loop')).toEqual([])
+    // Wrong doors both ways between two pages: one finding, not two.
+    const both = buildJourneyMap({
+      views: [...manyAt(6, 'a', 4_000, '/a', '/b', '/a', '/c'), ...manyAt(4, 'b', 4_000, '/b', '/a', '/b', '/c')],
+      viewsSampled: false,
+      scan: null,
+      brokenUrls: [],
+      now: NOW,
+    })
+    expect(both.findings.filter((f) => f.kind === 'loop')).toHaveLength(1)
+  })
+
+  it('counts each kind of finding at most three times toward the score', () => {
+    const scanPages = [page('/', ['/a']), page('/a', ['/'])]
+    for (let i = 0; i < 10; i++) scanPages.push(page(`/orphan-${i}`, ['/']))
+    const map = buildJourneyMap({ views: [], viewsSampled: false, scan: { rootPath: '/', pages: scanPages }, brokenUrls: [], now: NOW })
+    expect(map.findings.filter((f) => f.kind === 'orphan')).toHaveLength(10)
+    // Ten low-severity orphans cost three times the low weight, not ten.
+    expect(map.score).toBe(94)
   })
 
   it('puts broken pages first and scores lower with more findings', () => {

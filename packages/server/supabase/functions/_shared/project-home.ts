@@ -455,6 +455,13 @@ export interface SitemapView {
 
 export const SITEMAP_MAX = 12
 const ID_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{16,}|[A-Za-z0-9_-]{24,})$/i
+/**
+ * A kebab-case slug of words ("director-housing-rent-guide") is a page, not an
+ * id, however long: treating 24+ characters as an id merged distinct docs
+ * pages into one "/docs/:id" (Journey optimizer on Solo Boss Cloud,
+ * 2026-11-13). Ids and hashes carry digits or no dashes.
+ */
+const WORD_SLUG = /^[a-z]+(?:-[a-z]+)+$/
 
 /** A URL or route as a page path: no origin, query or hash; ids become `:id`. */
 export function normalizeRoute(raw: string | null | undefined): string | null {
@@ -470,7 +477,7 @@ export function normalizeRoute(raw: string | null | undefined): string | null {
   }
   path = path.split(/[?#]/)[0] ?? ''
   if (!path.startsWith('/')) path = `/${path}`
-  const segments = path.split('/').filter(Boolean).map((s) => (ID_SEGMENT.test(s) ? ':id' : s))
+  const segments = path.split('/').filter(Boolean).map((s) => (ID_SEGMENT.test(s) && !WORD_SLUG.test(s) ? ':id' : s))
   const out = `/${segments.join('/')}`
   return out.length > 120 ? out.slice(0, 120) : out
 }

@@ -143,13 +143,26 @@ export interface JourneyMap {
 // ── Tuning ──────────────────────────────────────────────────────────────────
 
 /** Most nodes the map returns (busiest first); findings still cover every page. */
-export const MAX_NODES = 60
+export const MAX_NODES = 30
 /** Most edges the map returns. */
-export const MAX_EDGES = 160
+export const MAX_EDGES = 60
+/** A move drawn on the map is at least this share of the busiest move (small maps keep every move). */
+const EDGE_MIN_SHARE = 0.03
 const MIN_VISITS_FOR_EXIT = 8
 const HIGH_EXIT_RATE = 0.6
-const MIN_LOOPS = 3
+/** A wrong door needs this many cases, or LOOP_MIN_SESSION_SHARE of sessions if more: rare cases are noise. */
+const MIN_LOOPS = 5
+const LOOP_MIN_SESSION_SHARE = 0.015
 const LOOP_SHARE = 0.25
+/**
+ * A "wrong door": A → B, back to A within this time, then on to a different
+ * page C. B was not what the link promised and C was. A plain return is not
+ * enough: list → item → list and hub → form → hub are normal use (yen-yen,
+ * 2026-11-13: 41 false "back and forth" findings on a tab app before this).
+ */
+export const BOUNCE_MS = 15_000
+/** Each kind of finding counts at most this many times toward the score, so one noisy kind cannot sink it. */
+const SCORE_CAP_PER_KIND = 3
 const MIN_RELOADS = 4
 const RELOAD_SHARE = 0.15
 const DEEP_CLICKS = 4
@@ -205,6 +218,8 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
   }
   const moves = new Map<string, number>()
   const loops = new Map<string, number>()
+  /** For each wrong door A→B, where people went instead (C), and how often. */
+  const wentInstead = new Map<string, Map<string, number>>()
   const flowCounts = new Map<string, number>()
   let bounces = 0
 
@@ -212,10 +227,14 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
     list.sort((a, b) => a.t - b.t)
     // Collapse repeats: A A B → A B, counting the repeat as a reload of A.
     const seq: string[] = []
-    for (const { path } of list) {
+    const at: number[] = []
+    for (const { path, t } of list) {
       stat(path).visits += 1
       if (seq.at(-1) === path) stat(path).reloads += 1
-      else seq.push(path)
+      else {
+        seq.push(path)
+        at.push(t)
+      }
     }
     for (const p of new Set(seq)) stat(p).sessions += 1
     stat(seq[0]!).entries += 1
@@ -224,10 +243,14 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
     for (let i = 1; i < seq.length; i++) {
       const key = `${seq[i - 1]}\u0000${seq[i]}`
       moves.set(key, (moves.get(key) ?? 0) + 1)
-      // A → B → A: went somewhere and came straight back.
-      if (i >= 2 && seq[i] === seq[i - 2]) {
+      // A → B → A within seconds, then on to another page C: a wrong door.
+      const next = seq[i + 1]
+      if (i >= 2 && seq[i] === seq[i - 2] && at[i]! - at[i - 1]! <= BOUNCE_MS && next !== undefined && next !== seq[i - 1]) {
         const lk = `${seq[i - 2]}\u0000${seq[i - 1]}`
         loops.set(lk, (loops.get(lk) ?? 0) + 1)
+        const instead = wentInstead.get(lk) ?? new Map<string, number>()
+        instead.set(next, (instead.get(next) ?? 0) + 1)
+        wentInstead.set(lk, instead)
       }
     }
     if (seq.length >= 2) {
@@ -330,17 +353,30 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
     }
   }
 
+  // One finding per pair of pages: A→B→A and B→A→B are the same problem.
+  const loopPairs = new Map<string, [string, number]>()
   for (const [key, n] of loops) {
     const [a, b] = key.split('\u0000') as [string, string]
+    const pair = a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`
+    const best = loopPairs.get(pair)
+    if (!best || n > best[1]) loopPairs.set(pair, [key, n])
+  }
+  const minLoops = Math.max(MIN_LOOPS, Math.ceil(sessions * LOOP_MIN_SESSION_SHARE))
+  for (const [key, n] of loopPairs.values()) {
+    const [a, b] = key.split('\u0000') as [string, string]
     const out = moves.get(key) ?? 0
-    if (n < MIN_LOOPS || out === 0 || n / out < LOOP_SHARE) continue
+    if (n < minLoops || out === 0 || n / out < LOOP_SHARE) continue
+    const [instead, insteadN] = [...(wentInstead.get(key) ?? new Map<string, number>())].sort((x, y) => y[1] - x[1])[0] ?? [null, 0]
+    const mostly = instead && insteadN * 2 >= n
     add({
       kind: 'loop',
-      severity: n >= 15 ? 'high' : 'medium',
-      pages: [b, a],
-      title: `People go back and forth between ${a} and ${b}`,
-      detail: `${n} times people went from ${a} to ${b} and straight back (${Math.round((n / out) * 100)}% of moves from ${a} to ${b}). ${b} probably does not have what they expected.`,
-      suggestion: `Make the link on ${a} say what ${b} contains, or put the missing information on ${b}.`,
+      severity: n >= 15 ? 'high' : n >= 8 ? 'medium' : 'low',
+      pages: mostly ? [b, a, instead] : [b, a],
+      title: mostly ? `People open ${b} by mistake and go to ${instead} instead` : `People open ${b}, come straight back and try another page`,
+      detail: `${n} times people went from ${a} to ${b}, came back within ${BOUNCE_MS / 1000} seconds and then opened a different page (${Math.round((n / out) * 100)}% of moves from ${a} to ${b})${mostly ? `, most often ${instead}` : ''}. ${b} is not what they expected from the link.`,
+      suggestion: mostly
+        ? `On ${a}, make the way to ${instead} easier to see, and make the link to ${b} say what is there.`
+        : `Make the link to ${b} on ${a} say what is there, or put what people look for on ${b}.`,
     })
   }
 
@@ -444,9 +480,12 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
   const kept = new Set(ranked.slice(0, MAX_NODES).map((n) => n.path))
   const edges: JourneyEdge[] = []
   const edgeSeen = new Set<string>()
-  for (const [key, n] of [...moves].sort((a, b) => b[1] - a[1])) {
+  const sortedMoves = [...moves].sort((a, b) => b[1] - a[1])
+  // A busy map draws its meaningful moves only; a small one keeps every move.
+  const minMoves = sortedMoves.length > MAX_EDGES / 2 ? Math.max(2, Math.ceil((sortedMoves[0]?.[1] ?? 0) * EDGE_MIN_SHARE)) : 1
+  for (const [key, n] of sortedMoves) {
     const [from, to] = key.split('\u0000') as [string, string]
-    if (!kept.has(from) || !kept.has(to)) continue
+    if (!kept.has(from) || !kept.has(to) || n < minMoves) continue
     edges.push({ from, to, moves: n, linked: linked.has(key) })
     edgeSeen.add(key)
   }
@@ -464,7 +503,15 @@ export function buildJourneyMap(input: JourneyInput): JourneyMap {
     .slice(0, 6)
     .map(([k, n]) => ({ pages: k.split('\u0000'), sessions: n }))
 
-  const penalty = findings.reduce((sum, f) => sum + SEVERITY_WEIGHT[f.severity], 0)
+  // Worst findings first (already sorted); each kind counts at most SCORE_CAP_PER_KIND times.
+  const perKind = new Map<JourneyFindingKind, number>()
+  let penalty = 0
+  for (const f of findings) {
+    const seen = perKind.get(f.kind) ?? 0
+    if (seen >= SCORE_CAP_PER_KIND) continue
+    perKind.set(f.kind, seen + 1)
+    penalty += SEVERITY_WEIGHT[f.severity]
+  }
   return {
     stats: {
       sessions,
