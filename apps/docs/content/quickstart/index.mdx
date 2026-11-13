@@ -96,6 +96,23 @@ Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 </Steps>
 
+## Rather let your AI editor do it?
+
+Paste this into Cursor, Claude Code or any AI editor that can run commands:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+<YouWillSee>**You'll see:** a browser page to approve, then your editor names the file it changed. Open your app and look for the report button.</YouWillSee>
+
+Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`,
+`node`) makes a small starter app with Mushi Mushi already in it. See
+[start a new app](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it).
+
 ## Already have Sentry issues? Bring them in
 
 The fastest way to a real diagnosis of your own code is a bug you already

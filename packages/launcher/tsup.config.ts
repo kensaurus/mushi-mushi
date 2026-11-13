@@ -33,6 +33,9 @@ const SDK_EXTERNAL: NonNullable<Options['external']> = [
  */
 const ADAPTERS = /^@mushi-mushi\/(react|vue|svelte|angular)$/
 
+/** The ESLint plugin, bundled into `mushi-mushi/eslint` (no longer published). */
+const ESLINT_PLUGIN = /^eslint-plugin-mushi-mushi(\/.*)?$/
+
 const sdk = {
   format: ['esm', 'cjs'],
   target: 'es2022',
@@ -79,6 +82,16 @@ export default defineConfig([
     entry: { vue: 'src/vue.ts', svelte: 'src/svelte.ts', angular: 'src/angular.ts' },
     noExternal: [ADAPTERS],
     dts: { resolve: [ADAPTERS] },
+  },
+  // `mushi-mushi/eslint`: the ESLint rules, bundled from the workspace plugin
+  // (a devDependency, private since ADR 0060 Phase 1b). eslint is an optional
+  // peer and stays external, like the frameworks.
+  {
+    ...sdk,
+    entry: { eslint: 'src/eslint.ts' },
+    external: [...SDK_EXTERNAL, /^eslint(\/.*)?$/],
+    noExternal: [ESLINT_PLUGIN],
+    dts: { resolve: [ESLINT_PLUGIN] },
   },
   // React on its own: every export uses hooks or context, so the entry is a
   // client module. Bundling drops the adapter's own 'use client' directive, so

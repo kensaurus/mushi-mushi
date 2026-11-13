@@ -5,9 +5,16 @@ description: "Free, open-source bug report widget for any website, no framework 
 
 # Bug report widget for vanilla JavaScript
 
-This quickstart adds the Mushi Mushi bug-report widget to a site with no
-framework, or to any framework you'd rather drive imperatively. Without a
-bundler, use the [script tag](#no-bundler-script-tag).
+This page adds a report button to a site with no framework, or to any
+framework you'd rather drive from plain JavaScript. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply.
+
+- **Plain HTML, WordPress, Webflow or no build step?** Paste one
+  [script tag](#no-bundler-script-tag). Nothing to install.
+- **A JavaScript project with a `package.json`?** Run `npx mushi-mushi` in its
+  folder. It gets your keys, installs the package and offers to add the
+  start-up code to your entry file, such as `src/main.ts` (it asks first).
 
 ## Try it live
 
@@ -63,7 +70,9 @@ document.querySelector('#report-bug')?.addEventListener('click', async () => {
 `captureEvent` files the report without opening any UI. To open the widget
 instead, call `mushi.report()`.
 
-The widget launcher mounts automatically on `Mushi.init`. Set
+<YouWillSee>**You'll see:** the report in the [console](https://kensaur.us/mushi-mushi/admin) within seconds, with a title, how serious it is and the likely cause.</YouWillSee>
+
+The report button shows automatically after `Mushi.init`. Set
 `widget: { trigger: 'hidden' }` to keep it out of sight and open it only
 from your own buttons.
 

@@ -2,7 +2,7 @@
   "name": "create-mushi-mushi",
   "version": "0.6.16",
   "license": "MIT",
-  "description": "Runs the same setup wizard as `npx mushi-mushi` (use that), so `npm create mushi-mushi` keeps working. Also scaffolds Vue, Svelte or Node starter apps with `--template`.",
+  "description": "Same as npx mushi-mushi. Kept so `npm create mushi-mushi` keeps working: it forwards every argument to the same setup wizard, starters (`--template`) and commands.",
   "bin": {
     "create-mushi-mushi": "./dist/index.js"
   },
@@ -39,7 +39,6 @@
   },
   "files": [
     "dist",
-    "templates",
     "README.md",
     "LICENSE"
   ],

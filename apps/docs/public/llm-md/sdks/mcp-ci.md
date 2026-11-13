@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      # Gates 1 + 2 read your ESLint report (mushi-mushi/eslint rules).
       - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
@@ -74,7 +74,7 @@ jobs:
 
 The action fails the step; it does not post a separate GitHub commit status.
 `dead_handler` and `mock_leak` judge the findings in `eslint-report` (an
-ESLint JSON report made with [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin)).
+ESLint JSON report made with [`mushi-mushi/eslint`](/sdks/eslint-plugin)).
 A run that asks for them without a report fails, so a missing lint step can
 never pass as "no findings". `crawl` is not run by this command: start a crawl
 with **Reconcile** on the Inventory page; `api_contract` reads its result. A
@@ -106,7 +106,7 @@ page; see [Admin → User stories · Inventory](/admin/inventory).
 | `commit-sha`  |          | `GITHUB_SHA`  | For `gates` and `spec-drift`: the commit to check.   |
 | `pr-number`   |          | —             | For `gates` and `spec-drift`: the PR the findings belong to. |
 | `gates`       |          | `all`         | For `gates`: a comma-separated subset; `crawl` is refused. |
-| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. |
+| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `mushi-mushi/eslint`. |
 | `repo-root`   |          | the workspace | For `discover-api`: where to look for routes. For `gates`: the root `eslint-report` paths are made relative to. |
 | `openapi-file` |         | `openapi.yaml` in `repo-root` | For `discover-api`: an explicit OpenAPI file. |
 | `supabase-url`, `supabase-anon-key` | | — | For `discover-api`: optional Supabase introspection. |

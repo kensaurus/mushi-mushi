@@ -131,7 +131,13 @@ export const BUDGETS = [
   // 2026-11-13: unpacked 1,020 → 1,030 kB: `mushi journeys` (show, scan,
   // record; ADR 0058). No new dependencies; measured 269.1 kB packed,
   // 1,022.9 kB unpacked.
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 280_000, unpacked: 1_030_000 },
+  // 2026-11-13: packed 280 → 285 kB, unpacked 1,030 → 1,050 kB: the Vue,
+  // Svelte and Node starters moved in from create-mushi-mushi (templates/,
+  // 21 files) with `--template` and the shared `wizard-bin` entry both
+  // unscoped bins now call (ADR 0060 Phase 1b); the rest of the growth since
+  // the 1,022.9 kB figure includes the 0.39.0 CHANGELOG. No new dependencies;
+  // measured 281.7 kB packed, 1,041.4 kB unpacked (57 files).
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 285_000, unpacked: 1_050_000 },
   // 2026-11-13 (ADR 0060): `mushi-mushi` is the one package users install and
   // the `npx mushi-mushi` launcher. Its own tarball is the bin plus thin
   // re-exports and the four small framework adapters bundled in; measured
@@ -142,7 +148,14 @@ export const BUDGETS = [
   // budget guards what the umbrella itself adds; the SDK tarballs are not
   // budgeted here (their size-limit checks cover the shipped bundle, not the
   // tarball).
-  { name: 'mushi-mushi', dir: 'packages/launcher', packed: 38_000, unpacked: 135_000 },
+  // 2026-11-13 (ADR 0060 Phase 1b): packed 38 → 60 kB, unpacked 135 → 235 kB
+  // for `mushi-mushi/eslint`, the ESLint rules bundled from the now-private
+  // eslint-plugin-mushi-mushi (eslint.js 60.8 kB + eslint.cjs 61.8 kB +
+  // 2 × 2.9 kB types = 128.3 kB unpacked, unminified like the other
+  // entries). The rest of the growth is the README rewrite and the CHANGELOG.
+  // No new dependencies (eslint is an optional peer); measured 54.8 kB
+  // packed, 225.2 kB unpacked (64 files), with the README still being edited.
+  { name: 'mushi-mushi', dir: 'packages/launcher', packed: 60_000, unpacked: 235_000 },
 ]
 
 const fmt = (n) => `${(n / 1000).toFixed(1)} kB`

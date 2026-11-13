@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 if (!process.env.MUSHI_PROJECT_ID || !process.env.MUSHI_API_KEY) {
   console.error(

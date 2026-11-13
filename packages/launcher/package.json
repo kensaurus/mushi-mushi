@@ -160,6 +160,16 @@
         "default": "./dist/node-hono.cjs"
       }
     },
+    "./eslint": {
+      "import": {
+        "types": "./dist/eslint.d.ts",
+        "default": "./dist/eslint.js"
+      },
+      "require": {
+        "types": "./dist/eslint.d.cts",
+        "default": "./dist/eslint.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -205,6 +215,9 @@
       ],
       "node/hono": [
         "./dist/node-hono.d.ts"
+      ],
+      "eslint": [
+        "./dist/eslint.d.ts"
       ]
     }
   },
@@ -223,6 +236,7 @@
   "peerDependencies": {
     "@angular/core": ">=17",
     "@opentelemetry/api": ">=1.0.0",
+    "eslint": ">=8.0.0",
     "express": ">=4.18.0",
     "fastify": ">=4.0.0",
     "hono": ">=4.0.0",
@@ -236,6 +250,9 @@
       "optional": true
     },
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "eslint": {
       "optional": true
     },
     "express": {
@@ -268,6 +285,7 @@
     "@mushi-mushi/vue": "workspace:^",
     "@types/node": "^22.20.0",
     "eslint": "^10.6.0",
+    "eslint-plugin-mushi-mushi": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

@@ -2,7 +2,7 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
-**Separate on purpose:** a dev dependency for your ESLint config, not part of [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi). To add Mushi Mushi to an app, install `mushi-mushi`; add this plugin too if you want the lint rules.
+**These rules now ship in [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) as `mushi-mushi/eslint`.** This folder is their source inside the Mushi Mushi monorepo and is no longer published (ADR 0060, Phase 1b). `eslint-plugin-mushi-mushi@0.3.7` was the last published version.
 
 ESLint rules from Mushi Mushi for two bugs AI coding tools often ship: a button
 wired to a handler that does nothing, and fake data (faker, MSW, `John Doe`
@@ -10,12 +10,12 @@ arrays) left in production code. Neither throws an error, so error monitoring
 never sees them. Free, MIT, and works without a Mushi Mushi account.
 
 ```bash
-npm install --save-dev eslint-plugin-mushi-mushi
+npm install --save-dev mushi-mushi
 ```
 
 ```js
 // eslint.config.js
-import mushi from 'eslint-plugin-mushi-mushi'
+import mushi from 'mushi-mushi/eslint'
 
 export default [
   {
@@ -28,7 +28,7 @@ export default [
 ]
 ```
 
-Docs: [eslint-plugin-mushi-mushi](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin)
+Docs: [ESLint rules](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin)
 
 ## Rules
 
@@ -59,10 +59,10 @@ code in your app.
 
 ## The `recommended` preset
 
-`mushi.configs.recommended` (also exported as `eslint-plugin-mushi-mushi/recommended`) turns on the same three rules as errors. Since 0.3.6 it no longer includes the console's design rules.
+`mushi.configs.recommended` (also exported as `recommended`: `import { recommended } from 'mushi-mushi/eslint'`) turns on the same three rules as errors. Since 0.3.6 it no longer includes the console's design rules.
 
 ```js
-import mushi from 'eslint-plugin-mushi-mushi'
+import mushi from 'mushi-mushi/eslint'
 
 export default [
   mushi.configs.recommended, // no-dead-handler, no-mock-leak, no-allowlist-jsx-textnode
@@ -70,6 +70,8 @@ export default [
 ```
 
 ## Legacy `.eslintrc`
+
+A legacy config finds plugins by package name, so it cannot load `mushi-mushi/eslint`. Move to flat config, or pin `eslint-plugin-mushi-mushi@0.3.7` while it is still on npm.
 
 ```json
 {

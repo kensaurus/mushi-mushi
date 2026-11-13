@@ -56,6 +56,7 @@ import { registerWorkCommands } from './commands/work.js'
 import { registerWorkerCommands } from './commands/worker.js'
 import { setGlobalOutputFormat } from './cli-shared.js'
 import { printAndExit } from './errors.js'
+import { isUnknownTopLevelCommand, UNKNOWN_COMMAND_EXIT, WIZARD_PROBE_ENV } from './wizard-args.js'
 
 // Wire SIGINT/SIGTERM into a process-wide AbortController on first import.
 // Long-running commands (`mushi index`, `mushi sourcemaps upload`) can
@@ -157,6 +158,16 @@ registerWorkerCommands(program)
 // action runs (Commander builds the tree during these synchronous calls;
 // the action itself only executes later, at parseAsync() time).
 registerCompletionCommand(program)
+
+// `npx mushi-mushi my-app` / `npm create mushi-mushi my-app`: the bins
+// (wizard-bin.ts) forward a bare word here with WIZARD_PROBE_ENV set. A word
+// that is not a command exits quietly so the bin runs the wizard instead of
+// Commander's "unknown command". Checked against the live tree, so it never
+// drifts from the registered commands.
+if (process.env[WIZARD_PROBE_ENV] === '1') {
+  delete process.env[WIZARD_PROBE_ENV]
+  if (isUnknownTopLevelCommand(process.argv[2], program.commands)) process.exit(UNKNOWN_COMMAND_EXIT)
+}
 
 // parseAsync so rejections from async command actions surface as clean
 // one-line errors (plain `parse()` leaves them as unhandled rejections).

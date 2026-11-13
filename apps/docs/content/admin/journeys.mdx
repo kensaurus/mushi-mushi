@@ -15,6 +15,16 @@ import { Callout } from 'nextra/components'
 
 <AdminDocHero page="journeys" />
 
+Most people who get stuck in an app don't report it. They leave. The Journey
+optimizer shows you where that happens, in plain English, and gives each
+problem a prompt your AI editor can apply.
+
+<InThirtySeconds>
+- With the Mushi Mushi SDK in your app, the map fills in from real visits. Nothing else to set up.
+- Press **Scan my site** to add up to 40 public pages and the links between them (needs a Firecrawl key).
+- Each problem has **Copy prompt for your coding agent**. Paste it into Cursor, Claude Code, Lovable or Bolt.
+</InThirtySeconds>
+
 The Journey optimizer builds one map from two sources. Either one is enough on its own.
 
 | Source | What it adds | What you need |
@@ -48,6 +58,9 @@ The SDK reads the window from the settings it already loads, so outside a
 window it adds no request at all.
 
 ## Scan your site
+
+The scan uses [Firecrawl](https://www.firecrawl.dev), a service that reads web
+pages for you. Add your own Firecrawl key under **Settings → AI keys** first.
 
 Type your live address (Mushi Mushi fills it in when it knows it) and press **Scan my site**.
 The scan reads up to 40 public pages, about 41 Firecrawl credits. Firecrawl reads them on
