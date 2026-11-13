@@ -63,6 +63,17 @@ describe("trackSessions: 'on-demand'", () => {
     await vi.waitFor(() => expect(initSessionTracker).toHaveBeenCalledTimes(1));
   });
 
+  it('ignores a window that only the cached config still has (the owner stopped it)', async () => {
+    // Live test 2026-11-13: the cached config applied on load still held the
+    // window, and recording started before the fresh config (no window) arrived.
+    localStorage.setItem(`mushi:journeys:draw:${PID}`, '0.05');
+    localStorage.setItem(`mushi:sdk-config:${PID}`, JSON.stringify({ cachedAt: Date.now(), config: { enabled: true, journeys: { recordUntil: later(), sampleRate: 1 } } }));
+    serveConfig();
+    Mushi.init(BASE);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(initSessionTracker).not.toHaveBeenCalled();
+  });
+
   it('skips a device outside the sample', async () => {
     localStorage.setItem(`mushi:journeys:draw:${PID}`, '0.5');
     serveConfig({ recordUntil: later(), sampleRate: 0.1 });
