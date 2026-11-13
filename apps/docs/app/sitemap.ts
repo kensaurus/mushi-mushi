@@ -39,11 +39,22 @@ function collectRoutes(items: PageMapItem[], acc: Map<string, Date | undefined>)
   }
 }
 
+/**
+ * App routes that set `robots: { index: false }` in their own metadata. The
+ * page map lists them like any page, and a sitemap may only submit indexable
+ * URLs: Search Console flagged `/r` as "submitted URL marked noindex".
+ * Add a route here whenever its page.tsx opts out of indexing.
+ */
+const NOINDEX_ROUTES: ReadonlySet<string> = new Set(['/r'])
+
 export const dynamic = 'force-static'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const routes = new Map<string, Date | undefined>()
   collectRoutes(await getPageMap(), routes)
+  for (const route of NOINDEX_ROUTES) {
+    routes.delete(route)
+  }
 
   // The landing's canonical is the product root (see [[...mdxPath]]/page.tsx),
   // so the sitemap must list that URL — not the /docs duplicate — for `/`.
