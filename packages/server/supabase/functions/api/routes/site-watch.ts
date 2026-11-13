@@ -32,6 +32,7 @@ import {
   mapLimit,
   monitorNeedsReconcile,
   resolvePagesOutside,
+  resolveSameSiteRedirects,
   runMonitor,
   sameUrlSet,
   selectWatchUrls,
@@ -231,6 +232,13 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
         return null;
       });
       urls = selectWatchUrls({ baseUrl, limit: pageLimit, current: watchedNow, lastPages: [], mapped });
+      // New pages in the site's own spelling, so a slash redirect cannot strip
+      // the marker (a HEAD, no redirect followed, no page script runs).
+      const known = new Set(watchedNow);
+      const fresh = urls.filter((u) => !known.has(u));
+      const resolved = fresh.length > 0 ? await resolveSameSiteRedirects(fresh, fetch, { deadlineMs: 15_000 }) : [];
+      const spelled = new Map(fresh.map((u, i) => [u, resolved[i] ?? u]));
+      urls = urls.map((u) => spelled.get(u) ?? u);
       if (monitorId) {
         // Sending the page list resets every page's history: only when it changed.
         const send = stale || !sameUrlSet(watchedNow, urls);

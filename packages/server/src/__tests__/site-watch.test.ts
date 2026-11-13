@@ -1062,7 +1062,8 @@ describe('selectWatchUrls / nextWatchUrls', () => {
       mapped: [`${BASE}/terms`],
       pending: [`${BASE}/broken-link`],
     })
-    expect(urls).toEqual([`${BASE}/`, `${BASE}/linked-only`, `${BASE}/broken-link`, `${BASE}/terms`])
+    // The base keeps its stored spelling here; the site's own spelling is resolved before sending.
+    expect(urls).toEqual([BASE, `${BASE}/linked-only`, `${BASE}/broken-link`, `${BASE}/terms`])
   })
 
   it('a dead URL the map lists is watched, so its 404 files', () => {
@@ -1087,8 +1088,9 @@ describe('selectWatchUrls / nextWatchUrls', () => {
     expect(sw.selectWatchUrls({ ...input, pending: [`${BASE}/old`] })).toContain(`${BASE}/old`)
   })
 
-  it('keeps the trailing-slash form of a page (a slash redirect drops the marker)', () => {
-    expect(sw.selectWatchUrls({ ...base, current: [BASE], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([`${BASE}/`, `${BASE}/terms`])
+  it('keeps the spelling a page is watched under (it was resolved against the site when it joined)', () => {
+    expect(sw.selectWatchUrls({ ...base, current: [`${BASE}/`], mapped: [BASE, `${BASE}/terms`] })).toEqual([`${BASE}/`, `${BASE}/terms`])
+    expect(sw.selectWatchUrls({ ...base, current: [BASE], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([BASE, `${BASE}/terms`])
   })
 
   it('leaves the monitor alone when the page set is unchanged, in any spelling or order', () => {
@@ -1106,7 +1108,7 @@ describe('selectWatchUrls / nextWatchUrls', () => {
 
   it('never switches a crawl to a one-page watch from nothing', () => {
     expect(sw.nextWatchUrls({ ...base, current: [], lastPages: [], mapped: null })).toBeNull()
-    expect(sw.nextWatchUrls({ ...base, current: [], lastPages: [], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([`${BASE}/`, `${BASE}/terms`])
+    expect(sw.nextWatchUrls({ ...base, current: [], lastPages: [], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([BASE, `${BASE}/terms`])
   })
 
   it('adds new mapped pages while there is room', () => {
@@ -1152,8 +1154,20 @@ describe('refreshWatchPages (the daily page-list refresh)', () => {
       if (mapped instanceof Error) throw mapped
       return mapped
     }),
+    // Like kensaur.us: the bare base answers 301 to its trailing-slash form.
+    resolve: vi.fn(async (urls: string[]) => urls.map((u) => (u === BASE ? `${BASE}/` : u))),
     now: () => new Date('2026-11-14T02:14:00Z'),
   })
+  /** Reads `reports` from `reports`; everything else from the site-watch fake. */
+  const withReports = (inner: { from: (t: string) => unknown }, reports: Array<{ id: string; status: string }>) =>
+    ({
+      from: (t: string) =>
+        t === 'reports'
+          ? {
+              select: () => ({ in: async (_c: string, ids: string[]) => ({ data: reports.filter((r) => ids.includes(r.id)), error: null }) }),
+            }
+          : inner.from(t),
+    }) as never
   const done = (id: string) => ({ id, status: 'completed' })
 
   it('switches a crawl monitor to a marked page list on the first poll, from the newest check and the map', async () => {
@@ -1171,6 +1185,8 @@ describe('refreshWatchPages (the daily page-list refresh)', () => {
     ])
     // The map is URL discovery: asked for room to choose from, and never marked.
     expect(d.map).toHaveBeenCalledWith(BASE, 500)
+    // Every page new to the monitor was resolved to the site's own spelling first.
+    expect(d.resolve).toHaveBeenCalledWith([BASE, `${BASE}/linked`, `${BASE}/terms`])
     expect(pages.find((p) => p.id === 'f1')!.resolved_at).toBe('2026-11-14T02:14:00.000Z')
   })
 
@@ -1193,19 +1209,52 @@ describe('refreshWatchPages (the daily page-list refresh)', () => {
     expect(patches).toHaveLength(1)
   })
 
-  it('keeps an unfiled 404 watched until it files, then drops it when it left the site', async () => {
+  it('keeps a broken link watched while its finding is open, even after the sitemap dropped it; drops it once a person closes the report', async () => {
     const suspect = { id: 's1', watch_id: 'w1', url: `${BASE}/gone`, problem: 'http_error', resolved_at: null, report_id: null, confirmed_at: null }
-    const { db, pages } = makeDb([suspect])
+    const f = makeDb([suspect])
+    const reports: Array<{ id: string; status: string }> = []
+    const db = withReports(f.db as never, reports)
     const patches = firecrawl(listMonitor([`${BASE}/`, `${BASE}/gone`]))
     const read = [ok(`${BASE}/`), broken('/gone', 404)]
-    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps([`${BASE}/`, `${BASE}/terms`]))
+    const mapWithoutGone = [`${BASE}/`, `${BASE}/terms`]
+    // A suspect not filed yet: stays.
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
     expect(JSON.stringify(patches.at(-1))).toContain(`/gone?${WATCH_TAG}`)
-    expect(pages[0].resolved_at).toBeNull()
-    // Filed: now it may leave the list, and its finding closes (the report stays).
-    Object.assign(pages[0], { report_id: 'r-s1', confirmed_at: '2026-11-14T01:40:00Z' })
-    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps([`${BASE}/`, `${BASE}/terms`]))
+    expect(f.pages[0].resolved_at).toBeNull()
+    // Filed, report open, still 404: stays, and its finding stays open (the Home light stays red).
+    Object.assign(f.pages[0], { report_id: 'r-s1', confirmed_at: '2026-11-14T01:40:00Z' })
+    reports.push({ id: 'r-s1', status: 'new' })
+    const before = patches.length
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
+    expect(patches.length).toBeGreaterThan(before)
+    expect(JSON.stringify(patches.at(-1))).toContain(`/gone?${WATCH_TAG}`)
+    expect(f.pages[0].resolved_at).toBeNull()
+    // A person dismissed the report (the page was removed on purpose): it may leave.
+    reports[0].status = 'dismissed'
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
     expect(JSON.stringify(patches.at(-1))).not.toContain('/gone')
-    expect(pages[0].resolved_at).toBe('2026-11-14T02:14:00.000Z')
+    expect(f.pages[0].resolved_at).toBe('2026-11-14T02:14:00.000Z')
+  })
+
+  it('stores the estimate Firecrawl returns for the new page list', async () => {
+    const f = makeDb()
+    const updates: Array<Record<string, unknown>> = []
+    const db = {
+      from: (t: string) =>
+        t === 'site_watches'
+          ? { update: (p: Record<string, unknown>) => ({ eq: async () => (updates.push(p), { error: null }) }) }
+          : (f.db as unknown as { from: (t: string) => unknown }).from(t),
+    } as never
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit = {}) =>
+        init.method === 'PATCH'
+          ? new Response(JSON.stringify({ success: true, data: { estimatedCreditsPerMonth: 1530 } }))
+          : new Response(JSON.stringify({ success: true, data: crawlMonitor })),
+      ),
+    )
+    await sw.refreshWatchPages(db, W, 'fc-key', [], [ok(`${BASE}/`), ok(`${BASE}/a`)], deps([`${BASE}/`, `${BASE}/a`]))
+    expect(updates).toEqual([{ estimated_credits_per_month: 1530 }])
   })
 
   it('a failed map still fixes a stale shape from the pages it has, and never PATCHes a one-page list from nothing', async () => {
@@ -1216,5 +1265,35 @@ describe('refreshWatchPages (the daily page-list refresh)', () => {
     expect(patches).toHaveLength(0)
     await sw.refreshWatchPages(db, W, 'fc-key', [], [ok(`${BASE}/`), ok(`${BASE}/a`)], deps(new Error('down')))
     expect(patches[0].targets).toEqual([expect.objectContaining({ urls: [`${BASE}/?${WATCH_TAG}`, `${BASE}/a?${WATCH_TAG}`] })])
+  })
+})
+
+describe('resolveSameSiteRedirects', () => {
+  it('takes the redirect target only for the same page (a slash added or removed); a HEAD, no redirect followed', async () => {
+    const seen: Array<{ url: string; init: RequestInit }> = []
+    const f = (async (url: string, init: RequestInit = {}) => {
+      seen.push({ url, init })
+      const at = (status: number, location?: string) => new Response(null, { status, headers: location ? { location } : {} })
+      if (url === BASE) return at(301, `${BASE}/`)
+      if (url === `${BASE}/old`) return at(301, `${BASE}/new`)
+      if (url === `${BASE}/away`) return at(302, 'https://elsewhere.example/away/')
+      if (url === `${BASE}/rel`) return at(308, '/help-her-take-photo/rel/')
+      if (url === `${BASE}/boom`) throw new TypeError('network down')
+      return at(200)
+    }) as unknown as typeof fetch
+    const urls = [BASE, `${BASE}/old`, `${BASE}/away`, `${BASE}/rel`, `${BASE}/boom`, `${BASE}/ok`]
+    expect(await sw.resolveSameSiteRedirects(urls, f)).toEqual([
+      `${BASE}/`,
+      `${BASE}/old`,
+      `${BASE}/away`,
+      `${BASE}/rel/`,
+      `${BASE}/boom`,
+      `${BASE}/ok`,
+    ])
+    for (const { init } of seen) {
+      expect(init.method).toBe('HEAD')
+      expect(init.redirect).toBe('manual')
+      expect((init.headers as Record<string, string>)['User-Agent']).toBe(sw.SITE_WATCH_USER_AGENT)
+    }
   })
 })

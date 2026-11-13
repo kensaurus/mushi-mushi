@@ -600,14 +600,8 @@ function pageKey(url: string): string | null {
   }
 }
 
-/** Not a page a person reads: sitemaps, feeds, images, scripts. */
-const NOT_A_PAGE = /\.(?:xml|txt|md|json|pdf|png|jpe?g|gif|webp|avif|svg|ico|css|js|map|zip|mp4|webm|woff2?|ttf|webmanifest)$/i;
-
-/** The same page under both spellings: the trailing-slash form wins (redirects drop the marker). */
-function preferForm(a: string, b: string): string {
-  const slash = (s: string) => /\/$/.test(s.split(/[?#]/)[0]);
-  return slash(b) && !slash(a) ? b : a;
-}
+/** Not a page a person reads: sitemaps, feeds, data downloads, images, scripts. */
+const NOT_A_PAGE = /\.(?:xml|txt|md|json|csv|pdf|png|jpe?g|gif|webp|avif|svg|ico|css|js|map|zip|mp4|webm|woff2?|ttf|webmanifest)$/i;
 
 function pathDepth(url: string): number {
   try {
@@ -637,7 +631,12 @@ export interface WatchUrlInput {
   lastPages: Array<{ url: string; statusCode?: number | null }>;
   /** `firecrawlMapOwnSite` result, or null when the map failed. */
   mapped: string[] | null;
-  /** URLs with an open finding not filed yet (a suspect, ADR 0029). */
+  /**
+   * URLs that must stay watched while broken (`heldPageUrls`): an open
+   * finding that is a suspect, or filed with its report still open. A filed
+   * 404 leaves only once a person closes its report, so a broken link that the
+   * sitemap also dropped cannot resolve silently while it still 404s.
+   */
   pending?: string[];
 }
 
@@ -660,16 +659,20 @@ function scopeFor(baseUrl: string): ((url: string) => boolean) | null {
  * Kept, in this order, while there is room:
  *   1. the base URL, always;
  *   2. every page already watched, unless it LEFT the site: the map no
- *      longer lists it, its last answer was 404 or 410, and it has no finding
- *      still waiting to file. A page that still loads, fails with a 5xx, or
- *      404s while its suspect is unfiled stays: the map reads the sitemap
- *      and Firecrawl's index and does not follow links, so "not mapped" alone
- *      is no proof a page is gone, and a 404 must reach its report first;
+ *      longer lists it, its last answer was 404 or 410, and it holds no open
+ *      finding (a suspect, or filed with its report still open). A page that
+ *      still loads, fails with a 5xx, or 404s with a finding open stays: the
+ *      map reads the sitemap and Firecrawl's index and does not follow links,
+ *      so "not mapped" alone is no proof a page is gone, and a broken link
+ *      stays watched until a person closes its report;
  *   3. the newest check's pages, by the same rule (on the switch from a
  *      crawl: every page the crawl found by following links, 404s included);
  *   4. mapped pages, shallow paths first. A mapped URL that is dead is loaded
  *      like any other, and its 404 files.
- * Same-site pages under the base path only; no sitemaps, feeds or files.
+ * Same-site pages under the base path only; no sitemaps, feeds or files. A
+ * page keeps the spelling it is watched under (resolved when it joined, see
+ * `resolveSameSiteRedirects`); a new page takes its first spelling here and
+ * the site's own spelling before it is sent.
  */
 export function selectWatchUrls(input: WatchUrlInput): string[] {
   const inScope = scopeFor(input.baseUrl);
@@ -690,24 +693,17 @@ export function selectWatchUrls(input: WatchUrlInput): string[] {
   const add = (url: string, force = false): void => {
     if (!inScope(url)) return;
     const k = key(url);
-    const had = chosen.get(k);
-    if (had !== undefined) {
-      chosen.set(k, preferForm(had, strip(url)));
-      return;
-    }
+    if (chosen.has(k)) return;
     if (!force && (left.has(k) || chosen.size >= limit)) return;
     chosen.set(k, strip(url));
   };
 
-  add(input.baseUrl, true);
+  // The base first, in the spelling already watched when there is one.
+  const baseKey = key(input.baseUrl);
+  add(input.current.find((u) => key(u) === baseKey) ?? input.baseUrl, true);
   for (const u of input.current) add(u);
   for (const p of input.lastPages) add(p.url);
   for (const u of mapped.slice().sort((a, b) => pathDepth(a) - pathDepth(b) || (a < b ? -1 : a > b ? 1 : 0))) add(u);
-  // A spelling seen later can still win the slash form for a chosen page.
-  for (const u of [...input.current, ...input.lastPages.map((p) => p.url), ...mapped]) {
-    const k = key(u);
-    if (chosen.has(k)) chosen.set(k, preferForm(chosen.get(k)!, strip(u)));
-  }
   return [...chosen.values()].slice(0, limit);
 }
 
@@ -754,9 +750,83 @@ export function mapLimit(pageLimit: number): number {
   return Math.min(500, Math.max(100, pageLimit * 5));
 }
 
+/** Report statuses a person closed: a held page may leave the list after these. */
+const CLOSED_REPORT_STATUSES = new Set(['fixed', 'resolved', 'verified', 'dismissed']);
+
+/**
+ * URLs that must stay watched while broken (`WatchUrlInput.pending`): every
+ * open finding that is a suspect, or filed with its report still open.
+ */
+export async function heldPageUrls(db: SupabaseClient, watchId: string): Promise<string[]> {
+  const { data, error } = await db.from('site_watch_pages').select('url, report_id').eq('watch_id', watchId).is('resolved_at', null);
+  if (error) throw new Error(`site_watch_pages open read failed: ${error.message}`);
+  const rows = (data ?? []) as Array<{ url: string; report_id: string | null }>;
+  const reportIds = [...new Set(rows.map((r) => r.report_id).filter((id): id is string => Boolean(id)))];
+  const closed = new Set<string>();
+  if (reportIds.length > 0) {
+    const { data: reports, error: repErr } = await db.from('reports').select('id, status').in('id', reportIds);
+    if (repErr) throw new Error(`reports read failed: ${repErr.message}`);
+    for (const r of (reports ?? []) as Array<{ id: string; status: string | null }>) {
+      if (CLOSED_REPORT_STATUSES.has(r.status ?? '')) closed.add(r.id);
+    }
+  }
+  return rows.filter((r) => !r.report_id || !closed.has(r.report_id)).map((r) => r.url);
+}
+
+/**
+ * Each URL in its site's own spelling: when the site answers it with a
+ * redirect to the same page (only a trailing slash added or removed), the
+ * redirect's target. kensaur.us answers `/glot-it` with a 301 to `/glot-it/`
+ * and drops the query string, and with it the marker; `/glot-it/` and
+ * `/glot-it/press` keep it (seen 2026-11-13). A HEAD that does not follow the
+ * redirect runs no page script, so it never reaches analytics. Anything else
+ * (another page or host, an error, a slow answer) keeps the URL as it is.
+ * No call starts after `deadlineMs`.
+ */
+export async function resolveSameSiteRedirects(
+  urls: string[],
+  fetchImpl: typeof fetch = fetch,
+  opts: { concurrency?: number; timeoutMs?: number; deadlineMs?: number } = {},
+): Promise<string[]> {
+  const timeoutMs = opts.timeoutMs ?? 5_000;
+  const deadline = Date.now() + (opts.deadlineMs ?? 30_000);
+  const out = urls.slice();
+  let next = 0;
+  const one = async (i: number): Promise<void> => {
+    const url = urls[i];
+    const key = pageKey(url);
+    if (!key || Date.now() > deadline) return;
+    try {
+      const res = await fetchImpl(url, {
+        method: 'HEAD',
+        redirect: 'manual',
+        headers: { 'User-Agent': SITE_WATCH_USER_AGENT },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      await res.body?.cancel().catch(() => {});
+      if (![301, 302, 307, 308].includes(res.status)) return;
+      const location = res.headers.get('location');
+      if (!location) return;
+      const target = new URL(location, url);
+      if (target.protocol !== 'https:') return;
+      if (pageKey(target.href) !== key) return;
+      out[i] = `${target.origin}${target.pathname}`;
+    } catch {
+      /* keep the URL */
+    }
+  };
+  const worker = async (): Promise<void> => {
+    while (next < urls.length) await one(next++);
+  };
+  await Promise.all(Array.from({ length: Math.min(opts.concurrency ?? 8, urls.length) }, worker));
+  return out;
+}
+
 export interface RefreshDeps {
   /** `firecrawlMapOwnSite` for the watch's project. Renders no page, so not marked. */
   map: (baseUrl: string, limit: number) => Promise<string[]>;
+  /** `resolveSameSiteRedirects` (no page script runs). */
+  resolve: (urls: string[]) => Promise<string[]>;
   now: () => Date;
 }
 
@@ -802,15 +872,8 @@ export async function refreshWatchPages(
     mapFailed = true;
     return null;
   });
-  const { data: openRows, error } = await db
-    .from('site_watch_pages')
-    .select('url')
-    .eq('watch_id', w.id)
-    .is('resolved_at', null)
-    .is('confirmed_at', null)
-    .is('report_id', null);
-  // Without the pending list a 404 could be dropped before it files: wait.
-  if (error) throw new Error(`site_watch_pages pending read failed: ${error.message}`);
+  // Without the held list a broken page could leave unseen: throw, retry next poll.
+  const pending = await heldPageUrls(db, w.id);
 
   const current = liveTargetUrls(live);
   const input: WatchUrlInput = {
@@ -819,7 +882,7 @@ export async function refreshWatchPages(
     current,
     lastPages: lastPages.map((p) => ({ url: p.url, statusCode: typeof p.statusCode === 'number' ? p.statusCode : null })),
     mapped,
-    pending: ((openRows ?? []) as Array<{ url: string }>).map((r) => r.url),
+    pending,
   };
   let next = nextWatchUrls(input);
   // A stale shape is fixed even when the page set is unchanged, as long as
@@ -831,13 +894,25 @@ export async function refreshWatchPages(
   const base = { pages: current.length, mapped: mapped?.length ?? null, ...(mapFailed ? { mapFailed } : {}) };
   if (!next) return base;
 
-  await updateMonitor(key, w.firecrawl_monitor_id, {
+  // Pages new to the monitor go out in the site's own spelling, so a slash
+  // redirect cannot strip the marker. Watched pages were resolved when they joined.
+  const known = new Set(current);
+  const fresh = next.filter((u) => !known.has(u));
+  const resolved = fresh.length > 0 ? await deps.resolve(fresh) : [];
+  const spelled = new Map(fresh.map((u, i) => [u, resolved[i] ?? u]));
+  const urls = next.map((u) => spelled.get(u) ?? u);
+
+  const { estimatedCreditsPerMonth } = await updateMonitor(key, w.firecrawl_monitor_id, {
     name: live.name ?? `Mushi live-site watch: ${w.base_url}`,
-    urls: next,
+    urls,
     scheduleCron: w.schedule_cron,
   });
-  const closedFindings = await resolvePagesOutside(db, w.id, next, deps.now().toISOString());
-  return { ...base, pages: next.length, reconciled: true, closedFindings };
+  // The console card shows Firecrawl's estimate for the monitor as it is now.
+  if (estimatedCreditsPerMonth !== null) {
+    await db.from('site_watches').update({ estimated_credits_per_month: estimatedCreditsPerMonth }).eq('id', w.id);
+  }
+  const closedFindings = await resolvePagesOutside(db, w.id, urls, deps.now().toISOString());
+  return { ...base, pages: urls.length, reconciled: true, closedFindings };
 }
 
 export async function deleteMonitor(key: string, monitorId: string): Promise<void> {

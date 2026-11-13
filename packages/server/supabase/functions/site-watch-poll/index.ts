@@ -37,6 +37,7 @@ import {
   pendingConfirmsByWatch,
   processCheck,
   refreshWatchPages,
+  resolveSameSiteRedirects,
   settleSuspects,
   type ConfirmBudget,
   type MonitorPage,
@@ -162,6 +163,8 @@ Deno.serve(
           const refreshed = await refreshWatchPages(db, w, fc.key, checks, lastPages, {
             // URL discovery: renders no page, so not marked (monitor-url.ts).
             map: (baseUrl, limit) => firecrawlMapOwnSite(db, w.project_id, baseUrl, { limit }),
+            // A HEAD per new page, no redirect followed: no page script runs.
+            resolve: (urls) => resolveSameSiteRedirects(urls, fetch, { deadlineMs: 20_000 }),
             now: () => new Date(),
           })
           if (refreshed) {

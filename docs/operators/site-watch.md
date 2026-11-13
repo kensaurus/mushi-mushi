@@ -21,11 +21,15 @@ apps unmarked.
   2. the newest check's pages (on the switch, the crawl's link-found pages);
   3. `/v2/map` pages, shallow first.
 
-  Sitemaps, feeds and files are left out. When a page appears with and
-  without a trailing slash, the slash form wins.
+  Sitemaps, feeds, data downloads and files are left out. Each new page is
+  resolved to the site's own spelling first (`resolveSameSiteRedirects`: a
+  HEAD, no redirect followed, no page script), because kensaur.us 301s
+  `/glot-it` to `/glot-it/` and drops the query, and with it the marker.
 - **When a page leaves:** only when the map no longer lists it, it answered
-  404/410, and its finding has already filed. A 404 waiting to file stays,
-  so link-found 404s still reach a report. A dead URL the map lists is
+  404/410, and it holds no open finding: a suspect, or filed with its report
+  still open. A broken link stays watched, with its finding open, until a
+  person closes its report, so link-found 404s still reach a report and stay
+  visible. A dead URL the map lists is
   loaded, and its 404 files.
 - **Refresh** (`refreshWatchPages`). The list refreshes once a day, after the
   poll reads the scheduled check (1 map credit), and on a stale shape (the old
@@ -41,7 +45,9 @@ apps unmarked.
   2026-11-13; its docs name no limit), up to 50 targets per monitor. With
   `page_limit` ≤ 100, one target holds a watch.
 - **Budget:** unchanged. The cap is 800 page loads a day over 8 watches, about
-  511 expected, plus 8 map credits a day.
+  529 computed from the 2026-11-13 checks and maps (509 loaded today),
+  plus 8 map credits a day. The +20 is mostly tsumagoi, whose crawl stopped
+  at 79 pages while the map lists 98. Lower `page_limit` to trim a watch.
 
 **First poll after the deploy:** each crawl monitor is switched to a page
 list. The next check reports every page `new`, so open judged-break findings
@@ -148,8 +154,9 @@ Filters to set:
 Known limits:
 
 - **A redirect can drop the marker.** A host redirect that drops the query
-  string, such as kensaur.us's slash redirect, removes it. The page list
-  prefers the trailing-slash form for that reason.
+  string, such as kensaur.us's slash redirect, removes it. The watch resolves
+  each new page to its redirect target first; other jobs (site audit,
+  Production Check) send the URL as given.
 - **The User-Agent header is unverified at the HTTP level.** Mushi sends it on
   every page load, but there was no Firecrawl key to check what Firecrawl's
   browser actually sends.

@@ -41,7 +41,7 @@ Measured on 2026-11-13 with throwaway monitors (since deleted):
   **Any PATCH that sends `targets` makes new target ids, even with an
   unchanged list**, and the next check reports every page `new`.
 - `/v2/map` on the 8 watched sites, filtered to pages under each base URL,
-  found 10–241 pages: 511 in all, capped at 100 per watch. A map reads the
+  found 10–241 pages per site. A map reads the
   sitemap and Firecrawl's index; it does not follow links, and it renders no
   page.
 
@@ -59,18 +59,29 @@ User-Agent. Nothing starts a crawl: `monitor-url-guard.test.ts` fails on a
   1. the base URL;
   2. every page already watched, unless it **left the site**. A page left
      the site when the map no longer lists it, its last answer was 404 or
-     410, and it has no finding still waiting to file;
+     410, and it holds no open finding (a suspect, or filed with its report
+     still open);
   3. the newest check's pages, by the same rule. On the switch from a crawl,
      these are the pages the crawl reached by following links, broken links
      included;
   4. mapped pages, shallow paths first.
 - **404s still alert.** Every listed page is loaded and its status recorded,
   so a page that answers 404 files through ADR 0029. A dead URL the map
-  lists is loaded like any other. A 404 page stays listed while its suspect
-  is unfiled, and leaves only after its report is filed and the map no longer
-  lists it. The report stays.
-- **The trailing-slash form wins** when both spellings appear. A host's slash
-  redirect drops the query string, and with it the marker.
+  lists is loaded like any other. A 404 page stays listed while it holds an
+  open finding: a suspect, or a filed one whose report is still open. It
+  leaves only after a person closes the report (`fixed`, `resolved`,
+  `verified` or `dismissed`) and the map no longer lists it. So a broken link
+  that the sitemap also dropped keeps its finding open, and the Home "site up"
+  light stays honest.
+- **Each new page goes out in the site's own spelling**
+  (`resolveSameSiteRedirects`). A HEAD with the Mushi User-Agent and no
+  redirect following runs no page script, so it never reaches analytics. When
+  the site answers with a redirect to the same page (a trailing slash added or
+  removed), the target is listed instead. kensaur.us answers `/glot-it` with a
+  301 to `/glot-it/` and drops the query string, and with it the marker.
+  `/glot-it/` and `/glot-it/press` keep it (measured 2026-11-13). Without the
+  resolver, the home page of every path-hosted app would stay unmarked.
+  Watched pages keep the spelling they were resolved to.
 - **The list refreshes once a day**, after `site-watch-poll` reads each new
   scheduled check: a `/v2/map` call (1 credit) plus that check's pages
   (`refreshWatchPages`). It also refreshes when the live monitor has a stale
@@ -97,9 +108,27 @@ The cap is unchanged at 1 page load per listed page per daily check, at most
 | | Before (crawl) | After (page list) |
 |---|---|---|
 | Page loads a day, cap | 800 (8 watches × 100) | 800 (unchanged) |
-| Page loads a day, measured / expected | 509 (last checks, 2026-11-13) | ≈ 511 (map count per watch, capped at 100) |
+| Page loads a day, measured / computed | 509 (last checks, 2026-11-13) | 529 (crawl ∪ map per site, capped at 100; computed from the same checks and maps) |
 | Map calls | 0 | 1 per watch per day (8 credits, no page render) |
 | Unmarked page loads a day | ≈ 500 (every page but each seed) | 0 |
+
+Per site, after the switch:
+
+| Site | Crawl loaded | Map (in scope) | List |
+|---|---|---|---|
+| mushi-mushi | 100 | 241 | 100 |
+| talk | 54 | 53 | 53 |
+| yen-yen | 20 | 14 | 19 |
+| tsumagoi | 79 | 98 | 100 |
+| solo-boss | 100 | 127 | 100 |
+| the-wanting-mind | 101 | 228 | 100 |
+| help-her-take-photo | 11 | 10 | 10 |
+| glot-it | 44 | 36 | 47 |
+
+The cap is unchanged. Actual page loads rise by 20 a day (+4%), almost all
+of it tsumagoi: its crawl stopped at depth 3 with 79 pages, and the map lists
+98. Lowering a watch's `page_limit` lowers its list (the poll rebuilds it at
+the next refresh). The other change is +8 map credits a day.
 
 ## Consequences
 
