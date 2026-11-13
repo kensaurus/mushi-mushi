@@ -115,3 +115,25 @@ removal with `fal-ai/birefnet/v2`, trimmed and padded to a common baseline.
 The pipeline, prompts and spend log live in the glot.it repo
 (`scripts/kensaurus-mascot/`). Like Mushi-chan, the art is all rights reserved
 (see [`TRADEMARK.md`](../../TRADEMARK.md)).
+
+### Icon
+
+Since 2026-11-13 the console and docs icons are Field Kenji's face in a paper
+specimen disc on the vermillion field, with Mushi-chan on the rim of his
+glasses. Before that they were the 虫 hanko stamp, which said nothing about who
+the guide is (owner, 2026-11-13).
+
+- Master: `docs/mascot/field-kenji-icon.png` (1024², opaque). It came from the
+  same pipeline as the poses, with the style sheet and `mushi-happy.png` as
+  references, picked from two options for legibility at 32 px.
+- Console (`apps/admin/public`): `favicon.svg` is a 64 px render inside an SVG
+  with explicit `width` and `height`, which `src/lib/favicon.ts` needs to draw
+  the badge. `icons/icon-192.png` and `icons/icon-512.png` are the PWA icons;
+  `icons/icon-maskable-512.png` holds the art at 80% on the vermillion field.
+- Docs (`apps/docs/public`): the same `favicon.svg`, plus `apple-touch-icon.png`,
+  `icon-192.png` and `icon-512.png`.
+- Social card: `scripts/gen-og-card.mjs` uses the icon as the brand stamp and
+  the wave pose beside the headline. GitHub's social preview is uploaded by
+  hand from `docs/social-preview/og-card.png`.
+- The SDK widget, the npm packages, `packages/brand` and the testers app keep
+  their marks. The placement rules above apply to the icon too.
