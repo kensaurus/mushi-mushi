@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-discord",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Self-host only: Mushi Mushi plugin for Discord — posts a channel message when Mushi Mushi triages a bug or a fix is proposed or applied. Mushi Mushi Cloud posts to Discord natively.",
   "license": "MIT",
   "type": "module",

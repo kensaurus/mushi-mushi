@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-sdk",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "license": "MIT",
   "description": "For plugin authors: build your own Mushi Mushi plugin — a small server that gets signed events when bugs are filed, triaged or fixed. Signature checks, delivery dedup and typed events.",
   "type": "module",

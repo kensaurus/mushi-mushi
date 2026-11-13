@@ -1,5 +1,13 @@
 # create-mushi-mushi
 
+## 0.6.16
+
+### Patch Changes
+
+- f318574: npm descriptions and READMEs now say who each package is for. To add Mushi Mushi to an app, install `mushi-mushi`; the integration and tooling packages say when you need them, and the SDK READMEs show the matching `mushi-mushi/<framework>` import. No code changes.
+- Updated dependencies [f318574]
+  - @mushi-mushi/cli@0.39.0
+
 ## 0.6.15
 
 ### Patch Changes

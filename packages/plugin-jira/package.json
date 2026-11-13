@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-jira",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "license": "MIT",
   "description": "Self-host only: Mushi Mushi plugin for Jira Cloud — opens a Jira issue per bug report, moves it as the report status changes, and comments when the fix lands. Mushi Mushi Cloud connects Jira natively.",
   "type": "module",
