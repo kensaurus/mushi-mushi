@@ -48,6 +48,7 @@ export function SitemapCard({ section }: { section: HomeSection<HomeSitemap> }) 
 }
 
 /**
+ * @internal Exported for tests.
  * Pages with their own counts. The tree adds the Home row and a row per
  * section head even when nothing was seen there; counting those gave
  * "4 of 3 pages" (2026-11-13).

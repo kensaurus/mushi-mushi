@@ -17,6 +17,7 @@ import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
 import { nodeSeverity, type JourneyFinding, type JourneyMap, type JourneyNode, type JourneySeverity } from '../../lib/journeys'
 
+/** @internal Exported for tests. */
 export const JOURNEY_NODE_SIZE = { width: 196, height: 70 }
 const ROW_GAP = 26
 const COLUMN_GAP = 90
@@ -45,6 +46,7 @@ export interface JourneyLayout {
   height: number
 }
 
+/** @internal Exported for tests. */
 export function edgeWidth(moves: number, maxMoves: number): number {
   if (moves <= 0 || maxMoves <= 0) return 1
   return Math.round((1 + (6 * Math.log1p(moves)) / Math.log1p(maxMoves)) * 10) / 10

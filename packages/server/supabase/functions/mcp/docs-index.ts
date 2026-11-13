@@ -346,7 +346,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "admin/journeys.md",
     keywords: ["admin", "journeys", "journey", "optimizer"],
     headings: ["Record visits only when you need them", "Scan your site", "Read the map", "What it finds", "Hand it to your coding agent", "Related"],
-    excerpt: "The Journey optimizer in Mushi Mushi maps how people move through your app and finds dead ends, pages people leave from, duplicate pages, pages nothing links to and pages buried…",
+    excerpt: "Map how people move through your app, then fix dead ends, pages people leave, duplicate pages and pages nothing links to, with prompts for your coding agent.",
   },
   {
     title: "Triage grading",
