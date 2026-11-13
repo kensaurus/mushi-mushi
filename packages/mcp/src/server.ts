@@ -41,10 +41,18 @@ import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.j
 import { installStdoutGuard } from './stdout-guard.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
+  JOURNEY_FINDING_KINDS,
+  JOURNEY_MAX_LIMIT,
+  JOURNEY_RECORDING_MAX_HOURS,
+  JOURNEY_SCAN_NEXT,
   RECIPE_STATES,
   designExcerptQueryOf,
   fixContextOf,
   inventoryActionNodeIdOf,
+  journeyDaysOf,
+  journeyRecordingBodyOf,
+  journeyRecordingNextOf,
+  journeysForAgent,
   projectReportDetail,
   projectReportListRow,
   recipeError,
@@ -4238,6 +4246,77 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         project_id: args.projectId ?? projectId,
       });
       return jsonResult(await apiCall(`/v1/admin/events/paths?${qs}`));
+    },
+  );
+
+  // Journey optimizer (ADR 0058): the map's findings, each with a fix prompt,
+  // and the site scan that feeds its link structure. Shaping is shared with
+  // the hosted server (journeysForAgent in report-shapes.ts).
+  server.registerTool(
+    'get_journeys',
+    {
+      title: titleOf('get_journeys'),
+      description: descOf('get_journeys'),
+      annotations: annotationsFor('get_journeys'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        days: z.number().int().min(7).max(90).optional().describe('Window of visits: 7, 30 (default) or 90 days'),
+        kind: z.enum(JOURNEY_FINDING_KINDS).optional().describe('Only findings of this kind'),
+        limit: z.number().int().min(1).max(JOURNEY_MAX_LIMIT).optional().describe('Most findings to return (default 20, max 100)'),
+        includeGraph: z.boolean().optional().describe('Also return the page nodes and page-to-page edges (up to 60 and 160 rows)'),
+      }),
+    },
+    async (args) => {
+      const days = journeyDaysOf(args.days);
+      if (days === null) throw new MushiApiError(400, 'INVALID_DAYS', 'days must be 7, 30 or 90.');
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${encodeURIComponent(pid)}/journeys?days=${days}`);
+      return jsonText(journeysForAgent(data, { kind: args.kind, limit: args.limit, includeGraph: args.includeGraph }));
+    },
+  );
+
+  server.registerTool(
+    'scan_site_journeys',
+    {
+      title: titleOf('scan_site_journeys'),
+      description: descOf('scan_site_journeys'),
+      annotations: annotationsFor('scan_site_journeys'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        baseUrl: z.string().optional().describe("The site's public https:// address; defaults to the one Mushi Mushi already knows"),
+      }),
+    },
+    async (args) => {
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<{ scan?: unknown }>(`/v1/admin/projects/${encodeURIComponent(pid)}/journeys/scan`, {
+        method: 'POST',
+        body: JSON.stringify(args.baseUrl ? { base_url: args.baseUrl } : {}),
+      });
+      return jsonText({ ...data, next: JOURNEY_SCAN_NEXT });
+    },
+  );
+
+  server.registerTool(
+    'record_journeys',
+    {
+      title: titleOf('record_journeys'),
+      description: descOf('record_journeys'),
+      annotations: annotationsFor('record_journeys'),
+      inputSchema: z.object({
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+        hours: z.number().int().min(0).max(JOURNEY_RECORDING_MAX_HOURS).describe('Hours to record from now (1-168), or 0 to stop'),
+        sampleRate: z.number().max(1).optional().describe('Share of visitors to record, above 0 and at most 1 (0.1 = one in ten)'),
+      }),
+    },
+    async (args) => {
+      const checked = journeyRecordingBodyOf(args.hours, args.sampleRate);
+      if (!checked.ok) throw new MushiApiError(400, 'INVALID_PARAMS', checked.message);
+      const pid = await resolveProjectId(args.projectId);
+      const data = await apiCall<{ recording?: unknown }>(`/v1/admin/projects/${encodeURIComponent(pid)}/journeys/recording`, {
+        method: 'PUT',
+        body: JSON.stringify(checked.body),
+      });
+      return jsonText({ ...data, next: journeyRecordingNextOf(checked.body.hours) });
     },
   );
 

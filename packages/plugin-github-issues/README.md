@@ -1,6 +1,6 @@
 # `@mushi-mushi/plugin-github-issues`
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 For people who track work in GitHub Issues. This opens a GitHub issue
 (labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when
@@ -70,4 +70,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 77 edge functions · 563 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 77 edge functions · 567 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

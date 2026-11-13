@@ -1,6 +1,6 @@
 # @mushi-mushi/react-native
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The React Native and Expo SDK for [Mushi Mushi](https://www.npmjs.com/package/mushi-mushi). It adds a bug button and a report sheet to your iOS and Android app. When a user reports a problem, Mushi Mushi gets a screenshot, the screen, device details and recent console and network entries, explains the cause in plain English, and hands your editor a fix to start from.
 
@@ -204,4 +204,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (October 2026): 77 edge functions · 563 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (October 2026): 77 edge functions · 567 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

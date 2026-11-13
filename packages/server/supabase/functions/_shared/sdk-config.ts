@@ -33,6 +33,9 @@ const SDK_BANNER_POSITIONS = ['top', 'bottom'] as const;
 export interface SdkConfigRow {
   project_id?: string;
   sdk_config_enabled?: boolean | null;
+  /** Journey optimizer: on-demand recording window end (ADR 0058). */
+  journey_recording_until?: string | null;
+  journey_recording_sample?: number | null;
   sdk_widget_position?: string | null;
   sdk_widget_theme?: string | null;
   sdk_widget_trigger_text?: string | null;
@@ -159,6 +162,8 @@ export interface NormalizeSdkConfigOptions {
   emailProviderConfigured?: boolean;
   /** VAPID public key when Web Push is configured, else null. */
   vapidPublicKey?: string | null;
+  /** Clock for the journey recording window (tests). */
+  now?: Date;
 }
 
 export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdkConfigOptions = {}) {
@@ -231,6 +236,10 @@ export function normalizeSdkConfig(row?: SdkConfigRow | null, opts: NormalizeSdk
       minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
     },
     reporterNotificationsEnabled: row?.reporter_notifications_enabled !== false,
+    // Journey optimizer (ADR 0058): an open recording window, read only by
+    // SDKs running `trackSessions: 'on-demand'`. Omitted when closed, so a
+    // closed window costs the SDK nothing to check.
+    ...journeyRecording(row, opts.now ?? new Date()),
     // Plan 018 §4.1 opt-in channels. A channel is offered to reporters only
     // when the project turned it on AND the server can actually send it, so
     // the widget never shows a checkbox that leads nowhere.
@@ -338,4 +347,16 @@ export function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<str
   }
   updates.sdk_config_updated_at = new Date().toISOString();
   return updates;
+}
+
+/** The open journey recording window, or nothing. */
+export function journeyRecording(
+  row: Pick<SdkConfigRow, 'journey_recording_until' | 'journey_recording_sample'> | null | undefined,
+  now: Date,
+): { journeys?: { recordUntil: string; sampleRate: number } } {
+  const until = row?.journey_recording_until ? Date.parse(row.journey_recording_until) : NaN;
+  if (!Number.isFinite(until) || until <= now.getTime()) return {};
+  const raw = Number(row?.journey_recording_sample);
+  const sampleRate = Number.isFinite(raw) && raw > 0 ? Math.min(1, raw) : 0.1;
+  return { journeys: { recordUntil: new Date(until).toISOString(), sampleRate } };
 }

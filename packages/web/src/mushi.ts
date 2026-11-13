@@ -204,7 +204,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // bots, consent), so under consent:'required' nothing is sent until
   // setConsent('granted'), whichever tracker initialises first.
   let unsubPageViewHistory: (() => void) | null = null;
-  if (bootstrapConfig.trackSessions !== false) {
+  let sessionTrackingStarted = false;
+  function startSessionTracking() {
+    if (sessionTrackingStarted) return;
+    sessionTrackingStarted = true;
     initSessionTracker({
       client: apiClient,
       sdkVersion: MUSHI_SDK_VERSION,
@@ -228,6 +231,37 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // History API unavailable (sandboxed iframe) — heartbeats still flow.
     }
   }
+  // `trackSessions: 'on-demand'` (Journey optimizer, ADR 0058): nothing is
+  // sent unless this tab opted in (?mushi_journeys=1) or the console's
+  // recording window, read from the runtime config below, samples this device.
+  // The deciding code is its own chunk, loaded only in that mode, so apps on
+  // the default pay no bytes for it (core bundle budget, 2026-11-13).
+  const trackSessionsMode = bootstrapConfig.trackSessions;
+  const journeyRecording = trackSessionsMode === 'on-demand' ? import('./journey-recording') : null;
+  const journeyTabOptIn = journeyRecording?.then((m) => m.readTabOptIn(bootstrapConfig.projectId));
+  function maybeStartSessionTracking(recording?: MushiRuntimeSdkConfig['journeys'] | null) {
+    if (sessionTrackingStarted || trackSessionsMode === false) return;
+    if (!journeyRecording) {
+      startSessionTracking();
+      return;
+    }
+    void Promise.all([journeyRecording, journeyTabOptIn])
+      .then(([m, tabOptIn]) => {
+        if (sessionTrackingStarted) return;
+        const record = m.journeyRecordingDecision({
+          mode: trackSessionsMode,
+          tabOptIn: tabOptIn === true,
+          window: recording,
+          draw: recording ? m.deviceDraw(bootstrapConfig.projectId) : 1,
+          now: Date.now(),
+        });
+        if (record) startSessionTracking();
+      })
+      .catch(() => {
+        // The chunk failed to load: on-demand stays off, which is its default.
+      });
+  }
+  maybeStartSessionTracking(null);
 
   const preFilter = createPreFilter(bootstrapConfig.preFilter);
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
@@ -1245,6 +1279,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
+    if (runtime.enabled !== false) maybeStartSessionTracking(runtime.journeys ?? null);
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
     reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
     syncReporterChannels();

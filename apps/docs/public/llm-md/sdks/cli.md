@@ -547,6 +547,36 @@ mushi code-health stats
 
 ---
 
+## User journeys
+
+Where people get stuck in your app, from the [Journey optimizer](/admin/journeys).
+`mushi journeys` prints the score, the most common paths and each finding with
+its pages and a suggested fix. `--prompts` adds a ready prompt per finding for
+the coding agent in your repo. `mushi journeys scan` reads the live site (up to
+40 pages, on your Firecrawl key) so the map also knows the site's links; it runs
+in the background, at most once every 10 minutes. If your app's SDK uses
+`trackSessions: 'on-demand'`, it sends no visits until you open a recording
+window: `mushi journeys record --hours 24 --sample 0.1` records one visitor in
+ten for a day (up to 168 hours), and `--stop` ends it. The MCP tools
+`get_journeys`, `scan_site_journeys` and `record_journeys` do the same from your
+editor.
+
+```bash
+mushi journeys                                  # last 30 days
+mushi journeys --days 90 --kind dead_end --prompts
+mushi journeys --json                           # the whole map, nodes and edges included
+mushi journeys scan                             # the address Mushi Mushi already knows
+mushi journeys scan --url https://example.com
+mushi journeys record --hours 24 --sample 0.1   # on-demand SDKs: record 10% of visitors for a day
+mushi journeys record --stop
+```
+
+`--days` takes 7, 30 or 90. `--kind` takes one of `broken`, `dead_end`,
+`high_exit`, `loop`, `reload`, `duplicate_page`, `route_variant`,
+`duplicate_title`, `orphan`, `deep_page` or `unvisited`.
+
+---
+
 ## Your repo
 
 These read the GitHub repo connected to the project. Mushi Mushi reads it through

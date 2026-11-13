@@ -1,6 +1,6 @@
 # @mushi-mushi/marketing-ui
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 Shared landing and connect-page React components.
 

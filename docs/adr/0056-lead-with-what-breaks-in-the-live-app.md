@@ -1,6 +1,6 @@
 # 0056. Lead with what breaks in the live app, in plain words; the free check is the front door
 
-Status: Accepted 2026-11-11 (decision delegated by the owner). Date: 2026-11-11
+Status: Superseded by [0058](0058-one-stop-platform-to-enhance-vibe-coded-apps.md) (the one job, the tagline and north star, the category line) on 2026-11-13; the rest stands            Date: 2026-11-11
 
 Supersedes: [0004](0004-lead-with-the-bug-mediator-category.md) (the category
 line), and the "one job" sentence and the hero's action pair of

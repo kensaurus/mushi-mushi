@@ -27,7 +27,7 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   metadataBase: new URL('https://kensaur.us/mushi-mushi'),
   title: {
-    default: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+    default: 'Mushi Mushi — one place to improve your AI-built app',
     template: '%s · Mushi Mushi',
   },
   // Fallback for pages without their own `description:` (the admin-console

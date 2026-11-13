@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Your users tap a button to report a bug, and Mushi Mushi checks your live site too. Plain-English diagnosis + a ready fix, in your editor. Open source.",
+  "description": "One place to improve your AI-built app. Fix bugs, smooth user journeys and clean up the code, from your editor. Open source.",
   "license": "MIT",
   "homepage": "https://kensaur.us/mushi-mushi",
   "author": "Kenji Sakuramoto <kensaurus@gmail.com> (https://github.com/kensaurus)",

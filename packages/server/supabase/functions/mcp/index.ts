@@ -113,9 +113,15 @@ import { HOSTED_RESOURCE_URIS, hostedResourceTarget } from './hosted-resources.t
 import { legacyAliasArgs } from './legacy-alias-args.ts'
 import { normalizeArgAliases } from './arg-aliases.ts'
 import {
+  JOURNEY_FINDING_KINDS,
+  JOURNEY_SCAN_NEXT,
   designExcerptQueryOf,
   fixContextOf,
   inventoryActionNodeIdOf,
+  journeyDaysOf,
+  journeyRecordingBodyOf,
+  journeyRecordingNextOf,
+  journeysForAgent,
   projectReportDetail,
   projectReportListRow,
   recipeError,
@@ -849,6 +855,59 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
       if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_radar')
       return apiCall(`/v1/admin/projects/${encodeURIComponent(pid)}/radar`, { headers: ctx.authHeaders })
+    },
+  },
+  get_journeys: {
+    scope: 'mcp:read',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for get_journeys')
+      const days = journeyDaysOf(args.days)
+      if (days === null) throw new McpError(ERR_INVALID_PARAMS, 'days must be 7, 30 or 90')
+      const kind = args.kind as string | undefined
+      if (kind !== undefined && !(JOURNEY_FINDING_KINDS as readonly string[]).includes(kind)) {
+        throw new McpError(ERR_INVALID_PARAMS, `kind must be one of ${JOURNEY_FINDING_KINDS.join(', ')}`)
+      }
+      // Same shaping as stdio (journeysForAgent in report-shapes.ts).
+      const data = await apiCall<Record<string, unknown>>(
+        `/v1/admin/projects/${encodeURIComponent(pid)}/journeys?days=${days}`,
+        { headers: ctx.authHeaders },
+      )
+      return journeysForAgent(data, {
+        kind,
+        limit: typeof args.limit === 'number' ? args.limit : undefined,
+        includeGraph: args.includeGraph === true,
+      })
+    },
+  },
+  scan_site_journeys: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for scan_site_journeys')
+      const baseUrl = typeof args.baseUrl === 'string' && args.baseUrl ? args.baseUrl : undefined
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${encodeURIComponent(pid)}/journeys/scan`, {
+        method: 'POST',
+        headers: ctx.authHeaders,
+        body: JSON.stringify(baseUrl ? { base_url: baseUrl } : {}),
+      })
+      return { ...data, next: JOURNEY_SCAN_NEXT }
+    },
+  },
+  record_journeys: {
+    scope: 'mcp:write',
+    handler: async (args, ctx) => {
+      const pid = (args.projectId as string | undefined) ?? ctx.projectIdHint
+      if (!pid) throw new McpError(ERR_INVALID_PARAMS, 'projectId is required for record_journeys')
+      // Same check as stdio and the route (journeyRecordingBodyOf in report-shapes.ts).
+      const checked = journeyRecordingBodyOf(args.hours, args.sampleRate)
+      if (!checked.ok) throw new McpError(ERR_INVALID_PARAMS, checked.message)
+      const data = await apiCall<Record<string, unknown>>(`/v1/admin/projects/${encodeURIComponent(pid)}/journeys/recording`, {
+        method: 'PUT',
+        headers: ctx.authHeaders,
+        body: JSON.stringify(checked.body),
+      })
+      return { ...data, next: journeyRecordingNextOf(checked.body.hours) }
     },
   },
   get_graph_node: {
@@ -2165,6 +2224,7 @@ const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   'list_lessons',
   'get_product_events_summary',
   'get_user_paths',
+  'get_journeys',
   'list_reporter_outbox',
   'get_app_recipe',
   'get_design_tokens',

@@ -11,7 +11,7 @@
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs)
 > and the pre-release checklist.
 
-*Owner: Kensaurus 合同会社 · Last ratified: June 2026*
+*Owner: Kensaurus 合同会社 · Last ratified: June 2026 · Category and north star amended 2026-11-13 by the owner ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md))*
 
 ---
 
@@ -24,21 +24,22 @@ the README hero, the landing hero, the npm description, the pitch, and
 ### 1.1 Vision
 
 **A world where shipping fast doesn't mean understanding slow.** AI lets one
-person build what used to take ten. But when it breaks, that same person is
-alone with a stack trace for code they didn't really write. Mushi exists to
-close that gap — to make *understanding* a bug as fast as *creating* the feature
-that caused it.
+person build what used to take ten. But when it breaks, or when people get
+stuck and leave, that same person is alone with code they didn't really write.
+Mushi Mushi exists to close that gap — to make *improving* an app as fast as
+*creating* it.
 
 ### 1.2 Mission
 
-**Turn "something broke" into "here's exactly why, and here's the fix" — without
-the builder ever leaving their editor.**
+**Turn "something is wrong with my app" into "here's exactly why, and here's the
+fix" — for the bugs, for the journeys people take through the app, and for the
+code itself — without the builder ever leaving their editor.**
 
 ### 1.3 The one-sentence north star
 
-> **Your AI shipped it. Mushi Mushi tells you why it broke — in plain English, in your
-> editor, with the fix ready to go — so a bug costs you five minutes instead of
-> your whole afternoon.**
+> **Your AI built it. Mushi Mushi makes it better: it finds what breaks, where
+> people get stuck and what the code needs, then hands your editor the fix in
+> plain English.**
 
 Every surface leads with a compression of this sentence. No surface contradicts
 it.
@@ -54,19 +55,35 @@ it.
 
 ### 1.5 The category we own
 
-**Bug fixing for AI-built apps.** (ADR 0056, 2026-11-11; it was "the bug
-mediator for AI-built apps", ADR 0004. "Mediator" still names how it works
-inside, below, but never leads a public surface.) One place every bug — a user tap on the
-widget, a Sentry alert, a Slack thread, a failing check — gets understood in
-plain English and comes out the other side as a ready-to-apply fix. Not "error
-monitoring" (that's Sentry's word, and it sounds like ops work). Not
-"observability" (enterprise-coded, config-heavy, allergy trigger).
+**One place to improve AI-built apps.** (ADR 0058, the owner, 2026-11-13. It
+was "Bug fixing for AI-built apps", ADR 0056, and before that "the bug mediator
+for AI-built apps", ADR 0004. "Mediator" still names how it works inside, below,
+but never leads a public surface.) Bug fixing is one pillar, not the category.
+Three pillars, one queue, all inside the editor or agent the builder already
+uses (MCP, CLI, skills):
+
+1. **Fix what breaks.** A user tap on the widget, a Sentry alert, a Slack
+   thread, a failing check, the free Production Check, the live-site watch —
+   each bug gets understood in plain English and comes out the other side as a
+   ready-to-apply fix.
+2. **Improve the journeys people take.** The Journey optimizer maps how people
+   move from page to page, from real visits plus a crawl of the live site, and
+   flags dead ends, loops, pages people leave from, orphan, deep and duplicate
+   pages — each with a plain suggestion and a prompt for the coding agent. The
+   first-time user test shows where a new user gets stuck.
+3. **Improve the code.** Known holes, code audits, the design system, repo
+   clean-up and CI cost — each finding explained, each change a reviewed draft
+   PR.
+
+Not "error monitoring" (that's Sentry's word, and it sounds like ops work). Not
+"observability" (enterprise-coded, config-heavy, allergy trigger). Not "growth
+analytics" either: the journey pillar ends in a fix, never a dashboard.
 
 The mediator sits *between* your users, your monitoring, your tracker, your
 chat, and your coding agents: one queue, one audit trail, one diagnosis per
 bug, with the fix dispatched from wherever you already are. Underneath, we are
-still the layer that makes a bug *understandable* — the mediator is where that
-layer lives. That is the word: **understandable.**
+still the layer that makes a problem *understandable* — the mediator is where
+that layer lives. That is the word: **understandable.**
 
 **The recipe.** Mushi keeps each app's recipe — its schema, design tokens,
 routes, gates, CI, deploy targets and which env vars exist — so a diagnosis
@@ -129,17 +146,19 @@ mediator's on-ramps and off-ramps: how bugs get *into* the queue and how fixes
 get *out*. What stays banned is leading with enterprise plumbing (SSO, region
 routing, Helm) — that remains operator-page material.
 
-The landing page and the README's first screen go further (ADR 0052, owner
-2026-10-27): they carry only Bucket A, as one job — *a user said your app is
-broken; Mushi Mushi tells you why in plain English and hands Cursor, Claude Code or
-Lovable the fix* — with one install action and one sample diagnosis anyone can
-read. Buckets B and C live on docs pages one click away. The operator cockpit
+The landing page and the README's first screen lead with the category and its
+three pillars (ADR 0058, owner 2026-11-13; it replaced the one job of ADR 0056
+and ADR 0052). The free Production Check stays the first action (ADR 0056).
+Each pillar is named with what it needs — nothing, an account you already have,
+a paid key such as Firecrawl, or your own computer running the worker — and
+only what works free with no key of your own is promised as free. Buckets B
+and C live on docs pages one click away. The operator cockpit
 (release trains, workers, credits, CI cost) stays behind the operator account
 and never appears on the public path.
 
 | Bucket | What's in it | Where it appears |
 |---|---|---|
-| **A. The Wedge** (lead with this) | Capture a bug → AI diagnoses it in plain English → ready-to-apply fix → editor-native (MCP) → optional draft PR. Standalone, no Sentry. | README hero, landing hero, npm first paragraph, the GIF, the 60-second quickstart |
+| **A. The Wedge** (lead with this) | The three pillars (ADR 0058): a bug, a journey where people get stuck, or a code problem → plain-English diagnosis → ready-to-apply fix → editor-native (MCP) → optional draft PR. Standalone, no Sentry. | README hero, landing hero, npm first paragraph, the GIF, the 60-second quickstart |
 | **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, the app recipe (schema, tokens, routes, gates, CI, deploy, env presence) and its drift, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
 | **C. The Mediator Fabric** (the on-ramps and off-ramps — shown as "works with everything you already run") | Sentry error ingest + 11 adapters, 13 plugins, Slack act-from-channel, Linear agent sessions, A2A/AG-UI, coding-agent dispatch. Enterprise plumbing (SSO/audit/retention/region, Helm) stays operator-only. | Docs pages linked from the landing's "More" line (`/plugins`, `/compare/sentry-vs-mushi`) + README integrations strip; not a landing section (ADR 0052); enterprise plumbing in `docs/operators/`. |
 
@@ -175,7 +194,8 @@ estimator and FAQ.
 ## The "is this drift?" test for any new feature
 
 Before building or featuring anything, ask: **"Does this help a solo vibe-coder
-understand and fix a bug faster, without leaving their editor?"**
+find and fix what is wrong with their app — a bug, a journey where people get
+stuck, or a code problem — faster, without leaving their editor?"**
 
 - **Yes →** it's Bucket A or B. Can lead.
   A hole found before a user hits it is a bug fixed in zero minutes: a check

@@ -89,8 +89,8 @@ mustContain('AGENTS.md', V2.category, 'category line (MUSHI_TAGLINE_V2.category)
 
 // 4. The v2 hero must lead primary surfaces (reinforces the tagline guard).
 //    JSX/MDX may split the sentence across tags — match the two anchors.
-const HERO_A = 'Your AI wrote it'
-const HERO_B = 'why it broke'
+const HERO_A = 'Your AI built it'
+const HERO_B = 'makes it better'
 function mustContainHero(rel, label) {
   const content = read(rel)
   if (content === null) return

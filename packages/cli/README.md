@@ -1,6 +1,6 @@
 # @mushi-mushi/cli
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The `mushi` command for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Install the SDK in your app, connect your editor, then read bugs, dispatch fixes and merge them without leaving the terminal.
 

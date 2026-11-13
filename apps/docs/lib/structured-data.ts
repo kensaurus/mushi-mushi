@@ -34,9 +34,9 @@ export const OG_CARD_HEIGHT = 630
  * (docs-meta.test.ts enforces it).
  */
 export const LANDING_META = {
-  title: 'Mushi Mushi — know why your AI-built app broke',
+  title: 'Mushi Mushi — one place to improve your AI-built app',
   description:
-    'Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional.',
+    'Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands you the fix.',
 } as const
 
 /** One `openGraph.images` / `twitter.images` entry for the card. */
@@ -44,7 +44,7 @@ export const OG_CARD_IMAGE = {
   url: OG_CARD_URL,
   width: OG_CARD_WIDTH,
   height: OG_CARD_HEIGHT,
-  alt: 'Mushi Mushi — know why your AI-built app broke, with the fix ready',
+  alt: 'Mushi Mushi — Your AI built it. Mushi Mushi makes it better. Fix bugs, smooth user journeys and clean up the code.',
 } as const
 
 const ORGANIZATION_ID = `${PRODUCT_ROOT}#organization`

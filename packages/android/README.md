@@ -1,6 +1,6 @@
 # Mushi Mushi for Android (`dev.mushimushi:mushi-android`)
 
-> **Your AI wrote it. Mushi Mushi tells you why it broke.**
+> **Your AI built it. Mushi Mushi makes it better.**
 
 The native Kotlin SDK for [Mushi Mushi](https://kensaur.us/mushi-mushi), for
 Android apps whose users find bugs you never see. A user shakes the phone or

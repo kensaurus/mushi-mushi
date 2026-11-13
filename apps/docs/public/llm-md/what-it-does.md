@@ -9,9 +9,10 @@ description: "Bugs nobody reports: a first-time user test, live-site watch, site
 
 # What else Mushi Mushi does
 
-The main job is simple: a user says your app is broken, and Mushi Mushi tells you
-why and hands your AI editor the fix. But most bugs never get reported. People
-just leave.
+Mushi Mushi is one place to improve your AI-built app: fix what breaks, smooth
+the journeys people take, clean up the code. The simplest part: a user says
+your app is broken, and Mushi Mushi tells you why and hands your AI editor the
+fix. But most bugs never get reported. People just leave.
 
 On my own 9 apps that is exactly what happened. In the 60 days to 2026-11-11,
 people reported 34 bugs. 2,031 came from my own side: checks like the ones

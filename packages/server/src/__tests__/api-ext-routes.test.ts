@@ -23,6 +23,7 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'ux-runs', register: 'registerUxRunsRoutes', count: 6 },
   { file: 'pipeline', register: 'registerPipelineRoutes', count: 3 },
   { file: 'fresh-eyes', register: 'registerFreshEyesRoutes', count: 6 },
+  { file: 'journeys', register: 'registerJourneyRoutes', count: 3 },
   { file: 'landing-visits', register: 'registerLandingVisitRoutes', count: 2 },
   { file: 'health-checks', register: 'registerHealthCheckRoutes', count: 1 },
   { file: 'recipe-ingest', register: 'registerRecipeIngestRoutes', count: 5 },

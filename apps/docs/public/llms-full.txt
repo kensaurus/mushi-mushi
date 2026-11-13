@@ -1,9 +1,9 @@
 # Mushi Mushi — full documentation dump
 
-> Bug fixing for AI-built apps: plain-English diagnosis + a ready fix, in your editor.
+> One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 236
+Pages: 237
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -14,16 +14,16 @@ the same directory. Individual pages also served as plain Markdown at
 
 ---
 
-## Mushi Mushi — know why your AI-built app broke, with the fix ready
+## Mushi Mushi — one place to improve your AI-built app
 
 Source: https://kensaur.us/mushi-mushi/docs
 
 ---
-title: Mushi Mushi — know why your AI-built app broke, with the fix ready
-description: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
+title: Mushi Mushi — one place to improve your AI-built app
+description: "Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands you the fix."
 ---
 
-Your AI wrote it. Mushi Mushi tells you why it broke.</>}
+Your AI built it. Mushi Mushi makes it better.</>}
   lead={LANDING_HERO.lead}
 />
 
@@ -68,7 +68,7 @@ It is early, and I'm still its main user. If something confuses you, [open an is
 
 ## What this is (and is not)
 
-Mushi Mushi is an open-source tool for bug fixing for AI-built apps: every bug your users report gets a plain-English diagnosis + a ready fix, in your editor.
+Mushi Mushi is open source and one place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code, each with a plain-English explanation and a fix your AI can apply.
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 
@@ -6404,7 +6404,7 @@ at `/v1/agent-card` for proxies that strip dotfiles.
 ```mermaid
 flowchart TB
   subgraph Inbound["Inbound to Mushi Mushi"]
-    MCP["MCP — both stdio AND Streamable HTTP<br/>130 tools / 8 resources / 4 prompts"]
+    MCP["MCP — both stdio AND Streamable HTTP<br/>133 tools / 8 resources / 4 prompts"]
     REST["REST /v1/admin/*<br/>OpenAPI 3.1 at /openapi.json<br/>adminOrApiKey({ scope: 'mcp:read|write' })"]
     A2A["A2A v1.0.0 /v1/a2a/tasks<br/>create / get / cancel / SSE subscribe"]
     AGUI["AG-UI v0.4 SSE<br/>fix dispatch stream<br/>API key OR JWT"]
@@ -6452,7 +6452,7 @@ your client:
 }
 ```
 
-The full tool catalog (130 tools, 8 resources, 4 prompts) lives in
+The full tool catalog (133 tools, 8 resources, 4 prompts) lives in
 [`@mushi-mushi/mcp`](/sdks/mcp) — see also the generated catalog at
 [`MCP tools reference`](/sdks/mcp-tools). Tools that move money
 (`dispatch_fix`, `transition_status`, `submit_fix_result`, `trigger_judge`,
@@ -6628,7 +6628,7 @@ helpful message for unregistered ids.
 
 | Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
 | --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 130 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, 133 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
 | **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
 | **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
 | **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
@@ -8694,6 +8694,36 @@ mushi code-health stats
 
 ---
 
+## User journeys
+
+Where people get stuck in your app, from the [Journey optimizer](/admin/journeys).
+`mushi journeys` prints the score, the most common paths and each finding with
+its pages and a suggested fix. `--prompts` adds a ready prompt per finding for
+the coding agent in your repo. `mushi journeys scan` reads the live site (up to
+40 pages, on your Firecrawl key) so the map also knows the site's links; it runs
+in the background, at most once every 10 minutes. If your app's SDK uses
+`trackSessions: 'on-demand'`, it sends no visits until you open a recording
+window: `mushi journeys record --hours 24 --sample 0.1` records one visitor in
+ten for a day (up to 168 hours), and `--stop` ends it. The MCP tools
+`get_journeys`, `scan_site_journeys` and `record_journeys` do the same from your
+editor.
+
+```bash
+mushi journeys                                  # last 30 days
+mushi journeys --days 90 --kind dead_end --prompts
+mushi journeys --json                           # the whole map, nodes and edges included
+mushi journeys scan                             # the address Mushi Mushi already knows
+mushi journeys scan --url https://example.com
+mushi journeys record --hours 24 --sample 0.1   # on-demand SDKs: record 10% of visitors for a day
+mushi journeys record --stop
+```
+
+`--days` takes 7, 30 or 90. `--kind` takes one of `broken`, `dead_end`,
+`high_exit`, `loop`, `reload`, `duplicate_page`, `route_variant`,
+`duplicate_title`, `orphan`, `deep_page` or `unvisited`.
+
+---
+
 ## Your repo
 
 These read the GitHub repo connected to the project. Mushi Mushi reads it through
@@ -9923,7 +9953,7 @@ read the contract before drafting a fix.
 ```
 
 See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
-on npm for the full **130-tool** catalog and
+on npm for the full **133-tool** catalog and
 [Connecting your orchestrator](/concepts/orchestrator-interop) for the
 non-MCP surfaces (REST, A2A, AG-UI SSE).
 
@@ -10076,7 +10106,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 
   Auto-generated from `packages/mcp/src/catalog.ts`. Do not edit by hand — run `pnpm gen:mcp-tools-doc`.
 
-**130 tools** · **8 resources** · **4 prompts**
+**133 tools** · **8 resources** · **4 prompts**
 
 ## Read tools (`mcp:read`)
 
@@ -10142,6 +10172,7 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `query_funnel` | Ordered funnel over product events | Where do users drop off? Ordered funnel over Mushi.track() events for this project. Pass 2–8 step event names in order (e.g. ["landing_view", "signup_completed", "first_report_received"]); each step counts distinct users who did the previous step then this one within stepWindow (default 7d), over the trailing windowDays (default 30). Optional breakdown property (e.g. "utm_source", "$surface") splits every step. Returns \{ steps: [\{ name, entered, converted, pct, median_secs }], breakdown: [\{ value, entered, steps }] } (pct is conversion from step 1; breakdown is empty unless requested). Read-only. Use to find the biggest drop-off before changing onboarding; use get_product_events_summary to discover event names, or get_user_paths to see what users did after a step. |
 | `get_product_events_summary` | Product events summary | Summarise the Mushi.track() product events this project received in the trailing windowDays (default 30): event names with counts and distinct users, daily volume, and top properties. Returns \{ window_days, events_total, persons, identified, anonymous, events_per_day: [\{ day, count }], top_events: [\{ name, count, persons }] }. Read-only. Use first to learn which event names exist before calling query_funnel or get_user_paths; use run_nl_query for ad-hoc SQL over the same rows. |
 | `get_user_paths` | Paths users take after an event | What did users do next? Rank the events users fired immediately after fromEvent within the trailing windowDays (default 30), most common first, up to limit rows (default 20, max 50). Returns \{ from_event, total, next: [\{ name, count, pct }] }. Read-only. Use to see where users go after a step instead of guessing the funnel order; use query_funnel once you know the ordered steps, or get_product_events_summary for event names. |
+| `get_journeys` | User journeys and where people get stuck | Where do people get stuck in the app, and what should change? Reads the Journey optimizer for one project: page-to-page moves from real visits over the last days (7, 30 default, or 90) joined with the latest site scan's links. Returns \{ days, liveUrl, score (0-100, 100 = no findings), rootPath, stats: \{ sessions, pageViews, pages, avgPagesPerSession, bounceRate, sampled }, scan, mapScan, recording (\{ until, sampleRate } of the on-demand visit recording; until null = off), flows (top 10 common paths), findingsTotal, findingsByKind, findings: [\{ id, kind, severity, pages, title, detail, suggestion, prompt }], next }. Kinds: broken, dead_end, high_exit, loop, reload, duplicate_page, route_variant, duplicate_title, orphan, deep_page, unvisited. Each finding's prompt is a ready instruction for a coding agent in the app's repo. Optional kind filters the findings, limit caps them (default 20, max 100), includeGraph adds the page nodes and edges (large). Read-only. With no scan yet, call scan_site_journeys first; for event-level funnels use query_funnel or get_user_paths. |
 | `get_map_run_status` | Story map run status | Poll the status and results of a story_map_run started by map_user_stories. Returns \{ status: pending\|running\|completed\|failed, pages_crawled, proposal_id (once done), cursor_pr_url (if Cursor Cloud refined the draft) }. Read-only. Use to know when a crawl has finished and which inventory_proposals row to review next. |
 | `list_byok_keys` | List your API key pool | List the BYOK API keys this project uses, grouped by provider (anthropic \| openai \| openrouter \| firecrawl \| browserbase \| cursor \| supabase). Returns pooled \{ keys: [\{ id, provider_slug, label, priority, status, cooldown_until, test_status, key_hint, base_url, last_tested_at, last_used_at, scope }] } where scope is project (this app), organization (every app in its organization) or universal (every app its organization owner owns); they are tried in that order, after the legacy credential. Also read-only \{ legacyKeys } metadata for credentials saved before the pooled lifecycle — never the raw secret. Read-only. Use to see which keys are validated, active, pending, legacy, shared, or rate-limited; use add_byok_key to add one. |
 | `get_spend_down_status` | Spend-down status of Cursor keys | For each Cursor key this project can use, show spend-down mode (ADR 0028): whether it is on, when the credits expire, the window state (off \| not_started \| active \| expired \| key_unusable), fixes started today out of the daily limit, the apps the key pays for that this project can see (each with its stop-loss state: paused when, over its spend-down runs of the last 14 days with 20+ samples, the 95% Wilson bound puts its Opus merge rate under 20%, hold rate over 35% or no-PR share over 50%; a paused app still gets 1 probe fix a day), a count of its other apps, the last 7 days' scoreboard (key-wide totals; per app × model × day rows for visible apps: runs, PRs, no-PR verdicts, other failures, Opus merge / fix_first / hold, merged, latest review cost per PR, merge and mergeable yield), and what the last worker tick did. Returns \{ keys: [\{ id, label, keyHint, scope, enabled, creditsExpireAt, model, dailyLimit, windowDays, state, startsAt, dispatchedToday, remainingToday, projects: [\{ id, name, canResume, stopLoss }], otherApps, projectsNote, stopLossNote, scoreboard: \{ days, since, totals, rows } \| null, scoreboardNote, lastRunAt, lastSummary }], reviewFollowups: \{ days, dispatched, finished, pushed, noChange, verdictsAfter: \{ merge, fix_first, hold }, awaitingReview, conversionRate, skipped, apps } \| null } — reviewFollowups (ADR 0032) is what sending fix_first PRs back to an agent with the Opus findings produced in the last 7 days, over the apps you can access. Read-only. Use to see whether expiring Cursor credits are being used and what they produce; use set_byok_spend_down to change it. |
@@ -10200,6 +10231,8 @@ description: Every tool, resource and prompt the Mushi Mushi MCP server exposes 
 | `set_tier` | Override contributor tier | Override a contributor's tier by tier slug (e.g. "champion"), bypassing the normal points-threshold logic entirely. This is an admin escape hatch for manual promotions — normal tier transitions happen automatically via point thresholds instead. Destructive: it is a label-only override that does NOT replay the automatic tier-evaluation path, so any host_credit_payload grant (Stripe perk, badge, etc.) normally tied to reaching that tier via points will NOT fire — confirm with the user whether they also need the perk granted another way. The override persists until another set_tier call changes it; the prior override stays in the end_user_activity audit trail either way, logged as tier_override_manual. Requires mcp:write scope. |
 | `import_sentry_issues` | Import Sentry issues | Pull existing Sentry issues into Mushi Mushi's report queue: by issueIds (numeric ids or short ids like WEB-12, at most 10) or by a Sentry search query (default is:unresolved) within the project's configured Sentry project, limit 1-10. For a backlog, add sinceDays (1-90) and call again with cursor set to the returned nextCursor until it is null; sentryProject picks another of the project's Sentry projects. Each issue goes through the same path as a Sentry webhook delivery: deduped per issue, linked, classified. An issue already linked to a report answers linked and is never reopened. Returns \{ items: [\{ input, issueId, shortId, outcome, reportId, error? }], created, linked, failed, indexing, sentryProject, sentryProjects, nextCursor }. Write; idempotent; spends classification budget per new report. Needs the Sentry org slug, project slug and an auth token (event:read, project:read) in Integrations → Sentry. Use for issues that existed before the webhook was wired; then call triage_issue on a created report. |
 | `file_report` | File a report | File a free-form report on a project by hand: a bug you found yourself, a backlog item, or work for an agent. Pass title (3-200 chars) and description (up to 10000 chars: what happens, steps, what you expected, how to check it is fixed); severity (critical \| high \| medium \| low) and component are optional hints that triage may refine. The report is stored with status new and goes through the same triage as a user report (classification, diagnosis), so it can then be dispatched with dispatch_fix. Returns \{ reportId, projectId, title, status, severity, component }. Write; not idempotent (a retry files a second report); at most 30 filed reports per project an hour; viewers cannot file. Use for work no user reported; for issues already in Sentry use import_sentry_issues. Then call triage_issue on the new reportId. |
+| `scan_site_journeys` | Scan the live site for the journey map | Start a site scan for the Journey optimizer: Firecrawl maps the live site and reads up to 40 pages (no LLM), keeping each page's title, internal links and a content fingerprint, so get_journeys can find orphan, duplicate and deep pages. Optional baseUrl (the public https:// address; defaults to the one Mushi Mushi already knows) and projectId. Firecrawl reads the pages on its side, usually within a few minutes; each get_journeys call moves the scan on, so call it again in about two minutes. Returns \{ scan: \{ id, status, baseUrl, pageCount, error, createdAt, finishedAt }, next }. One scan at a time per app (409 SCAN_RUNNING) and at most one every 10 minutes (429 SCAN_TOO_SOON); NO_LIVE_URL when no address is known, UNSAFE_URL for a private address; viewers cannot scan. Uses the project's Firecrawl key. Write: it stores a scan; nothing in the app or repo changes. |
+| `record_journeys` | Record visits for the journey map | Open, extend or stop the on-demand visit recording window for the Journey optimizer. Apps whose Mushi Mushi SDK runs trackSessions: 'on-demand' send no visits until a window is open; then that share of visitors is recorded until it ends (apps on the default trackSessions: true always record). hours is 1 to 168 from now, or 0 to stop; optional sampleRate is the share of visitors, above 0 and at most 1 (0.1 = one in ten; unset keeps the current share, 0.1 by default), and projectId. Returns \{ recording: \{ until, sampleRate }, next } (until null = off). Calling it again replaces the window. Viewers cannot record. Write: it changes the app's recording setting; nothing in the repo changes. Read the results with get_journeys. |
 | `map_user_stories` | Map user stories from live app | Crawl a live application URL (Firecrawl/Browserbase) and have Claude draft an inventory.yaml of pages and user stories, written to an inventory_proposals row (source=live_crawl). Optionally dispatches a Cursor Cloud agent to refine the draft and open a PR. Returns \{ runId, status: "pending" } immediately — poll get_map_run_status. Write; consumes crawl + LLM budget; NOT idempotent. Use to bootstrap test coverage without hand-writing YAML; then generate_tdd_from_story per accepted story. |
 | `generate_tdd_from_story` | Generate TDD test from user story | Generate a full Playwright TypeScript test from a mapped user story id (from accepted inventory) using Claude, and insert a qa_stories row (source=test_gen_from_story). approval_status follows the project automation_mode (auto = enabled immediately; review/approve = pending_review). Optionally opens a draft GitHub PR. Returns \{ qaStoryId, prUrl, approvalStatus, needsHumanReview }. Write; consumes LLM budget; NOT idempotent. Run map_user_stories first; use test_gen_from_report to build a test from a bug report instead. |
 | `improve_qa_story` | Auto-improve a failing QA story | Analyze recently failed qa_story_runs and use Claude to write improved test scripts that address the failures. New tests are created with source=pdca, parent_story_id chained to the original, and approval gated by the original story's automation_mode. Returns \{ improvedStoryIds }. Write; consumes LLM budget; NOT idempotent. Use to repair flaky/broken tests; use run_qa_story to re-run as-is, or list_qa_story_runs to inspect failures first. |
@@ -18916,6 +18949,13 @@ Mushi Mushi adds a small "Report a problem" button to your app. When a customer
 taps it, Mushi Mushi explains what went wrong in plain English and writes the
 fix instructions for your AI builder: Lovable, Bolt, Cursor or Claude Code.
 
+Fixing bugs is one part. Mushi Mushi also helps you make the app better: it
+shows where people get stuck or leave, page by page, and checks your code for
+known security holes. Each finding comes with fix instructions too. The page
+map from real visits needs only the button you already added; the crawl of
+your live site needs a Firecrawl key, and the security check needs your GitHub
+repository connected.
+
 It is for people who build apps with AI tools and have real users. You don't
 need to know how to code, and you don't need any other tools.
 
@@ -18967,9 +19007,10 @@ description: "Bugs nobody reports: a first-time user test, live-site watch, site
 
 # What else Mushi Mushi does
 
-The main job is simple: a user says your app is broken, and Mushi Mushi tells you
-why and hands your AI editor the fix. But most bugs never get reported. People
-just leave.
+Mushi Mushi is one place to improve your AI-built app: fix what breaks, smooth
+the journeys people take, clean up the code. The simplest part: a user says
+your app is broken, and Mushi Mushi tells you why and hands your AI editor the
+fix. But most bugs never get reported. People just leave.
 
 On my own 9 apps that is exactly what happened. In the 60 days to 2026-11-11,
 people reported 34 bugs. 2,031 came from my own side: checks like the ones
@@ -19194,6 +19235,9 @@ Backed by the `project_activity_summary` RPC.
 
 If numbers are zero after a real install, confirm the SDK has `trackSessions`
 enabled (default on) and that ingest is healthy under [SDK health](/admin/sdk-health).
+With `trackSessions: 'on-demand'` visits are recorded only while a recording
+window is open on the [Journey optimizer](/admin/journeys) page, or in a tab
+opened with `?mushi_journeys=1`.
 
 ---
 
@@ -22821,6 +22865,107 @@ POST   /v1/admin/pdca/<id>/trigger (manually trigger queued run)
 
 ---
 
+## Journey optimizer
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/journeys
+
+---
+title: Journey optimizer
+description: Map how people move through your app, then fix dead ends, pages people leave, duplicate pages and pages nothing links to, with prompts for your coding agent.
+---
+
+# Journey optimizer
+
+**Route:** `/journeys` (sidebar: Journeys)
+
+> **Scenario:** Your AI built the app fast. Now you want to know where people get
+> lost: which page they leave from, which two pages say the same thing, and which
+> page nobody can find. Then you want the fix in your editor.
+
+The Journey optimizer builds one map from two sources. Either one is enough on its own.
+
+| Source | What it adds | What you need |
+| --- | --- | --- |
+| **Real visits** | Where people arrive, the paths they take, where they leave, pages they open by mistake (wrong doors), pages they reload | The Mushi Mushi SDK with session tracking on (`trackSessions`, on by default), or `'on-demand'` with a recording window |
+| **Site scan** | Your site map from its own links, pages nothing links to, pages too many clicks deep, duplicate and near-duplicate pages, pages that share a title | A Firecrawl key in **Settings → AI keys** |
+| **Live-site watch** (optional) | Broken pages on the map | The watch turned on under **User stories → Discovery** |
+
+## Record visits only when you need them
+
+Every recorded visit sends a few small requests (start, page views, a heartbeat
+every minute while the tab is open). If that is too much for every visitor, run
+the SDK with `trackSessions: 'on-demand'`:
+
+```ts
+Mushi.init({ projectId, apiKey, trackSessions: 'on-demand' })
+```
+
+Then nothing is sent until you ask:
+
+- **Record visits on demand** on this page opens a window for 1 hour, 1 day or
+  1 week, for 10%, 50% or all visitors. Each device is drawn in or out once
+  and stays that way, so no visit is half recorded. **Stop** ends it at once.
+- **Test in your own browser** copies your address with `?mushi_journeys=1`.
+  That tab records whatever the window says; `?mushi_journeys=0` turns it off.
+
+The SDK reads the window from the settings it already loads, so outside a
+window it adds no request at all.
+
+## Scan your site
+
+Type your live address (Mushi Mushi fills it in when it knows it) and press **Scan my site**.
+The scan reads up to 40 public pages, about 41 Firecrawl credits. Firecrawl reads them on
+its side, slow pages included, and the map fills in by itself when it is done, usually within
+a few minutes. It uses no AI model and changes nothing on your site. Mushi Mushi keeps
+each page's title, its links and a fingerprint of its text, never the text itself, and
+keeps the newest 10 scans. One scan runs at a time, at most one every 10 minutes.
+
+## Read the map
+
+- Each card is a page: visits, the share of visits that end there, and how many clicks
+  it is from the start page. Its border is red for a fix-first problem and amber for one
+  worth fixing.
+- Each arrow is people moving from one page to the next. A thicker arrow means more people.
+- With a scan, a **dashed** arrow means people moved without a link on the page (menu,
+  back button or search), and a **dotted** one is a link nobody used.
+- Click a page to see only its problems. Pick 7, 30 or 90 days at the top of the map.
+
+## What it finds
+
+| Finding | Means | Usual fix |
+| --- | --- | --- |
+| Broken page | The live-site watch found the page failing | Fix the page, then the links to it |
+| Dead end | Most visits end here and the page links nowhere but the menu | Add one clear next step |
+| People leave | Most visits end here | Make the main action easy to see; check the page answers what people came for |
+| Wrong door | People open a page, come back within seconds and pick a different one | Make the way to the page they wanted easier to see, and say on the link what the first page holds |
+| Reloaded | People open the same page again right away | Check for slow loading or a form that seems not to save |
+| Duplicate pages | Two or more pages share most of their text | Merge and redirect, or make each page about one thing |
+| Same page, two addresses | `/About` and `/about`, `/pricing.html` and `/pricing` | Pick one address and redirect the others |
+| Same title | Pages share a title | Give each page its own title |
+| Nothing links here | No scanned page links to it | Link to it where people look, or remove it |
+| Too deep | 4 or more clicks from the start page | Link to it from the start page or menu |
+| Never opened | Scanned pages no visit opened | Link to them, or remove them |
+
+Thank-you, success, logout and 404 pages are never flagged for people leaving: leaving is
+the point there.
+
+## Hand it to your coding agent
+
+Every finding has **Copy prompt for your coding agent**: a self-contained instruction
+naming the pages, what is wrong and what to change. Paste it into Cursor, Claude Code,
+Lovable or Bolt. **Copy all as one prompt** gives the agent the whole list, worst first.
+
+The **Journey score** starts at 100 and drops for each finding: a fix-first one costs
+the most. Use it to see a change land, not as a grade.
+
+## Related
+
+- [First-time user test](/admin/ux-runs): an AI tries one goal as a new user and shows where it got stuck.
+- [User stories](/admin/inventory): the crawl that drafts what users can do in your app.
+- Home → **Pages**: the busiest pages at a glance, with a link here.
+
+---
+
 ## Triage grading
 
 Source: https://kensaur.us/mushi-mushi/docs/admin/judge
@@ -23206,7 +23351,7 @@ your agent can read reports, pull fix context, and optionally dispatch fixes —
 without leaving the editor.
 
 The page has four tabs: **Summary**, **Setup**, **Catalog** and **Examples**. The
-**Catalog** tab mirrors the server registry (**130 tools**, 8 resources, 4 prompts).
+**Catalog** tab mirrors the server registry (**133 tools**, 8 resources, 4 prompts).
 
 ---
 

@@ -1,13 +1,13 @@
-# Mushi Mushi — know why your AI-built app broke, with the fix ready
+# Mushi Mushi — one place to improve your AI-built app
 
 Source: https://kensaur.us/mushi-mushi/docs
 
 ---
-title: Mushi Mushi — know why your AI-built app broke, with the fix ready
-description: "Your AI shipped it. Mushi Mushi tells you why it broke: a plain-English diagnosis and a ready fix in your editor. Open source, Sentry optional."
+title: Mushi Mushi — one place to improve your AI-built app
+description: "Your AI built it. Mushi Mushi makes it better: it finds what breaks, where people get stuck and what the code needs, then hands you the fix."
 ---
 
-Your AI wrote it. Mushi Mushi tells you why it broke.</>}
+Your AI built it. Mushi Mushi makes it better.</>}
   lead={LANDING_HERO.lead}
 />
 
@@ -52,7 +52,7 @@ It is early, and I'm still its main user. If something confuses you, [open an is
 
 ## What this is (and is not)
 
-Mushi Mushi is an open-source tool for bug fixing for AI-built apps: every bug your users report gets a plain-English diagnosis + a ready fix, in your editor.
+Mushi Mushi is open source and one place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code, each with a plain-English explanation and a fix your AI can apply.
 
 **Who it is for.** {LANDING_WHAT_THIS_IS.who} {LANDING_WHAT_THIS_IS.boundary}
 

@@ -2148,6 +2148,60 @@
         }
       }
     },
+    "get_journeys": {
+      "title": "User journeys and where people get stuck",
+      "description": "Where do people get stuck in the app, and what should change? Reads the Journey optimizer for one project: page-to-page moves from real visits over the last days (7, 30 default, or 90) joined with the latest site scan's links. Returns { days, liveUrl, score (0-100, 100 = no findings), rootPath, stats: { sessions, pageViews, pages, avgPagesPerSession, bounceRate, sampled }, scan, mapScan, recording ({ until, sampleRate } of the on-demand visit recording; until null = off), flows (top 10 common paths), findingsTotal, findingsByKind, findings: [{ id, kind, severity, pages, title, detail, suggestion, prompt }], next }. Kinds: broken, dead_end, high_exit, loop, reload, duplicate_page, route_variant, duplicate_title, orphan, deep_page, unvisited. Each finding's prompt is a ready instruction for a coding agent in the app's repo. Optional kind filters the findings, limit caps them (default 20, max 100), includeGraph adds the page nodes and edges (large). Read-only. With no scan yet, call scan_site_journeys first; for event-level funnels use query_funnel or get_user_paths.",
+      "scope": "mcp:read",
+      "annotations": {
+        "title": "User journeys and where people get stuck",
+        "readOnlyHint": true,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "days": {
+            "description": "Window of visits: 7, 30 (default) or 90 days",
+            "type": "integer",
+            "minimum": 7,
+            "maximum": 90
+          },
+          "kind": {
+            "description": "Only findings of this kind",
+            "type": "string",
+            "enum": [
+              "broken",
+              "dead_end",
+              "high_exit",
+              "loop",
+              "reload",
+              "duplicate_page",
+              "route_variant",
+              "duplicate_title",
+              "orphan",
+              "deep_page",
+              "unvisited"
+            ]
+          },
+          "limit": {
+            "description": "Most findings to return (default 20, max 100)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "includeGraph": {
+            "description": "Also return the page nodes and page-to-page edges (up to 60 and 160 rows)",
+            "type": "boolean"
+          }
+        }
+      },
+      "returnsUntrusted": true
+    },
     "get_knowledge_graph": {
       "title": "Knowledge graph traversal",
       "description": "Traverse the knowledge graph from a seed component or page. Returns { nodes: [{ id, label, node_type }], edges: [{ source_node_id, target_node_id, edge_type }] } within a depth budget (default 2, max 4 hops). Read-only. Use to see how a component connects to the rest of the app; use get_blast_radius for a bug's impact area, or get_graph_neighborhood for a tighter BFS around one node.",
@@ -4553,6 +4607,41 @@
       },
       "returnsUntrusted": true
     },
+    "record_journeys": {
+      "title": "Record visits for the journey map",
+      "description": "Open, extend or stop the on-demand visit recording window for the Journey optimizer. Apps whose Mushi Mushi SDK runs trackSessions: 'on-demand' send no visits until a window is open; then that share of visitors is recorded until it ends (apps on the default trackSessions: true always record). hours is 1 to 168 from now, or 0 to stop; optional sampleRate is the share of visitors, above 0 and at most 1 (0.1 = one in ten; unset keeps the current share, 0.1 by default), and projectId. Returns { recording: { until, sampleRate }, next } (until null = off). Calling it again replaces the window. Viewers cannot record. Write: it changes the app's recording setting; nothing in the repo changes. Read the results with get_journeys.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Record visits for the journey map",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "hours": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 168,
+            "description": "Hours to record from now (1-168), or 0 to stop"
+          },
+          "sampleRate": {
+            "description": "Share of visitors to record, above 0 and at most 1 (0.1 = one in ten)",
+            "type": "number",
+            "maximum": 1
+          }
+        },
+        "required": [
+          "hours"
+        ]
+      }
+    },
     "refresh_ci": {
       "title": "Refresh fix CI status",
       "description": "Re-poll GitHub for the latest check-run status of a fix attempt's PR and persist it on the fix_attempt row (does not merge or mutate GitHub). Returns { check_run_status, check_run_conclusion, check_run_updated_at }. Write; idempotent. Use right before merge_fix to confirm CI is green; use get_fix_timeline for the full attempt lifecycle.",
@@ -5222,6 +5311,31 @@
               "boolean",
               "null"
             ]
+          }
+        }
+      }
+    },
+    "scan_site_journeys": {
+      "title": "Scan the live site for the journey map",
+      "description": "Start a site scan for the Journey optimizer: Firecrawl maps the live site and reads up to 40 pages (no LLM), keeping each page's title, internal links and a content fingerprint, so get_journeys can find orphan, duplicate and deep pages. Optional baseUrl (the public https:// address; defaults to the one Mushi Mushi already knows) and projectId. Firecrawl reads the pages on its side, usually within a few minutes; each get_journeys call moves the scan on, so call it again in about two minutes. Returns { scan: { id, status, baseUrl, pageCount, error, createdAt, finishedAt }, next }. One scan at a time per app (409 SCAN_RUNNING) and at most one every 10 minutes (429 SCAN_TOO_SOON); NO_LIVE_URL when no address is known, UNSAFE_URL for a private address; viewers cannot scan. Uses the project's Firecrawl key. Write: it stores a scan; nothing in the app or repo changes.",
+      "scope": "mcp:write",
+      "annotations": {
+        "title": "Scan the live site for the journey map",
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Project UUID — defaults to the server-configured project when omitted (`project_id` is accepted too.)",
+            "type": "string"
+          },
+          "baseUrl": {
+            "description": "The site's public https:// address; defaults to the one Mushi Mushi already knows",
+            "type": "string"
           }
         }
       }
