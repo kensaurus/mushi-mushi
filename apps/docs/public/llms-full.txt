@@ -22871,7 +22871,7 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/journeys
 
 ---
 title: Journey optimizer
-description: The Journey optimizer in Mushi Mushi maps how people move through your app and finds dead ends, pages people leave from, duplicate pages, pages nothing links to and pages buried too deep, each with a fix to hand your coding agent.
+description: Map how people move through your app, then fix dead ends, pages people leave, duplicate pages and pages nothing links to, with prompts for your coding agent.
 ---
 
 # Journey optimizer
