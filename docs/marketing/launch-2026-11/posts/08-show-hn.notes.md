@@ -25,8 +25,10 @@ Paste file: `08-show-hn.HELD.paste.md`.
 
 ## Facts behind the copy
 
-- **34, about 2,000, and 576 of 1,745:** `public_scoreboard(60)` on 2026-11-11.
-  The split is in `01-data-story.notes.md`.
+- **36, about 2,040, and 596 of 1,803:** `public_scoreboard(60)` on 2026-11-13
+  (`user_reports` 36, `other_reports` 2,042, `reviews` 1,803, `reviews_hold`
+  596, `apps` 9). On 2026-11-11 it was 34, 2,031 and 576 of 1,745. The split
+  is in `01-data-story.notes.md`. Re-run it on the day you post.
 - **"I pay for the model"**: ADR 0056 Context, "Mushi Mushi pays for the model"
   on a free project.
 - **The free and keyed lists** match ADR 0056 §1. Nothing else is promised as

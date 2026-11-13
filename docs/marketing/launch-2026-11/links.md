@@ -72,6 +72,10 @@ for a different asset.
 | `glama` | Glama | listing | `/docs/connect` |
 | `starter.lovable` | starter template README | README links | `/docs/check`, `/docs/proof` |
 | `widget` | the widget footer mark | set by the SDK (`utm_source=widget`) | landing |
+| `ph.launch` | Product Hunt | launch (HELD, `posts/09`) | landing |
+| `x.fieldkenji` | X | Field Kenji post (`posts/10`) | `/docs/demo/diagnosis` |
+| `devto.toolcatalog` | dev.to | tool-catalog article (outline, `posts/11`) | `/docs/connect`, `/docs/demo/diagnosis` |
+| `github-readme` | GitHub README | the "Check your live app" button and the hero image (in use before this table listed it) | `/docs/check`, `/docs/demo/diagnosis` |
 
 ## How to read the results
 
