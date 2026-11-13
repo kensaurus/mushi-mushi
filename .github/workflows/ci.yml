@@ -427,6 +427,13 @@ jobs:
       - name: Check onboarding doc drift
         run: pnpm check:onboarding-drift
 
+      - name: Check plugin skills match skills/
+        # skills/ is the only hand-edited copy of the agent skills. The Cursor
+        # plugin (packages/cursor-plugin/skills) and the Claude Code plugin
+        # (plugins/mushi-debugger/skills) ship generated copies. Run
+        # `pnpm sync:skills` and commit when this fails.
+        run: pnpm check:skills
+
       - name: Check env template vs onboarding docs
         run: pnpm check:env-docs
 

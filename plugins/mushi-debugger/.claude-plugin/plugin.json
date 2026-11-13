@@ -1,7 +1,7 @@
 {
   "name": "mushi-debugger",
-  "description": "Triage and fix Mushi Mushi bug reports from inside Claude Code — reports, plain-English diagnosis, paste-ready fix context, optional fix dispatch",
-  "version": "1.0.2",
+  "description": "Triage and fix Mushi Mushi bug reports from inside Claude Code: the hosted MCP server, a mushi-debugger subagent, and the Mushi Mushi skills for setup, triage, health checks and debugging, tests, SDK upgrades and a free live-site check",
+  "version": "1.1.0",
   "author": {
     "name": "kensaurus",
     "url": "https://github.com/kensaurus/mushi-mushi"
@@ -9,6 +9,6 @@
   "homepage": "https://kensaur.us/mushi-mushi/docs",
   "repository": "https://github.com/kensaurus/mushi-mushi",
   "license": "MIT",
-  "keywords": ["debugging", "bug-reports", "mcp", "triage"],
+  "keywords": ["debugging", "bug-reports", "mcp", "triage", "skills"],
   "mcpServers": "./.mcp.json"
 }

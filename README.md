@@ -89,7 +89,7 @@ Paste this into Cursor or Claude Code:
 
 > Install the Mushi Mushi skills from github.com/kensaurus/mushi-mushi (`npx skills add kensaurus/mushi-mushi`), then run the mushi-setup skill to wire the Mushi Mushi SDK and MCP server into this app and send a test report to verify the connection.
 
-The skills also add `/mushi-debug` (why ingest or MCP fails), `/mushi-health` (pass/fail across CLI, API and keys) and `/mushi-integration` (fix dispatch and the two-way loop).
+The skills also add `/mushi-triage` (evidence, diagnosis, then fix here or dispatch), `/mushi-debug` (a pass/fail health check, then why ingest or MCP fails), `/mushi-test` (generated tests and an end-to-end smoke test), `/mushi-sdk-upgrade` and `/mushi-check-live-app` (a free check of a live site). `/mushi-mushi` routes to the right one.
 
 </details>
 

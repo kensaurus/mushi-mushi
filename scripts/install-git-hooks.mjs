@@ -52,6 +52,7 @@ const HOOK_BODY = `#!/bin/sh
 #   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
 #   - config docs drift    (scripts/check-config-docs.mjs)
 #   - community-file drift (scripts/sync-community-files.mjs --check)
+#   - plugin skill drift   (scripts/sync-skills.mjs --check)
 #   - dead buttons         (scripts/check-dead-buttons.mjs)
 #   - JSX unicode escapes  (scripts/check-jsx-unicode-escapes.mjs)
 # Bypass once with \`git commit --no-verify\` in an emergency.
@@ -60,6 +61,7 @@ node scripts/check-design-tokens.mjs || exit 1
 node scripts/check-mcp-catalog-sync.mjs || exit 1
 node scripts/check-config-docs.mjs || exit 1
 node scripts/sync-community-files.mjs --check || exit 1
+node scripts/sync-skills.mjs --check || exit 1
 node scripts/check-dead-buttons.mjs || exit 1
 node scripts/check-jsx-unicode-escapes.mjs || exit 1
 `

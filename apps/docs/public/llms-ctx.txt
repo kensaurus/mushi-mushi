@@ -218,8 +218,9 @@ It reads CLI config at **`~/.config/mushi/config.json`**, or **`%APPDATA%\mushi\
 
 ## Claude Code plugin
 
-One command installs the hosted MCP hookup plus a `mushi-debugger` subagent
-(report triage → fix context → implement → close the loop):
+One command installs the hosted MCP hookup, a `mushi-debugger` subagent
+(report triage → fix context → implement → close the loop) and the seven
+[Mushi Mushi skills](/sdks/skills):
 
 ```
 /plugin marketplace add kensaurus/mushi-mushi

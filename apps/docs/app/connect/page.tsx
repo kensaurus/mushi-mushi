@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { CONNECT_SKILLS } from '@/lib/public-copy'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
 import {
@@ -276,11 +276,14 @@ function SkillsLane({ client }: { client: McpClientDef }) {
         </p>
         <CopyBlock label="" text={skillsCmd} />
         <p className="text-xs text-[var(--mushi-ink-muted)]">
-          Adds <code className="font-mono text-xs">mushi-setup</code>,{' '}
-          <code className="font-mono text-xs">mushi-debug</code>,{' '}
-          <code className="font-mono text-xs">mushi-health</code>,{' '}
-          <code className="font-mono text-xs">mushi-integration</code> and{' '}
-          <code className="font-mono text-xs">mushi-mushi</code>.
+          Adds{' '}
+          {CONNECT_SKILLS.skillNames.map((name, i, all) => (
+            <Fragment key={name}>
+              {i > 0 && (i === all.length - 1 ? ' and ' : ', ')}
+              <code className="font-mono text-xs">{name}</code>
+            </Fragment>
+          ))}
+          .
         </p>
       </div>
       <div className="rounded-md border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] p-4">
