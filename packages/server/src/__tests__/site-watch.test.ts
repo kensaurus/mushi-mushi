@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 }
 
 const sw = await import('../../supabase/functions/_shared/site-watch.ts')
+const { tagMonitorUrl } = await import('../../supabase/functions/_shared/monitor-url.ts')
 type Page = Parameters<typeof sw.classifyPage>[0]
 
 const BASE = 'https://kensaur.us/help-her-take-photo'
@@ -916,36 +917,56 @@ describe('review fixes 2026-10-21 (PR #533)', () => {
 describe('Firecrawl monitor calls', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('creates a daily crawl monitor with the breakage goal', async () => {
+  it('creates a daily scrape monitor over the page list, every URL marked (ADR 0059)', async () => {
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ success: true, data: { id: 'mon-1', estimatedCreditsPerMonth: 660 } }), { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchMock)
-    const res = await sw.createMonitor('fc-key', { name: 'watch', baseUrl: BASE, pageLimit: 25, scheduleCron: sw.DEFAULT_SCHEDULE_CRON })
+    const urls = [`${BASE}/`, `${BASE}/terms`, `${BASE}/s?q=a#top`]
+    const res = await sw.createMonitor('fc-key', { name: 'watch', urls, scheduleCron: sw.DEFAULT_SCHEDULE_CRON })
     expect(res).toEqual({ id: 'mon-1', estimatedCreditsPerMonth: 660 })
     const [url, init] = fetchMock.mock.calls[0]! as unknown as [string, RequestInit]
     expect(url).toBe('https://api.firecrawl.dev/v2/monitor')
     const body = JSON.parse(String(init.body))
-    expect(body).toMatchObject({
-      schedule: { cron: '30 1 * * *', timezone: 'UTC' },
-      goal: sw.SITE_WATCH_GOAL,
-      targets: [{ type: 'crawl', url: `${BASE}?${WATCH_TAG}`, crawlOptions: { limit: 25, ignoreQueryParameters: true } }],
-    })
+    expect(body).toMatchObject({ schedule: { cron: '30 1 * * *', timezone: 'UTC' }, goal: sw.SITE_WATCH_GOAL })
+    expect(body.targets).toEqual([
+      {
+        type: 'scrape',
+        urls: [`${BASE}/?${WATCH_TAG}`, `${BASE}/terms?${WATCH_TAG}`, `${BASE}/s?q=a&${WATCH_TAG}#top`],
+        scrapeOptions: { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } },
+      },
+    ])
     expect(body).not.toHaveProperty('webhook')
+    // No crawl target anywhere: a crawl marks only its seed.
+    expect(JSON.stringify(body)).not.toContain('"crawl"')
   })
 
-  it('identifies the crawler as MushiSiteWatch on create and on a full update, and sets nothing else', async () => {
+  it('splits a long list into targets of MONITOR_URLS_PER_TARGET (Firecrawl: 1-50 targets)', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: { id: 'mon-1' } }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    const spec = { name: 'watch', baseUrl: BASE, pageLimit: 25, scheduleCron: sw.DEFAULT_SCHEDULE_CRON }
+    const urls = Array.from({ length: sw.MONITOR_URLS_PER_TARGET * 2 + 1 }, (_, i) => `${BASE}/p${i}`)
+    await sw.createMonitor('fc-key', { name: 'watch', urls, scheduleCron: sw.DEFAULT_SCHEDULE_CRON })
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body))
+    expect(body.targets.map((t: { urls: string[] }) => t.urls.length)).toEqual([sw.MONITOR_URLS_PER_TARGET, sw.MONITOR_URLS_PER_TARGET, 1])
+    expect(body.targets.every((t: { urls: string[] }) => t.urls.every((u) => u.includes('mushi_monitor=watch')))).toBe(true)
+    // A watch holds at most 100 pages (site_watches.page_limit): one target today.
+    expect(sw.MONITOR_URLS_PER_TARGET).toBeGreaterThanOrEqual(100)
+  })
+
+  it('identifies as MushiSiteWatch on create and on a list update; a status-only update sends no targets', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, data: { id: 'mon-1' } }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const spec = { name: 'watch', urls: [`${BASE}/`], scheduleCron: sw.DEFAULT_SCHEDULE_CRON }
     await sw.createMonitor('fc-key', spec)
     await sw.updateMonitor('fc-key', 'mon-1', { ...spec, status: 'active' })
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    for (const call of fetchMock.mock.calls) {
-      const body = JSON.parse(String((call as unknown as [string, RequestInit])[1].body))
+    await sw.updateMonitor('fc-key', 'mon-1', { name: 'watch', scheduleCron: sw.DEFAULT_SCHEDULE_CRON, status: 'active' })
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)))
+    for (const body of bodies.slice(0, 2)) {
       expect(body.targets[0].scrapeOptions).toEqual({ headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } })
-      expect(body.targets[0].url).toBe(`${BASE}?${WATCH_TAG}`)
+      expect(body.targets[0].urls).toEqual([`${BASE}/?${WATCH_TAG}`])
     }
+    // Sending targets resets every page's history (probe 2026-11-13).
+    expect(bodies[2]).toEqual({ status: 'active' })
     expect(sw.SITE_WATCH_USER_AGENT).toMatch(/^Mozilla\/5\.0 .* Chrome\/[\d.]+ Safari\/537\.36 MushiSiteWatch\/1\.0 \(\+https:\/\/kensaur\.us\/mushi-mushi\)$/)
   })
 
@@ -972,32 +993,307 @@ describe('Firecrawl monitor calls', () => {
     expect(pages.map((p) => p.url)).toEqual([BASE, `${BASE}/a?x=1`])
   })
 
-  it('flags a live monitor that lacks the current User-Agent for reconcile', async () => {
-    // The six 2026-10-10 monitors came back with scrapeOptions {} and their
-    // crawls reached glot.it unmarked.
-    expect(sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: {} }] })).toBe(true)
-    expect(sw.monitorNeedsReconcile({})).toBe(true)
-    expect(sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: { headers: { 'User-Agent': 'MushiSiteWatch/0.9' } } }] })).toBe(true)
-    expect(
-      sw.monitorNeedsReconcile({ targets: [{ scrapeOptions: { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } } }] }),
-    ).toBe(false)
-    // Monitors created before 2026-11-13 crawl from the bare URL: patched once to the marked one.
+  it('flags a live monitor for reconcile: a crawl, a missing User-Agent, or an unmarked page URL', async () => {
     const ua = { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } }
-    expect(sw.monitorNeedsReconcile({ targets: [{ url: BASE, scrapeOptions: ua }] })).toBe(true)
-    expect(sw.monitorNeedsReconcile({ targets: [{ url: `${BASE}?${WATCH_TAG}`, scrapeOptions: ua }] })).toBe(false)
+    const scrape = (urls: string[], scrapeOptions: Record<string, unknown> = ua) => ({ type: 'scrape', urls, scrapeOptions })
+    // Every monitor before ADR 0059 is a crawl, even one with the UA and a marked seed.
+    expect(sw.monitorNeedsReconcile({ targets: [{ type: 'crawl', url: `${BASE}?${WATCH_TAG}`, scrapeOptions: ua }] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({})).toBe(true)
+    // The six 2026-10-10 monitors came back with scrapeOptions {} and reached glot.it unmarked.
+    expect(sw.monitorNeedsReconcile({ targets: [scrape([`${BASE}/?${WATCH_TAG}`], {})] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [scrape([`${BASE}/?${WATCH_TAG}`], { headers: { 'User-Agent': 'MushiSiteWatch/0.9' } })] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [scrape([`${BASE}/?${WATCH_TAG}`, `${BASE}/terms`])] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [scrape([])] })).toBe(true)
+    expect(sw.monitorNeedsReconcile({ targets: [scrape([`${BASE}/?${WATCH_TAG}`, `${BASE}/terms?${WATCH_TAG}`])] })).toBe(false)
 
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ success: true, data: { name: 'watch', targets: [{ scrapeOptions: {} }] } }))),
+      vi.fn(async () => new Response(JSON.stringify({ success: true, data: { name: 'watch', targets: [{ type: 'crawl', url: BASE, scrapeOptions: {} }] } }))),
     )
     const live = await sw.getMonitor('fc-key', 'mon-1')
     expect(live.name).toBe('watch')
     expect(sw.monitorNeedsReconcile(live)).toBe(true)
+    expect(sw.liveTargetUrls(live)).toEqual([])
+    expect(sw.liveTargetUrls({ targets: [scrape([`${BASE}/terms?x=1&${WATCH_TAG}`])] })).toEqual([`${BASE}/terms?x=1`])
   })
 
   it('a monitor already gone counts as deleted; a 404 elsewhere is a typed error', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('not found', { status: 404 })))
     await expect(sw.deleteMonitor('fc-key', 'gone')).resolves.toBeUndefined()
     await expect(sw.listChecks('fc-key', 'gone')).rejects.toMatchObject({ status: 404, message: 'FIRECRAWL_MONITOR_NOT_FOUND' })
+  })
+})
+
+// ── The page list a watch loads (ADR 0059) ──────────────────────────────
+
+describe('selectWatchUrls / nextWatchUrls', () => {
+  const page = (path: string, statusCode: number | null = 200) => ({ url: `${BASE}${path}`, statusCode })
+  const base = {
+    baseUrl: BASE,
+    limit: 100,
+    current: [] as string[],
+    lastPages: [] as Array<{ url: string; statusCode: number | null }>,
+    mapped: null as string[] | null,
+  }
+
+  it('base first, same-site pages under the base path only, no sitemaps or files, at most the limit', () => {
+    const urls = sw.selectWatchUrls({
+      ...base,
+      limit: 4,
+      mapped: [
+        `${BASE}/sitemap.xml`,
+        `${BASE}/a/b/c`,
+        `${BASE}/terms`,
+        'https://kensaur.us/other-app/x',
+        'https://elsewhere.example/terms',
+        `${BASE}/assets/og.png`,
+        `${BASE}/privacy?utm_source=x#top`,
+        `${BASE}/guides/one`,
+      ],
+    })
+    // Shallow paths first; query and fragment dropped.
+    expect(urls).toEqual([BASE, `${BASE}/privacy`, `${BASE}/terms`, `${BASE}/guides/one`])
+  })
+
+  it('on the switch from a crawl, keeps every page the crawl reached by following links, 404s included', () => {
+    const urls = sw.selectWatchUrls({
+      ...base,
+      lastPages: [page('/'), page('/linked-only'), page('/broken-link', 404)],
+      mapped: [`${BASE}/terms`],
+      pending: [`${BASE}/broken-link`],
+    })
+    // The base keeps its stored spelling here; the site's own spelling is resolved before sending.
+    expect(urls).toEqual([BASE, `${BASE}/linked-only`, `${BASE}/broken-link`, `${BASE}/terms`])
+  })
+
+  it('a dead URL the map lists is watched, so its 404 files', () => {
+    const urls = sw.selectWatchUrls({
+      ...base,
+      current: [`${BASE}/`],
+      lastPages: [page('/'), page('/gone', 404)],
+      mapped: [`${BASE}/`, `${BASE}/gone`],
+    })
+    expect(urls).toContain(`${BASE}/gone`)
+  })
+
+  it('drops a watched page that left the site: unmapped, 404/410, nothing waiting to file', () => {
+    const input = {
+      ...base,
+      current: [`${BASE}/`, `${BASE}/old`, `${BASE}/flaky`, `${BASE}/unmapped-ok`],
+      lastPages: [page('/'), page('/old', 410), page('/flaky', 503), page('/unmapped-ok')],
+      mapped: [`${BASE}/`, `${BASE}/flaky`],
+    }
+    expect(sw.selectWatchUrls(input)).toEqual([`${BASE}/`, `${BASE}/flaky`, `${BASE}/unmapped-ok`])
+    // A 404 whose suspect has not filed yet stays until it reaches its report.
+    expect(sw.selectWatchUrls({ ...input, pending: [`${BASE}/old`] })).toContain(`${BASE}/old`)
+  })
+
+  it('keeps the spelling a page is watched under (it was resolved against the site when it joined)', () => {
+    expect(sw.selectWatchUrls({ ...base, current: [`${BASE}/`], mapped: [BASE, `${BASE}/terms`] })).toEqual([`${BASE}/`, `${BASE}/terms`])
+    expect(sw.selectWatchUrls({ ...base, current: [BASE], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([BASE, `${BASE}/terms`])
+  })
+
+  it('leaves the monitor alone when the page set is unchanged, in any spelling or order', () => {
+    const current = [`${BASE}/`, `${BASE}/terms`]
+    expect(sw.nextWatchUrls({ ...base, current, lastPages: [page('/'), page('/terms')], mapped: [`${BASE}/terms/`, BASE] })).toBeNull()
+  })
+
+  it('a failed or thin map cannot shrink the list (a flaky map must not reset every page)', () => {
+    const pagesNow = Array.from({ length: 10 }, (_, i) => `${BASE}/p${i}`)
+    const lastPages = pagesNow.map((u) => ({ url: u, statusCode: 200 }))
+    const current = [BASE, ...pagesNow]
+    expect(sw.nextWatchUrls({ ...base, current, lastPages, mapped: null })).toBeNull()
+    expect(sw.nextWatchUrls({ ...base, current, lastPages, mapped: [BASE, `${BASE}/new`] })).toBeNull()
+  })
+
+  it('never switches a crawl to a one-page watch from nothing', () => {
+    expect(sw.nextWatchUrls({ ...base, current: [], lastPages: [], mapped: null })).toBeNull()
+    expect(sw.nextWatchUrls({ ...base, current: [], lastPages: [], mapped: [`${BASE}/`, `${BASE}/terms`] })).toEqual([BASE, `${BASE}/terms`])
+  })
+
+  it('adds new mapped pages while there is room', () => {
+    const current = [`${BASE}/`, `${BASE}/terms`]
+    const next = sw.nextWatchUrls({
+      ...base,
+      current,
+      lastPages: [page('/'), page('/terms')],
+      mapped: [`${BASE}/`, `${BASE}/terms`, `${BASE}/new`],
+    })
+    expect(next).toEqual([`${BASE}/`, `${BASE}/terms`, `${BASE}/new`])
+  })
+})
+
+describe('refreshWatchPages (the daily page-list refresh)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  const W = { id: 'w1', base_url: BASE, page_limit: 100, schedule_cron: '30 1 * * *', firecrawl_monitor_id: 'mon-1' }
+  const ua = { headers: { 'User-Agent': sw.SITE_WATCH_USER_AGENT } }
+  const crawlMonitor = { name: 'watch', targets: [{ type: 'crawl', url: BASE, scrapeOptions: ua }] }
+  const listMonitor = (urls: string[]) => ({
+    name: 'watch',
+    targets: [{ type: 'scrape', urls: urls.map((u) => tagMonitorUrl(u, 'watch')), scrapeOptions: ua }],
+  })
+
+  /** A fake Firecrawl: GET monitor, GET check pages, PATCH monitor (recorded). */
+  function firecrawl(monitor: unknown, checkPagesData: unknown[] = []) {
+    const patches: Array<Record<string, unknown>> = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (init.method === 'PATCH') {
+          patches.push(JSON.parse(String(init.body)))
+          return new Response(JSON.stringify({ success: true, data: {} }))
+        }
+        if (String(url).includes('/checks/')) return new Response(JSON.stringify({ data: { pages: checkPagesData } }))
+        return new Response(JSON.stringify({ success: true, data: monitor }))
+      }),
+    )
+    return patches
+  }
+  const deps = (mapped: string[] | Error) => ({
+    map: vi.fn(async (_baseUrl: string, _limit: number) => {
+      if (mapped instanceof Error) throw mapped
+      return mapped
+    }),
+    // Like kensaur.us: the bare base answers 301 to its trailing-slash form.
+    resolve: vi.fn(async (urls: string[]) => urls.map((u) => (u === BASE ? `${BASE}/` : u))),
+    now: () => new Date('2026-11-14T02:14:00Z'),
+  })
+  /** Reads `reports` from `reports`; everything else from the site-watch fake. */
+  const withReports = (inner: { from: (t: string) => unknown }, reports: Array<{ id: string; status: string }>) =>
+    ({
+      from: (t: string) =>
+        t === 'reports'
+          ? {
+              select: () => ({ in: async (_c: string, ids: string[]) => ({ data: reports.filter((r) => ids.includes(r.id)), error: null }) }),
+            }
+          : inner.from(t),
+    }) as never
+  const done = (id: string) => ({ id, status: 'completed' })
+
+  it('switches a crawl monitor to a marked page list on the first poll, from the newest check and the map', async () => {
+    const { db, pages } = makeDb([
+      // An open finding for a crawl page that will not be watched any more.
+      { id: 'f1', watch_id: 'w1', url: `${BASE}/elsewhere`, problem: 'http_error', resolved_at: null, report_id: 'r1', confirmed_at: '2026-11-10T00:00:00Z' },
+    ])
+    const patches = firecrawl(crawlMonitor, [ok(`${BASE}/`), ok(`${BASE}/linked`)])
+    const d = deps([`${BASE}/`, `${BASE}/terms`])
+    const r = await sw.refreshWatchPages(db, W, 'fc-key', [done('c9')], null, d)
+    expect(r).toMatchObject({ reconciled: true, pages: 3, closedFindings: 1 })
+    expect(patches).toHaveLength(1)
+    expect(patches[0].targets).toEqual([
+      { type: 'scrape', urls: [`${BASE}/`, `${BASE}/linked`, `${BASE}/terms`].map((u) => `${u}?${WATCH_TAG}`), scrapeOptions: ua },
+    ])
+    // The map is URL discovery: asked for room to choose from, and never marked.
+    expect(d.map).toHaveBeenCalledWith(BASE, 500)
+    // Every page new to the monitor was resolved to the site's own spelling first.
+    expect(d.resolve).toHaveBeenCalledWith([BASE, `${BASE}/linked`, `${BASE}/terms`])
+    expect(pages.find((p) => p.id === 'f1')!.resolved_at).toBe('2026-11-14T02:14:00.000Z')
+  })
+
+  it('does nothing between daily checks on a current monitor (no map credit, no PATCH)', async () => {
+    const { db } = makeDb()
+    const patches = firecrawl(listMonitor([`${BASE}/`, `${BASE}/terms`]))
+    const d = deps([`${BASE}/`])
+    expect(await sw.refreshWatchPages(db, W, 'fc-key', [], null, d)).toBeNull()
+    expect(d.map).not.toHaveBeenCalled()
+    expect(patches).toHaveLength(0)
+  })
+
+  it('after a daily check, PATCHes only when the page set changed', async () => {
+    const { db } = makeDb()
+    const patches = firecrawl(listMonitor([`${BASE}/`, `${BASE}/terms`]))
+    const read = [ok(`${BASE}/`), ok(`${BASE}/terms`)]
+    expect(await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps([`${BASE}/`, `${BASE}/terms`]))).toMatchObject({ pages: 2 })
+    expect(patches).toHaveLength(0)
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps([`${BASE}/`, `${BASE}/terms`, `${BASE}/new`]))
+    expect(patches).toHaveLength(1)
+  })
+
+  it('keeps a broken link watched while its finding is open, even after the sitemap dropped it; drops it once a person closes the report', async () => {
+    const suspect = { id: 's1', watch_id: 'w1', url: `${BASE}/gone`, problem: 'http_error', resolved_at: null, report_id: null, confirmed_at: null }
+    const f = makeDb([suspect])
+    const reports: Array<{ id: string; status: string }> = []
+    const db = withReports(f.db as never, reports)
+    const patches = firecrawl(listMonitor([`${BASE}/`, `${BASE}/gone`]))
+    const read = [ok(`${BASE}/`), broken('/gone', 404)]
+    const mapWithoutGone = [`${BASE}/`, `${BASE}/terms`]
+    // A suspect not filed yet: stays.
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
+    expect(JSON.stringify(patches.at(-1))).toContain(`/gone?${WATCH_TAG}`)
+    expect(f.pages[0].resolved_at).toBeNull()
+    // Filed, report open, still 404: stays, and its finding stays open (the Home light stays red).
+    Object.assign(f.pages[0], { report_id: 'r-s1', confirmed_at: '2026-11-14T01:40:00Z' })
+    reports.push({ id: 'r-s1', status: 'new' })
+    const before = patches.length
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
+    expect(patches.length).toBeGreaterThan(before)
+    expect(JSON.stringify(patches.at(-1))).toContain(`/gone?${WATCH_TAG}`)
+    expect(f.pages[0].resolved_at).toBeNull()
+    // A person dismissed the report (the page was removed on purpose): it may leave.
+    reports[0].status = 'dismissed'
+    await sw.refreshWatchPages(db, W, 'fc-key', [], read, deps(mapWithoutGone))
+    expect(JSON.stringify(patches.at(-1))).not.toContain('/gone')
+    expect(f.pages[0].resolved_at).toBe('2026-11-14T02:14:00.000Z')
+  })
+
+  it('stores the estimate Firecrawl returns for the new page list', async () => {
+    const f = makeDb()
+    const updates: Array<Record<string, unknown>> = []
+    const db = {
+      from: (t: string) =>
+        t === 'site_watches'
+          ? { update: (p: Record<string, unknown>) => ({ eq: async () => (updates.push(p), { error: null }) }) }
+          : (f.db as unknown as { from: (t: string) => unknown }).from(t),
+    } as never
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: RequestInit = {}) =>
+        init.method === 'PATCH'
+          ? new Response(JSON.stringify({ success: true, data: { estimatedCreditsPerMonth: 1530 } }))
+          : new Response(JSON.stringify({ success: true, data: crawlMonitor })),
+      ),
+    )
+    await sw.refreshWatchPages(db, W, 'fc-key', [], [ok(`${BASE}/`), ok(`${BASE}/a`)], deps([`${BASE}/`, `${BASE}/a`]))
+    expect(updates).toEqual([{ estimated_credits_per_month: 1530 }])
+  })
+
+  it('a failed map still fixes a stale shape from the pages it has, and never PATCHes a one-page list from nothing', async () => {
+    const { db } = makeDb()
+    const patches = firecrawl(crawlMonitor, [])
+    const r = await sw.refreshWatchPages(db, W, 'fc-key', [done('c1')], null, deps(new Error('FIRECRAWL_HTTP_500')))
+    expect(r).toMatchObject({ mapFailed: true })
+    expect(patches).toHaveLength(0)
+    await sw.refreshWatchPages(db, W, 'fc-key', [], [ok(`${BASE}/`), ok(`${BASE}/a`)], deps(new Error('down')))
+    expect(patches[0].targets).toEqual([expect.objectContaining({ urls: [`${BASE}/?${WATCH_TAG}`, `${BASE}/a?${WATCH_TAG}`] })])
+  })
+})
+
+describe('resolveSameSiteRedirects', () => {
+  it('takes the redirect target only for the same page (a slash added or removed); a HEAD, no redirect followed', async () => {
+    const seen: Array<{ url: string; init: RequestInit }> = []
+    const f = (async (url: string, init: RequestInit = {}) => {
+      seen.push({ url, init })
+      const at = (status: number, location?: string) => new Response(null, { status, headers: location ? { location } : {} })
+      if (url === BASE) return at(301, `${BASE}/`)
+      if (url === `${BASE}/old`) return at(301, `${BASE}/new`)
+      if (url === `${BASE}/away`) return at(302, 'https://elsewhere.example/away/')
+      if (url === `${BASE}/rel`) return at(308, '/help-her-take-photo/rel/')
+      if (url === `${BASE}/boom`) throw new TypeError('network down')
+      return at(200)
+    }) as unknown as typeof fetch
+    const urls = [BASE, `${BASE}/old`, `${BASE}/away`, `${BASE}/rel`, `${BASE}/boom`, `${BASE}/ok`]
+    expect(await sw.resolveSameSiteRedirects(urls, f)).toEqual([
+      `${BASE}/`,
+      `${BASE}/old`,
+      `${BASE}/away`,
+      `${BASE}/rel/`,
+      `${BASE}/boom`,
+      `${BASE}/ok`,
+    ])
+    for (const { init } of seen) {
+      expect(init.method).toBe('HEAD')
+      expect(init.redirect).toBe('manual')
+      expect((init.headers as Record<string, string>)['User-Agent']).toBe(sw.SITE_WATCH_USER_AGENT)
+    }
   })
 })

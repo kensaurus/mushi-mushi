@@ -1,6 +1,7 @@
 /**
  * FILE: site-watch.ts (api routes)
- * PURPOSE: Live-site watch (ADR 0024). The console turns a Firecrawl
+ * PURPOSE: Live-site watch (ADR 0024; monitor shape ADR 0059: a marked
+ *          page list from the app's map, not a crawl). The console turns a Firecrawl
  *          monitor on or off for an app's live site, runs a check now, and
  *          reads the pages the watch found broken. The monitor runs and bills
  *          on the project's own Firecrawl key; site-watch-poll reads its
@@ -19,14 +20,22 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { runInBackground } from '../../_shared/background.ts';
-import { resolveFirecrawl } from '../../_shared/firecrawl.ts';
+import { firecrawlMapOwnSite, resolveFirecrawl } from '../../_shared/firecrawl.ts';
 import { assertSafeOutboundUrl } from '../../_shared/inventory-guards.ts';
 import {
   createMonitor,
   DEFAULT_SCHEDULE_CRON,
   deleteMonitor,
   FirecrawlMonitorError,
+  getMonitor,
+  liveTargetUrls,
+  mapLimit,
+  monitorNeedsReconcile,
+  resolvePagesOutside,
+  resolveSameSiteRedirects,
   runMonitor,
+  sameUrlSet,
+  selectWatchUrls,
   updateMonitor,
 } from '../../_shared/site-watch.ts';
 import { dbError, parseUuidParam, userCanAccessProject } from '../shared.ts';
@@ -195,18 +204,49 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
       .maybeSingle();
     if (readErr) return dbError(c, readErr);
 
-    const spec = {
-      name: `Mushi live-site watch: ${(project?.name as string | undefined) ?? a.projectId}`,
-      baseUrl,
-      pageLimit,
-      scheduleCron: (existing?.schedule_cron as string | undefined) ?? DEFAULT_SCHEDULE_CRON,
-    };
+    const name = `Mushi live-site watch: ${(project?.name as string | undefined) ?? a.projectId}`;
+    const scheduleCron = (existing?.schedule_cron as string | undefined) ?? DEFAULT_SCHEDULE_CRON;
     let monitorId = (existing?.firecrawl_monitor_id as string | null | undefined) ?? null;
     let estimate: number | null = null;
+    // The pages the monitor loads (ADR 0059): the pages already watched on
+    // the same address, then the app's map. URL discovery renders no page,
+    // so the map is not marked; every listed page is (`monitorBody`). A
+    // failed map still starts the watch on what it has; the daily refresh
+    // after each check fills the list.
+    let urls: string[] = [];
+    let watchedNow: string[] = [];
     try {
-      if (monitorId) {
+      let stale = true;
+      if (monitorId && existing?.base_url === baseUrl) {
         try {
-          estimate = (await updateMonitor(fc.key, monitorId, { ...spec, status: 'active' })).estimatedCreditsPerMonth;
+          const live = await getMonitor(fc.key, monitorId);
+          watchedNow = liveTargetUrls(live);
+          stale = monitorNeedsReconcile(live);
+        } catch (err) {
+          if (!(err instanceof FirecrawlMonitorError && err.status === 404)) throw err;
+          monitorId = null;
+        }
+      }
+      const mapped = await firecrawlMapOwnSite(db, a.projectId, baseUrl, { limit: mapLimit(pageLimit) }).catch((err) => {
+        slog.warn('site-watch map failed', { projectId: a.projectId, err: String(err).slice(0, 200) });
+        return null;
+      });
+      urls = selectWatchUrls({ baseUrl, limit: pageLimit, current: watchedNow, lastPages: [], mapped });
+      // New pages in the site's own spelling, so a slash redirect cannot strip
+      // the marker (a HEAD, no redirect followed, no page script runs).
+      const known = new Set(watchedNow);
+      const fresh = urls.filter((u) => !known.has(u));
+      const resolved = fresh.length > 0 ? await resolveSameSiteRedirects(fresh, fetch, { deadlineMs: 15_000 }) : [];
+      const spelled = new Map(fresh.map((u, i) => [u, resolved[i] ?? u]));
+      urls = urls.map((u) => spelled.get(u) ?? u);
+      if (monitorId) {
+        // Sending the page list resets every page's history: only when it changed.
+        const send = stale || !sameUrlSet(watchedNow, urls);
+        try {
+          estimate = (
+            await updateMonitor(fc.key, monitorId, { name, scheduleCron, status: 'active', ...(send ? { urls } : {}) })
+          ).estimatedCreditsPerMonth;
+          if (!send) urls = watchedNow;
         } catch (err) {
           // The monitor was deleted on Firecrawl's side: make a new one.
           if (!(err instanceof FirecrawlMonitorError && err.status === 404)) throw err;
@@ -214,7 +254,7 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
         }
       }
       if (!monitorId) {
-        const created = await createMonitor(fc.key, spec);
+        const created = await createMonitor(fc.key, { name, urls, scheduleCron });
         monitorId = created.id;
         estimate = created.estimatedCreditsPerMonth;
       }
@@ -226,7 +266,7 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
       project_id: a.projectId,
       base_url: baseUrl,
       page_limit: pageLimit,
-      schedule_cron: spec.scheduleCron,
+      schedule_cron: scheduleCron,
       firecrawl_monitor_id: monitorId,
       status: 'active',
       last_error: null,
@@ -244,13 +284,19 @@ export function registerSiteWatchRoutes(app: Hono<{ Variables: Variables }>): vo
         .update({ resolved_at: new Date().toISOString() })
         .eq('watch_id', existing.id)
         .is('resolved_at', null);
+    } else if (existing) {
+      // Pages left out of the new list are no longer checked.
+      await resolvePagesOutside(db, existing.id as string, urls, new Date().toISOString()).catch((err) => {
+        slog.warn('site-watch close dropped findings failed', { projectId: a.projectId, err: String(err).slice(0, 200) });
+      });
     }
 
     await logAudit(db, a.projectId, c.get('userId') as string, 'settings.updated', 'site_watch', a.projectId, {
       baseUrl,
       pageLimit,
+      pages: urls.length,
     }).catch(() => {});
-    return c.json({ ok: true, data: { monitorId, estimatedCreditsPerMonth: estimate } });
+    return c.json({ ok: true, data: { monitorId, estimatedCreditsPerMonth: estimate, pages: urls.length } });
   });
 
   app.post('/v1/admin/projects/:id/site-watch/run', jwtAuth, async (c) => {

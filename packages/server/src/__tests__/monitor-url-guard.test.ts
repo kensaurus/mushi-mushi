@@ -15,7 +15,9 @@
  *               is built by `monitorScrapeBody(...)`, except a map body (URL
  *               discovery renders no page);
  *            4. a file that loads no customer page calls no Firecrawl
- *               page-loading endpoint (scrape, batch scrape, crawl, monitor).
+ *               page-loading endpoint (scrape, batch scrape, crawl, monitor);
+ *            5. nothing starts a crawl or builds a crawl monitor target: a
+ *               crawl marks only its seed (ADR 0059).
  *          The behaviour of each builder is tested next to it (site-watch,
  *          site-audit-worker, production-check, home-thumbnail,
  *          inventory-crawler, firecrawl-v2).
@@ -65,8 +67,8 @@ const NO_CUSTOMER_PAGE_LOAD: Record<string, string> = {
   'search-rank/index.ts': 'reads search results; the app page is not loaded',
   'api/routes/search-rank.ts': 'resolves the key only',
   'api/routes/site-audit.ts': 'resolves the key only; the worker loads the pages',
-  'api/routes/site-watch.ts': 'resolves the key only; requests are built in _shared/site-watch.ts',
-  'site-watch-poll/index.ts': 'resolves the key only; requests are built in _shared/site-watch.ts',
+  'api/routes/site-watch.ts': 'resolves the key and maps the site (no render); monitor requests are built in _shared/site-watch.ts',
+  'site-watch-poll/index.ts': 'resolves the key and maps the site (no render); monitor requests are built in _shared/site-watch.ts',
   'api/routes/production-check.ts': 'resolves the key only; pages load in _shared/production-check.ts',
   'api/routes/project-home.ts': 'resolves the key only; the screenshot is taken in _shared/home-thumbnail.ts',
   'story-mapper/index.ts': 'pages only through firecrawlScrapeOwnSite (marked in _shared/firecrawl.ts) and the map',
@@ -139,6 +141,15 @@ describe('Firecrawl call sites mark customer page loads (monitor-url.ts)', () =>
 
   it('a file that loads no customer page calls no Firecrawl page-loading endpoint', () => {
     const offenders = Object.keys(NO_CUSTOMER_PAGE_LOAD).filter((file) => PAGE_ENDPOINT.test(sources.find((s) => s.file === file)!.src))
+    expect(offenders).toEqual([])
+  })
+
+  it('nothing starts a Firecrawl crawl: a crawl marks only its seed URL (ADR 0059)', () => {
+    // A crawl loads the pages it finds by their bare links, so ~500 pages a
+    // day reached the apps unmarked. The live-site watch is a marked page
+    // list (scrape targets) instead; a new crawl needs a new ADR.
+    const crawl = /\/v[12]\/crawl\b|['"`]\/crawl['"`/]|type:\s*['"]crawl['"]/
+    const offenders = firecrawlFiles.filter((f) => crawl.test(f.src)).map((f) => f.file)
     expect(offenders).toEqual([])
   })
 })
