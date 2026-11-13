@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * Records one animated GIF per admin docs page.
+ * Records one demo clip per admin docs page (the file name predates the move
+ * from GIF to video).
  *
- * Output: docs/screenshots/{slug}-demo.gif
+ * Output: docs/screenshots/{slug}-demo.{webm,mp4} + {slug}-demo-poster.webp
+ * (encoded by ./demo-video.mjs; DocVideo plays them in the docs).
  * Requires TEST_USER_EMAIL + TEST_USER_PASSWORD + Supabase URL/anon in .env.local
  *
  * Usage:
@@ -15,9 +17,9 @@
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { encodeDemoVideo } from './demo-video.mjs'
 import { loadEnv, parseArgs, REPO_ROOT, step, ok, warn, err } from './lib.mjs'
 
 const MANIFEST = join(REPO_ROOT, 'apps/docs/data/admin-screenshots.ts')
@@ -120,17 +122,6 @@ async function fetchSupabaseSession() {
   }
 }
 
-function runCommand(bin, cmdArgs) {
-  return new Promise((resolveCmd, rejectCmd) => {
-    const child = spawn(bin, cmdArgs, { stdio: ['ignore', 'inherit', 'inherit'] })
-    child.on('error', rejectCmd)
-    child.on('exit', (code) => {
-      if (code === 0) resolveCmd()
-      else rejectCmd(new Error(`${bin} exited with code ${code}`))
-    })
-  })
-}
-
 async function parseManifest() {
   const text = await readFile(MANIFEST, 'utf8')
   const pages = []
@@ -209,33 +200,17 @@ async function interact(page, slug) {
   await page.waitForTimeout(700)
 }
 
-async function convertWebmToGif(webmPath, gifPath, prefixSec = 0.35) {
-  const filter =
-    `fps=${FPS},scale=${WIDTH}:-1:flags=lanczos,` +
-    `split[s0][s1];[s0]palettegen=stats_mode=diff[p];` +
-    `[s1][p]paletteuse=dither=bayer:bayer_scale=5`
-  await runCommand(FFMPEG, [
-    '-y',
-    '-ss',
-    prefixSec.toFixed(2),
-    '-i',
-    webmPath,
-    '-t',
-    (DWELL_MS / 1000 + 0.8).toFixed(2),
-    '-vf',
-    filter,
-    '-loop',
-    '0',
-    '-loglevel',
-    'error',
-    gifPath,
-  ])
+function encodeWebm(webmPath, outStem, prefixSec = 0.35) {
+  return encodeDemoVideo(FFMPEG, webmPath, outStem, {
+    inputArgs: ['-ss', prefixSec.toFixed(2), '-t', (DWELL_MS / 1000 + 0.8).toFixed(2)],
+    filter: `fps=${FPS},scale=${WIDTH}:-1:flags=lanczos`,
+  })
 }
 
 async function recordPage({ slug, route }, sessionBundle) {
-  const gifPath = join(OUT_DIR, `${slug}-demo.gif`)
-  if (!force && existsSync(gifPath)) {
-    warn(`skip ${slug} — ${slug}-demo.gif exists (use --force)`)
+  const outStem = join(OUT_DIR, `${slug}-demo`)
+  if (!force && existsSync(`${outStem}.mp4`)) {
+    warn(`skip ${slug} — ${slug}-demo.mp4 exists (use --force)`)
     return { slug, skipped: true }
   }
 
@@ -275,10 +250,10 @@ async function recordPage({ slug, route }, sessionBundle) {
 
   const webms = (await readdir(tmpDir)).filter((f) => f.endsWith('.webm'))
   if (!webms.length) throw new Error(`no webm for ${slug}`)
-  await convertWebmToGif(join(tmpDir, webms[webms.length - 1]), gifPath)
-  const size = statSync(gifPath).size
-  ok(`${slug}-demo.gif (${(size / 1024 / 1024).toFixed(2)} MB)`)
-  if (size > HARD_LIMIT_BYTES) warn(`  ${slug}-demo.gif exceeds ${HARD_LIMIT_BYTES / 1024 / 1024} MB`)
+  const { mp4 } = await encodeWebm(join(tmpDir, webms[webms.length - 1]), outStem)
+  const size = statSync(mp4).size
+  ok(`${slug}-demo.mp4 (${(size / 1024).toFixed(0)} KB) + .webm + poster`)
+  if (size > HARD_LIMIT_BYTES) warn(`  ${slug}-demo.mp4 exceeds ${HARD_LIMIT_BYTES / 1024 / 1024} MB`)
   await rm(tmpDir, { recursive: true, force: true })
   return { slug, skipped: false, bytes: size }
 }
@@ -286,7 +261,7 @@ async function recordPage({ slug, route }, sessionBundle) {
 async function patchManifest(pages) {
   let text = await readFile(MANIFEST, 'utf8')
   for (const { slug } of pages) {
-    const gif = `${slug}-demo.gif`
+    const video = `${slug}-demo`
     // Escape all regex special chars, then allow either a literal hyphen or none
     // (the manifest key is always a plain slug so escaping is belt-and-suspenders).
     const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -294,13 +269,13 @@ async function patchManifest(pages) {
     const match = text.match(blockRe)
     if (!match) continue
     let body = match[2]
-    body = /gif:\s*'[^']+'/.test(body)
-      ? body.replace(/gif:\s*'[^']+'/, `gif: '${gif}'`)
-      : body.replace(/(\n\s+image:\s*'[^']+',)/, `$1\n    gif: '${gif}',`)
+    body = /video:\s*'[^']+'/.test(body)
+      ? body.replace(/video:\s*'[^']+'/, `video: '${video}'`)
+      : body.replace(/(\n\s+image:\s*'[^']+',)/, `$1\n    video: '${video}',`)
     text = text.replace(blockRe, `$1${body}$3`)
   }
   await writeFile(MANIFEST, text, 'utf8')
-  ok('Updated apps/docs/data/admin-screenshots.ts gif fields')
+  ok('Updated apps/docs/data/admin-screenshots.ts video fields')
 }
 
 ;(async () => {
@@ -317,7 +292,7 @@ async function patchManifest(pages) {
     process.exit(1)
   }
 
-  step(`Recording ${pages.length} admin page GIFs @ ${BASE_URL} (${WIDTH}×${HEIGHT})`)
+  step(`Recording ${pages.length} admin page demo clips @ ${BASE_URL} (${WIDTH}×${HEIGHT})`)
   const sessionBundle = await fetchSupabaseSession()
 
   const results = []
