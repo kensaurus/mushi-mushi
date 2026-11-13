@@ -40,9 +40,11 @@ go out before the Show HN gates hold.
    - `[verify: lean default tool count, from the built catalog]`
 4. **How we keep the public list honest.** `glama.json` is generated from
    the catalog (`packages/mcp/scripts/generate-glama-json.mjs --check`). Admit
-   the gap we found while writing: on 2026-11-13 `glama.json` listed 92 tools
-   while its description, and the docs, said 130. Show the fix commit.
-   `[blocked: reconcile the 92 vs 130 count first]`
+   the gap we found while writing. On 2026-11-13 the pre-commit catalog check
+   counted 138 tools in the canonical catalog and 130 on the hosted server,
+   but `glama.json` still listed 92: the generator had not been re-run since
+   the catalog grew. Show the regenerate commit and why the `--check` didn't
+   catch it. `[blocked: regenerate glama.json first]`
 5. **What we'd tell another MCP builder.** Three rules, each with its
    example from steps 3–4. No rule without an example.
 6. **Close.** One line on what Mushi Mushi is: a bug report turned into a

@@ -43,8 +43,10 @@ All re-queried 2026-11-13. Re-run each one on launch day.
   2026-11-13).
 - **Not cited on purpose** (PLAN.md "Stop doing" #3): npm downloads, repo
   views (414 of 502 in 14 days came from aocr.org), GitHub stars, and any
-  MCP tool count. `glama.json` lists 92 tools while its description and the
-  docs say 130, so no tool count is safe to quote until that is reconciled.
+  MCP tool count. The counts differ by surface (2026-11-13 pre-commit
+  catalog check: 138 in the canonical catalog, 130 on the hosted server,
+  while `glama.json` still lists a stale 92), so a single number would
+  mislead.
 
 ## Gallery (in order)
 
