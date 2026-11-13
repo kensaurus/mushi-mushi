@@ -28,11 +28,11 @@ npx mushi-mushi
 
 [Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
 
-<a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis" title="See a sample diagnosis: no signup">
-  <img alt="The Mushi Mushi console's report list: each user report with a plain-English summary, how serious it is and how sure Mushi Mushi is." src="./docs/screenshots/report-detail-dark.png" width="100%" />
+<a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis?src=github-readme" title="See a sample diagnosis: no signup">
+  <img alt="A Mushi Mushi diagnosis of the report 'Pay now does nothing on my phone': the cause in plain English, why it broke, the two lines of code at fault, the suggested fix and the steps to reproduce." src="./docs/screenshots/sample-diagnosis.png" width="100%" />
 </a>
 
-<sub>↑ reports in the Mushi Mushi console, each with a plain-English summary. Click for one full sample diagnosis you can read without signing up.</sub>
+<sub>↑ What comes back when a user writes "Checkout button does nothing on my phone". Click for the whole sample, from their words to the fix prompt, without signing up.</sub>
 
 </div>
 

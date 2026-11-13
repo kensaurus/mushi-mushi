@@ -1279,7 +1279,6 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
     runtimeConfigLoaded = true;
-    if (runtime.enabled !== false) maybeStartSessionTracking(runtime.journeys ?? null);
     reporterNotificationsEnabled = runtime.reporterNotificationsEnabled !== false;
     reporterOffer = runtime.enabled === false ? null : runtime.reporter ?? null;
     syncReporterChannels();
@@ -1311,6 +1310,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       if (result.ok && result.data) {
         cacheRuntimeConfig(config.projectId, result.data);
         applyRuntimeConfig(result.data);
+        // On-demand recording follows the fresh config only: the cached copy
+        // applied above can still hold a window the owner has since stopped
+        // (found in the live test, 2026-11-13). A failed fetch records nothing.
+        if (result.data.enabled !== false) maybeStartSessionTracking(result.data.journeys ?? null);
       } else if (result.error) {
         log.debug('Runtime SDK config unavailable', result.error);
       }
@@ -1771,6 +1774,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     updateConfig(runtimeConfig) {
       applyRuntimeConfig(runtimeConfig);
+      if (runtimeConfig.enabled !== false) maybeStartSessionTracking(runtimeConfig.journeys ?? null);
     },
 
     diagnose() {

@@ -1,6 +1,6 @@
 Show HN: Mushi Mushi – find and fix what broke in your AI-built app
 
-I build apps with AI and run nine of them with real users. The surprise was how rarely people report bugs. In 60 days, 34 reports came through the in-app button, while about 2,000 reports came from automated checks and my own testing.
+I build apps with AI and run nine of them with real users. The surprise was how rarely people report bugs. In 60 days, 36 reports came through the in-app button, while about 2,040 reports came from automated checks and my own testing.
 
 Mushi Mushi is what I built for that. It's open source (MIT SDKs, AGPLv3 server) and has two ways in:
 
@@ -8,7 +8,7 @@ Mushi Mushi is what I built for that. It's open source (MIT SDKs, AGPLv3 server)
 
 2. A small report button for your users (one script tag, or one prompt in Lovable or Bolt). Each report comes back as a plain-English cause and a fix prompt your AI editor can apply. An MCP server lets Claude Code, Cursor or Lovable pull the report and the fix context directly.
 
-On my own apps, a second model reviews the AI-written fixes before they merge. In 60 days it reviewed 1,745 and held 576.
+On my own apps, a second model reviews the AI-written fixes before they merge. In 60 days it reviewed 1,803 and held 596.
 
 What's free for one app: the button and the diagnoses (I pay for the model), the one-time site check, and a scan of your dependencies for known vulnerabilities once GitHub is connected. The hourly site watch and the code audits need your own keys or a local agent.
 

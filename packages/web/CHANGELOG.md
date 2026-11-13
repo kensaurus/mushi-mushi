@@ -1,5 +1,24 @@
 # @mushi-mushi/web
 
+## 1.34.1
+
+### Patch Changes
+
+- 0bc9bde: `trackSessions: 'on-demand'` now decides from the freshly fetched runtime config only. The cached copy the SDK applies on load could still hold a recording window that had been stopped in the console, so a returning visitor kept recording until the window's original end time. If the fetch fails, nothing is recorded.
+
+## 1.34.0
+
+### Minor Changes
+
+- d597fb0: New `trackSessions: 'on-demand'` for the Journey optimizer. In this mode the SDK sends no session, heartbeat or page-view request until you ask for one. You can open a recording window on the console's Journeys page (for 1 hour, 1 day or 1 week, for 10%, 50% or all visitors), or open your app with `?mushi_journeys=1` to record your own tab. Each device is drawn into or out of the sample once and keeps that result, so a visitor is never half recorded. The check uses the runtime config the SDK already loads, so outside a window it adds no request. `true` (the default) and `false` work as before.
+
+### Patch Changes
+
+- d597fb0: New npm description and README hero (ADR 0058): Mushi Mushi is one place to improve AI-built apps. It fixes bugs, smooths the journeys people take through the app and cleans up the code, from your editor. Bug fixing is now one of three pillars instead of the whole product. No API changes.
+- Updated dependencies [d597fb0]
+- Updated dependencies [d597fb0]
+  - @mushi-mushi/core@1.34.0
+
 ## 1.33.8
 
 ### Patch Changes
