@@ -97,8 +97,13 @@ describe('mushi-mushi launcher', () => {
     expect(stderr).not.toContain('unknown command')
   })
 
-  it('prints the hint once, and not for a real subcommand', () => {
+  // One bin run per test: each run starts a probe and then the wizard, and two
+  // runs in one test passed vitest's 5 s default on a loaded CI runner.
+  it('prints the hint exactly once for a bare word', () => {
     expect(run(['my-app']).stderr.match(/To start a new app instead/g)).toHaveLength(1)
+  })
+
+  it('prints no hint for a real subcommand', () => {
     const sub = run(['setup', '--help'])
     expect(sub.stdout + sub.stderr).not.toContain('To start a new app instead')
     expect(sub.stdout).toContain('Wire the Mushi MCP server')
