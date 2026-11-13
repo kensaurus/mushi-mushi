@@ -194,7 +194,7 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 - [x] **[awesome-remote-mcp-servers](https://github.com/jaw9c/awesome-remote-mcp-servers)** —
   PR [#428](https://github.com/jaw9c/awesome-remote-mcp-servers/pull/428) **closed** (listed non-resolving hostname). Re-open with row in [`awesome-list-submissions.md`](./awesome-list-submissions.md).
 - [x] **[mcp.so](https://mcp.so/server/mushi-mushi)** — live; refresh Overview via [`mcp-so-listing.md`](./mcp-so-listing.md)
-- [ ] **[smithery.ai](https://smithery.ai/servers/kensaurus/mushi-mushi)** — republish Streamable HTTP URL from [`smithery-external-publish.json`](./smithery-external-publish.json)
+- [x] **smithery.ai** — **gone.** Smithery shut down accounts and its proxy on 2026-10-31 and our listing returns "Not found"; nothing to republish (see [`GTM-DISTRIBUTION.md`](./GTM-DISTRIBUTION.md) § Smithery).
 - [ ] **[cursor.directory](https://cursor.directory/plugins/new)** — **submitted;
   the page exists but is hidden** ("Flagged by the security agent. Hidden from
   the directory pending manual review", `noindex`, checked 2026-09-21). The
