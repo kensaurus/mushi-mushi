@@ -120,7 +120,8 @@ function toPage(raw: Record<string, unknown>): AuditPage | null {
             .filter((line) => /[\u3040-\u30FF]/.test(line))
             .join('\n')
         : null,
-    links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+    // A "#top" or same-page href resolves against the marked page URL; untag it like the page.
+    links: Array.isArray(raw.links) ? (raw.links as unknown[]).filter((l): l is string => typeof l === 'string').map(untagMonitorUrl) : [],
   }
 }
 

@@ -855,7 +855,10 @@ export async function scrapePage(url: string, deps: CheckDeps, signal: AbortSign
     description,
     language,
     markdown: typeof json.data?.markdown === 'string' ? json.data.markdown : '',
-    links: Array.isArray(json.data?.links) ? (json.data!.links as unknown[]).filter((l): l is string => typeof l === 'string') : [],
+    // A "#top" or same-page href resolves against the marked page URL; untag it like the page.
+    links: Array.isArray(json.data?.links)
+      ? (json.data!.links as unknown[]).filter((l): l is string => typeof l === 'string').map(untagMonitorUrl)
+      : [],
     rendered: true,
     renderUnreadable: isUnreadableRender({ title, description, language }),
     html: typeof json.data?.rawHtml === 'string' ? json.data.rawHtml.slice(0, HTML_CAP_BYTES) : '',

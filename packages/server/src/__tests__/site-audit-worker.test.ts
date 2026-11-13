@@ -36,7 +36,8 @@ const PAGES = [
     metadata: { sourceURL: `${BASE}/th/events?${AUDIT_TAG}`, statusCode: 200, title: 'イベント｜群馬・嬬恋 標高1,444mの牧場で過ごす夜', description: 'กิจกรรมที่ฟาร์ม', language: 'th' },
     html: '<img src="/a.jpg" alt="Camp">',
     markdown: '# กิจกรรม\n\n[泊まる](https://x) | [旅のプラン](https://y)',
-    links: [`${BASE}/events/pizza`, 'https://firecrawl.dev/privacy'],
+    // A "#top" skip link resolves against the marked page URL (location.href keeps mushi_monitor).
+    links: [`${BASE}/events/pizza`, 'https://firecrawl.dev/privacy', `${BASE}/th/events?mushi_monitor=audit#top`],
   },
   { metadata: { sourceURL: `${BASE}/th/events/pizza?${AUDIT_TAG}`, statusCode: 200, title: 'คืนพิซซ่า ที่ฟาร์ม Tsumagoi', description: 'คืนพิซซ่า', language: 'th' }, html: '', markdown: 'คืนพิซซ่า', links: [] },
 ]
@@ -99,6 +100,9 @@ describe('runSiteAudits', () => {
       'locale_text_leak',
     ])
     expect(reports.every((r) => r.source === 'site_audit' && r.status === 'new')).toBe(true)
+    // The marker Firecrawl echoes back (page URLs, same-page links) never reaches a link check or a report.
+    expect(calls.filter((c) => c.includes('mushi_monitor'))).toEqual([])
+    expect(JSON.stringify(reports)).not.toContain('mushi_monitor')
     const audit = db.table('site_audits')[0]
     expect(audit).toMatchObject({ batch_id: null, last_error: null })
     expect(audit.next_run_at).toBe(new Date(T0.getTime() + 3_600_000 + 7 * 86_400_000).toISOString())
