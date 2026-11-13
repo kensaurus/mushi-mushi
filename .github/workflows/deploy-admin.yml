@@ -6,7 +6,10 @@
 # OVERVIEW:
 # - Builds the Vite SPA with cloud Supabase credentials
 # - Syncs immutable assets (JS/CSS) with long cache, HTML with no-cache
-# - Deploys CloudFront Functions for SPA routing and security headers
+# - Publishes the code of the Mushi-owned CloudFront Functions
+#   (mushi-mushi-spa-response, hosted-MCP router + well-known). It never
+#   writes the distribution config: kensaurus/kensaur.us `infra/edge/` owns
+#   E246VQ1C9QYZVB (behaviours, associations, routing functions).
 # - Invalidates CloudFront cache and runs a health check
 #
 # DEPENDENCIES:
@@ -49,7 +52,6 @@ on:
     paths:
       - 'apps/admin/**'
       - 'scripts/cloudfront-mushi-*'
-      - 'scripts/aws-attach-apex-redirect.mjs'
       - 'scripts/aws-setup-hosted-mcp.mjs'
       - 'scripts/hosted-mcp-oauth-metadata.json'
   workflow_dispatch:
@@ -64,11 +66,8 @@ permissions:
 env:
   AWS_REGION: ap-northeast-1
   S3_BUCKET: kensaur.us-mushi-mushi
-  # Admin SPA lives under /mushi-mushi/admin/. The single CloudFront Function
-  # `mushi-mushi-spa-router` (scripts/cloudfront-mushi-spa-router.js) is the
-  # router for ALL three /mushi-mushi/* prefixes (admin SPA, docs static
-  # export, and a 302 to /mushi-mushi/admin/ for everything else — which is
-  # how the canonical landing page gets served today).
+  # Admin SPA lives under /mushi-mushi/admin/. Routing for /mushi-mushi/* is
+  # owned by kensaurus/kensaur.us `infra/edge/`, not this workflow.
   S3_PREFIX: mushi-mushi/admin
 
 jobs:
@@ -284,43 +283,11 @@ jobs:
         # (FunctionSizeLimitExceeded — broke this workflow on 2026-07-03).
         # Deploy stripped artifacts so source comments never break deploys;
         # exits 1 while there is still headroom if a function outgrows the gate.
-        run: |
-          node scripts/build-cf-function.mjs \
-            scripts/cloudfront-mushi-spa-router.js \
-            scripts/cloudfront-mushi-spa-response.js \
-            scripts/cloudfront-mushi-apex-redirect.js
+        run: node scripts/build-cf-function.mjs scripts/cloudfront-mushi-spa-response.js
 
-      - name: Deploy CloudFront SPA router function
-        run: |
-          FUNC_NAME="mushi-mushi-spa-router"
-
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            echo "Creating new CloudFront Function: $FUNC_NAME"
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          else
-            echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          fi
-
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function \
-            --name "$FUNC_NAME" \
-            --if-match "$ETAG" \
-            --region us-east-1
-
+      # The routing functions (mushi-mushi-spa-router, mushi-mushi-apex-redirect,
+      # kensaur-default-viewer) and every association are owned by
+      # kensaurus/kensaur.us `infra/edge/`.
       - name: Deploy CloudFront SPA response function
         run: |
           FUNC_NAME="mushi-mushi-spa-response"
@@ -352,53 +319,14 @@ jobs:
             --if-match "$ETAG" \
             --region us-east-1
 
-      - name: Deploy CloudFront apex redirect function
-        # Rescues apex dead links: admin SPA (/reports/<uuid>) and docs routes
-        # (/quickstart/incident-loop from Nextra unprefixed .txt payloads).
-        run: |
-          FUNC_NAME="mushi-mushi-apex-redirect"
-
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            echo "Creating new CloudFront Function: $FUNC_NAME"
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
-              --region us-east-1
-          else
-            echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
-              --region us-east-1
-          fi
-
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function \
-            --name "$FUNC_NAME" \
-            --if-match "$ETAG" \
-            --region us-east-1
-
-      - name: Setup hosted MCP proxy (Smithery / kensaur.us)
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      - name: Publish hosted MCP function code (Smithery / kensaur.us)
+        # Code only. The hosted-MCP behaviours, origin and associations are
+        # owned by kensaurus/kensaur.us `infra/edge/`.
         run: node scripts/aws-setup-hosted-mcp.mjs
 
-      - name: Attach apex redirect cache behaviors
-        continue-on-error: true
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        run: node scripts/aws-attach-apex-redirect.mjs
-
       - name: Invalidate CloudFront cache
-        # Invalidates /mushi-mushi/* (spa-router), the apex docs prefixes
-        # (apex-redirect) and the hosted-MCP /.well-known paths.
+        # Invalidates /mushi-mushi/*, the apex docs prefixes and the hosted-MCP
+        # /.well-known paths.
         # One path, not a list (2026-11-01): CloudFront bills $0.005 per invalidation
         # PATH after the first 1,000 a month, and a wildcard counts as one path.
         # This deploy's 12-path list made the shared kensaur.us distribution

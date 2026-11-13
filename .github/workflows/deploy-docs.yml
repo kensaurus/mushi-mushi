@@ -6,7 +6,9 @@
 # OVERVIEW:
 # - Builds the Nextra app with `output: 'export'` and basePath /mushi-mushi/docs
 # - Syncs immutable assets (JS/CSS) with long cache, HTML with short cache
-# - Deploys two CloudFront Functions for clean-URL routing + security headers
+# - Publishes the code of the Mushi-owned mushi-mushi-docs-response function.
+#   Routing (docs router, apex redirect) and every association on
+#   E246VQ1C9QYZVB are owned by kensaurus/kensaur.us `infra/edge/`.
 # - Invalidates CloudFront cache and runs a health check on /mushi-mushi/docs/
 # - Fails if any sitemap URL is not a 200, or if a missing page leaks the raw
 #   S3 NoSuchKey page / lacks security headers (a viewer-response function
@@ -30,8 +32,8 @@
 # NOTES:
 # - This workflow is independent of the SDK release pipeline
 # - Only touches the docs S3 prefix; admin and cloud have their own workflows
-# - The CloudFront Functions are created on first run, then updated/published
-#   on every subsequent run — fully idempotent
+# - The docs response function is created on first run, then updated and
+#   published on every subsequent run — fully idempotent
 ##
 
 name: Deploy Docs Site
@@ -52,10 +54,7 @@ on:
       - 'packages/brand/tokens/**'
       - 'packages/marketing-ui/src/**'
       - 'packages/mcp/src/**'
-      - 'scripts/cloudfront-mushi-docs-*'
-      - 'scripts/cloudfront-mushi-apex-redirect.js'
-      - 'scripts/cloudfront-mushi-spa-router.js'
-      - 'scripts/aws-attach-apex-redirect.mjs'
+      - 'scripts/cloudfront-mushi-docs-response.js'
   workflow_dispatch:
 
 concurrency:
@@ -275,36 +274,11 @@ jobs:
         # CloudFront Functions reject code >= 10,240 bytes
         # (FunctionSizeLimitExceeded). Deploy stripped artifacts so source
         # comments never break deploys; fails here with headroom instead.
-        run: |
-          node scripts/build-cf-function.mjs \
-            scripts/cloudfront-mushi-docs-router.js \
-            scripts/cloudfront-mushi-docs-response.js \
-            scripts/cloudfront-mushi-apex-redirect.js \
-            scripts/cloudfront-mushi-spa-router.js
+        run: node scripts/build-cf-function.mjs scripts/cloudfront-mushi-docs-response.js
 
-      - name: Deploy CloudFront docs router function
-        run: |
-          FUNC_NAME="mushi-mushi-docs-router"
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"Clean-URL routing for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-router.js \
-              --region us-east-1
-          else
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"Clean-URL routing for mushi-mushi docs","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-docs-router.js \
-              --region us-east-1
-          fi
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
-
+      # The routing functions (mushi-mushi-docs-router, mushi-mushi-apex-redirect,
+      # mushi-mushi-spa-router) and the /mushi-mushi/docs/* associations are
+      # owned by kensaurus/kensaur.us `infra/edge/`.
       - name: Deploy CloudFront docs response function
         run: |
           FUNC_NAME="mushi-mushi-docs-response"
@@ -328,72 +302,8 @@ jobs:
             --query 'ETag' --output text)
           aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
 
-      - name: Deploy CloudFront apex redirect function
-        run: |
-          FUNC_NAME="mushi-mushi-apex-redirect"
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
-              --region us-east-1
-          else
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"Redirect apex docs + admin routes to /mushi-mushi/docs|admin","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-apex-redirect.js \
-              --region us-east-1
-          fi
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
-
-      - name: Deploy CloudFront spa router function
-        run: |
-          FUNC_NAME="mushi-mushi-spa-router"
-          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text 2>/dev/null || echo "")
-          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
-            aws cloudfront create-function \
-              --name "$FUNC_NAME" \
-              --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          else
-            aws cloudfront update-function \
-              --name "$FUNC_NAME" \
-              --if-match "$EXISTING_ETAG" \
-              --function-config '{"Comment":"SPA + docs routing under /mushi-mushi/*","Runtime":"cloudfront-js-2.0"}' \
-              --function-code fileb://scripts/.cf-dist/cloudfront-mushi-spa-router.js \
-              --region us-east-1
-          fi
-          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
-            --query 'ETag' --output text)
-          aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
-
-      - name: Attach apex redirect cache behaviors
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        run: node scripts/aws-attach-apex-redirect.mjs
-
-      - name: Associate CloudFront docs functions with /docs/* behavior
-        # `publish-function` only puts the function in the LIVE stage of
-        # the Functions service — it does NOT attach the function to any
-        # distribution behavior. Each cache behavior has to opt in via
-        # `FunctionAssociations`. Without this step the docs security
-        # headers and the .txt noindex tag are never applied. (Missing
-        # pages are a different story: viewer-response functions never run
-        # on origin 4xx — see the missing-page smoke check below.)
-        # The shell script is idempotent — if both functions are already
-        # attached on the right event types, it makes zero AWS mutating
-        # API calls (only a GetDistributionConfig + DescribeFunction).
-        env:
-          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-        run: bash scripts/associate-cloudfront-docs-functions.sh
-
+      # Attaching docs-response to /mushi-mushi/docs/* (and the apex redirect
+      # to Default) is owned by kensaurus/kensaur.us `infra/edge/`.
       - name: Invalidate CloudFront cache
         # One path, not a list (2026-11-01): CloudFront bills $0.005 per invalidation
         # PATH after the first 1,000 a month, and a wildcard counts as one path.
@@ -460,9 +370,10 @@ jobs:
         # CloudFront never runs viewer-response functions when the origin
         # answers >= 400, so mushi-mushi-docs-response cannot shape a 404. The
         # body comes from the bucket's website ErrorDocument and the headers
-        # from the docs response headers policy, both set by
-        # scripts/aws-configure-docs-errors.mjs (run by an AWS admin; this
-        # role cannot). Fails while a missing page leaks the raw S3 NoSuchKey
+        # from the docs response headers policy. scripts/aws-configure-docs-errors.mjs
+        # sets the ErrorDocument and the policy (run by an AWS admin; this
+        # role cannot); kensaurus/kensaur.us `infra/edge/` attaches the
+        # policy to the docs behaviour. Fails while a missing page leaks the raw S3 NoSuchKey
         # page or ships without the security headers a 200 carries.
         #
         # Opt-in until that one-time setup has run: otherwise every docs deploy
@@ -484,7 +395,7 @@ jobs:
           fi
           for header in strict-transport-security content-security-policy x-content-type-options; do
             if ! grep -qi "^${header}:" /tmp/missing.headers; then
-              echo "::error::A missing docs page has no ${header} header. Run scripts/aws-configure-docs-errors.mjs (response headers policy)."
+              echo "::error::A missing docs page has no ${header} header. Check the response headers policy (scripts/aws-configure-docs-errors.mjs) and its attachment in kensaurus/kensaur.us infra/edge."
               failed=1
             fi
           done
