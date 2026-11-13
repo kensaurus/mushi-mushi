@@ -28,6 +28,9 @@ async function login(page) {
 
 const browser = await chromium.launch({ headless: true })
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+// Egress guard (E246 spike, 2026-11-13): live kensaur.us bytes are CloudFront egress, and this check
+// never needs audio, video or GIFs.
+await page.route(/\.(mp3|mp4|gif|wav|m4a)(?:[?#]|$)/i, (route) => route.abort())
 
 try {
   await login(page)
