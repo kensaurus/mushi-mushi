@@ -13,7 +13,7 @@ description: The Connect page wires GitHub, the SDK, MCP, the CLI and your edito
 
 > **Scenario:** Your repo is on GitHub, the SDK is installed, but your editor still
 > can't ask Mushi Mushi what broke, and you're a couple of versions behind on
-> `@mushi-mushi/web`. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
+> the Mushi Mushi SDK. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
 > in one place.
 
 A row of status pills at the top (**App checked in**, **SDK version**, **Editor**)

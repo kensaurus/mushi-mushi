@@ -20,7 +20,7 @@ device to a merged PR.
 
 | ⓵ SDKs (client) | ⓶ Edge gateway | ⓷ Data | ⓸ External |
 |---|---|---|---|
-| `@mushi-mushi/web` + framework adapters | `api` *(Hono router)* | Postgres + RLS | Sentry *(User-Feedback webhook)* |
+| `mushi-mushi` + framework subpaths | `api` *(Hono router)* | Postgres + RLS | Sentry *(User-Feedback webhook)* |
 | `@mushi-mushi/react-native` | `fast-filter` *(spam triage)* | `pgvector` embeddings | Slack |
 | Native iOS / Android / Flutter | `classify-report` *(2-stage LLM)* | Apache AGE graph | GitHub *(scoped App)* |
 | `@mushi-mushi/capacitor` | `judge-batch` *(nightly cron)* | `blast_radius_cache` MV | Langfuse *(traces)* |

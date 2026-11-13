@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/wasm-classifier",
   "version": "0.2.6",
-  "description": "Optional junk filter for Mushi Mushi bug reports. Stops empty or nonsense reports in the browser before they are sent. The ONNX backend is experimental and falls back to the heuristic.",
+  "description": "Optional add-on for the browser SDK; most apps don't need it. Stops empty or nonsense bug reports in the browser before they are sent. The ONNX backend is experimental and falls back to the heuristic.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

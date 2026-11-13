@@ -60,7 +60,7 @@ import { Callout } from 'nextra/components'
 + import Logo from './logo.svg?react'`}</pre> },
     { id: 'jest', label: 'Decide on testing framework', content: <>CRA ran Jest through <code>react-scripts test</code>, which goes away. <strong>Vitest</strong> (a separate package from the Vite team) has a Jest-compatible API and is the usual replacement. To keep Jest instead, configure babel-jest or ts-jest yourself.</> },
     { id: 'mushi-import', label: 'Re-verify Mushi Mushi mounts correctly', content: <pre className="text-xs">{`// src/main.tsx
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 createRoot(document.getElementById('root')!).render(
   <MushiProvider config={{
@@ -115,4 +115,4 @@ Vite, `MushiProvider` can also read `VITE_MUSHI_PROJECT_ID` and
 - [Vite docs: env variables](https://vite.dev/guide/env-and-mode)
 - [React blog: Sunsetting Create React App](https://react.dev/blog/2025/02/14/sunsetting-create-react-app)
 - [Vitest](https://vitest.dev/)
-- [`@mushi-mushi/react` SDK reference](/sdks/react)
+- [`mushi-mushi/react` SDK reference](/sdks/react)

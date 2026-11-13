@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional CI tool:** you run it with `npx` from CI or your own machine, never inside your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 Mushi Mushi's crawler and synthetic monitor can only check pages they can
 reach, and most app pages sit behind a login. This runner signs in to your app
 with Playwright, using the login script in your `inventory.yaml`, and hands

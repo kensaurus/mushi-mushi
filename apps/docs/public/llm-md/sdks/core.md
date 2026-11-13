@@ -1,13 +1,13 @@
-# @mushi-mushi/core
+# mushi-mushi/core
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
-title: '@mushi-mushi/core'
-description: Reference for @mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.
+title: 'mushi-mushi/core'
+description: Reference for mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.
 ---
 
-# `@mushi-mushi/core`
+# `mushi-mushi/core`
 
 Shared types, HTTP client, offline queue helpers, and config used by every
 Mushi Mushi framework SDK. It is framework-agnostic, and you rarely install it
@@ -16,7 +16,7 @@ directly.
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/core
+pnpm add mushi-mushi
 ```
 
 Every SDK needs a project ID and an API key.
@@ -46,7 +46,7 @@ Get both values in one step by running `mushi login` or by creating a project in
 the [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/projects). The ID and
 key are shown together on the success screen after project creation.
 
-Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--beforesend).
+Sampling + `beforeSend` examples: [`mushi-mushi`](/sdks/web#sampling--beforesend).
 
 ### `MushiWidgetConfig` (selected keys)
 
@@ -97,7 +97,7 @@ it in your own `beforeSend` hook, server code, or logs. It runs entirely in
 your process, so scrubbed values never leave the client.
 
 ```ts
-import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
+import { scrubPii, scrubUrl, createPiiScrubber } from 'mushi-mushi/core'
 
 // Free text → typed placeholders
 scrubPii('email jake@x.com or call +1 415 555 0100')
@@ -173,7 +173,7 @@ generated copy, so the two scrubbers can't drift.
 ### Region resolution
 
 ```ts
-import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from 'mushi-mushi/core'
 
 const url = await resolveRegionEndpoint({
   projectId: 'YOUR_PROJECT_ID',

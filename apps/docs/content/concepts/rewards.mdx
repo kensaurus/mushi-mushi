@@ -225,7 +225,7 @@ The rewards system inherits all guarantees from the
 
 Register webhook endpoints in the admin console on the **Rewards** page. All
 payloads are `POST`, `Content-Type: application/json`, and signed with
-`X-Mushi-Signature: sha256=<hex HMAC-SHA256 of the body>`. `@mushi-mushi/node`
+`X-Mushi-Signature: sha256=<hex HMAC-SHA256 of the body>`. `mushi-mushi/node`
 exports `createMushiRewardsHandler` to verify and route them.
 
 Every payload carries `event`, `end_user_id`, `occurred_at` and `webhookId`, plus

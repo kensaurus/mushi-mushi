@@ -26,11 +26,12 @@ describe('CLI detect on RealWorld fixtures', () => {
     }
   })
 
-  it('backend-express → express → @mushi-mushi/node, bare MUSHI_* env vars', () => {
+  it('backend-express → express → mushi-mushi/node, bare MUSHI_* env vars', () => {
     const dir = path.join(FIXTURES, 'backend-express')
     const fw = detectFramework(dir, loadPkg(dir))
     expect(fw.id).toBe('express')
-    expect(fw.packageName).toBe('@mushi-mushi/node')
+    expect(fw.packageName).toBe('mushi-mushi')
+    expect(fw.importPath).toBe('mushi-mushi/node')
 
     const env = envVarsToWrite('mushi_key', 'proj-id', fw, 'http://localhost:4199/functions/v1/api')
     expect(env).toContain('MUSHI_PROJECT_ID=proj-id')
@@ -39,22 +40,24 @@ describe('CLI detect on RealWorld fixtures', () => {
     expect(env).not.toContain('VITE_')
   })
 
-  it('frontend-react-vite → react → @mushi-mushi/react, VITE_* env vars', () => {
+  it('frontend-react-vite → react → mushi-mushi/react, VITE_* env vars', () => {
     const dir = path.join(FIXTURES, 'frontend-react-vite')
     const fw = detectFramework(dir, loadPkg(dir))
     expect(fw.id).toBe('react')
-    expect(fw.packageName).toBe('@mushi-mushi/react')
+    expect(fw.packageName).toBe('mushi-mushi')
+    expect(fw.importPath).toBe('mushi-mushi/react')
 
     const env = envVarsToWrite('mushi_key', 'proj-id', fw)
     expect(env).toContain('VITE_MUSHI_PROJECT_ID=proj-id')
     expect(env).toContain('VITE_MUSHI_API_KEY=mushi_key')
   })
 
-  it('frontend-hash → vanilla → @mushi-mushi/web, VITE_* env vars', () => {
+  it('frontend-hash → vanilla → mushi-mushi, VITE_* env vars', () => {
     const dir = path.join(FIXTURES, 'frontend-hash')
     const fw = detectFramework(dir, loadPkg(dir))
     expect(fw.id).toBe('vanilla')
-    expect(fw.packageName).toBe('@mushi-mushi/web')
+    expect(fw.packageName).toBe('mushi-mushi')
+    expect(fw.importPath).toBe('mushi-mushi')
 
     const env = envVarsToWrite('mushi_key', 'proj-id', fw)
     expect(env).toContain('VITE_MUSHI_PROJECT_ID=proj-id')

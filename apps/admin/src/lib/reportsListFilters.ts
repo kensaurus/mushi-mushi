@@ -108,6 +108,8 @@ export const SDK_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string }>
 ]
 
 const SDK_FILTER_ALIASES: Record<string, string> = {
+  // The one-package install (`mushi-mushi`) still reports as the web SDK.
+  'mushi-mushi': '@mushi-mushi/web',
   '@mushi-mushi/react': '@mushi-mushi/web',
   '@mushi-mushi/vue': '@mushi-mushi/web',
   '@mushi-mushi/svelte': '@mushi-mushi/web',

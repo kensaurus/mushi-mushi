@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
 
 ---
 title: Bug report widget for React
-description: "Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report."
+description: "Free, open-source bug report widget for React and Next.js: install mushi-mushi, add your project key, and get a plain-English diagnosis per report."
 ---
 
 # Bug report widget for React
@@ -45,17 +45,17 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
 ## 1. Install
 
 ```bash
-pnpm add @mushi-mushi/react
-# or: npm install @mushi-mushi/react
+pnpm add mushi-mushi
+# or: npm install mushi-mushi
 ```
 
-`@mushi-mushi/react` re-exports from `@mushi-mushi/core` and `@mushi-mushi/web`,
-so you only need this one dependency.
+`mushi-mushi` carries the React bindings (`mushi-mushi/react`), the web SDK and
+the core types, so you only need this one dependency.
 
 ## 2. Wrap your app
 
 ```tsx filename="src/main.tsx"
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 import { App } from './App'
 
 export function Root() {
@@ -79,7 +79,7 @@ straight into `app/layout.tsx`:
 
 ```tsx filename="app/providers.tsx"
 'use client'
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -122,7 +122,7 @@ Component cannot pass functions to a client one.
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 
 export function CrashFallback({ error }: { error: Error }) {
   const mushi = useMushiSdk()
@@ -159,5 +159,5 @@ the console's **Connect** page.
 ## Next steps
 
 - [Concepts → Classification pipeline](/concepts/classification)
-- [SDK reference → @mushi-mushi/react](/sdks/react)
+- [SDK reference → mushi-mushi/react](/sdks/react)
 - [Plugins → Receive a webhook in your own service](/plugins/building)

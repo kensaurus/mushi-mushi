@@ -23,7 +23,7 @@ changelog for that range, then apply API + config migrations in the host app.
 
 ```bash
 # Host app
-node -e "const p=require('./package.json'); console.log(p.dependencies?.['@mushi-mushi/web']||p.overrides?.['@mushi-mushi/web']||'missing')"
+node -e "const p=require('./package.json'); const d={...p.dependencies,...p.overrides}; console.log(d['mushi-mushi']?'mushi-mushi '+d['mushi-mushi']:d['@mushi-mushi/web']?'@mushi-mushi/web '+d['@mushi-mushi/web']:'missing')"
 
 # Or MCP (does not bump the pin)
 check_sdk_version({ package: "@mushi-mushi/web", current: "<installed>" })

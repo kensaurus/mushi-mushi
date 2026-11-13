@@ -33,14 +33,14 @@ pnpm add @mushi-mushi/adapters
 | AWS CloudWatch (via SNS)      | `translateCloudWatch`        | `createCloudWatchAdapter`         |
 | Opsgenie                      | `translateOpsGenie`          | `createOpsGenieAdapter`           |
 
-Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
+Every translator returns a `MushiCaptureEventInput` (from `mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
 
 ## Quick start: Datadog → Hono
 
 ```ts
 import { Hono } from 'hono';
 import { createDatadogWebhookHandler } from '@mushi-mushi/adapters';
-import { MushiNodeClient } from '@mushi-mushi/node';
+import { MushiNodeClient } from 'mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,

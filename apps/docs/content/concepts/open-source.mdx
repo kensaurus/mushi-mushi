@@ -37,7 +37,7 @@ self-host is what we run; the hosted service adds only its own tuning data
 
 The widget runs inside *your* application. A copyleft SDK would force your app's
 license, which is unacceptable — so every package you ship to your users is MIT.
-Drop `@mushi-mushi/react` into a closed-source product with zero obligations.
+Drop `mushi-mushi` into a closed-source product with zero obligations.
 
 ### Why AGPLv3 for the server?
 

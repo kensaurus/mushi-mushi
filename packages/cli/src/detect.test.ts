@@ -7,6 +7,8 @@ import {
   detectPackageManager,
   envVarsToWrite,
   installCommand,
+  isLauncherOnly,
+  isMushiSdkPackage,
   readPackageJson,
   FRAMEWORKS,
 } from './detect.js'
@@ -157,7 +159,7 @@ describe('detectPackageManager', () => {
 
 describe('installCommand', () => {
   it('uses install for npm', () => {
-    expect(installCommand('npm', ['@mushi-mushi/react'])).toBe('npm install @mushi-mushi/react')
+    expect(installCommand('npm', ['mushi-mushi'])).toBe('npm install mushi-mushi')
   })
   it('uses add for pnpm/yarn/bun', () => {
     expect(installCommand('pnpm', ['a', 'b'])).toBe('pnpm add a b')
@@ -209,28 +211,57 @@ describe('envVarsToWrite', () => {
 })
 
 describe('FRAMEWORKS', () => {
-  it('every framework points at a real @mushi-mushi/* package', () => {
-    const validPackages = new Set([
-      '@mushi-mushi/react',
-      '@mushi-mushi/vue',
-      '@mushi-mushi/svelte',
-      '@mushi-mushi/angular',
-      '@mushi-mushi/react-native',
-      '@mushi-mushi/capacitor',
-      '@mushi-mushi/web',
-      '@mushi-mushi/node',
+  it('every framework installs mushi-mushi, or the scoped native package', () => {
+    // ADR 0060: one package for users. React Native and Capacitor stay scoped
+    // (Metro subpath support; native code must be a top-level dependency).
+    const NATIVE: Record<string, string> = {
+      expo: '@mushi-mushi/react-native',
+      'react-native': '@mushi-mushi/react-native',
+      capacitor: '@mushi-mushi/capacitor',
+    }
+    const umbrellaPaths = new Set([
+      'mushi-mushi',
+      'mushi-mushi/react',
+      'mushi-mushi/vue',
+      'mushi-mushi/svelte',
+      'mushi-mushi/angular',
+      'mushi-mushi/node',
     ])
     for (const fw of Object.values(FRAMEWORKS)) {
-      expect(validPackages.has(fw.packageName)).toBe(true)
+      const native = NATIVE[fw.id]
+      if (native) {
+        expect(fw.packageName, fw.id).toBe(native)
+        expect(fw.importPath, fw.id).toBe(native)
+      } else {
+        expect(fw.packageName, fw.id).toBe('mushi-mushi')
+        expect(umbrellaPaths.has(fw.importPath), fw.id).toBe(true)
+        expect(fw.snippet(), fw.id).not.toMatch(/@mushi-mushi\//)
+      }
     }
+  })
+
+  it('isLauncherOnly marks mushi-mushi below 1.0 (the setup command), not the 1.x SDK', () => {
+    expect(isLauncherOnly('mushi-mushi', '^0.8.15')).toBe(true)
+    expect(isLauncherOnly('mushi-mushi', '0.8.15')).toBe(true)
+    expect(isLauncherOnly('mushi-mushi', '^1.35.0')).toBe(false)
+    expect(isLauncherOnly('mushi-mushi', 'latest')).toBe(false)
+    expect(isLauncherOnly('@mushi-mushi/web', '^0.9.0')).toBe(false)
+    expect(isLauncherOnly('mushi-mushi', undefined)).toBe(false)
+  })
+
+  it('isMushiSdkPackage recognises the umbrella and the scoped packages', () => {
+    expect(isMushiSdkPackage('mushi-mushi')).toBe(true)
+    expect(isMushiSdkPackage('@mushi-mushi/react')).toBe(true)
+    expect(isMushiSdkPackage('create-mushi-mushi')).toBe(false)
+    expect(isMushiSdkPackage('mushi-mushi-vscode')).toBe(false)
   })
 
   it('snippet always references the correct env var names and the package', () => {
     const VITE_FRAMEWORKS = new Set(['react', 'vue', 'svelte', 'sveltekit', 'angular', 'capacitor', 'vanilla'])
     for (const fw of Object.values(FRAMEWORKS)) {
       const snip = fw.snippet()
-      // Every snippet must reference the package it belongs to
-      expect(snip).toContain(fw.packageName)
+      // Every snippet must import from the path it belongs to
+      expect(snip).toContain(`'${fw.importPath}'`)
       // Each framework must reference its env vars — not literal key values
       if (fw.id === 'next') {
         expect(snip).toContain('NEXT_PUBLIC_MUSHI_PROJECT_ID')

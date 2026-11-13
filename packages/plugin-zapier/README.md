@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For people who want Mushi Mushi bug events in a tool it does not connect to.
 This sends each event to a Zapier "Catch Hook", so you can pass bug reports and
 fixes on to Notion, Google Sheets, email or any other Zapier app without

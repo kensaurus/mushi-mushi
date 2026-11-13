@@ -23,16 +23,16 @@ this page is the Mushi-aware companion to it.
   commit them and edit them like any other Xcode / Android Studio project.
 - Mushi Mushi has a Capacitor plugin ([`@mushi-mushi/capacitor`](/sdks/capacitor))
   with native shake-to-report and screenshot capture. There is no Mushi Mushi
-  Cordova plugin; in a Cordova app you would have run `@mushi-mushi/web`
-  inside the WebView.
+  Cordova plugin; in a Cordova app you would have run the web SDK
+  (`mushi-mushi`) inside the WebView.
 
 ## Prerequisites
 
 - Working Cordova app that builds for at least one platform.
 - For Capacitor 8: Node 22+, Xcode 26+ for iOS, Android Studio 2025.2.1+
   for Android ([environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)).
-- A Mushi Mushi project. If you already use `@mushi-mushi/web` in the Cordova
-  app, keep the same `projectId` and `apiKey`. If not,
+- A Mushi Mushi project. If you already use the web SDK (`mushi-mushi` or
+  `@mushi-mushi/web`) in the Cordova app, keep the same `projectId` and `apiKey`. If not,
   [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-cordova-to-capacitor) (no card) and a
   project; the [Capacitor quickstart](/quickstart/capacitor#get-your-project-id-and-api-key)
   shows where the two values come from.
@@ -56,7 +56,7 @@ Most popular Cordova plugins have a 1:1 Capacitor counterpart:
 | `cordova-plugin-share` | `@capacitor/share` |
 | `cordova-plugin-firebase-messaging` | `@capacitor/push-notifications` + `@capacitor-firebase/messaging` |
 | `cordova-sqlite-storage` | `@capacitor-community/sqlite` |
-| `@mushi-mushi/web` in the WebView | `@mushi-mushi/capacitor` (adds native shake and screenshots) |
+| `mushi-mushi` (web SDK) in the WebView | `@mushi-mushi/capacitor` (adds native shake and screenshots) |
 
 For anything not listed, search the [Capacitor Plugins](https://capacitorjs.com/docs/plugins)
 catalog or the [Capawesome community plugins](https://capawesome.io/plugins/).
@@ -109,7 +109,7 @@ npx @capacitor/assets generate --ios --android
     {
       id: 'mushi',
       label: 'Add @mushi-mushi/capacitor',
-      content: <pre className="text-xs">{`# If you ran @mushi-mushi/web in the Cordova WebView, remove its
+      content: <pre className="text-xs">{`# If you ran the web SDK (mushi-mushi) in the Cordova WebView, remove its
 # Mushi.init call; the Capacitor plugin replaces it.
 npm install @mushi-mushi/capacitor
 npx cap sync

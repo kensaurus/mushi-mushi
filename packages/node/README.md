@@ -4,6 +4,8 @@
 
 The server-side SDK for [Mushi Mushi](https://github.com/kensaurus/mushi-mushi). Browser SDKs report the bugs users see; this one reports the bugs your backend sees: uncaught exceptions, failed webhooks, broken integrations. They land in the same queue and get the same plain-English diagnosis and fix.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { MushiNodeClient } from 'mushi-mushi/node'` (and `mushi-mushi/node/express`, `/fastify`, `/hono`). This package keeps working and keeps getting updates.
+
 ```mermaid
 flowchart LR
     A["Your server throws"] --> B["Mushi Mushi diagnoses the bug"] --> C["Fix lands in your editor"]
@@ -12,13 +14,14 @@ flowchart LR
 ## Quick start
 
 ```bash
-npm i @mushi-mushi/node
+npm install mushi-mushi   # then import from 'mushi-mushi/node'
+# or: npm install @mushi-mushi/node   # same code; import from '@mushi-mushi/node'
 ```
 
 Create one client, then hand it to the error handler for your framework ([Node SDK reference](https://kensaur.us/mushi-mushi/docs/sdks/node)):
 
 ```ts
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 const client = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -28,15 +31,15 @@ const client = new MushiNodeClient({
 })
 
 // Express: register after your routes
-import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import { mushiExpressErrorHandler } from 'mushi-mushi/node/express'
 app.use(mushiExpressErrorHandler({ client }))
 
 // Fastify
-import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import { mushiFastifyPlugin } from 'mushi-mushi/node/fastify'
 mushiFastifyPlugin(app, { client })
 
 // Hono (Node or edge): onError must return a Response, so pass your own handler second
-import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { mushiHonoErrorHandler } from 'mushi-mushi/node/hono'
 app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
 
 // Any server: also report uncaughtException and unhandledRejection
@@ -72,7 +75,7 @@ await client.captureReport({
 When a reporter earns points or reaches a new tier, Mushi Mushi sends your app a signed webhook. This is where you grant a role, turn on Pro, or apply a coupon. The handler checks the `X-Mushi-Signature` HMAC before any callback runs and answers `401` on a bad signature.
 
 ```ts
-import { createMushiRewardsHandler } from '@mushi-mushi/node'
+import { createMushiRewardsHandler } from 'mushi-mushi/node'
 
 const handler = createMushiRewardsHandler({
   secret: process.env.MUSHI_REWARD_WEBHOOK_SECRET!, // the mushi_whk_… secret shown once in the console

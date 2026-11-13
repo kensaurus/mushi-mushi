@@ -58,7 +58,7 @@ npx mushi-mushi
 npx mushi-mushi --yes
 
 # Or manual
-npm install @mushi-mushi/web
+npm install mushi-mushi
 ```
 
 The key the wizard writes to `.env.local` is ingest-only (`report:write`):
@@ -68,7 +68,7 @@ The CLI's own key (with `mcp:read`) stays in the CLI config.
 ### 3. Initialize in your app
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: process.env.MUSHI_PROJECT_ID!,

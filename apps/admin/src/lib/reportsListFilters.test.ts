@@ -106,6 +106,10 @@ describe('sanitizeListFilters (stale bookmarks)', () => {
     expect(sanitizeListFilters({ platform: '', sdkPackage: '@mushi-mushi/capacitor', days: '' }).sdkPackage).toBe('@mushi-mushi/web')
   })
 
+  it('maps the one-package mushi-mushi name to the web SDK it reports as', () => {
+    expect(sanitizeListFilters({ platform: '', sdkPackage: 'mushi-mushi', days: '' }).sdkPackage).toBe('@mushi-mushi/web')
+  })
+
   it('drops values the list cannot apply instead of failing the page', () => {
     expect(sanitizeListFilters({ platform: 'playstation', sdkPackage: 'left-pad', days: '400', origin: 'moon' })).toEqual({
       platform: '',

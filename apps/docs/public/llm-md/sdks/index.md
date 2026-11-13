@@ -33,13 +33,13 @@ each tier means and where each package sits.
 
 | Tier | What it means | Packages |
 | --- | --- | --- |
-| **Battle-tested** | Runs in production apps daily, including the Mushi Mushi console itself; full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
-| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
-| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (100 to 200 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
+| **Battle-tested** | Runs in production apps daily, including the Mushi Mushi console itself; full capture surface; deep test suites | `mushi-mushi` (web SDK), `mushi-mushi/core`, `mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
+| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `mushi-mushi/node`, `@mushi-mushi/adapters` |
+| **Functional wrapper** | Thin framework binding over the `mushi-mushi` web SDK (100 to 200 lines each); everything documented works, but expect fewer framework-specific niceties | `mushi-mushi/vue`, `mushi-mushi/svelte`, `mushi-mushi/angular` |
 | **Native preview** | Full native implementations, not yet published to CocoaPods, Maven Central or pub.dev; install from the GitHub repo | iOS (Swift), Android (Kotlin), Flutter |
 
 If a "functional wrapper" is missing something you need, the underlying
-[`@mushi-mushi/web`](/sdks/web) API is always available alongside it, and
+[`mushi-mushi`](/sdks/web) API is always available alongside it, and
 [issues](https://github.com/kensaurus/mushi-mushi/issues) for framework
 bindings get prioritized by demand.
 
@@ -49,19 +49,19 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/core`](/sdks/core) | npm | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
-| [`@mushi-mushi/web`](/sdks/web) | npm | Browser SDK: report widget, breadcrumbs, session replay, optional WASM pre-classifier |
-| [`@mushi-mushi/react`](/sdks/react) | npm | React provider + hooks + `` |
-| [`@mushi-mushi/vue`](/sdks/vue) | npm | Vue 3 plugin + composables |
-| [`@mushi-mushi/svelte`](/sdks/svelte) | npm | Svelte stores + context |
-| [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular service, error handler and `provideMushi()` |
+| [`mushi-mushi`](/sdks/web) | npm | Browser SDK: report widget, breadcrumbs, session replay, optional WASM pre-classifier |
+| [`mushi-mushi/core`](/sdks/core) | npm (subpath of `mushi-mushi`) | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
+| [`mushi-mushi/react`](/sdks/react) | npm (subpath of `mushi-mushi`) | React provider + hooks + `` |
+| [`mushi-mushi/vue`](/sdks/vue) | npm (subpath of `mushi-mushi`) | Vue 3 plugin + composables |
+| [`mushi-mushi/svelte`](/sdks/svelte) | npm (subpath of `mushi-mushi`) | Svelte stores + context |
+| [`mushi-mushi/angular`](/sdks/angular) | npm (subpath of `mushi-mushi`) | Angular service, error handler and `provideMushi()` |
 | [`@mushi-mushi/adapters`](/sdks/adapters) | npm | Inbound observability webhooks (Sentry, Datadog, Bugsnag, …) |
 
 ## Server
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/node`](/sdks/node) | npm | Forward unhandled exceptions + HTTP error handlers |
+| [`mushi-mushi/node`](/sdks/node) | npm (subpath of `mushi-mushi`) | Forward unhandled exceptions + HTTP error handlers |
 
 ## Mobile & native
 
@@ -78,7 +78,7 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
-| [`mushi-mushi`](/sdks/launcher) | npm | Launcher: the `npx mushi-mushi` setup wizard |
+| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard plus the web, framework and Node SDKs above |
 | [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server: triage reports from Cursor, Claude, Codex |
 | [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | GitHub Action: triage-coverage gate, fix dispatch, pre-release gates, crawler sign-in |
 | [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lint rules for empty event handlers (`no-dead-handler`) and leftover mock data (`no-mock-leak`) |
@@ -106,11 +106,8 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 ## Installation
 
 ```bash
-# Minimal (browser app)
-npm install @mushi-mushi/web
-
-# React app
-npm install @mushi-mushi/react
+# Browser app, React, Vue, Svelte, Angular or Node
+npm install mushi-mushi
 
 # React Native
 npm install @mushi-mushi/react-native
@@ -118,6 +115,8 @@ npm install @mushi-mushi/react-native
 # MCP server
 npx @mushi-mushi/mcp
 ```
+
+Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another `@mushi-mushi/*` SDK? It keeps working and keeps getting updates. `mushi-mushi` ships the same code; switch when you like by changing the import path.
 
 ## Upgrade from 0.x
 

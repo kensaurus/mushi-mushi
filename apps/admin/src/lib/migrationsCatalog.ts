@@ -64,7 +64,7 @@ const MIGRATIONS_CATALOG: readonly AdminMigrationGuideMeta[] = [
   {
     slug: 'vue-2-to-vue-3',
     title: 'Vue 2 → Vue 3',
-    summary: 'Composition API migration with @mushi-mushi/vue peer-dep alignment.',
+    summary: 'Composition API migration with mushi-mushi/vue peer-dep alignment.',
   },
   {
     slug: 'spa-to-ssr',

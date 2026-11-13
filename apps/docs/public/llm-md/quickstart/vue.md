@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
 title: Bug report widget for Vue 3
-description: "Free, open-source bug report widget for Vue 3: install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts."
+description: "Free, open-source bug report widget for Vue 3: install mushi-mushi and register MushiPlugin with your project ID and public API key in main.ts."
 ---
 
 # Bug report widget for Vue 3
@@ -32,12 +32,12 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
 ## Install and register the plugin
 
 ```bash
-pnpm add @mushi-mushi/vue
+pnpm add mushi-mushi
 ```
 
 ```ts filename="src/main.ts"
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 createApp(App)
@@ -48,4 +48,4 @@ createApp(App)
   .mount('#app')
 ```
 
-API detail: [`@mushi-mushi/vue`](/sdks/vue). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/vue`](/sdks/vue). Widget behavior: [`mushi-mushi`](/sdks/web).
