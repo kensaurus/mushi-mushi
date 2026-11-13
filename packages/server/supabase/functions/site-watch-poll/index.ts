@@ -25,6 +25,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { firecrawlMapOwnSite, resolveFirecrawl } from '../_shared/firecrawl.ts'
 import { queueReportClassification } from '../_shared/report-classification.ts'
+import { runEdgeCanaries } from '../_shared/edge-canary.ts'
 import {
   allocateConfirms,
   checkPages,
@@ -236,6 +237,23 @@ Deno.serve(
         }
       }),
     )
-    return json({ ok: true, data: { watches: results.length, results } })
+    // Edge canaries (ADR 0061): plain no-redirect requests, no Firecrawl.
+    // Only on the hourly cron pass, so runs never overlap and a fail streak
+    // counts hours; "Check now" (a projectId POST) leaves them alone.
+    let canaries: Record<string, unknown> | null = null
+    if (!only) {
+      try {
+        canaries = { ...(await runEdgeCanaries(db, {
+          fetch,
+          now: () => new Date(),
+          sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+          classify: deps.classify,
+        })) }
+      } catch (err) {
+        plog.warn('edge canaries failed', { err: String(err).slice(0, 300) })
+        canaries = { error: 'edge canaries failed; the next hourly pass retries' }
+      }
+    }
+    return json({ ok: true, data: { watches: results.length, results, canaries } })
   }),
 )
