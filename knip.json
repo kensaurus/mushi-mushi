@@ -98,7 +98,8 @@
       ],
       "project": [
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
-        "!supabase/**"
+        "!supabase/**",
+        "!src/__tests__/**!"
       ],
       "ignoreDependencies": [
         "npm"
