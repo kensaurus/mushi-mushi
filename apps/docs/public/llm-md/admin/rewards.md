@@ -257,7 +257,7 @@ Webhook payloads are sent for these events. Every payload carries `event`,
 
 Add endpoints under **Host webhooks** (an HTTPS URL and an optional signing secret of at
 least 16 characters; leave it empty and Mushi Mushi creates one and shows it once), and
-send a test event from there. `@mushi-mushi/node` exports `createMushiRewardsHandler` to
+send a test event from there. `mushi-mushi/node` exports `createMushiRewardsHandler` to
 verify and route these events in your server.
 
 ---

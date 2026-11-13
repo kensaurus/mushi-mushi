@@ -14,7 +14,7 @@
  */
 
 import { buildCiVars, stackFromPackageJsons, type SdkStack } from './sdk-diagnostics.ts'
-import { archivedDirsFrom, computeBumpPlan, isUnderArchivedDir } from './sdk-upgrade-plan.ts'
+import { archivedDirsFrom, computeBumpPlan, isUmbrellaLauncherOnly, isUnderArchivedDir } from './sdk-upgrade-plan.ts'
 
 export type SdkHealthProblemId = 'not_installed' | 'no_repo' | 'no_sdk_key' | 'ci_secrets_missing' | 'never_seen' | 'outdated' | 'csp_blocks_api' | 'stale'
 export type SdkHealthFixKind = 'install_task' | 'sync_ci_secrets' | 'upgrade_pr' | 'csp_task'
@@ -97,6 +97,8 @@ function parseDeps(text: string): Record<string, string> | null {
 
 /** Packages that put the bug-report widget or reporter in an app (not the CLI, MCP or server tools). */
 const SDK_PACKAGES = new Set([
+  // The one package users install (ADR 0060); the scoped names keep working.
+  'mushi-mushi',
   '@mushi-mushi/web',
   '@mushi-mushi/react',
   '@mushi-mushi/react-native',
@@ -111,10 +113,20 @@ export function isSdkPackage(name: string): boolean {
   return SDK_PACKAGES.has(name)
 }
 
+/** An SDK dependency: an SDK package, except the pre-1.0 `mushi-mushi` launcher. */
+export function isSdkDependency(dep: Pick<MushiDep, 'name' | 'spec'>): boolean {
+  return isSdkPackage(dep.name) && !isUmbrellaLauncherOnly(dep.name, dep.spec)
+}
+
+/** A Mushi Mushi npm package: the `mushi-mushi` umbrella or any scoped `@mushi-mushi/*` one. */
+export function isMushiPackageName(name: string): boolean {
+  return name === 'mushi-mushi' || name.startsWith('@mushi-mushi/')
+}
+
 /** False for an Expo app without the web SDK: no browser request to block. */
 function cspApplies(files: readonly PackageJsonFile[]): boolean {
   const target = detectAppTarget(files)
-  return !(target?.stack === 'expo' && !mushiDeps(files).some((d) => d.name === '@mushi-mushi/web'))
+  return !(target?.stack === 'expo' && !mushiDeps(files).some((d) => d.name === '@mushi-mushi/web' || (d.name === 'mushi-mushi' && isSdkDependency(d))))
 }
 
 /**
@@ -126,6 +138,8 @@ export function appPackageFiles(files: readonly PackageJsonFile[]): PackageJsonF
   return files.filter((f) => {
     try {
       const name = (JSON.parse(f.text) as { name?: unknown } | null)?.name
+      // Not `mushi-mushi`: that is also the monorepo root's private name, and
+      // the umbrella's own manifest names no framework, so it is never picked.
       return !(typeof name === 'string' && name.startsWith('@mushi-mushi/'))
     } catch {
       return true
@@ -141,14 +155,14 @@ export interface MushiDep {
   version: string | null
 }
 
-/** Every @mushi-mushi/* dependency declared in the files. */
+/** Every `mushi-mushi` and @mushi-mushi/* dependency declared in the files. */
 export function mushiDeps(files: readonly PackageJsonFile[]): MushiDep[] {
   const out: MushiDep[] = []
   for (const f of files) {
     const deps = parseDeps(f.text)
     if (!deps) continue
     for (const [name, spec] of Object.entries(deps)) {
-      if (!name.startsWith('@mushi-mushi/')) continue
+      if (!isMushiPackageName(name)) continue
       const m = /^[\^~>=<\s]*(\d+\.\d+\.\d+)/.exec(spec)
       out.push({ path: f.path, name, spec, version: m ? m[1] : null })
     }
@@ -189,7 +203,7 @@ export function detectAppTarget(files: readonly PackageJsonFile[]): AppTarget | 
   })
   const markers = STACK_MARKERS[stack]
   const matching = parsed.filter((p) => markers.some((m) => m in p.deps))
-  const withSdk = matching.filter((p) => Object.keys(p.deps).some((n) => n.startsWith('@mushi-mushi/')))
+  const withSdk = matching.filter((p) => Object.keys(p.deps).some(isMushiPackageName))
   // The repo root and apps/* are where apps live; packages/* are libraries.
   const rank = (path: string) => (path === 'package.json' || path.startsWith('apps/') ? 0 : 1)
   const pick = (withSdk.length > 0 ? withSdk : matching).sort(
@@ -414,7 +428,7 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
   const files = input.packages.ok ? appPackageFiles(input.packages.value) : []
   const deps = mushiDeps(files)
   // The CLI or MCP alone in a repo is not the SDK: nothing reports bugs from the app.
-  const sdkDeps = deps.filter((d) => isSdkPackage(d.name))
+  const sdkDeps = deps.filter(isSdkDependency)
   const target = detectAppTarget(files)
   const seen = input.lastSeenAt != null
   // A heartbeat proves an install, wherever its package.json lives.
@@ -438,7 +452,7 @@ export function sdkHealthProblems(input: SdkHealthInput): SdkHealthResult {
       id: 'not_installed',
       severity: 'error',
       title: "The SDK isn't in your app yet",
-      detail: `No package.json in ${repo} lists a Mushi SDK package (such as @mushi-mushi/web or @mushi-mushi/react-native), so the app sends no bug reports.`,
+      detail: `No package.json in ${repo} lists a Mushi SDK package (such as mushi-mushi or @mushi-mushi/react-native), so the app sends no bug reports.`,
       fix: { kind: 'install_task', label: 'File install task' },
     })
   }
@@ -598,7 +612,7 @@ function webSteps(stack: SdkStack, dir: string, capacitor: boolean, env: ReturnT
   const at = (p: string) => (dir ? `${dir}/${p}` : p)
   const read = stack === 'vite' ? (n: string) => `import.meta.env.${n}` : (n: string) => `process.env.${n}`
   const steps: string[] = []
-  steps.push(`Install the SDK in ${dir || 'the repo root'}: \`@mushi-mushi/web\`, with the repo's package manager (commit the lockfile).`)
+  steps.push(`Install the SDK in ${dir || 'the repo root'}: \`mushi-mushi\` (\`import { Mushi } from 'mushi-mushi'\`), with the repo's package manager (commit the lockfile).`)
   steps.push(
     `Add \`${at('src/lib/mushi-env.ts')}\` with \`readMushiEnv(raw)\` (trims, and treats '', '-', 'undefined' and 'null' as unset; CI can bake a secret placeholder as '-') and \`readMushiEndpoint(raw)\` (only absolute http(s) URLs). Copy ${TEMPLATE_REPO} src/lib/mushi-env.ts.`,
   )
@@ -650,7 +664,7 @@ export function installTaskReport(input: InstallTaskInput): TaskReport {
   const lines: string[] = [
     `Add the Mushi bug-report SDK to ${input.appName} (${STACK_LABEL[stack]}${capacitor ? ' + Capacitor' : ''}, ${input.target ? `\`${input.target.path}\`` : 'no framework found in package.json; check where the app lives'}).`,
     '',
-    `No package.json in ${input.repoLabel} lists a @mushi-mushi package, so the app sends no bug reports.`,
+    `No package.json in ${input.repoLabel} lists a Mushi Mushi package (mushi-mushi or @mushi-mushi/*), so the app sends no bug reports.`,
     '',
     'How to fix:',
     ...steps.map((s, i) => `${i + 1}. ${s}`),

@@ -4,10 +4,10 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
 title: JavaScript bug reporting SDK for the browser
-description: Reference for @mushi-mushi/web, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+description: Reference for mushi-mushi, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
-# `@mushi-mushi/web`
+# `mushi-mushi`
 
 The Mushi Mushi browser SDK: screenshots, console logs, network breadcrumbs, and a
 report widget in a Shadow DOM so your CSS never leaks in or out.
@@ -79,7 +79,7 @@ Mushi.init({
 | `beforeSend` | — | Every report type after PII scrub. Async OK. |
 | `beforeSendFeedback` | — | **Deprecated.** Feedback-only; ignored when `beforeSend` is set. |
 
-Types live on `MushiConfig` in `@mushi-mushi/core`.
+Types live on `MushiConfig` in `mushi-mushi/core`.
 
 ---
 
@@ -178,7 +178,7 @@ different `userId` switches the identity used for later reports and activity.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -260,7 +260,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
-import { useMushi } from '@mushi-mushi/react'
+import { useMushi } from 'mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()

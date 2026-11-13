@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For teams who live in Rollbar and want to see what users report there too.
 This copies each bug Mushi Mushi triages into Rollbar as an item, next to your
 Rollbar errors, and resolves that item when Mushi Mushi applies a fix.

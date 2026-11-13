@@ -156,7 +156,7 @@ export function isMobileFramework(fw: Framework): fw is MobileFramework {
 }
 
 /**
- * Server-side runtimes: use `@mushi-mushi/node` instead of the browser SDK.
+ * Server-side runtimes: use `mushi-mushi/node` instead of the browser SDK.
  * The widget preview and configurator don't apply to these — only the install
  * command and code snippet are shown.
  */
@@ -223,24 +223,21 @@ export function frameworkLabel(fw: Framework): string {
 }
 
 /** The `npm install` command for the chosen framework.
- *  - Web adapters (Vue / Svelte) ship as a thin layer that depends on
- *    @mushi-mushi/web for the actual capture runtime, so we install both.
- *  - React bundles its own runtime in @mushi-mushi/react.
+ *  - Every web and server framework installs the one `mushi-mushi` package:
+ *    the browser SDK is its root export and the framework bindings are
+ *    subpaths (`mushi-mushi/react`, `/vue`, `/svelte`, `/angular`, `/node`).
  *  - Mobile (react-native / expo / capacitor) ships the native runtime in a
- *    dedicated package — no @mushi-mushi/web on top, the web SDK doesn't run
- *    in those environments. Capacitor users on the WebView can additionally
- *    add @mushi-mushi/web (covered in the docs migration guide). */
+ *    dedicated scoped package, because native code must be a top-level app
+ *    dependency. Capacitor users on the WebView can additionally add
+ *    `mushi-mushi` (covered in the docs migration guide). */
 export function installCommand(fw: Framework): string {
   // The loader needs no package manager — paste the <script> tag and done.
   if (fw === 'loader') return '# No install — paste the <script> tag into your <head>.'
-  if (fw === 'react') return 'npm install @mushi-mushi/react'
-  if (fw === 'vanilla') return 'npm install @mushi-mushi/web'
   if (fw === 'react-native') return 'npm install @mushi-mushi/react-native'
   if (fw === 'expo') return 'npx expo install @mushi-mushi/react-native expo-sensors'
   if (fw === 'capacitor') return 'npm install @mushi-mushi/capacitor && npx cap sync'
-  // All server-side integrations ship through @mushi-mushi/node.
-  if (isServerFramework(fw)) return 'npm install @mushi-mushi/node'
-  return `npm install @mushi-mushi/${fw} @mushi-mushi/web`
+  // React, Vue, Svelte, vanilla and every server runtime: one package.
+  return 'npm install mushi-mushi'
 }
 
 /* ── Snippet rendering ──────────────────────────────────────────────────
@@ -369,9 +366,9 @@ ${attrs.join('\n')}
     const isHeadless = cfg.trigger === 'manual' || cfg.trigger === 'hidden'
     const isAttach = cfg.trigger === 'attach'
     const triggerImport = isHeadless
-      ? `\nimport { MushiTrigger } from '@mushi-mushi/react'`
+      ? `\nimport { MushiTrigger } from 'mushi-mushi/react'`
       : isAttach
-        ? `\nimport { MushiAttach } from '@mushi-mushi/react'`
+        ? `\nimport { MushiAttach } from 'mushi-mushi/react'`
         : ''
     const triggerUsage = isHeadless
       ? `
@@ -396,7 +393,7 @@ ${attrs.join('\n')}
 
 // app/providers.tsx
 'use client'
-import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+import { MushiProvider } from 'mushi-mushi/react'${triggerImport}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -418,7 +415,7 @@ ${extras}    }}>${triggerUsage}
       return `// .env.local (keep it out of git):
 // VITE_MUSHI_PROJECT_ID=${projectId}
 // VITE_MUSHI_API_KEY=${key}
-import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+import { MushiProvider } from 'mushi-mushi/react'${triggerImport}
 
 function App() {
   return (
@@ -431,7 +428,7 @@ ${extras}    }}>${triggerUsage}
   )
 }`
     }
-    return `import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
+    return `import { MushiProvider } from 'mushi-mushi/react'${triggerImport}
 
 function App() {
   return (
@@ -451,7 +448,7 @@ ${extras}    }}>${triggerUsage}
     const widget = widgetLines(cfg, innerIndent)
     const capture = captureLines(cfg.capture, innerIndent)
     const extras = `${widget}${capture}`
-    return `import { Mushi } from '@mushi-mushi/web'
+    return `import { Mushi } from 'mushi-mushi'
 
 Mushi.init({
   projectId: '${projectId}',
@@ -468,7 +465,7 @@ ${extras}})`
    *
    *   2. The actual visual bug-capture widget (the floating trigger button +
    *      submission modal + console/network capture) lives in
-   *      @mushi-mushi/web and is mounted by Mushi.init(). The Vue and Svelte
+   *      the root `mushi-mushi` export and is mounted by Mushi.init(). The Vue and Svelte
    *      adapters explicitly DO NOT mount any UI — packages/vue/src/index.ts:87
    *      says so out loud.
    *
@@ -496,29 +493,29 @@ ${extras}}`
     : `credentials`
 
   if (fw === 'vue') {
-    return `import { MushiPlugin } from '@mushi-mushi/vue'
-import { Mushi } from '@mushi-mushi/web'
+    return `import { MushiPlugin } from 'mushi-mushi/vue'
+import { Mushi } from 'mushi-mushi'
 
 const credentials = { projectId: '${projectId}', apiKey: '${key}' }
 
 // Vue plugin: provides useMushi() composable + global Vue errorHandler.
 app.use(MushiPlugin, credentials)
 
-// @mushi-mushi/web: mounts the visual bug-capture widget (floating button + modal).
+// The mushi-mushi root export mounts the visual bug-capture widget (floating button + modal).
 // All widget/capture options go here — the Vue plugin doesn't render UI.
 Mushi.init(${mushiInitBody})`
   }
 
   if (fw === 'svelte') {
-    return `import { initMushi } from '@mushi-mushi/svelte'
-import { Mushi } from '@mushi-mushi/web'
+    return `import { initMushi } from 'mushi-mushi/svelte'
+import { Mushi } from 'mushi-mushi'
 
 const credentials = { projectId: '${projectId}', apiKey: '${key}' }
 
 // Svelte adapter: getMushi() / createMushiErrorHandler() for SvelteKit.
 initMushi(credentials)
 
-// @mushi-mushi/web: mounts the visual bug-capture widget (floating button + modal).
+// The mushi-mushi root export mounts the visual bug-capture widget (floating button + modal).
 // All widget/capture options go here — the Svelte adapter doesn't render UI.
 Mushi.init(${mushiInitBody})`
   }
@@ -590,7 +587,7 @@ ${props}
   }
 
   // ── Server-side frameworks ──────────────────────────────────────────────
-  // These use @mushi-mushi/node rather than the browser SDK. There is no
+  // These use mushi-mushi/node rather than the browser SDK. There is no
   // widget / screenshot / elementSelector — just error capture and
   // breadcrumbs via the MushiNodeClient. The SdkInstallCard hides the
   // widget preview and configurator for these frameworks.
@@ -604,7 +601,7 @@ ${props}
 
   if (fw === 'node') {
     return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 export const mushi = new MushiNodeClient({
   projectId: '${projectId}',
@@ -620,7 +617,7 @@ attachUnhandledHook({ client: mushi })`
 
   if (fw === 'express') {
     return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 export const mushi = new MushiNodeClient({
   projectId: '${projectId}',
@@ -631,7 +628,7 @@ export const mushi = new MushiNodeClient({
 attachUnhandledHook({ client: mushi })
 
 // ❷ In your Express app — mount AFTER all routes:
-import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import { mushiExpressErrorHandler } from 'mushi-mushi/node/express'
 import type { Express } from 'express'
 
 export function attachMushi(app: Express) {
@@ -643,7 +640,7 @@ export function attachMushi(app: Express) {
 
   if (fw === 'fastify') {
     return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 export const mushi = new MushiNodeClient({
   projectId: '${projectId}',
@@ -654,7 +651,7 @@ export const mushi = new MushiNodeClient({
 attachUnhandledHook({ client: mushi })
 
 // ❷ In your Fastify bootstrap:
-import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import { mushiFastifyPlugin } from 'mushi-mushi/node/fastify'
 import Fastify from 'fastify'
 
 const app = Fastify()
@@ -665,7 +662,7 @@ mushiFastifyPlugin(app, { client: mushi })`
 
   if (fw === 'hono') {
     return `// ❶ src/instrument.ts — load first: node --import ./dist/instrument.js
-import { MushiNodeClient, attachUnhandledHook } from '@mushi-mushi/node'
+import { MushiNodeClient, attachUnhandledHook } from 'mushi-mushi/node'
 
 export const mushi = new MushiNodeClient({
   projectId: '${projectId}',
@@ -677,7 +674,7 @@ attachUnhandledHook({ client: mushi })
 
 // ❷ In your Hono app:
 import { Hono } from 'hono'
-import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { mushiHonoErrorHandler } from 'mushi-mushi/node/hono'
 
 const app = new Hono()
 

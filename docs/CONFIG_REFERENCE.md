@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-11-11._
+_120 configuration knobs across 19 sections · last regenerated 2026-11-13._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1893,7 +1893,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Recommended** — `on`. The caption reminds the reporter to remove anything private before sending, which keeps capture on for apps with sensitive screens. Sources: [GDPR Article 5: data minimisation and storage limitation](https://gdpr-info.eu/art-5-gdpr/) (read 2026-10-22).
 
-**Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `api edge function (GET /v1/sdk/config)`, `@mushi-mushi/web widget`, `@mushi-mushi/react-native widget`
+**Where it lives** — table `project_settings.sdk_screenshot_sensitive_hint` · endpoint `PUT /v1/admin/projects/:id/sdk-config` · read by `api edge function (GET /v1/sdk/config)`, `@mushi-mushi/web widget (also shipped as mushi-mushi)`, `@mushi-mushi/react-native widget`
 
 **When to change** — Keep on for any app that captures screenshots — it is the reporter's chance to catch PII. Customize the copy to match your tone or compliance wording. Turn off only when screenshots are disabled or never contain user data.
 
@@ -1961,7 +1961,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Summary** — Picks which framework's install snippet you copy — React, Vue, Svelte, React Native, Expo, Capacitor, or Vanilla.
 
-**How it works** — Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.
+**How it works** — Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from the one `mushi-mushi` package (framework adapters at `mushi-mushi/react`, `/vue`, `/svelte`) via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.
 
 **Default** — `react`
 

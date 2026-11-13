@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional, runs on your own server:** you need it only to forward an error tool you already run into Mushi Mushi. It is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 Already send errors to Sentry, Crashlytics, Bugsnag or Rollbar? These webhook
 handlers forward them into [Mushi Mushi](https://github.com/kensaurus/mushi-mushi),
 so a crash lands in the same queue as your users' bug reports and gets the same
@@ -14,18 +16,18 @@ integration's Client Secret, and Sentry alerts go straight into the queue
 ([how](https://kensaur.us/mushi-mushi/docs/plugins/sentry#route-sentry-errors-into-mushi-mushi-inbound)).
 The other sources have no built-in receiver. For those you run one of these
 handlers on your own server and pass each event on, for example with
-`@mushi-mushi/node` and a project API key.
+`mushi-mushi/node` and a project API key.
 
 ## Quick start: Sentry to Hono
 
 ```bash
-npm i @mushi-mushi/adapters @mushi-mushi/node
+npm i @mushi-mushi/adapters mushi-mushi
 ```
 
 ```ts
 import { Hono } from 'hono';
 import { createSentryAdapter } from '@mushi-mushi/adapters/sentry';
-import { MushiNodeClient } from '@mushi-mushi/node';
+import { MushiNodeClient } from 'mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,

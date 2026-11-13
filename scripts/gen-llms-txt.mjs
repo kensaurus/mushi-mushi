@@ -122,9 +122,11 @@ const lines = [
   // Labelled with the package name: the pages' own titles say what they are
   // ("React & Next.js bug reporting SDK"), and this label is how the package
   // name stays a keyword in the MCP docs index (gen-mcp-docs-index.mjs).
-  curated("@mushi-mushi/web", "/sdks/web"),
-  curated("@mushi-mushi/react", "/sdks/react"),
-  curated("@mushi-mushi/node", "/sdks/node"),
+  // ADR 0060: `mushi-mushi` is the package users install; the scoped names
+  // stay keywords in each page's own text.
+  curated("mushi-mushi (browser SDK)", "/sdks/web"),
+  curated("mushi-mushi/react", "/sdks/react"),
+  curated("mushi-mushi/node", "/sdks/node"),
   curated("@mushi-mushi/cli", "/sdks/cli"),
   curated("@mushi-mushi/mcp", "/sdks/mcp"),
   curated("MCP tools reference", "/sdks/mcp-tools"),

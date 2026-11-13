@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
 
 ---
 title: Bug report widget for vanilla JavaScript
-description: "Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key."
+description: "Free, open-source bug report widget for any website, no framework needed: install mushi-mushi or paste one script tag, then add your project key."
 ---
 
 # Bug report widget for vanilla JavaScript
@@ -35,13 +35,13 @@ With the script tag, they go in `data-project` and `data-key` instead.
 ## 1. Install
 
 ```bash
-pnpm add @mushi-mushi/web
+pnpm add mushi-mushi
 ```
 
 ## 2. Initialize
 
 ```ts filename="src/mushi.ts"
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 export const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -106,5 +106,5 @@ Anything else (capture options, `beforeSend`, `captureEvent` from your own
 code) needs the npm package above. The console's **Script tag** install tab
 prints this tag with your project ID and key filled in.
 
-  See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
+  See [SDK reference → mushi-mushi](/sdks/web) for the full config
   surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).

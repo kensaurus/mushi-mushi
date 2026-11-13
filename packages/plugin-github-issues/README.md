@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For people who track work in GitHub Issues. This opens a GitHub issue
 (labelled `mushi-bug`) for each bug Mushi Mushi triages and closes it when
 Mushi Mushi applies the fix.

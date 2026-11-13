@@ -228,7 +228,7 @@ curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/healthz
 ## 7. Connect the SDK
 
 ```tsx
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 function App() {
   return (

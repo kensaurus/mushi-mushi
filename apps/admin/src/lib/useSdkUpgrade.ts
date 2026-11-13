@@ -30,7 +30,8 @@ export interface BumpEntry {
   package: string
   from: string
   to: string
-  migrateToWeb?: boolean
+  /** Scoped SDK only: the `mushi-mushi/<name>` path that ships the same code (ADR 0060). */
+  umbrellaPath?: string
 }
 
 /**

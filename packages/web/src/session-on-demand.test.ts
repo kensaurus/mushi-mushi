@@ -20,7 +20,7 @@ const PID = '00000000-0000-0000-0000-0000000000d1';
 const BASE: MushiConfig = { projectId: PID, apiKey: 'mushi_test_key_abcdefghijklmnop', trackSessions: 'on-demand' };
 
 function serveConfig(journeys?: { recordUntil: string; sampleRate: number }) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.includes('/v1/sdk/config')) {
       return new Response(JSON.stringify({ ok: true, data: { enabled: true, ...(journeys ? { journeys } : {}) } }), { status: 200 });
@@ -30,6 +30,16 @@ function serveConfig(journeys?: { recordUntil: string; sampleRate: number }) {
 }
 
 const later = () => new Date(Date.now() + 3_600_000).toISOString();
+
+/**
+ * The RequestInit of the last /v1/sdk/config fetch. Reads the spy, not
+ * globalThis.fetch: the SDK's network capture wraps fetch after init.
+ */
+function fetchedConfig(spy: ReturnType<typeof serveConfig>): RequestInit | undefined {
+  const calls = spy.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
+  const hit = [...calls].reverse().find(([input]) => String(input instanceof Request ? input.url : input).includes('/v1/sdk/config'));
+  return hit ? hit[1] ?? {} : undefined;
+}
 
 describe("trackSessions: 'on-demand'", () => {
   beforeEach(() => {
@@ -72,6 +82,21 @@ describe("trackSessions: 'on-demand'", () => {
     Mushi.init(BASE);
     await new Promise((r) => setTimeout(r, 50));
     expect(initSessionTracker).not.toHaveBeenCalled();
+  });
+
+  it('reads the config past the HTTP cache on demand, and normally otherwise', async () => {
+    // A cached response kept a stopped window alive for minutes (live test, 2026-11-13).
+    const onDemand = serveConfig();
+    Mushi.init(BASE);
+    await vi.waitFor(() => expect(fetchedConfig(onDemand)).toBeDefined());
+    expect(fetchedConfig(onDemand)?.cache).toBe('no-store');
+    try { Mushi.destroy(); } catch { /* none */ }
+    vi.restoreAllMocks();
+    localStorage.clear();
+    const standard = serveConfig();
+    Mushi.init({ projectId: PID, apiKey: BASE.apiKey });
+    await vi.waitFor(() => expect(fetchedConfig(standard)).toBeDefined());
+    expect(fetchedConfig(standard)?.cache).toBeUndefined();
   });
 
   it('skips a device outside the sample', async () => {

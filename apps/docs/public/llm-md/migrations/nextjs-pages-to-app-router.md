@@ -103,7 +103,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 export function ArticleReportButton({ articleId }: { articleId: string }) {
   const mushi = useMushiSdk()
   return <button onClick={() => void mushi?.captureEvent({ description: 'Article issue', metadata: { articleId } })}>Report</button>
@@ -129,4 +129,4 @@ export function ArticleReportButton({ articleId }: { articleId: string }) {
 - [Official Next.js App Router migration guide](https://nextjs.org/docs/app/guides/migrating/app-router-migration)
 - [Next.js App Router + CSP integration](/sdks/nextjs-app-router-csp)
 - [Next.js static export integration](/sdks/nextjs-static-export)
-- [`@mushi-mushi/react` SDK reference](/sdks/react)
+- [`mushi-mushi/react` SDK reference](/sdks/react)

@@ -48,7 +48,7 @@ bridged to JS via TurboModules (RN) or Capacitor plugins.
 | **Native fidelity** | WebView ceiling | ~Native, with effort |
 | **Migration size** | Smaller (you can wrap a static export) | Larger (every screen is rewritten) |
 | **Team profile** | Web devs only | React devs + some native fluency |
-| **Mushi Mushi support** | [`@mushi-mushi/capacitor`](/sdks/capacitor) + [`@mushi-mushi/web`](/sdks/web) for the WebView | [`@mushi-mushi/react-native`](/sdks/react-native) |
+| **Mushi Mushi support** | [`@mushi-mushi/capacitor`](/sdks/capacitor) + [`mushi-mushi`](/sdks/web) for the WebView | [`@mushi-mushi/react-native`](/sdks/react-native) |
 
 Pick **Capacitor** if you already have a strong web product and just need
 a native shell. Pick **React Native** if you want to ship native UX from
@@ -61,7 +61,7 @@ List every screen, native module, and platform integration. Mark each as: port t
     { id: 'shell', label: 'Pick the shell: Capacitor or React Native', content: <>Use the table above. The earlier you commit, the better; switching mid-migration costs 2-3x.</> },
     { id: 'design-system', label: 'Port the design system', content: <>Tokens (colors, type scale, spacing) come over first. Components follow. Aim for visual parity within ± 2 px before porting any screens.</> },
     { id: 'pilot', label: 'Pilot one user-facing flow end-to-end', content: <>Pick a low-risk flow (e.g., Settings). Ship it as a hybrid screen embedded in the existing native app — your shell can host both worlds during the migration.</> },
-    { id: 'mushi', label: 'Wire Mushi Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi Mushi SDKs and add @mushi-mushi/capacitor (or @mushi-mushi/web for WebView-only surfaces). Both report to the same project; filter Reports by SDK to tell them apart.</> },
+    { id: 'mushi', label: 'Wire Mushi Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi Mushi SDKs and add @mushi-mushi/capacitor (or mushi-mushi for WebView-only surfaces). Both report to the same project; filter Reports by SDK to tell them apart.</> },
     { id: 'screen-rollout', label: 'Roll out screen-by-screen behind a feature flag', content: <>Each screen flips from native to hybrid behind a flag. Monitor crash + complaint rate per flag, roll back individual screens when needed.</> },
     { id: 'sunset', label: 'Sunset native screens once their hybrid versions are stable', content: <>Delete the Swift / Kotlin code only after the hybrid version has been at 100 % rollout for ≥ 30 days.</> },
 

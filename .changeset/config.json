@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["@mushi-mushi/core", "@mushi-mushi/web", "@mushi-mushi/react"]],
+  "linked": [["@mushi-mushi/core", "@mushi-mushi/web", "@mushi-mushi/react", "mushi-mushi"]],
   "access": "public",
   "baseBranch": "master",
   "updateInternalDependencies": "patch",

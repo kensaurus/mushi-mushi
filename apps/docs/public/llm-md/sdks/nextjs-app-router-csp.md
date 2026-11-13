@@ -20,7 +20,7 @@ Mount Mushi Mushi inside a client component:
 'use client'
 
 import { useEffect } from 'react'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 export function MushiClient() {
   useEffect(() => {

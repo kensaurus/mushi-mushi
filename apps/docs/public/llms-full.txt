@@ -322,7 +322,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -354,7 +354,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -724,7 +724,7 @@ Angular keeps them in an environment file, shown below.
 ## Install and register
 
 ```bash
-pnpm add @mushi-mushi/angular
+pnpm add mushi-mushi
 ```
 
 Angular CLI does not expose `import.meta.env`, so keep the project ID and the
@@ -743,7 +743,7 @@ Register Mushi Mushi once in your app config. `provideMushi()` provides
 
 ```ts filename="src/app/app.config.ts"
 import { type ApplicationConfig } from '@angular/core'
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 import { environment } from '../environments/environment'
 
 export const appConfig: ApplicationConfig = {
@@ -759,7 +759,7 @@ export const appConfig: ApplicationConfig = {
 
   ```ts snippet-skip="1.0.2 fallback; the same file as the example above"
   import { ErrorHandler, type ApplicationConfig } from '@angular/core'
-  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from 'mushi-mushi/angular'
   import { environment } from '../environments/environment'
 
   const mushiConfig: MushiConfig = {
@@ -780,7 +780,7 @@ Report from a component:
 
 ```ts filename="src/app/feedback-button.component.ts"
 import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 @Component({
   selector: 'app-feedback-button',
@@ -795,7 +795,7 @@ export class FeedbackButtonComponent {
 }
 ```
 
-API detail: [`@mushi-mushi/angular`](/sdks/angular). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/angular`](/sdks/angular). Widget behavior: [`mushi-mushi`](/sdks/web).
 
 ---
 
@@ -1744,7 +1744,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/react
 
 ---
 title: Bug report widget for React
-description: "Free, open-source bug report widget for React and Next.js: install @mushi-mushi/react, add your project key, and get a plain-English diagnosis per report."
+description: "Free, open-source bug report widget for React and Next.js: install mushi-mushi, add your project key, and get a plain-English diagnosis per report."
 ---
 
 # Bug report widget for React
@@ -1785,17 +1785,17 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`
 ## 1. Install
 
 ```bash
-pnpm add @mushi-mushi/react
-# or: npm install @mushi-mushi/react
+pnpm add mushi-mushi
+# or: npm install mushi-mushi
 ```
 
-`@mushi-mushi/react` re-exports from `@mushi-mushi/core` and `@mushi-mushi/web`,
-so you only need this one dependency.
+`mushi-mushi` carries the React bindings (`mushi-mushi/react`), the web SDK and
+the core types, so you only need this one dependency.
 
 ## 2. Wrap your app
 
 ```tsx filename="src/main.tsx"
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 import { App } from './App'
 
 export function Root() {
@@ -1819,7 +1819,7 @@ straight into `app/layout.tsx`:
 
 ```tsx filename="app/providers.tsx"
 'use client'
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -1862,7 +1862,7 @@ Component cannot pass functions to a client one.
 Add a hook anywhere in your tree to capture programmatic reports:
 
 ```tsx filename="src/components/CrashFallback.tsx"
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 
 export function CrashFallback({ error }: { error: Error }) {
   const mushi = useMushiSdk()
@@ -1899,7 +1899,7 @@ the console's **Connect** page.
 ## Next steps
 
 - [Concepts → Classification pipeline](/concepts/classification)
-- [SDK reference → @mushi-mushi/react](/sdks/react)
+- [SDK reference → mushi-mushi/react](/sdks/react)
 - [Plugins → Receive a webhook in your own service](/plugins/building)
 
 ---
@@ -2058,7 +2058,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/svelte
 
 ---
 title: Bug report widget for Svelte and SvelteKit
-description: "Free, open-source bug report widget for Svelte and SvelteKit: install @mushi-mushi/svelte and call initMushi from hooks.client.ts or a root layout."
+description: "Free, open-source bug report widget for Svelte and SvelteKit: install mushi-mushi and call initMushi from hooks.client.ts or a root layout."
 ---
 
 # Bug report widget for Svelte and SvelteKit
@@ -2086,11 +2086,11 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
 ## Install and initialize
 
 ```bash
-pnpm add @mushi-mushi/svelte
+pnpm add mushi-mushi
 ```
 
 ```ts
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -2100,7 +2100,7 @@ initMushi({
 
 Call `initMushi` from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 
-API detail: [`@mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`mushi-mushi`](/sdks/web).
 
 ---
 
@@ -2413,7 +2413,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/vue
 
 ---
 title: Bug report widget for Vue 3
-description: "Free, open-source bug report widget for Vue 3: install @mushi-mushi/vue and register MushiPlugin with your project ID and public API key in main.ts."
+description: "Free, open-source bug report widget for Vue 3: install mushi-mushi and register MushiPlugin with your project ID and public API key in main.ts."
 ---
 
 # Bug report widget for Vue 3
@@ -2441,12 +2441,12 @@ Put them in `.env.local` as `VITE_MUSHI_PROJECT_ID` and `VITE_MUSHI_API_KEY`.
 ## Install and register the plugin
 
 ```bash
-pnpm add @mushi-mushi/vue
+pnpm add mushi-mushi
 ```
 
 ```ts filename="src/main.ts"
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 createApp(App)
@@ -2457,7 +2457,7 @@ createApp(App)
   .mount('#app')
 ```
 
-API detail: [`@mushi-mushi/vue`](/sdks/vue). Widget behavior: [`@mushi-mushi/web`](/sdks/web).
+API detail: [`mushi-mushi/vue`](/sdks/vue). Widget behavior: [`mushi-mushi`](/sdks/web).
 
 ---
 
@@ -2467,7 +2467,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/web
 
 ---
 title: Bug report widget for vanilla JavaScript
-description: "Free, open-source bug report widget for any website, no framework needed: install @mushi-mushi/web or paste one script tag, then add your project key."
+description: "Free, open-source bug report widget for any website, no framework needed: install mushi-mushi or paste one script tag, then add your project key."
 ---
 
 # Bug report widget for vanilla JavaScript
@@ -2498,13 +2498,13 @@ With the script tag, they go in `data-project` and `data-key` instead.
 ## 1. Install
 
 ```bash
-pnpm add @mushi-mushi/web
+pnpm add mushi-mushi
 ```
 
 ## 2. Initialize
 
 ```ts filename="src/mushi.ts"
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 export const mushi = Mushi.init({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -2569,7 +2569,7 @@ Anything else (capture options, `beforeSend`, `captureEvent` from your own
 code) needs the npm package above. The console's **Script tag** install tab
 prints this tag with your project ID and key filled in.
 
-  See [SDK reference → @mushi-mushi/web](/sdks/web) for the full config
+  See [SDK reference → mushi-mushi](/sdks/web) for the full config
   surface (PII scrubbing, rate limits, custom triggers, on-device pre-filter).
 
 ---
@@ -4793,7 +4793,7 @@ device to a merged PR.
 
 | ⓵ SDKs (client) | ⓶ Edge gateway | ⓷ Data | ⓸ External |
 |---|---|---|---|
-| `@mushi-mushi/web` + framework adapters | `api` *(Hono router)* | Postgres + RLS | Sentry *(User-Feedback webhook)* |
+| `mushi-mushi` + framework subpaths | `api` *(Hono router)* | Postgres + RLS | Sentry *(User-Feedback webhook)* |
 | `@mushi-mushi/react-native` | `fast-filter` *(spam triage)* | `pgvector` embeddings | Slack |
 | Native iOS / Android / Flutter | `classify-report` *(2-stage LLM)* | Apache AGE graph | GitHub *(scoped App)* |
 | `@mushi-mushi/capacitor` | `judge-batch` *(nightly cron)* | `blast_radius_cache` MV | Langfuse *(traces)* |
@@ -5499,7 +5499,7 @@ User feels a bug (shakes phone)
 
 ### ① Capture
 
-The SDK widget (`@mushi-mushi/web`, `@mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi Mushi captures:
+The SDK widget (`mushi-mushi`, `mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi Mushi captures:
 
 - A screenshot of the exact screen they were looking at
 - Their description in their own words
@@ -6280,7 +6280,7 @@ self-host is what we run; the hosted service adds only its own tuning data
 
 The widget runs inside *your* application. A copyleft SDK would force your app's
 license, which is unacceptable — so every package you ship to your users is MIT.
-Drop `@mushi-mushi/react` into a closed-source product with zero obligations.
+Drop `mushi-mushi` into a closed-source product with zero obligations.
 
 ### Why AGPLv3 for the server?
 
@@ -6427,7 +6427,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.31.0`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.31.1`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -6901,7 +6901,7 @@ The rewards system inherits all guarantees from the
 
 Register webhook endpoints in the admin console on the **Rewards** page. All
 payloads are `POST`, `Content-Type: application/json`, and signed with
-`X-Mushi-Signature: sha256=`. `@mushi-mushi/node`
+`X-Mushi-Signature: sha256=`. `mushi-mushi/node`
 exports `createMushiRewardsHandler` to verify and route them.
 
 Every payload carries `event`, `end_user_id`, `occurred_at` and `webhookId`, plus
@@ -7008,15 +7008,15 @@ fresh report session.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| Top banner vanished after saving console config | Host had `trigger: 'banner'`; old server always sent `launcher: 'auto'` | Upgrade to latest `@mushi-mushi/web`. Host banner wiring now wins over console defaults. |
+| Top banner vanished after saving console config | Host had `trigger: 'banner'`; old server always sent `launcher: 'auto'` | Upgrade to the latest `mushi-mushi` (or `@mushi-mushi/web`). Host banner wiring now wins over console defaults. |
 | Console toggle has no effect | `runtimeConfig: false` or SDK never heartbeats | Set `runtimeConfig: 'auto'` and confirm project ID + API key |
 | Capture button missing | Host or console disabled that capture mode | Check `capture.screenshot` / `capture.elementSelector` in init and SDK install card |
-| Reporter lost typed text mid-report | Pre-fix SDK rebuild | Upgrade `@mushi-mushi/web` — drafts persist across re-renders |
+| Reporter lost typed text mid-report | Pre-fix SDK rebuild | Upgrade `mushi-mushi` (or `@mushi-mushi/web`) — drafts persist across re-renders |
 
 ## Related
 
 - [Trigger modes](/concepts/trigger-modes) — launcher posture matrix
-- [@mushi-mushi/web](/sdks/web) — SDK reference
+- [mushi-mushi](/sdks/web) — SDK reference
 - [Screenshot preview deep-dive](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SDK_SCREENSHOT_PREVIEW.md)
 
 ---
@@ -7165,7 +7165,7 @@ corner stamp, edge tab, help menu, or your own custom button.
 ## Bring Your Own Button
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: '00000000-0000-0000-0000-000000000000',
@@ -7272,15 +7272,15 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 
 | Package | Version |
 | --- | --- |
-| @mushi-mushi/core, @mushi-mushi/web | 1.34.x |
-| @mushi-mushi/react | 1.34.x |
+| @mushi-mushi/core, @mushi-mushi/web | 1.35.x |
+| @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.38.x |
+| @mushi-mushi/cli | 0.39.x |
 | @mushi-mushi/mcp | 0.31.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 0.8.x |
+| mushi-mushi (launcher) | 1.35.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
@@ -7292,13 +7292,13 @@ each tier means and where each package sits.
 
 | Tier | What it means | Packages |
 | --- | --- | --- |
-| **Battle-tested** | Runs in production apps daily, including the Mushi Mushi console itself; full capture surface; deep test suites | `@mushi-mushi/core`, `@mushi-mushi/web`, `@mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
-| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `@mushi-mushi/node`, `@mushi-mushi/adapters` |
-| **Functional wrapper** | Thin framework binding over `@mushi-mushi/web` (100 to 200 lines each); everything documented works, but expect fewer framework-specific niceties | `@mushi-mushi/vue`, `@mushi-mushi/svelte`, `@mushi-mushi/angular` |
+| **Battle-tested** | Runs in production apps daily, including the Mushi Mushi console itself; full capture surface; deep test suites | `mushi-mushi` (web SDK), `mushi-mushi/core`, `mushi-mushi/react`, `@mushi-mushi/react-native`, `@mushi-mushi/cli`, `@mushi-mushi/mcp` |
+| **Solid** | Complete for the documented surface, used in real apps, smaller scope | `@mushi-mushi/capacitor`, `mushi-mushi/node`, `@mushi-mushi/adapters` |
+| **Functional wrapper** | Thin framework binding over the `mushi-mushi` web SDK (100 to 200 lines each); everything documented works, but expect fewer framework-specific niceties | `mushi-mushi/vue`, `mushi-mushi/svelte`, `mushi-mushi/angular` |
 | **Native preview** | Full native implementations, not yet published to CocoaPods, Maven Central or pub.dev; install from the GitHub repo | iOS (Swift), Android (Kotlin), Flutter |
 
 If a "functional wrapper" is missing something you need, the underlying
-[`@mushi-mushi/web`](/sdks/web) API is always available alongside it, and
+[`mushi-mushi`](/sdks/web) API is always available alongside it, and
 [issues](https://github.com/kensaurus/mushi-mushi/issues) for framework
 bindings get prioritized by demand.
 
@@ -7308,19 +7308,19 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/core`](/sdks/core) | npm | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
-| [`@mushi-mushi/web`](/sdks/web) | npm | Browser SDK: report widget, breadcrumbs, session replay, optional WASM pre-classifier |
-| [`@mushi-mushi/react`](/sdks/react) | npm | React provider + hooks + `` |
-| [`@mushi-mushi/vue`](/sdks/vue) | npm | Vue 3 plugin + composables |
-| [`@mushi-mushi/svelte`](/sdks/svelte) | npm | Svelte stores + context |
-| [`@mushi-mushi/angular`](/sdks/angular) | npm | Angular service, error handler and `provideMushi()` |
+| [`mushi-mushi`](/sdks/web) | npm | Browser SDK: report widget, breadcrumbs, session replay, optional WASM pre-classifier |
+| [`mushi-mushi/core`](/sdks/core) | npm (subpath of `mushi-mushi`) | Shared primitives: `normaliseThrown`, `createBreadcrumbBuffer`, `captureEnvironment` |
+| [`mushi-mushi/react`](/sdks/react) | npm (subpath of `mushi-mushi`) | React provider + hooks + `` |
+| [`mushi-mushi/vue`](/sdks/vue) | npm (subpath of `mushi-mushi`) | Vue 3 plugin + composables |
+| [`mushi-mushi/svelte`](/sdks/svelte) | npm (subpath of `mushi-mushi`) | Svelte stores + context |
+| [`mushi-mushi/angular`](/sdks/angular) | npm (subpath of `mushi-mushi`) | Angular service, error handler and `provideMushi()` |
 | [`@mushi-mushi/adapters`](/sdks/adapters) | npm | Inbound observability webhooks (Sentry, Datadog, Bugsnag, …) |
 
 ## Server
 
 | Package | Registry | Description |
 | --- | --- | --- |
-| [`@mushi-mushi/node`](/sdks/node) | npm | Forward unhandled exceptions + HTTP error handlers |
+| [`mushi-mushi/node`](/sdks/node) | npm (subpath of `mushi-mushi`) | Forward unhandled exceptions + HTTP error handlers |
 
 ## Mobile & native
 
@@ -7337,7 +7337,7 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
-| [`mushi-mushi`](/sdks/launcher) | npm | Launcher: the `npx mushi-mushi` setup wizard |
+| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard plus the web, framework and Node SDKs above |
 | [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server: triage reports from Cursor, Claude, Codex |
 | [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | GitHub Action: triage-coverage gate, fix dispatch, pre-release gates, crawler sign-in |
 | [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lint rules for empty event handlers (`no-dead-handler`) and leftover mock data (`no-mock-leak`) |
@@ -7365,11 +7365,8 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 ## Installation
 
 ```bash
-# Minimal (browser app)
-npm install @mushi-mushi/web
-
-# React app
-npm install @mushi-mushi/react
+# Browser app, React, Vue, Svelte, Angular or Node
+npm install mushi-mushi
 
 # React Native
 npm install @mushi-mushi/react-native
@@ -7377,6 +7374,8 @@ npm install @mushi-mushi/react-native
 # MCP server
 npx @mushi-mushi/mcp
 ```
+
+Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another `@mushi-mushi/*` SDK? It keeps working and keeps getting updates. `mushi-mushi` ships the same code; switch when you like by changing the import path.
 
 ## Upgrade from 0.x
 
@@ -7419,14 +7418,14 @@ pnpm add @mushi-mushi/adapters
 | AWS CloudWatch (via SNS)      | `translateCloudWatch`        | `createCloudWatchAdapter`         |
 | Opsgenie                      | `translateOpsGenie`          | `createOpsGenieAdapter`           |
 
-Every translator returns a `MushiCaptureEventInput` (from `@mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
+Every translator returns a `MushiCaptureEventInput` (from `mushi-mushi/core`) so you can route the result to any sink: the hosted Mushi Mushi API, a queue, your own database, a fan-out of several. Subpath imports are supported, e.g. `@mushi-mushi/adapters/cloudwatch`.
 
 ## Quick start: Datadog → Hono
 
 ```ts
 import { Hono } from 'hono';
 import { createDatadogWebhookHandler } from '@mushi-mushi/adapters';
-import { MushiNodeClient } from '@mushi-mushi/node';
+import { MushiNodeClient } from 'mushi-mushi/node';
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -7524,7 +7523,7 @@ or experiments, run PostHog beside it; see
 ## Quick start
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -7541,7 +7540,7 @@ mushi.identify('usr_42')                           // stitches earlier anonymous
 React:
 
 ```tsx
-import { useMushiTrack } from '@mushi-mushi/react'
+import { useMushiTrack } from 'mushi-mushi/react'
 
 function BuyButton() {
   const track = useMushiTrack()
@@ -7732,7 +7731,7 @@ The SDK's vocabulary for Mushi Mushi's own funnel lives in
 trio `loop_impression`, `loop_click`, `loop_signup`. It is a worked example of
 the naming rules, not something your app needs to emit.
 
-**Related:** [`@mushi-mushi/web`](/sdks/web) · [`@mushi-mushi/react`](/sdks/react) ·
+**Related:** [`mushi-mushi`](/sdks/web) · [`mushi-mushi/react`](/sdks/react) ·
 [Runtime config](/concepts/runtime-config)
 
 ---
@@ -7829,22 +7828,22 @@ nothing.
 
 ---
 
-## @mushi-mushi/angular
+## mushi-mushi/angular
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/angular
 
 ---
-title: '@mushi-mushi/angular'
-description: API reference for @mushi-mushi/angular, the Mushi Mushi Angular SDK. provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in Angular 17+.
+title: 'mushi-mushi/angular'
+description: API reference for mushi-mushi/angular, the Mushi Mushi Angular SDK. provideMushi(), MushiService, MushiErrorHandler and the MUSHI_CONFIG token in Angular 17+.
 ---
 
-# `@mushi-mushi/angular`
+# `mushi-mushi/angular`
 
-The Mushi Mushi Angular service and error handler over [`@mushi-mushi/web`](/sdks/web). Shared
+The Mushi Mushi Angular service and error handler over [`mushi-mushi`](/sdks/web). Shared
 wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/angular
+npm install mushi-mushi
 ```
 
 See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough.
@@ -7852,7 +7851,7 @@ See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough
 ## API surface
 
 ```ts
-import { provideMushi, MushiService } from '@mushi-mushi/angular'
+import { provideMushi, MushiService } from 'mushi-mushi/angular'
 ```
 
 | Export | Purpose |
@@ -7868,7 +7867,7 @@ import { provideMushi, MushiService } from '@mushi-mushi/angular'
 ```ts
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser'
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 import { AppComponent } from './app/app.component'
 import { environment } from './environments/environment'
 
@@ -7888,7 +7887,7 @@ On the server (Angular SSR) `MushiService` skips initialisation.
 
   ```ts snippet-skip="1.0.2 fallback; needs the reader's environment file"
   import { ErrorHandler } from '@angular/core'
-  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from '@mushi-mushi/angular'
+  import { MUSHI_CONFIG, MushiErrorHandler, MushiService, type MushiConfig } from 'mushi-mushi/angular'
 
   const providers = [
     { provide: MUSHI_CONFIG, useValue: { projectId: environment.mushiProjectId, apiKey: environment.mushiApiKey } },
@@ -7904,7 +7903,7 @@ On the server (Angular SSR) `MushiService` skips initialisation.
 
 ```ts
 import { Component, inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 @Component({ selector: 'app-feedback-button', template: '<button (click)="reportIssue()">Report</button>' })
 export class FeedbackButtonComponent {
@@ -7922,14 +7921,15 @@ Call `identify()` on `MushiService` when the signed-in user changes (1.0.3 and l
 
 ```ts
 import { inject } from '@angular/core'
-import { MushiService } from '@mushi-mushi/angular'
+import { MushiService } from 'mushi-mushi/angular'
 
 const mushi = inject(MushiService)
 mushi.identify(user.id, { email: user.email, name: user.name })
 ```
 
-On 1.0.2 and earlier, `MushiService` has no `identify()`. Use the web SDK
-instance instead: add `@mushi-mushi/web` to your own dependencies (pnpm will
+On `@mushi-mushi/angular` 1.0.2 and earlier, `MushiService` has no `identify()`.
+Use the web SDK instance instead: import `Mushi` from `mushi-mushi` (on the
+scoped packages, add `@mushi-mushi/web` to your own dependencies; pnpm will
 not resolve it through the Angular package), then call
 `Mushi.getInstance()?.setUser({ id: user.id, email: user.email })`.
 
@@ -9022,16 +9022,16 @@ machine.
 
 ---
 
-## @mushi-mushi/core
+## mushi-mushi/core
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/core
 
 ---
-title: '@mushi-mushi/core'
-description: Reference for @mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.
+title: 'mushi-mushi/core'
+description: Reference for mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.
 ---
 
-# `@mushi-mushi/core`
+# `mushi-mushi/core`
 
 Shared types, HTTP client, offline queue helpers, and config used by every
 Mushi Mushi framework SDK. It is framework-agnostic, and you rarely install it
@@ -9040,7 +9040,7 @@ directly.
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/core
+pnpm add mushi-mushi
 ```
 
 Every SDK needs a project ID and an API key.
@@ -9070,7 +9070,7 @@ Get both values in one step by running `mushi login` or by creating a project in
 the [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/projects). The ID and
 key are shown together on the success screen after project creation.
 
-Sampling + `beforeSend` examples: [`@mushi-mushi/web`](/sdks/web#sampling--beforesend).
+Sampling + `beforeSend` examples: [`mushi-mushi`](/sdks/web#sampling--beforesend).
 
 ### `MushiWidgetConfig` (selected keys)
 
@@ -9121,7 +9121,7 @@ it in your own `beforeSend` hook, server code, or logs. It runs entirely in
 your process, so scrubbed values never leave the client.
 
 ```ts
-import { scrubPii, scrubUrl, createPiiScrubber } from '@mushi-mushi/core'
+import { scrubPii, scrubUrl, createPiiScrubber } from 'mushi-mushi/core'
 
 // Free text → typed placeholders
 scrubPii('email jake@x.com or call +1 415 555 0100')
@@ -9197,7 +9197,7 @@ generated copy, so the two scrubbers can't drift.
 ### Region resolution
 
 ```ts
-import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from 'mushi-mushi/core'
 
 const url = await resolveRegionEndpoint({
   projectId: 'YOUR_PROJECT_ID',
@@ -9425,24 +9425,24 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/framework-wrappers
 
 ---
 title: Framework wrappers (Vue / Svelte / Angular)
-description: How the Mushi Mushi Vue, Svelte and Angular packages wrap @mushi-mushi/web, how each one boots the SDK once, and where to find capture and widget options.
+description: How mushi-mushi/vue, /svelte and /angular wrap the web SDK, how each one boots the SDK once, and where to find capture and widget options.
 ---
 
 # Framework wrappers
 
-The Mushi Mushi packages `@mushi-mushi/vue`, `@mushi-mushi/svelte`, and
-`@mushi-mushi/angular` are thin idiomatic shells over [`@mushi-mushi/web`](/sdks/web).
-Each package depends on `web` and calls `Mushi.init` once, so do not call
+The Mushi Mushi entry points `mushi-mushi/vue`, `mushi-mushi/svelte`, and
+`mushi-mushi/angular` are thin idiomatic shells over [`mushi-mushi`](/sdks/web).
+Each one wraps the web SDK and calls `Mushi.init` once, so do not call
 `Mushi.init` a second time.
 
-| Package | Boot | Docs |
+| Import | Boot | Docs |
 | --- | --- | --- |
-| [`@mushi-mushi/vue`](/sdks/vue) | `app.use(MushiPlugin, config)` | [Quickstart](/quickstart/vue) |
-| [`@mushi-mushi/svelte`](/sdks/svelte) | `initMushi(config)` | [Quickstart](/quickstart/svelte) |
-| [`@mushi-mushi/angular`](/sdks/angular) | `providers: [provideMushi(config)]` (1.0.3+; factory providers on 1.0.2 and earlier) | [Quickstart](/quickstart/angular) |
+| [`mushi-mushi/vue`](/sdks/vue) | `app.use(MushiPlugin, config)` | [Quickstart](/quickstart/vue) |
+| [`mushi-mushi/svelte`](/sdks/svelte) | `initMushi(config)` | [Quickstart](/quickstart/svelte) |
+| [`mushi-mushi/angular`](/sdks/angular) | `providers: [provideMushi(config)]` (1.0.3+; factory providers on 1.0.2 and earlier) | [Quickstart](/quickstart/angular) |
 
 For capture, widget triggers, runtime config, and privacy, read the
-[web SDK](/sdks/web). React has its own package: [`@mushi-mushi/react`](/sdks/react).
+[web SDK](/sdks/web). React has its own entry point: [`mushi-mushi/react`](/sdks/react).
 
 ---
 
@@ -9897,7 +9897,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.0`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.1`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -10297,7 +10297,7 @@ Mount Mushi Mushi inside a client component:
 'use client'
 
 import { useEffect } from 'react'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 export function MushiClient() {
   useEffect(() => {
@@ -10389,10 +10389,10 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/node
 
 ---
 title: Node.js server error reporting SDK
-description: Send Node server errors to Mushi Mushi with @mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
+description: Send Node server errors to Mushi Mushi with mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
 ---
 
-# `@mushi-mushi/node`
+# `mushi-mushi/node`
 
 The Mushi Mushi server-side SDK for Node.js apps. It forwards unhandled
 exceptions, adds HTTP error handlers for Express, Fastify and Hono, and tags
@@ -10403,7 +10403,7 @@ each handler report with the request method, URL and trace context (W3C
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/node
+pnpm add mushi-mushi
 ```
 
 ## Create a client
@@ -10411,7 +10411,7 @@ pnpm add @mushi-mushi/node
 Every handler below takes the same client:
 
 ```ts
-import { MushiNodeClient } from '@mushi-mushi/node'
+import { MushiNodeClient } from 'mushi-mushi/node'
 
 export const client = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -10425,7 +10425,7 @@ export const client = new MushiNodeClient({
 
 ```ts
 import express from 'express'
-import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import { mushiExpressErrorHandler } from 'mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
@@ -10436,7 +10436,7 @@ app.use(mushiExpressErrorHandler({ client })) // mount LAST so it sees every oth
 
 ```ts
 import Fastify from 'fastify'
-import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import { mushiFastifyPlugin } from 'mushi-mushi/node/fastify'
 
 const app = Fastify()
 mushiFastifyPlugin(app, { client })
@@ -10449,7 +10449,7 @@ second argument. Mushi Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'
-import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { mushiHonoErrorHandler } from 'mushi-mushi/node/hono'
 
 const app = new Hono()
 app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
@@ -10460,7 +10460,7 @@ app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error',
 Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 
 ```ts
-import { attachUnhandledHook } from '@mushi-mushi/node'
+import { attachUnhandledHook } from 'mushi-mushi/node'
 
 attachUnhandledHook({ client })
 ```
@@ -10471,7 +10471,7 @@ Use the client directly when you want to report outside the request cycle
 (cron jobs, queue workers, integration failures):
 
 ```ts
-import { MushiNodeClient } from '@mushi-mushi/node'
+import { MushiNodeClient } from 'mushi-mushi/node'
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -10719,12 +10719,12 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/react
 
 ---
 title: React & Next.js bug reporting SDK
-description: Reference for @mushi-mushi/react, Mushi Mushi for React. MushiProvider, useMushi, useMushiSdk and useMushiReport hooks, user identity, rewards hooks and badge.
+description: Reference for mushi-mushi/react, Mushi Mushi for React. MushiProvider, useMushi, useMushiSdk and useMushiReport hooks, user identity, rewards hooks and badge.
 ---
 
-# `@mushi-mushi/react`
+# `mushi-mushi/react`
 
-The Mushi Mushi React provider and hooks. Wraps `@mushi-mushi/web`.
+The Mushi Mushi React provider and hooks. Wraps the `mushi-mushi` web SDK.
 
 ```tsx
 import {
@@ -10735,7 +10735,7 @@ import {
   useReputation,
   useTier,
   MushiRewardsBadge,
-} from '@mushi-mushi/react'
+} from 'mushi-mushi/react'
 ```
 
 | Export                  | Purpose                                               |
@@ -10764,7 +10764,7 @@ inside a `useEffect` that watches your auth context:
 
 ```tsx filename="lib/auth-watcher.tsx"
 import { useEffect } from 'react'
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 import { useSession } from './auth'  // your auth hook
 
 export function AuthWatcher() {
@@ -10793,7 +10793,7 @@ provider has initialised, and the effect re-runs once it is ready.
 ## Enabling the Rewards program
 
 ```tsx filename="app/layout.tsx"
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10823,7 +10823,7 @@ Returns the current user's reputation totals, or `null` if rewards are
 disabled or no user has been identified.
 
 ```tsx
-import { useReputation } from '@mushi-mushi/react'
+import { useReputation } from 'mushi-mushi/react'
 
 function PointsDisplay() {
   const reputation = useReputation()
@@ -10857,7 +10857,7 @@ interface MushiReputationResult {
 Returns the current user's tier, or `null`.
 
 ```tsx
-import { useTier } from '@mushi-mushi/react'
+import { useTier } from 'mushi-mushi/react'
 
 function TierBanner() {
   const tier = useTier()
@@ -10886,7 +10886,7 @@ Drop-in badge that renders the current user's tier name (and optionally
 their point total). It is polymorphic and renders as a `` by default.
 
 ```tsx
-import { MushiRewardsBadge } from '@mushi-mushi/react'
+import { MushiRewardsBadge } from 'mushi-mushi/react'
 
 // Minimal: just the tier name
 <MushiRewardsBadge />
@@ -10918,7 +10918,7 @@ A small dot before the name is coloured by tier slug (`free` → grey,
 Use the SDK instance to record a custom rewards activity:
 
 ```tsx
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 
 function LessonCard({ lessonId }) {
   const sdk = useMushiSdk()
@@ -11354,7 +11354,7 @@ function ProfileBadge() {
 }
 ```
 
-The `MushiRewardsBadge` component from `@mushi-mushi/react` is web-only
+The `MushiRewardsBadge` component from `mushi-mushi/react` is web-only
 (uses ``). On React Native, render tier data from `getTier()` and
 `getReputation()` directly using your own `` / `` elements.
 
@@ -11375,7 +11375,7 @@ Initialize Sentry first, then Mushi Mushi. Mushi Mushi reads Sentry event and re
 
 ```ts
 import * as Sentry from '@sentry/browser'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
@@ -11451,22 +11451,22 @@ GitHub repo (SKILL.md files)
 
 ---
 
-## @mushi-mushi/svelte
+## mushi-mushi/svelte
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/svelte
 
 ---
-title: '@mushi-mushi/svelte'
-description: Reference for @mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.
+title: 'mushi-mushi/svelte'
+description: Reference for mushi-mushi/svelte, the Mushi Mushi Svelte SDK. initMushi, getMushi and the SvelteKit handleError helpers that send browser errors to your queue.
 ---
 
-# `@mushi-mushi/svelte`
+# `mushi-mushi/svelte`
 
-Mushi Mushi boot helpers for Svelte and SvelteKit over [`@mushi-mushi/web`](/sdks/web). Shared
+Mushi Mushi boot helpers for Svelte and SvelteKit over [`mushi-mushi`](/sdks/web). Shared
 wrapper notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/svelte
+npm install mushi-mushi
 ```
 
 See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
@@ -11474,7 +11474,7 @@ See [Quickstart → Svelte](/quickstart/svelte) for the short install path.
 ## API surface
 
 ```ts
-import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelte'
+import { initMushi, getMushi, createMushiErrorHandler } from 'mushi-mushi/svelte'
 ```
 
 | Export | Purpose |
@@ -11486,12 +11486,12 @@ import { initMushi, getMushi, createMushiErrorHandler } from '@mushi-mushi/svelt
 
 The error helpers send only when an SDK instance exists. Because `initMushi()`
 does nothing on the server, a helper used in `hooks.server.ts` does not send
-server errors; use [`@mushi-mushi/node`](/sdks/node) for those.
+server errors; use [`mushi-mushi/node`](/sdks/node) for those.
 
 ## Setup
 
 ```ts
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 
 initMushi({
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -11504,7 +11504,7 @@ Call from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
 ## Submitting a report
 
 ```ts
-import { getMushi } from '@mushi-mushi/svelte'
+import { getMushi } from 'mushi-mushi/svelte'
 
 const mushi = getMushi()
 await mushi.captureEvent({
@@ -11700,22 +11700,22 @@ out, and opens one draft PR. Its pushes go to `mushi-ux/**`, so add
 
 ---
 
-## @mushi-mushi/vue
+## mushi-mushi/vue
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/vue
 
 ---
-title: '@mushi-mushi/vue'
-description: Mushi Mushi for Vue 3, @mushi-mushi/vue. MushiPlugin, the useMushi, useMushiReport and useMushiWidget composables, user identity and submitting reports.
+title: 'mushi-mushi/vue'
+description: Mushi Mushi for Vue 3, mushi-mushi/vue. MushiPlugin, the useMushi, useMushiReport and useMushiWidget composables, user identity and submitting reports.
 ---
 
-# `@mushi-mushi/vue`
+# `mushi-mushi/vue`
 
-The Mushi Mushi Vue 3 plugin and composables over [`@mushi-mushi/web`](/sdks/web). Shared wrapper
+The Mushi Mushi Vue 3 plugin and composables over [`mushi-mushi`](/sdks/web). Shared wrapper
 notes: [Framework wrappers](/sdks/framework-wrappers).
 
 ```bash
-npm install @mushi-mushi/vue
+npm install mushi-mushi
 ```
 
   **Still on Vue 2?** This adapter requires Vue 3. See the [Vue 2 → Vue 3 migration guide](/migrations/vue-2-to-vue-3), which walks through the bridge build and the Mushi-specific bits.
@@ -11725,7 +11725,7 @@ See [Quickstart → Vue](/quickstart/vue) for the full setup walkthrough.
 ## API surface
 
 ```ts
-import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/vue'
+import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from 'mushi-mushi/vue'
 ```
 
 | Export | Purpose |
@@ -11743,7 +11743,7 @@ still runs, and the error is sent with `captureException()`.
 ```ts
 // main.ts
 import { createApp } from 'vue'
-import { MushiPlugin } from '@mushi-mushi/vue'
+import { MushiPlugin } from 'mushi-mushi/vue'
 import App from './App.vue'
 
 createApp(App)
@@ -11759,7 +11759,7 @@ createApp(App)
 ```vue
 <script setup lang="ts">
 import { watch } from 'vue'
-import { useMushi } from '@mushi-mushi/vue'
+import { useMushi } from 'mushi-mushi/vue'
 import { useAuth } from './auth'
 
 const mushi = useMushi()
@@ -11775,7 +11775,7 @@ watch(user, (u) => {
 
 ```vue
 <script setup lang="ts">
-import { useMushiReport } from '@mushi-mushi/vue'
+import { useMushiReport } from 'mushi-mushi/vue'
 
 const { submitReport } = useMushiReport()
 </script>
@@ -11817,7 +11817,7 @@ The web SDK does not load the classifier on its own. Pass it in
 `preFilter.wasmClassifier`:
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 import { createHeuristicClassifier } from '@mushi-mushi/wasm-classifier'
 
 Mushi.init({
@@ -11876,10 +11876,10 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/web
 
 ---
 title: JavaScript bug reporting SDK for the browser
-description: Reference for @mushi-mushi/web, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
+description: Reference for mushi-mushi, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.
 ---
 
-# `@mushi-mushi/web`
+# `mushi-mushi`
 
 The Mushi Mushi browser SDK: screenshots, console logs, network breadcrumbs, and a
 report widget in a Shadow DOM so your CSS never leaks in or out.
@@ -11951,7 +11951,7 @@ Mushi.init({
 | `beforeSend` | — | Every report type after PII scrub. Async OK. |
 | `beforeSendFeedback` | — | **Deprecated.** Feedback-only; ignored when `beforeSend` is set. |
 
-Types live on `MushiConfig` in `@mushi-mushi/core`.
+Types live on `MushiConfig` in `mushi-mushi/core`.
 
 ---
 
@@ -12050,7 +12050,7 @@ different `userId` switches the identity used for later reports and activity.
 Add a `rewards` block to your `init()` config:
 
 ```typescript
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
@@ -12132,7 +12132,7 @@ The same methods are exposed on the `useMushi()` hook, memoised so they're
 stable across renders:
 
 ```tsx
-import { useMushi } from '@mushi-mushi/react'
+import { useMushi } from 'mushi-mushi/react'
 
 function MyReports() {
   const { listMyReports, replyToReport } = useMushi()
@@ -12299,7 +12299,7 @@ Create a free account (no card) or sign in to the Mushi Mushi admin console, and
   Mushi.init({ projectId: '...', apiKey: '...' })
 
 # Or via npm:
-npm install @mushi-mushi/web`} },
+npm install mushi-mushi`} },
     { id: 'mount-mushi', label: 'Add Mushi Mushi alongside BugHerd', content: <>Both can coexist for a few days while you train clients on the new UX.</> },
     { id: 'redact', label: 'Mark sensitive elements with data-mushi-redact', content: {`<!-- Blacked out in Mushi Mushi screenshots -->
 
@@ -12383,7 +12383,7 @@ You have three options for the **web** experience after porting the native app:
 2. **RN Web for the app shell + Next.js for marketing.** One app, two surfaces.
 3. **Full RN Web.** Single codebase, with SEO trade-offs.
 
-Option 1 is usually the simplest. You can run `@mushi-mushi/web` on the
+Option 1 is usually the simplest. You can run `mushi-mushi` on the
 marketing site and `@mushi-mushi/react-native` in the new app against the
 same project ID and API key at the same time.
 
@@ -12526,16 +12526,16 @@ this page is the Mushi-aware companion to it.
   commit them and edit them like any other Xcode / Android Studio project.
 - Mushi Mushi has a Capacitor plugin ([`@mushi-mushi/capacitor`](/sdks/capacitor))
   with native shake-to-report and screenshot capture. There is no Mushi Mushi
-  Cordova plugin; in a Cordova app you would have run `@mushi-mushi/web`
-  inside the WebView.
+  Cordova plugin; in a Cordova app you would have run the web SDK
+  (`mushi-mushi`) inside the WebView.
 
 ## Prerequisites
 
 - Working Cordova app that builds for at least one platform.
 - For Capacitor 8: Node 22+, Xcode 26+ for iOS, Android Studio 2025.2.1+
   for Android ([environment setup](https://capacitorjs.com/docs/getting-started/environment-setup)).
-- A Mushi Mushi project. If you already use `@mushi-mushi/web` in the Cordova
-  app, keep the same `projectId` and `apiKey`. If not,
+- A Mushi Mushi project. If you already use the web SDK (`mushi-mushi` or
+  `@mushi-mushi/web`) in the Cordova app, keep the same `projectId` and `apiKey`. If not,
   [create a free account](https://kensaur.us/mushi-mushi/admin/signup?src=migration-cordova-to-capacitor) (no card) and a
   project; the [Capacitor quickstart](/quickstart/capacitor#get-your-project-id-and-api-key)
   shows where the two values come from.
@@ -12559,7 +12559,7 @@ Most popular Cordova plugins have a 1:1 Capacitor counterpart:
 | `cordova-plugin-share` | `@capacitor/share` |
 | `cordova-plugin-firebase-messaging` | `@capacitor/push-notifications` + `@capacitor-firebase/messaging` |
 | `cordova-sqlite-storage` | `@capacitor-community/sqlite` |
-| `@mushi-mushi/web` in the WebView | `@mushi-mushi/capacitor` (adds native shake and screenshots) |
+| `mushi-mushi` (web SDK) in the WebView | `@mushi-mushi/capacitor` (adds native shake and screenshots) |
 
 For anything not listed, search the [Capacitor Plugins](https://capacitorjs.com/docs/plugins)
 catalog or the [Capawesome community plugins](https://capawesome.io/plugins/).
@@ -12600,7 +12600,7 @@ npx @capacitor/assets generate --ios --android
 
       id: 'mushi',
       label: 'Add @mushi-mushi/capacitor',
-      content: {`# If you ran @mushi-mushi/web in the Cordova WebView, remove its
+      content: {`# If you ran the web SDK (mushi-mushi) in the Cordova WebView, remove its
 # Mushi.init call; the Capacitor plugin replaces it.
 npm install @mushi-mushi/capacitor
 npx cap sync
@@ -12757,7 +12757,7 @@ a week in beta.
 
 You'll touch the Mushi Mushi SDK exactly once per hop:
 
-- **Hop 1 (Cordova → Capacitor):** replace `@mushi-mushi/web` in the
+- **Hop 1 (Cordova → Capacitor):** replace the web SDK (`mushi-mushi`) in the
   WebView (if you used it) with [`@mushi-mushi/capacitor`](/sdks/capacitor)
   and call `Mushi.configure({ projectId, apiKey })`.
 - **Hop 2 (Capacitor → React Native):** swap that for
@@ -12934,7 +12934,7 @@ Vite, `MushiProvider` can also read `VITE_MUSHI_PROJECT_ID` and
 - [Vite docs: env variables](https://vite.dev/guide/env-and-mode)
 - [React blog: Sunsetting Create React App](https://react.dev/blog/2025/02/14/sunsetting-create-react-app)
 - [Vitest](https://vitest.dev/)
-- [`@mushi-mushi/react` SDK reference](/sdks/react)
+- [`mushi-mushi/react` SDK reference](/sdks/react)
 
 ---
 
@@ -13138,7 +13138,7 @@ triagers can open the replay from the report.
 
 ```ts
 import LogRocket from 'logrocket'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 LogRocket.init('your-app/id')
 const mushi = Mushi.init({ projectId: 'YOUR_PROJECT_ID', apiKey: 'YOUR_PUBLIC_KEY' })
@@ -13157,8 +13157,8 @@ Every Mushi Mushi report now carries the LogRocket session URL in its metadata.
 ## Migration checklist
 
 Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: {`npm install @mushi-mushi/web
-# Or @mushi-mushi/react if you're on React`} },
+    { id: 'install', label: 'Install Mushi Mushi alongside LogRocket', content: {`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'`} },
     { id: 'mount-mushi', label: 'Mount Mushi Mushi (LogRocket stays as-is)', content: {`import LogRocket from 'logrocket'
 
 LogRocket.init('your-app/id')
@@ -13338,7 +13338,7 @@ bridged to JS via TurboModules (RN) or Capacitor plugins.
 | **Native fidelity** | WebView ceiling | ~Native, with effort |
 | **Migration size** | Smaller (you can wrap a static export) | Larger (every screen is rewritten) |
 | **Team profile** | Web devs only | React devs + some native fluency |
-| **Mushi Mushi support** | [`@mushi-mushi/capacitor`](/sdks/capacitor) + [`@mushi-mushi/web`](/sdks/web) for the WebView | [`@mushi-mushi/react-native`](/sdks/react-native) |
+| **Mushi Mushi support** | [`@mushi-mushi/capacitor`](/sdks/capacitor) + [`mushi-mushi`](/sdks/web) for the WebView | [`@mushi-mushi/react-native`](/sdks/react-native) |
 
 Pick **Capacitor** if you already have a strong web product and just need
 a native shell. Pick **React Native** if you want to ship native UX from
@@ -13351,7 +13351,7 @@ List every screen, native module, and platform integration. Mark each as: port t
     { id: 'shell', label: 'Pick the shell: Capacitor or React Native', content: <>Use the table above. The earlier you commit, the better; switching mid-migration costs 2-3x.</> },
     { id: 'design-system', label: 'Port the design system', content: <>Tokens (colors, type scale, spacing) come over first. Components follow. Aim for visual parity within ± 2 px before porting any screens.</> },
     { id: 'pilot', label: 'Pilot one user-facing flow end-to-end', content: <>Pick a low-risk flow (e.g., Settings). Ship it as a hybrid screen embedded in the existing native app — your shell can host both worlds during the migration.</> },
-    { id: 'mushi', label: 'Wire Mushi Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi Mushi SDKs and add @mushi-mushi/capacitor (or @mushi-mushi/web for WebView-only surfaces). Both report to the same project; filter Reports by SDK to tell them apart.</> },
+    { id: 'mushi', label: 'Wire Mushi Mushi: keep the native SDK AND add the JS one', content: <>If you're wrapping the native app with Capacitor, you can keep your native iOS / Android Mushi Mushi SDKs and add @mushi-mushi/capacitor (or mushi-mushi for WebView-only surfaces). Both report to the same project; filter Reports by SDK to tell them apart.</> },
     { id: 'screen-rollout', label: 'Roll out screen-by-screen behind a feature flag', content: <>Each screen flips from native to hybrid behind a flag. Monitor crash + complaint rate per flag, roll back individual screens when needed.</> },
     { id: 'sunset', label: 'Sunset native screens once their hybrid versions are stable', content: <>Delete the Swift / Kotlin code only after the hybrid version has been at 100 % rollout for ≥ 30 days.</> },
 
@@ -13516,7 +13516,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
 
 // app/articles/[slug]/ArticleReportButton.tsx (Client Component)
 'use client'
-import { useMushiSdk } from '@mushi-mushi/react'
+import { useMushiSdk } from 'mushi-mushi/react'
 export function ArticleReportButton({ articleId }: { articleId: string }) {
   const mushi = useMushiSdk()
   return <button onClick={() => void mushi?.captureEvent({ description: 'Article issue', metadata: { articleId } })}>Report</button>
@@ -13542,7 +13542,7 @@ export function ArticleReportButton({ articleId }: { articleId: string }) {
 - [Official Next.js App Router migration guide](https://nextjs.org/docs/app/guides/migrating/app-router-migration)
 - [Next.js App Router + CSP integration](/sdks/nextjs-app-router-csp)
 - [Next.js static export integration](/sdks/nextjs-static-export)
-- [`@mushi-mushi/react` SDK reference](/sdks/react)
+- [`mushi-mushi/react` SDK reference](/sdks/react)
 
 ---
 
@@ -13597,7 +13597,7 @@ through one identify function.
 ## Recipe: keep Pendo for analytics + guides; use Mushi Mushi for feedback
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 // 1. Initialise both
 window.pendo.initialize({
@@ -13621,9 +13621,9 @@ intake and triage.
 ## Migration checklist
 
 Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: {`npm install @mushi-mushi/web
-# Or @mushi-mushi/react if you're on React`} },
-    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: {`import { Mushi Mushi } from '@mushi-mushi/web'
+    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: {`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'`} },
+    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: {`import { Mushi } from 'mushi-mushi'
 const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`} },
     { id: 'mirror-identity', label: 'Mirror pendo.identify into mushi.setUser', content: {`function identifyEverywhere(visitor, account) {
   window.pendo.identify(visitor, account)
@@ -13830,7 +13830,7 @@ widget is Shadow-DOM isolated.
 
 ```ts
 import * as Sentry from '@sentry/react'
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 Sentry.init({ dsn: 'YOUR_DSN' })
 
@@ -13871,7 +13871,7 @@ SDKs coexist.
 
 `Mushi.init()` returns the SDK instance; the methods below are called on
 it (`const mushi = Mushi.init({...})`). In React, get it with
-`useMushiSdk()` from `@mushi-mushi/react`.
+`useMushiSdk()` from `mushi-mushi/react`.
 
 | Sentry | Mushi Mushi |
 |--------|-------|
@@ -13887,8 +13887,8 @@ it (`const mushi = Mushi.init({...})`). In React, get it with
 ## Migration checklist
 
 Run npx mushi-mushi. It handles browser sign-in, project pick, SDK install, and env vars. No account yet? Create a free one (no card) first.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside Sentry (do not remove Sentry)', content: {`npm install @mushi-mushi/web
-# or @mushi-mushi/react on React. Sentry stays in package.json`} },
+    { id: 'install', label: 'Install Mushi Mushi alongside Sentry (do not remove Sentry)', content: {`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'. Sentry stays in package.json`} },
     { id: 'mount-both', label: 'Mount both SDKs, with Sentry linking on', content: {`Sentry.init({ dsn: 'YOUR_DSN' })
 ;(globalThis as Record<string, unknown>).Sentry = Sentry
 const mushi = Mushi.init({
@@ -14024,7 +14024,7 @@ Shake.registerUser('user-42')
 
 ```ts
 // AFTER: Mushi Mushi web
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 const mushi = Mushi.init({
   projectId: 'YOUR_PROJECT_ID',
   apiKey:    'YOUR_PUBLIC_KEY',
@@ -14035,8 +14035,7 @@ mushi.setUser({ id: 'user-42', email: 'jane@example.com', name: 'Jane Doe' })
 ## Migration checklist
 
 Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web:    npm install @mushi-mushi/web
-# React:  npm install @mushi-mushi/react
+    { id: 'install', label: 'Install the right Mushi Mushi SDK', content: {`# Web or React: npm install mushi-mushi
 # RN:     npm install @mushi-mushi/react-native
 #         plus expo-sensors (shake) and react-native-view-shot (screenshots)
 # Capacitor: npm install @mushi-mushi/capacitor && npx cap sync`} },
@@ -14143,7 +14142,7 @@ export default defineNuxtPlugin((nuxtApp) => {
 // SvelteKit: src/routes/+layout.svelte (initMushi initialises the SDK itself)
 
   import { onMount } from 'svelte'
-  import { initMushi } from '@mushi-mushi/svelte'
+  import { initMushi } from 'mushi-mushi/svelte'
   onMount(() => {
     initMushi({
       projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
@@ -14189,7 +14188,7 @@ the server-side HTML, you'll see:
 - [Next.js: Migrating from Vite](https://nextjs.org/docs/app/guides/migrating/from-vite)
 - [Nuxt installation](https://nuxt.com/docs/4.x/getting-started/installation)
 - [Creating a SvelteKit project](https://svelte.dev/docs/kit/creating-a-project)
-- [`@mushi-mushi/react`](/sdks/react) / [`@mushi-mushi/vue`](/sdks/vue) / [`@mushi-mushi/svelte`](/sdks/svelte) SDK references
+- [`mushi-mushi/react`](/sdks/react) / [`mushi-mushi/vue`](/sdks/vue) / [`mushi-mushi/svelte`](/sdks/svelte) SDK references
 
 ---
 
@@ -14199,7 +14198,7 @@ Source: https://kensaur.us/mushi-mushi/docs/migrations/vue-2-to-vue-3
 
 ---
 title: 'Vue 2 → Vue 3'
-description: Upgrade a Vue 2 app to Vue 3 and move from the plain Mushi Mushi web SDK to the @mushi-mushi/vue plugin, with an interactive migration checklist.
+description: Upgrade a Vue 2 app to Vue 3 and move from the plain Mushi Mushi web SDK to the mushi-mushi/vue plugin, with an interactive migration checklist.
 ---
 
 # Vue 2 → Vue 3
@@ -14209,9 +14208,9 @@ description: Upgrade a Vue 2 app to Vue 3 and move from the plain Mushi Mushi we
 Vue 2 reached end-of-life on 2023-12-31. This guide covers the upgrade
 and the Mushi Mushi pieces.
 
-The Mushi Mushi Vue adapter (`@mushi-mushi/vue`) supports **Vue 3.3 and later**
+The Mushi Mushi Vue adapter (`mushi-mushi/vue`) supports **Vue 3.3 and later**
 (its peer dependency is `vue >=3.3`). Apps still on Vue 2 use the plain
-`@mushi-mushi/web` SDK; this guide brings you onto the adapter.
+`mushi-mushi` web SDK; this guide brings you onto the adapter.
 
   **Vue 2 is no longer receiving security patches.** The Vue team's official
   recommendation is to migrate. If you cannot, [HeroDevs ships a paid LTS](https://www.herodevs.com/support/nes-vue)
@@ -14228,12 +14227,12 @@ The Mushi Mushi Vue adapter (`@mushi-mushi/vue`) supports **Vue 3.3 and later**
 - `v-model` on a custom component changed semantics; see the
   [Vue 3 migration guide](https://v3-migration.vuejs.org/breaking-changes/v-model.html).
 - Vue Router 3 → 4. Vuex 3 → 4 (or Pinia, recommended).
-- Mushi Mushi: `@mushi-mushi/web` direct usage → `@mushi-mushi/vue` adapter.
+- Mushi Mushi: `mushi-mushi` direct usage → `mushi-mushi/vue` adapter.
 
 ## API mapping (Mushi Mushi)
 
-| Vue 2 (with @mushi-mushi/web) | Vue 3 (with @mushi-mushi/vue + @mushi-mushi/web) |
-|-------------------------------|--------------------------------------------------|
+| Vue 2 (with `mushi-mushi`) | Vue 3 (with `mushi-mushi/vue`) |
+|----------------------------|--------------------------------|
 | `Mushi.init({ projectId, apiKey })` in main.js | `app.use(MushiPlugin, { projectId, apiKey })` only; the plugin calls `Mushi.init()` itself |
 | Manually attach `Vue.config.errorHandler = ...` to forward to Mushi Mushi | The adapter chains onto Vue 3's `app.config.errorHandler` automatically |
 | Use the instance from `Mushi.init()` in components | Use the `useMushi()` composable inside `` / `setup()` |
@@ -14255,8 +14254,8 @@ npm install vue@^3
 + import { createRouter, createWebHistory } from 'vue-router'
 + export default createRouter({ history: createWebHistory(), routes })`} },
     { id: 'state', label: 'Decide: Vuex 4 or Pinia', content: <>Vuex 4 is a Vue-3-compatible drop-in. Pinia is the new recommended state library — better TS, smaller, simpler. If you're touching state code anyway, Pinia is worth the switch.</> },
-    { id: 'install-mushi-adapter', label: 'Install the Mushi Mushi Vue adapter', content: {`npm install @mushi-mushi/vue
-# @mushi-mushi/web comes with it as a dependency`} },
+    { id: 'install-mushi-adapter', label: 'Install the Mushi Mushi Vue adapter', content: {`npm install mushi-mushi
+# Already on mushi-mushi? Skip this. On @mushi-mushi/web, this adds the mushi-mushi/vue entry point`} },
     { id: 'wire-mushi', label: 'Replace direct Mushi.init usage with the adapter', content: {`// main.ts
 
 const app = createApp(App)
@@ -14289,13 +14288,13 @@ async function reportIssue() {
 - **`` and Options API mixing**. Both work in Vue 3, but
   `useMushi()` is a composable, so call it inside `setup()` /
   ``. In an Options API component, add a `setup()` option
-  that returns it, or use `Mushi.getInstance()` from `@mushi-mushi/web`.
+  that returns it, or use `Mushi.getInstance()` from `mushi-mushi`.
 - **Stale Vue 2 plugins**. Check each Vue plugin you use (error
   reporting, logging, UI kits) for a Vue 3 version.
 
 ## Mushi Mushi during the migration
 
-You can run **just `@mushi-mushi/web`** in compat mode and it works. The
+You can run **just `mushi-mushi`** (no `/vue` import) in compat mode and it works. The
 adapter is purely additive: it gives you a nicer composable API and
 auto-wires the error handler. Migrate Mushi Mushi to the adapter only after
 your app is on real Vue 3 (compat alias removed).
@@ -14305,7 +14304,7 @@ your app is on real Vue 3 (compat alias removed).
 - [Vue 3 Migration Guide](https://v3-migration.vuejs.org/)
 - [`@vue/compat` build](https://v3-migration.vuejs.org/migration-build.html)
 - [Pinia (recommended state)](https://pinia.vuejs.org/)
-- [`@mushi-mushi/vue` SDK reference](/sdks/vue)
+- [`mushi-mushi/vue` SDK reference](/sdks/vue)
 
 ---
 
@@ -16579,13 +16578,13 @@ which defaults to `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api`,
 and every region resolves to that endpoint today. API keys use one `mushi_…`
 format in every region.
 
-`@mushi-mushi/core` also exports `resolveRegionEndpoint`, which asks the
+`mushi-mushi/core` also exports `resolveRegionEndpoint`, which asks the
 gateway which endpoint serves a project and caches the answer in
 `localStorage` for 24 hours. Until regional clusters ship it returns the same
 endpoint.
 
 ```ts
-import { resolveRegionEndpoint } from '@mushi-mushi/core'
+import { resolveRegionEndpoint } from 'mushi-mushi/core'
 
 const endpoint = await resolveRegionEndpoint({
   projectId: 'YOUR_PROJECT_ID',
@@ -20259,7 +20258,7 @@ description: The Connect page wires GitHub, the SDK, MCP, the CLI and your edito
 
 > **Scenario:** Your repo is on GitHub, the SDK is installed, but your editor still
 > can't ask Mushi Mushi what broke, and you're a couple of versions behind on
-> `@mushi-mushi/web`. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
+> the Mushi Mushi SDK. This page wires GitHub, the SDK, MCP, the CLI and upgrade PRs
 > in one place.
 
 A row of status pills at the top (**App checked in**, **SDK version**, **Editor**)
@@ -22606,7 +22605,7 @@ Most teams will never hand-author `inventory.yaml`. Turn on
 `capture.discoverInventory` in the SDK config:
 
 ```ts
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 <MushiProvider config={{
   projectId: '…',
@@ -22904,7 +22903,10 @@ Then nothing is sent until you ask:
 
 - **Record visits on demand** on this page opens a window for 1 hour, 1 day or
   1 week, for 10%, 50% or all visitors. Each device is drawn in or out once
-  and stays that way, so no visit is half recorded. **Stop** ends it at once.
+  and stays that way, so no visit is half recorded. **Stop** applies from each
+  visitor's next page load (SDK newer than 1.34.1; 1.34.1 and older can take about
+  6 minutes). A page that is already open keeps recording until it is closed or
+  reloaded.
 - **Test in your own browser** copies your address with `?mushi_journeys=1`.
   That tab records whatever the window says; `?mushi_journeys=0` turns it off.
 
@@ -23380,7 +23382,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.0"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
@@ -25773,7 +25775,7 @@ Webhook payloads are sent for these events. Every payload carries `event`,
 
 Add endpoints under **Host webhooks** (an HTTPS URL and an optional signing secret of at
 least 16 characters; leave it empty and Mushi Mushi creates one and shows it once), and
-send a test event from there. `@mushi-mushi/node` exports `createMushiRewardsHandler` to
+send a test event from there. `mushi-mushi/node` exports `createMushiRewardsHandler` to
 verify and route these events in your server.
 
 ---

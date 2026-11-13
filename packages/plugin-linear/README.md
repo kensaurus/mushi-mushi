@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Optional, runs on your own server:** it is never part of your app. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For people who plan their work in Linear. This opens a Linear issue for each
 new Mushi Mushi bug report, updates it once Mushi Mushi has triaged the report, and
 can move it along your Linear workflow.

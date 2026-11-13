@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Self-host only:** you need this only when you run your own Mushi Mushi server. To add Mushi Mushi to an app, install [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi).
+
 For mobile apps that use Firebase. When Mushi Mushi applies a fix, this writes
 a `mushi_resolved_<reportId>` flag to your Firebase Remote Config, which your
 app can read to stop showing a stale crash notice. It does not create or copy

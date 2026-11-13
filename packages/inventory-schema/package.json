@@ -1,7 +1,7 @@
 {
   "name": "@mushi-mushi/inventory-schema",
-  "version": "0.4.6",
-  "description": "Zod schema, JSON Schema and types for Mushi Mushi's inventory.yaml: your app's pages, the buttons on each, what they should do, and the tests that prove it.",
+  "version": "0.4.7",
+  "description": "Optional tooling for inventory.yaml: Zod schema, JSON Schema and types for Mushi Mushi's inventory.yaml — your app's pages, the buttons on each, what they should do, and the tests that prove it.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",

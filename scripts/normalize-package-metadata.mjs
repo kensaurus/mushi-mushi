@@ -77,7 +77,7 @@ export const NPM_PITCH = MUSHI_TAGLINE_V2.pitch
  * PRIMARY_DESCRIPTION_MAX.
  */
 export const PRIMARY_ROLES = {
-  'mushi-mushi': 'One command adds a bug report widget to any app.',
+  'mushi-mushi': 'The one package: SDK and setup wizard for any app.',
   '@mushi-mushi/cli': 'Mushi Mushi CLI: SDK setup, MCP wiring, triage.',
   '@mushi-mushi/mcp': 'MCP server for Cursor, Claude Code and Copilot.',
   '@mushi-mushi/core': 'Mushi Mushi SDK types, API client, pre-filter.',

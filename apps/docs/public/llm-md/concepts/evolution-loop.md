@@ -58,7 +58,7 @@ User feels a bug (shakes phone)
 
 ### ① Capture
 
-The SDK widget (`@mushi-mushi/web`, `@mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi Mushi captures:
+The SDK widget (`mushi-mushi`, `mushi-mushi/react`, etc.) lives in the corner of your app. When a user shakes their phone or taps "Report a problem," Mushi Mushi captures:
 
 - A screenshot of the exact screen they were looking at
 - Their description in their own words

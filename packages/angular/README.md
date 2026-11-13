@@ -7,17 +7,20 @@ a problem, [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) gets a
 screenshot, the route and recent console and network events, explains the
 cause in plain English, and hands your editor a fix to start from.
 
+The same code ships in the [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi) package: `npm install mushi-mushi`, then `import { provideMushi } from 'mushi-mushi/angular'`. This package keeps working and keeps getting updates.
+
 Add `provideMushi(config)` to your app's providers once. It also sends
 uncaught errors to Mushi Mushi through Angular's `ErrorHandler`. It pulls in
 `@mushi-mushi/web` for the widget, so do not call `Mushi.init()` separately.
 
 ```bash
-npm install @mushi-mushi/angular
+npm install mushi-mushi   # then import from 'mushi-mushi/angular'
 # or: npx mushi-mushi
+# or: npm install @mushi-mushi/angular   # same code; import from '@mushi-mushi/angular'
 ```
 
 ```ts
-import { provideMushi } from '@mushi-mushi/angular'
+import { provideMushi } from 'mushi-mushi/angular'
 
 bootstrapApplication(AppComponent, {
   providers: [

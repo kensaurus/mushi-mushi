@@ -2,6 +2,8 @@
 
 > **Your AI built it. Mushi Mushi makes it better.**
 
+**Separate on purpose:** a dev dependency for your ESLint config, not part of [`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi). To add Mushi Mushi to an app, install `mushi-mushi`; add this plugin too if you want the lint rules.
+
 ESLint rules from Mushi Mushi for two bugs AI coding tools often ship: a button
 wired to a handler that does nothing, and fake data (faker, MSW, `John Doe`
 arrays) left in production code. Neither throws an error, so error monitoring

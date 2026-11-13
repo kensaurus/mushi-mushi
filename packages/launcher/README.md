@@ -12,7 +12,7 @@ npx mushi-mushi
 
 **[See a sample diagnosis →](https://kensaur.us/mushi-mushi/docs/demo/diagnosis)** No signup, nothing to install.
 
-<sub>`mushi-mushi` is the setup command. It adds the Mushi Mushi SDK to the app you already have: React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, Node or plain JavaScript. [Launcher docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)</sub>
+<sub>`mushi-mushi` is the one package you install: the setup command and the SDK. It adds Mushi Mushi to the app you already have: React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, Node or plain JavaScript. [Launcher docs](https://kensaur.us/mushi-mushi/docs/sdks/launcher)</sub>
 
 [![npm](https://img.shields.io/npm/v/mushi-mushi?color=cb3837&label=mushi-mushi)](https://www.npmjs.com/package/mushi-mushi)
 [![npm downloads](https://img.shields.io/npm/dm/mushi-mushi?color=cb3837&label=downloads)](https://www.npmjs.com/package/mushi-mushi)
@@ -47,11 +47,11 @@ Who it's for and where each group starts: [who it's for](https://kensaur.us/mush
 npx mushi-mushi
 ```
 
-The wizard signs you in through your browser, detects your framework, installs the right SDK, writes env vars to `.env.local` (with the right prefix for your framework, such as `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_` or `PUBLIC_`, or bare `MUSHI_*` names for servers and bare React Native), prints the snippet to paste into your app, and offers to send a test report. It never overwrites an existing env var and never edits your source.
+The wizard signs you in through your browser, detects your framework, installs `mushi-mushi` (React Native and Capacitor get their native package), writes env vars to `.env.local` (with the right prefix for your framework, such as `NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`, `EXPO_PUBLIC_`, `REACT_APP_` or `PUBLIC_`, or bare `MUSHI_*` names for servers and bare React Native), prints the snippet to paste into your app, and offers to send a test report. It never overwrites an existing env var and never edits your source.
 
 ```tsx
 // After the wizard runs (React + Vite example, src/main.tsx):
-import { MushiProvider } from '@mushi-mushi/react'
+import { MushiProvider } from 'mushi-mushi/react'
 
 createRoot(document.getElementById('root')!).render(
   <MushiProvider config={{
@@ -139,21 +139,23 @@ Editors connect over MCP: Cursor, Claude Code, VS Code, Windsurf, Cline, Claude 
 
 ## Framework support
 
-| Framework                       | Install after wizard (automatic)                  |
-| ------------------------------- | ------------------------------------------------- |
-| React, Next.js, Create React App, Remix | `@mushi-mushi/react`                  |
-| Vue 3 / Nuxt                    | `@mushi-mushi/vue`                                |
-| Svelte / SvelteKit              | `@mushi-mushi/svelte`                             |
-| Angular 17+                     | `@mushi-mushi/angular`                            |
-| React Native / Expo             | `@mushi-mushi/react-native`                       |
-| Capacitor / Ionic               | `@mushi-mushi/capacitor`                          |
-| Astro, Solid, plain JavaScript  | `@mushi-mushi/web`                                |
-| Node (Express / Fastify / Hono) | `@mushi-mushi/node` (server-side errors)          |
+| Framework                       | Install                 | Import from                                   |
+| ------------------------------- | ----------------------- | --------------------------------------------- |
+| React, Next.js, Create React App, Remix | `mushi-mushi` | `mushi-mushi/react`                           |
+| Vue 3 / Nuxt                    | `mushi-mushi`           | `mushi-mushi/vue`                             |
+| Svelte / SvelteKit              | `mushi-mushi`           | `mushi-mushi/svelte`                          |
+| Angular 17+                     | `mushi-mushi`           | `mushi-mushi/angular`                         |
+| Astro, Solid, plain JavaScript  | `mushi-mushi`           | `mushi-mushi`                                 |
+| Node (Express / Fastify / Hono) | `mushi-mushi`           | `mushi-mushi/node` (server-side errors), `mushi-mushi/node/express`, `/fastify`, `/hono` |
+| React Native / Expo             | `@mushi-mushi/react-native` | `@mushi-mushi/react-native` (Metro)     |
+| Capacitor / Ionic               | `@mushi-mushi/capacitor` | `@mushi-mushi/capacitor` (native code registers as a top-level dependency) |
 | Flutter / Dart                  | Git dependency, a preview, not on pub.dev yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/flutter#install)) |
 | iOS native (Swift)              | SwiftPM from the repo, a preview, not tagged yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/ios#install)) |
 | Android native (Kotlin/Java)    | Build from source, a preview, not on Maven Central yet ([how](https://github.com/kensaurus/mushi-mushi/tree/master/packages/android#install)) |
 
-The Vue, Svelte and Angular packages bring `@mushi-mushi/web` with them. Prefer to skip the wizard? `npm i @mushi-mushi/react` (or your framework's package) and wire it up by hand.
+Prefer to skip the wizard? `npm install mushi-mushi` and wire it up by hand. Your framework (React, Vue, Svelte, Angular, Express…) is an optional peer: `mushi-mushi` never installs one you don't use. More entry points: `mushi-mushi/headless`, `mushi-mushi/i18n`, `mushi-mushi/otel`, `mushi-mushi/test-utils` and `mushi-mushi/core` (types).
+
+Already on `@mushi-mushi/react`, `@mushi-mushi/web` or another `@mushi-mushi/*` SDK? It keeps working and keeps getting updates. `mushi-mushi` ships the same code; switch when you like by changing the import path.
 
 ---
 

@@ -420,6 +420,6 @@ function ProfileBadge() {
 }
 ```
 
-The `MushiRewardsBadge` component from `@mushi-mushi/react` is web-only
+The `MushiRewardsBadge` component from `mushi-mushi/react` is web-only
 (uses ``). On React Native, render tier data from `getTier()` and
 `getReputation()` directly using your own `` / `` elements.

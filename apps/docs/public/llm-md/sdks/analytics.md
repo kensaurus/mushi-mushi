@@ -31,7 +31,7 @@ or experiments, run PostHog beside it; see
 ## Quick start
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 const mushi = Mushi.init({
   projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
@@ -48,7 +48,7 @@ mushi.identify('usr_42')                           // stitches earlier anonymous
 React:
 
 ```tsx
-import { useMushiTrack } from '@mushi-mushi/react'
+import { useMushiTrack } from 'mushi-mushi/react'
 
 function BuyButton() {
   const track = useMushiTrack()
@@ -239,5 +239,5 @@ The SDK's vocabulary for Mushi Mushi's own funnel lives in
 trio `loop_impression`, `loop_click`, `loop_signup`. It is a worked example of
 the naming rules, not something your app needs to emit.
 
-**Related:** [`@mushi-mushi/web`](/sdks/web) · [`@mushi-mushi/react`](/sdks/react) ·
+**Related:** [`mushi-mushi`](/sdks/web) · [`mushi-mushi/react`](/sdks/react) ·
 [Runtime config](/concepts/runtime-config)

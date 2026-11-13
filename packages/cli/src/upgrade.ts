@@ -1,6 +1,7 @@
 /**
  * FILE: packages/cli/src/upgrade.ts
- * PURPOSE: `mushi upgrade` — bump installed @mushi-mushi/* to latest npm.
+ * PURPOSE: `mushi upgrade` — bump the installed `mushi-mushi` package and any
+ *          scoped @mushi-mushi/* packages to latest npm.
  *
  * `--check` is the CI/local freshness probe: plan only, no install.
  * Exit codes: 0 current, 1 outdated or missing, 2 registry unreachable.
@@ -8,16 +9,22 @@
 
 import { resolve } from 'node:path'
 import { execSync } from 'node:child_process'
-import { detectPackageManager, installCommand, readPackageJson } from './detect.js'
+import { detectPackageManager, installCommand, isLauncherOnly, readPackageJson } from './detect.js'
 import { checkFreshness } from './freshness.js'
 
 /** Strict semver guard before interpolating registry versions into shell commands. */
 const SAFE_NPM_VERSION = /^\d+\.\d+\.\d+(-[\w.]+)?$/
 
 const MUSHI_PACKAGES = [
+  // The one package users install (ADR 0060). The scoped names below keep
+  // working for apps that installed them before.
+  'mushi-mushi',
   '@mushi-mushi/web',
   '@mushi-mushi/core',
   '@mushi-mushi/react',
+  '@mushi-mushi/vue',
+  '@mushi-mushi/svelte',
+  '@mushi-mushi/angular',
   '@mushi-mushi/react-native',
   '@mushi-mushi/capacitor',
   '@mushi-mushi/node',
@@ -29,8 +36,35 @@ interface UpgradePlanEntry {
   current: string
   latest: string | null
   willUpgrade: boolean
-  /** Legacy @mushi-mushi/react — suggest web migration. */
-  migrateToWeb?: boolean
+}
+
+/** Scoped SDKs whose code also ships in `mushi-mushi` (`mushi-mushi/<name>`). */
+const IN_UMBRELLA = new Set([
+  '@mushi-mushi/web',
+  '@mushi-mushi/core',
+  '@mushi-mushi/react',
+  '@mushi-mushi/vue',
+  '@mushi-mushi/svelte',
+  '@mushi-mushi/angular',
+  '@mushi-mushi/node',
+])
+
+/**
+ * A pointer to the single package, shown after an upgrade of an app that
+ * still installs scoped SDKs. Not a migration: the scoped names keep working
+ * and keep getting updates.
+ *
+ * @internal Exported for tests only.
+ */
+export function umbrellaNote(entries: ReadonlyArray<Pick<UpgradePlanEntry, 'name'>>): string {
+  if (entries.some((e) => e.name === 'mushi-mushi')) return ''
+  const scoped = entries.map((e) => e.name).filter((n) => IN_UMBRELLA.has(n))
+  if (scoped.length === 0) return ''
+  return (
+    '\nTip: the same SDK now ships as one package. ' +
+    '`npm install mushi-mushi` and import from `mushi-mushi` (or `mushi-mushi/react`, `/vue`, `/svelte`, `/angular`, `/node`). ' +
+    `Your ${scoped.join(', ')} install keeps working.`
+  )
 }
 
 export interface UpgradePlan {
@@ -49,7 +83,8 @@ async function planUpgrade(cwd: string): Promise<UpgradePlan> {
     ...(pkg?.devDependencies ?? {}),
   }
 
-  const installed = MUSHI_PACKAGES.filter((name) => deps[name])
+  // `mushi-mushi@0.x` is the setup command, not the SDK: leave it as it is.
+  const installed = MUSHI_PACKAGES.filter((name) => deps[name] && !isLauncherOnly(name, deps[name]))
 
   const entries: UpgradePlanEntry[] = await Promise.all(
     installed.map(async (name) => {
@@ -72,7 +107,6 @@ async function planUpgrade(cwd: string): Promise<UpgradePlan> {
         current,
         latest: safeLatest,
         willUpgrade,
-        migrateToWeb: name === '@mushi-mushi/react' && willUpgrade,
       }
     }),
   )
@@ -99,7 +133,7 @@ export type UpgradeCheckExit = 0 | 1 | 2
 
 /**
  * 0 = current (or only non-registry pins).
- * 1 = outdated, or no @mushi-mushi/* deps.
+ * 1 = outdated, or no Mushi Mushi package in package.json.
  * 2 = every semver pin failed to reach the registry (retry; do not flake CI).
  */
 export function evaluateUpgradeCheckExit(plan: UpgradePlan): UpgradeCheckExit {
@@ -128,7 +162,7 @@ export async function runUpgrade(opts: RunUpgradeOptions = {}): Promise<RunUpgra
         : exit === 2
           ? 'Could not reach the npm registry to check for updates — try again in a moment.'
           : plan.entries.length === 0
-            ? 'No @mushi-mushi/* packages in package.json — run `mushi init` first.'
+            ? 'No Mushi Mushi package (mushi-mushi or @mushi-mushi/*) in package.json — run `npx mushi-mushi` first.'
             : 'One or more Mushi packages are behind the latest stable npm release.'
     return { plan, upgraded: false, message }
   }
@@ -137,7 +171,7 @@ export async function runUpgrade(opts: RunUpgradeOptions = {}): Promise<RunUpgra
     return {
       plan,
       upgraded: false,
-      message: 'No @mushi-mushi/* packages in package.json — run `mushi init` first.',
+      message: 'No Mushi Mushi package (mushi-mushi or @mushi-mushi/*) in package.json — run `npx mushi-mushi` first.',
     }
   }
 
@@ -170,10 +204,7 @@ export async function runUpgrade(opts: RunUpgradeOptions = {}): Promise<RunUpgra
     }
   }
 
-  const reactEntry = plan.entries.find((e) => e.migrateToWeb)
-  const migrateNote = reactEntry
-    ? '\nNote: @mushi-mushi/react is legacy — prefer @mushi-mushi/web for Vite/Capacitor/SPA apps.'
-    : ''
+  const migrateNote = umbrellaNote(plan.entries)
 
   return {
     plan,

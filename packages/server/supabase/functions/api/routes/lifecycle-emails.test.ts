@@ -73,7 +73,7 @@ Deno.test('templates carry the deep links, plain text + html, and List-Unsubscri
   const day0 = buildLifecycleEmail({ key: 'day0_welcome', adminUrl: admin, unsubscribeUrl: unsub })
   assert(day0.text.includes(`${admin}/onboarding?tab=verify`))
   assert(day0.text.includes('npx mushi-mushi setup --ide cursor'))
-  assert(day0.text.includes("import { Mushi } from '@mushi-mushi/web'"))
+  assert(day0.text.includes("import { Mushi } from 'mushi-mushi'"))
   assert(day0.html.includes('href="https://kensaur.us/mushi-mushi/admin/onboarding?tab=verify"'))
   // Sober subject lines: no mascot, no emoji.
   assert(!/mushi-chan|🐛/i.test(day0.subject))

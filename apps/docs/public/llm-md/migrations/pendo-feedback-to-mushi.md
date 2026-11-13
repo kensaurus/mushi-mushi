@@ -49,7 +49,7 @@ through one identify function.
 ## Recipe: keep Pendo for analytics + guides; use Mushi Mushi for feedback
 
 ```ts
-import { Mushi } from '@mushi-mushi/web'
+import { Mushi } from 'mushi-mushi'
 
 // 1. Initialise both
 window.pendo.initialize({
@@ -73,9 +73,9 @@ intake and triage.
 ## Migration checklist
 
 Create a free account (no card) or sign in to the Mushi Mushi admin console, and create a project. Copy projectId + apiKey from the panel that opens; the key is shown once.</> },
-    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: {`npm install @mushi-mushi/web
-# Or @mushi-mushi/react if you're on React`} },
-    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: {`import { Mushi Mushi } from '@mushi-mushi/web'
+    { id: 'install', label: 'Install Mushi Mushi alongside Pendo', content: {`npm install mushi-mushi
+# On React, same package: import from 'mushi-mushi/react'`} },
+    { id: 'mount-mushi', label: 'Initialise Mushi Mushi in your app entry', content: {`import { Mushi } from 'mushi-mushi'
 const mushi = Mushi.init({ projectId: '...', apiKey: '...' })`} },
     { id: 'mirror-identity', label: 'Mirror pendo.identify into mushi.setUser', content: {`function identifyEverywhere(visitor, account) {
   window.pendo.identify(visitor, account)

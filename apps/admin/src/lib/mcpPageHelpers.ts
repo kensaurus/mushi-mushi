@@ -115,25 +115,25 @@ export function isCatalogTabId(v: string | null): v is CatalogTabId {
 
 export function buildSdkInstallSnippet(pkgManager: 'npm' | 'yarn' | 'pnpm'): string {
   const cmds: Record<'npm' | 'yarn' | 'pnpm', string> = {
-    npm: 'npm install @mushi-mushi/web',
-    yarn: 'yarn add @mushi-mushi/web',
-    pnpm: 'pnpm add @mushi-mushi/web',
+    npm: 'npm install mushi-mushi',
+    yarn: 'yarn add mushi-mushi',
+    pnpm: 'pnpm add mushi-mushi',
   }
   return cmds[pkgManager]
 }
 
 export function buildSdkInitSnippet(projectId: string): string {
-  return `import Mushi Mushi from '@mushi-mushi/web';
+  return `import { Mushi } from 'mushi-mushi';
 
 // Call once at app startup (e.g. in _app.tsx / main.tsx).
 // Use a report:write key — NOT your MCP key.
-Mushi.init({
+const mushi = Mushi.init({
   apiKey: 'mushi_<your-report-write-key>',
   projectId: '${projectId}',
 });
 
 // Identify users so reports are tied to real people:
-Mushi.identify({ id: user.id, email: user.email });`
+mushi.identify(user.id, { email: user.email });`
 }
 
 export function buildCursorJson(projectId: string, projectName: string): string {

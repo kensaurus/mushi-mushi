@@ -1,9 +1,9 @@
 ---
 title: Node.js server error reporting SDK
-description: Send Node server errors to Mushi Mushi with @mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
+description: Send Node server errors to Mushi Mushi with mushi-mushi/node. Express, Fastify and Hono handlers tag each report with request method, URL and trace context.
 ---
 
-# `@mushi-mushi/node`
+# `mushi-mushi/node`
 
 The Mushi Mushi server-side SDK for Node.js apps. It forwards unhandled
 exceptions, adds HTTP error handlers for Express, Fastify and Hono, and tags
@@ -14,7 +14,7 @@ each handler report with the request method, URL and trace context (W3C
 ## Install
 
 ```bash
-pnpm add @mushi-mushi/node
+pnpm add mushi-mushi
 ```
 
 ## Create a client
@@ -22,7 +22,7 @@ pnpm add @mushi-mushi/node
 Every handler below takes the same client:
 
 ```ts
-import { MushiNodeClient } from '@mushi-mushi/node'
+import { MushiNodeClient } from 'mushi-mushi/node'
 
 export const client = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
@@ -36,7 +36,7 @@ export const client = new MushiNodeClient({
 
 ```ts
 import express from 'express'
-import { mushiExpressErrorHandler } from '@mushi-mushi/node/express'
+import { mushiExpressErrorHandler } from 'mushi-mushi/node/express'
 
 const app = express()
 // …all your routes…
@@ -47,7 +47,7 @@ app.use(mushiExpressErrorHandler({ client })) // mount LAST so it sees every oth
 
 ```ts
 import Fastify from 'fastify'
-import { mushiFastifyPlugin } from '@mushi-mushi/node/fastify'
+import { mushiFastifyPlugin } from 'mushi-mushi/node/fastify'
 
 const app = Fastify()
 mushiFastifyPlugin(app, { client })
@@ -60,7 +60,7 @@ second argument. Mushi Mushi reports the error, then calls it.
 
 ```ts
 import { Hono } from 'hono'
-import { mushiHonoErrorHandler } from '@mushi-mushi/node/hono'
+import { mushiHonoErrorHandler } from 'mushi-mushi/node/hono'
 
 const app = new Hono()
 app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error', { status: 500 })))
@@ -71,7 +71,7 @@ app.onError(mushiHonoErrorHandler({ client }, () => new Response('Server error',
 Attach `uncaughtException` + `unhandledRejection` hooks so nothing escapes:
 
 ```ts
-import { attachUnhandledHook } from '@mushi-mushi/node'
+import { attachUnhandledHook } from 'mushi-mushi/node'
 
 attachUnhandledHook({ client })
 ```
@@ -82,7 +82,7 @@ Use the client directly when you want to report outside the request cycle
 (cron jobs, queue workers, integration failures):
 
 ```ts
-import { MushiNodeClient } from '@mushi-mushi/node'
+import { MushiNodeClient } from 'mushi-mushi/node'
 
 const mushi = new MushiNodeClient({
   apiKey: process.env.MUSHI_API_KEY!,
