@@ -407,10 +407,10 @@ describe('cloudfront-mushi-hosted-mcp', () => {
     assert.equal(out.statusCode, undefined);
   });
 
-  it('serves Smithery backlink HTML at edge', () => {
+  it('no longer serves a Smithery backlink page (Smithery shut down 2026-10-31)', () => {
     const out = router(req('/mushi-mushi/hosted-mcp/smithery-backlink', '', 'GET'));
-    assert.equal(out.statusCode, 200);
-    assert.match(out.body, /smithery\.ai\/servers\/kensaurus\/mushi-mushi/);
+    assert.equal(out.statusCode, undefined);
+    assert.equal(out.body, undefined);
   });
 
   it('302 real-client OAuth authorize to Supabase api authorize with query intact', () => {

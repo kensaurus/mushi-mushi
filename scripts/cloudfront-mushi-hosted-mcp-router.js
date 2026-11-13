@@ -19,24 +19,16 @@
  * same URL, so GitHub accepts it.
  *
  * POST/DELETE/OPTIONS/SSE GET → rewrite URI and forward to custom origin.
+ *
+ * The /smithery-backlink page (a link to our Smithery listing) was removed on
+ * 2026-11-13: Smithery shut down its accounts and proxy on 2026-10-31 and the
+ * listing is gone. That path now forwards to the origin like any other.
  */
 
 var PREFIX = '/mushi-mushi/hosted-mcp'
-var SMITHERY_SERVER_URL = 'https://smithery.ai/servers/kensaurus/mushi-mushi'
 var SUPABASE_HOST = 'dxptnwrhwsqckaftyymj.supabase.co'
 var API_AUTHORIZE_URL = 'https://' + SUPABASE_HOST + '/functions/v1/api/v1/mcp-oauth/authorize'
 var GITHUB_APP_CALLBACK_URL = 'https://' + SUPABASE_HOST + '/functions/v1/api/v1/webhooks/github/app-authorize'
-
-function smitheryBacklinkHtml() {
-  return (
-    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
-    '<title>Mushi MCP on Smithery</title><link rel="canonical" href="' +
-    SMITHERY_SERVER_URL +
-    '" /></head><body><p>Install Mushi MCP via <a href="' +
-    SMITHERY_SERVER_URL +
-    '">Smithery</a>.</p></body></html>'
-  )
-}
 
 function qsValue(qs, key) {
   if (!qs) return ''
@@ -142,18 +134,6 @@ function handler(event) {
     rest = '/'
   } else if (rest.charAt(0) !== '/') {
     rest = '/' + rest
-  }
-
-  if ((method === 'GET' || method === 'HEAD') && rest === '/smithery-backlink') {
-    return {
-      statusCode: 200,
-      statusDescription: 'OK',
-      headers: {
-        'content-type': { value: 'text/html; charset=utf-8' },
-        'cache-control': { value: 'public, max-age=3600' },
-      },
-      body: smitheryBacklinkHtml(),
-    }
   }
 
   if ((method === 'GET' || method === 'HEAD') && rest === '/github/app-authorize') {
