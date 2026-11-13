@@ -9,9 +9,14 @@ description: "Free, open-source bug report widget for React and Next.js: install
 
 # Bug report widget for React
 
-This quickstart adds the Mushi Mushi bug-report widget to a React app (Vite or
-Next.js). Users report from the widget; each report arrives with a screenshot
-and the console and network tail, followed by a plain-English diagnosis.
+This page adds a report button to a React app (Vite or Next.js). When
+something breaks, your users tap it and write one sentence. You get a
+screenshot, what the app was doing, and the likely cause in plain English
+with a fix your AI editor can apply.
+
+The fastest way is one command in your app's folder, `npx mushi-mushi`. It
+gets your keys and installs the package, then prints the code for step 2 for
+you to paste. The steps below are the same thing by hand.
 
   **Coming from Create React App?** Migrate to Vite first: see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
@@ -51,6 +56,8 @@ pnpm add mushi-mushi
 
 `mushi-mushi` carries the React bindings (`mushi-mushi/react`), the web SDK and
 the core types, so you only need this one dependency.
+
+**You'll see:** `mushi-mushi` in the `dependencies` of your `package.json`.
 
 ## 2. Wrap your app
 
@@ -109,7 +116,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-`npx mushi-mushi` writes this `providers.tsx` for you when it detects Next.js.
+`npx mushi-mushi` prints this `providers.tsx` code when it detects Next.js,
+ready to paste (or to hand to your AI editor). It does not edit your files.
+
+**You'll see:** a small report button in the corner of your app when you reload it.
 Keep callbacks such as `beforeSend` inside `providers.tsx`, because a Server
 Component cannot pass functions to a client one.
 
@@ -146,9 +156,10 @@ soon as `` initialises.
 
 ## 4. Verify
 
-Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
-instance). Your first report appears on the **Bugs** page within seconds, and
-its AI diagnosis follows shortly after.
+Tap the report button in your app and write one sentence. Then open the console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
+instance).
+
+**You'll see:** your report on the **Bugs** page within seconds, and its plain-English diagnosis shortly after.
 
 A one-sentence test report gets a thin diagnosis. For a real one, bring in a
 bug you already know about: see

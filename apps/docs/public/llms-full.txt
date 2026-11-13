@@ -35,6 +35,8 @@ Words you will see on this page
 - **Sentry**: a popular service that records errors when code crashes. You don't need it.
 - **Pull request (PR)**: a proposed change to your code that you can read before you accept it.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+- **`npx mushi-mushi`**: the one command that adds Mushi Mushi to your app. You type it in your app's folder, or ask your AI editor to.
+- **Journey map**: a picture of how people move through your app, and where they get stuck or leave.
 
 More words, in plain English: [the glossary](/glossary).
 
@@ -323,7 +325,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -355,7 +357,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -505,6 +507,23 @@ npx mushi-mushi setup --ide cursor
 Then ask your editor: *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** a fix brief in your editor: the cause, the files to change and how to check it. You review the change before it ships.
+
+## Rather let your AI editor do it?
+
+Paste this into Cursor, Claude Code or any AI editor that can run commands:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+**You'll see:** a browser page to approve, then your editor names the file it changed. Open your app and look for the report button.
+
+Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`,
+`node`) makes a small starter app with Mushi Mushi already in it. See
+[start a new app](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it).
 
 ## Already have Sentry issues? Bring them in
 
@@ -705,9 +724,13 @@ description: "Free, open-source bug report widget for Angular 17+: one provideMu
 
 # Bug report widget for Angular
 
-This quickstart adds the Mushi Mushi bug-report widget to an Angular 17+ app.
-The steps match the [React quickstart](/quickstart/react); only the install and
-the boot call differ.
+This page adds a report button to an Angular 17+ app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply. Uncaught errors are reported
+too.
+
+The steps match the [React quickstart](/quickstart/react); only the install
+and the start-up call differ.
 
 ## Get your project ID and API key
 
@@ -753,6 +776,8 @@ export const appConfig: ApplicationConfig = {
   ],
 }
 ```
+
+**You'll see:** a small report button in the corner of your app after `ng serve` reloads.
 
   **1.0.2 and earlier:** `provideMushi()` did not return Angular providers,
   and the package needed the JIT compiler in production builds. Upgrade to
@@ -1750,9 +1775,14 @@ description: "Free, open-source bug report widget for React and Next.js: install
 
 # Bug report widget for React
 
-This quickstart adds the Mushi Mushi bug-report widget to a React app (Vite or
-Next.js). Users report from the widget; each report arrives with a screenshot
-and the console and network tail, followed by a plain-English diagnosis.
+This page adds a report button to a React app (Vite or Next.js). When
+something breaks, your users tap it and write one sentence. You get a
+screenshot, what the app was doing, and the likely cause in plain English
+with a fix your AI editor can apply.
+
+The fastest way is one command in your app's folder, `npx mushi-mushi`. It
+gets your keys and installs the package, then prints the code for step 2 for
+you to paste. The steps below are the same thing by hand.
 
   **Coming from Create React App?** Migrate to Vite first: see
   the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi Mushi React
@@ -1792,6 +1822,8 @@ pnpm add mushi-mushi
 
 `mushi-mushi` carries the React bindings (`mushi-mushi/react`), the web SDK and
 the core types, so you only need this one dependency.
+
+**You'll see:** `mushi-mushi` in the `dependencies` of your `package.json`.
 
 ## 2. Wrap your app
 
@@ -1850,7 +1882,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-`npx mushi-mushi` writes this `providers.tsx` for you when it detects Next.js.
+`npx mushi-mushi` prints this `providers.tsx` code when it detects Next.js,
+ready to paste (or to hand to your AI editor). It does not edit your files.
+
+**You'll see:** a small report button in the corner of your app when you reload it.
 Keep callbacks such as `beforeSend` inside `providers.tsx`, because a Server
 Component cannot pass functions to a client one.
 
@@ -1887,9 +1922,10 @@ soon as `` initialises.
 
 ## 4. Verify
 
-Open your admin console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
-instance). Your first report appears on the **Bugs** page within seconds, and
-its AI diagnosis follows shortly after.
+Tap the report button in your app and write one sentence. Then open the console at [kensaur.us/mushi-mushi/admin](https://kensaur.us/mushi-mushi/admin) (or your self-hosted
+instance).
+
+**You'll see:** your report on the **Bugs** page within seconds, and its plain-English diagnosis shortly after.
 
 A one-sentence test report gets a thin diagnosis. For a real one, bring in a
 bug you already know about: see
@@ -2064,9 +2100,14 @@ description: "Free, open-source bug report widget for Svelte and SvelteKit: inst
 
 # Bug report widget for Svelte and SvelteKit
 
-This quickstart adds the Mushi Mushi bug-report widget to a Svelte or SvelteKit
-app. The steps match the [React quickstart](/quickstart/react); only the install
-and the boot call differ.
+This page adds a report button to a Svelte or SvelteKit app. When something
+breaks, your users tap it and write one sentence. You get the likely cause in
+plain English, with a fix your AI editor can apply.
+
+The fastest way is `npx mushi-mushi` in your app's folder: it gets your keys,
+installs the package and prints the code below for you to paste. The steps
+match the [React quickstart](/quickstart/react); only the install and the
+start-up call differ.
 
 ## Get your project ID and API key
 
@@ -2100,6 +2141,11 @@ initMushi({
 ```
 
 Call `initMushi` from `hooks.client.ts` or a top-level `+layout.svelte` `onMount`.
+
+**You'll see:** a small report button in the corner of your app. Tap it, send one sentence, and the report shows in the [console](https://kensaur.us/mushi-mushi/admin) within seconds.
+
+Starting a new Svelte app? `npx mushi-mushi --template svelte my-app` makes one
+with Mushi Mushi already in it ([how](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it)).
 
 API detail: [`mushi-mushi/svelte`](/sdks/svelte). Widget behavior: [`mushi-mushi`](/sdks/web).
 
@@ -2419,9 +2465,14 @@ description: "Free, open-source bug report widget for Vue 3: install mushi-mushi
 
 # Bug report widget for Vue 3
 
-This quickstart adds the Mushi Mushi bug-report widget to a Vue 3 app. The
-steps match the [React quickstart](/quickstart/react); only the install and the
-boot call differ.
+This page adds a report button to a Vue 3 app. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply.
+
+The fastest way is `npx mushi-mushi` in your app's folder: it gets your keys,
+installs the package and prints the code below for you to paste. The steps
+match the [React quickstart](/quickstart/react); only the install and the
+start-up call differ.
 
 ## Get your project ID and API key
 
@@ -2458,6 +2509,11 @@ createApp(App)
   .mount('#app')
 ```
 
+**You'll see:** a small report button in the corner of your app. Tap it, send one sentence, and the report shows in the [console](https://kensaur.us/mushi-mushi/admin) within seconds.
+
+Starting a new Vue app? `npx mushi-mushi --template vue my-app` makes one with
+Mushi Mushi already in it ([how](/sdks/launcher#start-a-new-app-with-mushi-mushi-in-it)).
+
 API detail: [`mushi-mushi/vue`](/sdks/vue). Widget behavior: [`mushi-mushi`](/sdks/web).
 
 ---
@@ -2473,9 +2529,16 @@ description: "Free, open-source bug report widget for any website, no framework 
 
 # Bug report widget for vanilla JavaScript
 
-This quickstart adds the Mushi Mushi bug-report widget to a site with no
-framework, or to any framework you'd rather drive imperatively. Without a
-bundler, use the [script tag](#no-bundler-script-tag).
+This page adds a report button to a site with no framework, or to any
+framework you'd rather drive from plain JavaScript. When something breaks,
+your users tap it and write one sentence. You get the likely cause in plain
+English, with a fix your AI editor can apply.
+
+- **Plain HTML, WordPress, Webflow or no build step?** Paste one
+  [script tag](#no-bundler-script-tag). Nothing to install.
+- **A JavaScript project with a `package.json`?** Run `npx mushi-mushi` in its
+  folder. It gets your keys, installs the package and offers to add the
+  start-up code to your entry file, such as `src/main.ts` (it asks first).
 
 ## Try it live
 
@@ -2529,7 +2592,9 @@ document.querySelector('#report-bug')?.addEventListener('click', async () => {
 `captureEvent` files the report without opening any UI. To open the widget
 instead, call `mushi.report()`.
 
-The widget launcher mounts automatically on `Mushi.init`. Set
+**You'll see:** the report in the [console](https://kensaur.us/mushi-mushi/admin) within seconds, with a title, how serious it is and the likely cause.
+
+The report button shows automatically after `Mushi.init`. Set
 `widget: { trigger: 'hidden' }` to keep it out of sight and open it only
 from your own buttons.
 
@@ -5885,7 +5950,7 @@ specified — do NOT refactor unrelated code or break sibling actions on the sam
 - [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — Zod + JSON Schema for `inventory.yaml`.
 - [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) — bootstrap an authenticated session so the crawler / monitor can reach pages behind a login wall.
 - [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action that runs all five gates, plus `propose`, `discover-api`, `discovery-status`, and `auth-bootstrap` sub-commands.
-- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — `no-dead-handler` and `no-mock-leak`.
+- [`mushi-mushi/eslint`](/sdks/eslint-plugin) — `no-dead-handler` and `no-mock-leak`.
 - [Admin → User stories · Inventory](/admin/inventory) — the in-app surface where you accept proposals and trigger one-off gate runs.
 
 ---
@@ -6428,7 +6493,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.31.1`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.31.2`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -7269,6 +7334,29 @@ description: Bug-reporting SDKs for React, Vue, Svelte, Angular, React Native, C
 
 # SDK reference
 
+An SDK is the small piece of code you add to your app. Mushi Mushi's SDK shows
+the report button and sends each report, with a screenshot and what the app
+was doing, to your project.
+
+**Most apps need one package: `mushi-mushi`.** Run `npx mushi-mushi` in your
+app's folder and it installs the SDK for you
+([how the setup works](/sdks/launcher)). Phone apps built with React Native,
+Expo or Capacitor get their own package, which the same command installs.
+
+| Your app | Install | Import from |
+| --- | --- | --- |
+| React, Next.js, Remix | `mushi-mushi` | `mushi-mushi/react` |
+| Vue, Nuxt | `mushi-mushi` | `mushi-mushi/vue` |
+| Svelte, SvelteKit | `mushi-mushi` | `mushi-mushi/svelte` |
+| Angular 17+ | `mushi-mushi` | `mushi-mushi/angular` |
+| Astro, Solid, plain JavaScript | `mushi-mushi` | `mushi-mushi` |
+| Node (Express, Fastify, Hono) | `mushi-mushi` | `mushi-mushi/node` |
+| React Native, Expo | `@mushi-mushi/react-native` | `@mushi-mushi/react-native` |
+| Capacitor, Ionic | `@mushi-mushi/capacitor` | `@mushi-mushi/capacitor` |
+
+The rest of this page is the full reference: every package, its version and
+how mature it is.
+
 Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://www.npmjs.com/org/mushi-mushi) for live versions). Current workspace snapshots:
 
 | Package | Version |
@@ -7276,12 +7364,12 @@ Mushi Mushi's npm packages ship on independent semver tracks (see [npm](https://
 | @mushi-mushi/core, @mushi-mushi/web | 1.35.x |
 | @mushi-mushi/react | 1.35.x |
 | @mushi-mushi/react-native | 0.24.x |
-| @mushi-mushi/cli | 0.39.x |
+| @mushi-mushi/cli | 0.40.x |
 | @mushi-mushi/mcp | 0.31.x |
 | @mushi-mushi/capacitor | 1.1.x |
 | @mushi-mushi/node | 1.3.x |
 | @mushi-mushi/angular, @mushi-mushi/vue, @mushi-mushi/svelte | 1.0.x |
-| mushi-mushi (launcher) | 1.35.x |
+| mushi-mushi (launcher) | 1.36.x |
 
 See [Project ID & API keys](/concepts/credentials) for credential formats (project UUID, and the one `mushi_…` key format every SDK and the MCP server share).
 
@@ -7338,10 +7426,10 @@ The JS packages are MIT-licensed; the server packages (`@mushi-mushi/server`, `@
 | Package | Registry | Description |
 | --- | --- | --- |
 | [`@mushi-mushi/cli`](/sdks/cli) | npm | Project setup, RAG indexing, report management, `mushi migrate` |
-| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard plus the web, framework and Node SDKs above |
+| [`mushi-mushi`](/sdks/launcher) | npm | The one package: the `npx mushi-mushi` setup wizard, `--template` starter apps, and the web, framework and Node SDKs above |
 | [`@mushi-mushi/mcp`](/sdks/mcp) | npm | MCP server: triage reports from Cursor, Claude, Codex |
 | [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) | npm | GitHub Action: triage-coverage gate, fix dispatch, pre-release gates, crawler sign-in |
-| [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) | npm | Lint rules for empty event handlers (`no-dead-handler`) and leftover mock data (`no-mock-leak`) |
+| [`mushi-mushi/eslint`](/sdks/eslint-plugin) | npm (subpath of `mushi-mushi`; was `eslint-plugin-mushi-mushi`) | Lint rules for buttons whose click does nothing (`no-dead-handler`) and leftover fake data (`no-mock-leak`) |
 
 ## Infrastructure & advanced
 
@@ -9219,36 +9307,67 @@ const REGION_ENDPOINTS = {
 
 ---
 
-## eslint-plugin-mushi-mushi
+## mushi-mushi/eslint
 
 Source: https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin
 
 ---
-title: 'eslint-plugin-mushi-mushi'
-description: eslint-plugin-mushi-mushi, the Mushi Mushi ESLint plugin. Its no-dead-handler and no-mock-leak rules and preset flag empty handlers and mock data in production.
+title: 'mushi-mushi/eslint'
+description: ESLint rules in mushi-mushi/eslint that catch what AI coding tools leave behind, such as buttons that do nothing and placeholder data left in real pages.
 ---
 
-# `eslint-plugin-mushi-mushi`
+# `mushi-mushi/eslint`: catch what AI tools leave behind
 
-The Mushi Mushi ESLint plugin has two lint rules for bugs AI coding tools often ship: **`no-dead-handler`**
-flags event handlers that do nothing (`onClick={() => {}}`, a body that only
-logs) and **`no-mock-leak`** flags faker / placeholder data left in
-production paths. They run wherever ESLint runs: your editor, `pnpm lint`,
-and CI.
+AI coding tools often ship two quiet bugs. A button looks finished, but its
+click does nothing. Or a page still shows the fake data the AI used while
+building it (John Doe, lorem ipsum). Nothing crashes, so no error tracker
+sees either one. Your users do.
 
-## Install
+`mushi-mushi/eslint` finds both while you build. ESLint (the tool that checks
+your code for mistakes as you type) runs these rules in your editor, in
+`npm run lint` and in CI.
+
+- It comes with `mushi-mushi`, so if your app has ESLint there is nothing extra to install.
+- Add two lines to `eslint.config.js`.
+- Your editor underlines empty click handlers and leftover fake data.
+
+## Turn it on
+
+You need `mushi-mushi` and ESLint 8 or newer in your project. Most apps made
+with Vite, Next.js or an AI builder have ESLint already. `mushi-mushi` does
+not install ESLint for you.
 
 ```bash
-pnpm add -D eslint-plugin-mushi-mushi
+npm install mushi-mushi
 ```
 
-## Turn on the two rules
+Then add the recommended rules to your ESLint config:
 
 ```js filename="eslint.config.js"
-import mushi from 'eslint-plugin-mushi-mushi'
+import mushi from 'mushi-mushi/eslint'
 
 export default [
   // …your other configs
+  mushi.configs.recommended,
+]
+```
+
+**You'll see:** `npx eslint .` (or your editor) flags `onClick={() => {}}` and arrays of John Doe placeholder data in your pages.
+
+Prefer to ask your AI editor? Paste this:
+
+```text
+Add the Mushi Mushi ESLint rules to this project: import mushi from
+'mushi-mushi/eslint' in eslint.config.js and add mushi.configs.recommended to
+the exported array. Then run the linter and fix what it reports.
+```
+
+### Pick the rules yourself
+
+```js filename="eslint.config.js"
+import mushi from 'mushi-mushi/eslint'
+
+export default [
   {
     plugins: { 'mushi-mushi': mushi },
     rules: {
@@ -9259,44 +9378,38 @@ export default [
 ]
 ```
 
-For legacy `.eslintrc`:
+`recommended` is also a named export:
+`import { recommended } from 'mushi-mushi/eslint'`. In a CommonJS config, use
+`require('mushi-mushi/eslint').default`.
 
-```json
-{
-  "plugins": ["mushi-mushi"],
-  "rules": {
-    "mushi-mushi/no-dead-handler": "error",
-    "mushi-mushi/no-mock-leak": "error"
-  }
-}
-```
+### Coming from `eslint-plugin-mushi-mushi`?
 
-## The recommended preset
+The rules moved into `mushi-mushi/eslint`. `eslint-plugin-mushi-mushi` is no
+longer published; its last version, 0.3.7, still installs. To switch, change
+the import to `mushi-mushi/eslint`. The rule names stay the same.
 
-`mushi.configs.recommended` (and `plugin:mushi-mushi/legacy`) turns on the
-two rules above plus `no-allowlist-jsx-textnode`, which catches an allowlist
-comment written as JSX text (it would render on the page) and nothing else.
+`mushi-mushi/eslint` works with flat config (`eslint.config.js`, the default
+since ESLint 9) only. An older `.eslintrc` loads plugins by package name, so
+it cannot load a subpath. Move to flat config to use it.
 
-```js filename="eslint.config.js"
-import mushi from 'eslint-plugin-mushi-mushi'
+## What the recommended rules catch
 
-export default [mushi.configs.recommended]
-```
+`mushi.configs.recommended` turns on three rules: `no-dead-handler` and
+`no-mock-leak` below, plus `no-allowlist-jsx-textnode`, which catches an
+allowlist comment written as JSX text (it would show up on the page).
 
-The plugin's other 16 rules check the Mushi Mushi console's own design system
-(tokens, ``, ``, page posture, the widget theme) and
-are only in the Mushi Mushi monorepo's `internal` preset. Turn one on by name if
-it fits your app.
+The other 16 rules check the Mushi Mushi console's own design system (tokens,
+``, ``, page posture, the widget theme). They are in
+`configs.internal` and are not meant for other apps.
 
-## Rules
-
-### `mushi-mushi/no-dead-handler`
+### `mushi-mushi/no-dead-handler`: buttons that do nothing
 
 Flags inline event handlers (`on*` props, and `onClick` / `onSubmit`-style
-object keys) whose body is empty, returns `null`, holds only `console.*` calls in a
-block, or throws "not implemented", including inside `useCallback`. It checks inline
-functions only: a handler passed by name, such as `onSubmit={noop}`, is not
-followed. Files named `*.test.*`, `*.spec.*` and `*.stories.*` are skipped.
+object keys) whose body is empty, returns `null`, holds only `console.*`
+calls in a block, or throws "not implemented", including inside
+`useCallback`. It checks inline functions only: a handler passed by name,
+such as `onSubmit={noop}`, is not followed. Files named `*.test.*`,
+`*.spec.*` and `*.stories.*` are skipped.
 
 ```jsx
 // ✗ caught
@@ -9311,15 +9424,14 @@ followed. Files named `*.test.*`, `*.spec.*` and `*.stories.*` are skipped.
 <button onClick={() => {}} />        // foo.test.tsx, *.stories.tsx
 ```
 
-### `mushi-mushi/no-mock-leak`
+### `mushi-mushi/no-mock-leak`: fake data in real pages
 
 Flags mock-library imports (`@faker-js/faker`, `faker`, `msw`, and
 similar), arrays of placeholder objects (`John Doe`, `Jane Doe`), and
 `lorem ipsum` or `placeholder@example.com` strings in production files. It
 skips files under a `__tests__`, `test`, `tests`, `spec`, `stories`,
 `fixtures`, `mocks` or `__mocks__` folder, and files named `*.test.*`,
-`*.spec.*`, `*.stories.*` or `*.mock.*`. The intent is to catch the
-moment a developer leaves their seed data wired up in a real page.
+`*.spec.*`, `*.stories.*` or `*.mock.*`.
 
 ```ts
 // ✗ caught — apps/web/src/pages/Dashboard.tsx
@@ -9336,12 +9448,12 @@ export const projects = [
 
 ## In CI
 
-Run ESLint as its own step (for example `npx eslint .`) so a PR fails when
-either rule reports. To record the findings in Mushi Mushi as well, write a
-JSON report (`npx eslint -f json -o mushi-eslint.json src/`) and pass it to the
-[`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates` command as `eslint-report`. That
-command does not run ESLint itself, and its `dead_handler` and `mock_leak`
-gates fail when no report is given.
+Run ESLint as its own step (for example `npx eslint .`) so a pull request
+fails when either rule reports. To record the findings in Mushi Mushi as
+well, write a JSON report (`npx eslint -f json -o mushi-eslint.json src/`)
+and pass it to the [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) `gates` command as
+`eslint-report`. That command does not run ESLint itself, and its
+`dead_handler` and `mock_leak` gates fail when no report is given.
 
 ---
 
@@ -9774,16 +9886,18 @@ Source: https://kensaur.us/mushi-mushi/docs/sdks/launcher
 
 ---
 title: 'mushi-mushi (launcher)'
-description: npx mushi-mushi detects your framework, installs the matching Mushi Mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.
+description: npx mushi-mushi signs you in, installs Mushi Mushi, writes your project ID and key to .env.local and shows the code to add. Plus flags and troubleshooting.
 ---
 
-# `mushi-mushi`: the one-command launcher
+# `mushi-mushi`: one command to set it up
 
-`npx mushi-mushi` is the single Mushi Mushi entry point on npm: it auto-detects
-your framework, picks the right `@mushi-mushi/*` SDK, writes your project ID
-and API key into `.env.local` (or an existing `.env`) as `MUSHI_PROJECT_ID` and
-`MUSHI_API_KEY` with your framework's env prefix, and prints the snippet to
-paste into your app.
+`mushi-mushi` is the one package you need. Run it once with `npx` and it adds
+Mushi Mushi to your app. Install it with `npm install` and it is the SDK (the
+code in your app that shows the report button).
+
+- Run `npx mushi-mushi` in your app's folder.
+- Approve the sign-in in your browser. Your free project and key are made for you.
+- Add the few lines of code it shows you. Your app now has a report button.
 
 ## Try it
 
@@ -9791,14 +9905,102 @@ paste into your app.
 npx mushi-mushi
 ```
 
-Equivalent commands. All three run the same wizard from
-[`@mushi-mushi/cli`](/sdks/cli):
+`npx` runs a tool from npm (the public library of JavaScript packages)
+without installing it for good.
+
+**You'll see:** a browser page asking you to approve the sign-in, then the code to add to your app, and an offer to send a test report.
+
+## What it does, step by step
+
+1. **Finds your framework** from your `package.json` (React, Next.js, Vue, Svelte, Angular, Expo and more; the full list is [below](#what-it-detects)).
+2. **Signs you in** through your browser, and makes a project and a key that can only send reports.
+3. **Installs `mushi-mushi`** with the package manager your lockfile uses. React Native and Capacitor apps get their own package, `@mushi-mushi/react-native` or `@mushi-mushi/capacitor`.
+4. **Writes two settings** (your project ID and key) to `.env.local`, or to `.env` if you already have one. Each name gets the prefix your framework needs, such as `VITE_` or `NEXT_PUBLIC_`.
+5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first. For React, Vue and the others it prints the code, because that code has to wrap your app and a wizard that rewrites your components can break them.
+6. **Offers to send a test report**, so you see your first report in the [console](https://kensaur.us/mushi-mushi/admin).
+
+Apart from that offer, it doesn't change your app's code. It warns you if
+the env file is not in `.gitignore`. Run again, it asks before replacing a
+Mushi Mushi setting that is already there, except with `--yes`
+([details](#running-it-again)).
+
+  **`.env.local` stays on your computer.** Before you deploy, add the same two
+  settings where your site is built (Vercel, Netlify), then redeploy. Without
+  them the report button does not show on your live site. The
+  [quickstart](/quickstart#add-your-keys-where-your-site-is-hosted) has the names for each framework.
+
+## Let your AI editor run it
+
+Paste this into Cursor, Claude Code or any AI editor that can run commands:
+
+```text
+Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
+It prints a sign-in link: show it to me and wait while I approve it in my
+browser. Then add the code it prints to the file it names, and tell me which
+file you changed.
+```
+
+`--yes` takes the default answers, which an AI editor's terminal needs because
+it cannot answer questions. It still opens the browser sign-in for you.
+
+## Start a new app with Mushi Mushi in it
+
+The commands above add Mushi Mushi to an app you already have. To start from
+nothing, `--template` makes a small starter app with Mushi Mushi already wired in:
 
 ```bash
-npx mushi-mushi              # the launcher (this package)
-npm create mushi-mushi       # via the npm-create convention
-npx @mushi-mushi/cli init    # the scoped name
+npx mushi-mushi --template vue my-app   # or: svelte, node
+cd my-app
+npm install
+npx mushi-mushi                         # sign in and write your settings
+npm run dev                             # npm start for the node starter
 ```
+
+The folder must not exist yet. Without a folder name you get
+`mushi-vue-app`, `mushi-svelte-app` or `mushi-node-app`.
+`npm create mushi-mushi -- --template vue` does the same. npm and pnpm need
+the `--` before the flags.
+
+A folder name on its own, as in `npm create mushi-mushi my-app`, does not
+make a new app. It runs the setup wizard in the folder you are in, after
+this hint:
+
+```text
+To start a new app instead: npx mushi-mushi --template <vue|svelte|node> my-app
+```
+
+## Other ways to run the same wizard
+
+```bash
+npx mushi-mushi              # this package
+npm create mushi-mushi       # the npm "create" convention
+npx @mushi-mushi/cli init    # the full CLI
+```
+
+Any other command is passed to the full CLI, so
+`npx mushi-mushi setup --ide cursor` and `npx mushi-mushi reports list` work
+without a global install. Install [`@mushi-mushi/cli`](/sdks/cli) globally
+(`npm install -g @mushi-mushi/cli`) when you use it every day and want the
+short `mushi` command.
+
+## Flags
+
+```bash
+npx mushi-mushi --framework next               # skip framework detection
+npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
+npx mushi-mushi --skip-install                 # print the install command, don't run it
+npx mushi-mushi --skip-test-report             # don't offer to send a test report
+npx mushi-mushi --audit                        # health-check an existing install instead
+npx mushi-mushi --cwd apps/web                 # run inside a monorepo package
+npx mushi-mushi --endpoint https://mushi.your-company.com   # self-hosted
+npx mushi-mushi -y                             # take the defaults (CI and AI-editor shells)
+npx mushi-mushi -v                             # print the version
+npx mushi-mushi --help
+```
+
+In CI, pass `--yes --project-id <project-uuid> --api-key mushi_xxx`. Without
+a terminal to answer questions, the wizard exits with a clear error instead
+of waiting.
 
 ## What it detects
 
@@ -9826,40 +10028,66 @@ order, and takes the first match:
 
 With no matching dependency it falls back to config files
 (`next.config.*`, `nuxt.config.*`, `svelte.config.js`, `angular.json`,
-`remix.config.*`, `astro.config.*`). Pass `--framework ` to skip
-detection.
+`remix.config.*`, `astro.config.*`).
 
-The package manager is detected from the lockfile (`bun.lockb` or
-`bun.lock`, `pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var
-prefixes are chosen by framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`,
-`EXPO_PUBLIC_…`, `REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and
-`VITE_…` for the other browser frameworks. Server frameworks, bare React
-Native and Remix get plain `MUSHI_…` names.
+The package manager comes from the lockfile (`bun.lockb` or `bun.lock`,
+`pnpm-lock.yaml`, `yarn.lock`, `package-lock.json`). Env-var prefixes come
+from the framework: `NEXT_PUBLIC_…`, `NUXT_PUBLIC_…`, `EXPO_PUBLIC_…`,
+`REACT_APP_…` (Create React App), `PUBLIC_…` (Astro) and `VITE_…` for the
+other browser frameworks. Server frameworks, bare React Native and Remix get
+plain `MUSHI_…` names.
 
 ## Running it again
 
 Running the wizard a second time is safe:
 
-- If `MUSHI_*` vars already exist in the env file, the wizard asks before
+- If `MUSHI_*` settings already exist in the env file, the wizard asks before
   replacing them. With `--yes` (and in non-interactive shells) it replaces them.
 - The install step runs again; pass `--skip-install` to print the install
-  command instead. When an `@mushi-mushi/*` package is already a dependency,
-  the wizard suggests `npx mushi-mushi --audit`, which runs health checks
-  instead of the setup.
-- After writing the env file it warns if that file isn't gitignored, so
-  secrets don't accidentally end up in source control.
+  command instead. When Mushi Mushi is already a dependency, the wizard
+  suggests `npx mushi-mushi --audit`, which runs health checks instead of the
+  setup.
 
-## When to use the launcher vs the CLI directly
+## Troubleshooting
 
-Use **the launcher** when you want one command to give a teammate
-("`npx mushi-mushi` and you're done"). Any other command is forwarded to
-`@mushi-mushi/cli`, so `npx mushi-mushi setup --ide cursor` or
-`npx mushi-mushi reports list` works without a global install.
+- **Wrong framework detected?** Pass `--framework ` with an id from the table above.
+- **Monorepo?** `cd` into the package first, or pass `--cwd apps/web`.
+- **An old version runs?** `npx mushi-mushi@latest`, or clear the cache with `npm cache clean --force`.
+- **Node version too old?** It needs Node 20.19 or newer. Get it at [nodejs.org](https://nodejs.org/).
+- **Sign-in does not finish?** Run `npx mushi-mushi doctor --auth` to check the sign-in path.
+- **Want the full error?** Run `DEBUG=mushi npx mushi-mushi`.
 
-Install **`@mushi-mushi/cli`** globally (`npm install -g @mushi-mushi/cli`)
-when you use it every day and want the short `mushi` command, for example
-`mushi reports list`, `mushi reports triage `, or the `mushi migrate`
-migration helper.
+## Security notes
+
+- A key passed with `--api-key` is visible to other users on the same machine
+  (`ps -ef`). On a shared machine, use the browser sign-in or the prompt.
+- The key the wizard writes into your app can only send reports. It cannot
+  read them, so it is safe in your app's code.
+- `~/.config/mushi/config.json`, where the CLI keeps your sign-in, is written
+  with mode `0o600` on macOS and Linux.
+- The wizard removes line breaks and other control characters from a pasted
+  key, so a paste cannot add extra lines to your env file.
+- Every release is published with
+  [npm provenance](https://docs.npmjs.com/generating-provenance-statements):
+  `npm audit signatures` checks that the package was built from this repo by
+  its CI.
+
+## What package scanners show
+
+`mushi-mushi` is both a library (the SDK, imported from subpaths such as
+`mushi-mushi/react`) and a command (`npx mushi-mushi`).
+
+- **Socket.dev** flags `child_process`, `process.env` and URL strings. They
+  come from the command: it runs `npm install` and passes other commands to
+  `@mushi-mushi/cli`, reads `DEBUG` and npm settings, and prints links. The
+  command's source is `packages/launcher/src/bin.ts`; the wizard it runs is
+  `packages/cli/src/init.ts`.
+- **Size.** The package itself is about 55 kB packed. A first
+  `npx mushi-mushi` downloads about 1.8 MB, mostly the web SDK and its source
+  maps. Your app's bundle gets only the subpath you import.
+
+If something looks wrong, [open an issue](https://github.com/kensaurus/mushi-mushi/issues).
+The source is public.
 
 ---
 
@@ -9898,7 +10126,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.1`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.2`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -10009,7 +10237,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      # Gates 1 + 2 read your ESLint report (eslint-plugin-mushi-mushi rules).
+      # Gates 1 + 2 read your ESLint report (mushi-mushi/eslint rules).
       - run: npx eslint -f json -o mushi-eslint.json src/ || true
       - uses: kensaurus/mushi-mushi/packages/mcp-ci@master
         with:
@@ -10038,7 +10266,7 @@ jobs:
 
 The action fails the step; it does not post a separate GitHub commit status.
 `dead_handler` and `mock_leak` judge the findings in `eslint-report` (an
-ESLint JSON report made with [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin)).
+ESLint JSON report made with [`mushi-mushi/eslint`](/sdks/eslint-plugin)).
 A run that asks for them without a report fails, so a missing lint step can
 never pass as "no findings". `crawl` is not run by this command: start a crawl
 with **Reconcile** on the Inventory page; `api_contract` reads its result. A
@@ -10070,7 +10298,7 @@ page; see [Admin → User stories · Inventory](/admin/inventory).
 | `commit-sha`  |          | `GITHUB_SHA`  | For `gates` and `spec-drift`: the commit to check.   |
 | `pr-number`   |          | —             | For `gates` and `spec-drift`: the PR the findings belong to. |
 | `gates`       |          | `all`         | For `gates`: a comma-separated subset; `crawl` is refused. |
-| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `eslint-plugin-mushi-mushi`. |
+| `eslint-report` | for `gates` with `dead_handler` / `mock_leak` | — | ESLint JSON report (`eslint -f json`) made with `mushi-mushi/eslint`. |
 | `repo-root`   |          | the workspace | For `discover-api`: where to look for routes. For `gates`: the root `eslint-report` paths are made relative to. |
 | `openapi-file` |         | `openapi.yaml` in `repo-root` | For `discover-api`: an explicit OpenAPI file. |
 | `supabase-url`, `supabase-anon-key` | | — | For `discover-api`: optional Supabase introspection. |
@@ -22728,7 +22956,7 @@ per-surface details.
 - [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — the Zod /
   JSON Schema for `inventory.yaml`.
 - [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action.
-- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — the lint rules.
+- [`mushi-mushi/eslint`](/sdks/eslint-plugin) — the lint rules.
 - [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) —
   bootstrap an authenticated session for the crawler / monitor.
 
@@ -22896,6 +23124,14 @@ description: Map how people move through your app, then fix dead ends, pages peo
 > lost: which page they leave from, which two pages say the same thing, and which
 > page nobody can find. Then you want the fix in your editor.
 
+Most people who get stuck in an app don't report it. They leave. The Journey
+optimizer shows you where that happens, in plain English, and gives each
+problem a prompt your AI editor can apply.
+
+- With the Mushi Mushi SDK in your app, the map fills in from real visits. Nothing else to set up.
+- Press **Scan my site** to add up to 40 public pages and the links between them (needs a Firecrawl key).
+- Each problem has **Copy prompt for your coding agent**. Paste it into Cursor, Claude Code, Lovable or Bolt.
+
 The Journey optimizer builds one map from two sources. Either one is enough on its own.
 
 | Source | What it adds | What you need |
@@ -22929,6 +23165,9 @@ The SDK reads the window from the settings it already loads, so outside a
 window it adds no request at all.
 
 ## Scan your site
+
+The scan uses [Firecrawl](https://www.firecrawl.dev), a service that reads web
+pages for you. Add your own Firecrawl key under **Settings → AI keys** first.
 
 Type your live address (Mushi Mushi fills it in when it knows it) and press **Scan my site**.
 The scan reads up to 40 public pages, about 41 Firecrawl credits. Firecrawl reads them on
@@ -23397,7 +23636,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.1"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",

@@ -80,7 +80,7 @@ const ROOT = resolve(__dirname, '..')
 // on the registry are skipped silently.
 //
 // Bootstrap is only for never-published packages. Packages already on npm
-// (all three below as of 2026-05-05) go through the regular `release.yml`
+// (both below as of 2026-05-05) go through the regular `release.yml`
 // + Trusted Publisher OIDC flow from their next version onwards.
 //
 // To bootstrap a NEW package in future:
@@ -93,7 +93,9 @@ const TARGETS = [
   // bootstrapped 2026-05-05 — now on npm, future versions via OIDC
   { path: 'packages/inventory-schema', name: '@mushi-mushi/inventory-schema' },
   { path: 'packages/inventory-auth-runner', name: '@mushi-mushi/inventory-auth-runner' },
-  { path: 'packages/eslint-plugin-mushi-mushi', name: 'eslint-plugin-mushi-mushi' },
+  // eslint-plugin-mushi-mushi (bootstrapped 2026-05-05) left this list on
+  // 2026-11-13: it is private now and its rules ship as `mushi-mushi/eslint`
+  // (ADR 0060 Phase 1b).
   // add new never-published packages here ↓
 ]
 

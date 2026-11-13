@@ -1461,7 +1461,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/quickstart",
     markdown: "quickstart/index.md",
     keywords: ["quickstart", "install", "first", "report", "fix", "choose", "stack"],
-    headings: ["Install", "Send your first report", "Add your keys where your site is hosted", "Get your first fix", "Already have Sentry issues? Bring them in", "Pick your framework", "Where to start", "Keys and settings"],
+    headings: ["Install", "Send your first report", "Add your keys where your site is hosted", "Get your first fix", "Rather let your AI editor do it?", "Already have Sentry issues? Bring them in", "Pick your framework", "Where to start"],
     excerpt: "Install Mushi Mushi with npx mushi-mushi, connect Cursor or Claude Code over MCP, and turn user bug reports into plain-English diagnoses with ready fixes.",
   },
   {
@@ -1717,13 +1717,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Reference for mushi-mushi/core, the MushiConfig shape, widget options, PII scrubbing helpers and region resolution shared by every Mushi Mushi JavaScript SDK.",
   },
   {
-    title: "eslint-plugin-mushi-mushi",
+    title: "mushi-mushi/eslint",
     url: docUrl("/sdks/eslint-plugin"),
     route: "/sdks/eslint-plugin",
     markdown: "sdks/eslint-plugin.md",
-    keywords: ["sdks", "eslint-plugin", "eslint", "plugin", "eslint-plugin-mushi-mushi"],
-    headings: ["Install", "Turn on the two rules", "The recommended preset", "Rules", "mushi-mushi/no-dead-handler", "mushi-mushi/no-mock-leak", "In CI"],
-    excerpt: "eslint-plugin-mushi-mushi, the Mushi Mushi ESLint plugin. Its no-dead-handler and no-mock-leak rules and preset flag empty handlers and mock data in production.",
+    keywords: ["sdks", "eslint-plugin", "eslint", "plugin", "mushi-mushi/eslint"],
+    headings: ["Turn it on", "Pick the rules yourself", "Coming from eslint-plugin-mushi-mushi?", "What the recommended rules catch", "mushi-mushi/no-dead-handler: buttons that do nothing", "mushi-mushi/no-mock-leak: fake data in real pages", "In CI"],
+    excerpt: "ESLint rules in mushi-mushi/eslint that catch what AI coding tools leave behind, such as buttons that do nothing and placeholder data left in real pages.",
   },
   {
     title: "mushi_mushi (Flutter)",
@@ -1776,8 +1776,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/launcher",
     markdown: "sdks/launcher.md",
     keywords: ["sdks", "launcher", "mushi-mushi"],
-    headings: ["Try it", "What it detects", "Running it again", "When to use the launcher vs the CLI directly"],
-    excerpt: "npx mushi-mushi detects your framework, installs the matching Mushi Mushi SDK, writes your project ID and API key to .env.local, and prints the snippet.",
+    headings: ["Try it", "What it does, step by step", "Let your AI editor run it", "Start a new app with Mushi Mushi in it", "Other ways to run the same wizard", "Flags", "What it detects", "Running it again"],
+    excerpt: "npx mushi-mushi signs you in, installs Mushi Mushi, writes your project ID and key to .env.local and shows the code to add. Plus flags and troubleshooting.",
   },
   {
     title: "Bug report MCP server for Cursor & Claude Code",

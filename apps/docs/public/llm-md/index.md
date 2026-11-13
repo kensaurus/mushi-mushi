@@ -19,6 +19,8 @@ Words you will see on this page
 - **Sentry**: a popular service that records errors when code crashes. You don't need it.
 - **Pull request (PR)**: a proposed change to your code that you can read before you accept it.
 - **MCP**: the standard way AI code editors such as Cursor and Claude Code connect to outside tools. It is how your editor reads Mushi Mushi's reports.
+- **`npx mushi-mushi`**: the one command that adds Mushi Mushi to your app. You type it in your app's folder, or ask your AI editor to.
+- **Journey map**: a picture of how people move through your app, and where they get stuck or leave.
 
 More words, in plain English: [the glossary](/glossary).
 

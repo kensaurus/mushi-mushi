@@ -1,5 +1,5 @@
 import { mount } from 'svelte'
-import { initMushi } from '@mushi-mushi/svelte'
+import { initMushi } from 'mushi-mushi/svelte'
 import App from './App.svelte'
 
 initMushi({

@@ -78,18 +78,16 @@
         "icacls",
         "cursor-agent"
       ],
+      "project": [
+        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
+        "!templates/**"
+      ],
       "ignoreIssues": {
         "src/recipe/engine/**": [
           "exports",
           "types"
         ]
       }
-    },
-    "packages/create-mushi-mushi": {
-      "project": [
-        "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts,mdx}!",
-        "!templates/**"
-      ]
     },
     "packages/server": {
       "entry": [
