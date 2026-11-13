@@ -859,6 +859,8 @@ describe('redirects keep the query string exactly as CloudFront passes it', () =
       'https://kensaur.us/glot-it/'],
     ['www-redirect 301', 'cloudfront-kensaur-www-redirect.js', wwwReq('/babuu-ai/'),
       'https://kensaur.us/babuu-ai/'],
+    ['www-redirect app-root 301', 'cloudfront-kensaur-www-redirect.js', req('/glot-it', QS),
+      '/glot-it/'],
   ];
   for (const [name, file, event, path] of cases) {
     it(name, () => {
@@ -866,4 +868,39 @@ describe('redirects keep the query string exactly as CloudFront passes it', () =
       assert.equal(out.headers.location.value, `${path}?${EXPECTED}`);
     });
   }
+});
+
+describe('cloudfront-kensaur-www-redirect app roots', () => {
+  // The S3 website endpoint answers a slashless directory key with a 302 that
+  // drops the query string (live on all ten exact app-root behaviours,
+  // 2026-11-13), so `kensaur.us/glot-it?utm_source=x` lost its UTM.
+  const handler = loadHandler('cloudfront-kensaur-www-redirect.js');
+  const apex = (uri, querystring = {}) => ({
+    request: { uri, querystring, headers: { host: { value: 'kensaur.us' } } },
+  });
+
+  for (const app of ['glot-it', 'the-wanting-mind', 'help-her-take-photo', 'yen-yen', 'mushi-mushi', '20251102dinner']) {
+    it(`301s /${app} to /${app}/ before S3, query kept`, () => {
+      const out = handler(apex(`/${app}`, { utm_source: { value: 'x' } }));
+      assert.equal(out.statusCode, 301);
+      assert.equal(out.headers.location.value, `/${app}/?utm_source=x`);
+    });
+  }
+
+  it('without a query, no stray "?"', () => {
+    assert.equal(handler(apex('/glot-it')).headers.location.value, '/glot-it/');
+  });
+
+  it('passes everything else through to the origin', () => {
+    for (const uri of ['/glot-it/', '/glot-it/press', '/babuu-ai/library', '/robots.txt', '/favicon.ico', '/', '/a/b']) {
+      const out = handler(apex(uri));
+      assert.equal(out.uri, uri, uri);
+      assert.equal(out.statusCode, undefined, uri);
+    }
+  });
+
+  it('www still goes to the apex first, with the query', () => {
+    const out = handler({ request: { uri: '/glot-it', querystring: { a: { value: '1' } }, headers: { host: { value: 'www.kensaur.us' } } } });
+    assert.equal(out.headers.location.value, 'https://kensaur.us/glot-it?a=1');
+  });
 });
