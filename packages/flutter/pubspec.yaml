@@ -1,5 +1,5 @@
 name: mushi_mushi
-description: Flutter SDK for Mushi Mushi — the open-source LLM-driven bug intake & autofix platform.
+description: Flutter SDK for Mushi Mushi. One place to improve AI-built apps — fix bugs, smooth user journeys and clean up the code.
 version: 0.3.0
 homepage: https://kensaur.us/mushi-mushi
 repository: https://github.com/kensaurus/mushi-mushi

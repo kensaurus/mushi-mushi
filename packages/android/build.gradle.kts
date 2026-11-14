@@ -72,7 +72,7 @@ publishing {
 
             pom {
                 name.set("Mushi Mushi Android SDK")
-                description.set("Native Android SDK for Mushi Mushi. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor.")
+                description.set("Native Android SDK for Mushi Mushi. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.")
                 url.set("https://github.com/kensaurus/mushi-mushi")
                 licenses {
                     license {

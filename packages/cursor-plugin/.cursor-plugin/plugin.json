@@ -2,7 +2,7 @@
   "name": "mushi-mushi",
   "displayName": "Mushi Mushi",
   "version": "0.31.2",
-  "description": "Triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs — all from your AI coding agent. Ships the Mushi Mushi skills for setup, triage, debugging, tests and SDK upgrades. Mushi sees what users feel; Sentry sees what code throws.",
+  "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. From your AI coding agent: triage user-felt bugs, pull evidence (screenshots, console logs, network requests), check blast radius, and dispatch fix PRs. Ships the Mushi Mushi skills for setup, triage, debugging, tests and SDK upgrades. Mushi sees what users feel; Sentry sees what code throws.",
   "author": {
     "name": "Mushi Mushi",
     "url": "https://kensaur.us/mushi-mushi"

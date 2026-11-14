@@ -29,5 +29,5 @@
     "required": ["mushiApiKey"]
   },
   "displayName": "Mushi Mushi",
-  "displayDescription": "MCP server for Cursor, Claude Code and Copilot. The bug mediator for AI-built apps: plain-English diagnosis + a ready fix, in your editor."
+  "displayDescription": "MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code."
 }

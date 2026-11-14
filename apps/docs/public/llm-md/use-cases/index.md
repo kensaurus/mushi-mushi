@@ -9,10 +9,11 @@ description: Where Mushi Mushi fits. An open-source Sentry alternative, a debugg
 
 # Use cases & comparisons
 
-Mushi Mushi is bug fixing for AI-built apps: your users tap a button to tell
-you what broke, Mushi Mushi checks your live site too, and every bug gets a
-plain-English explanation and a fix your AI can apply. These pages map that
-onto the situations people actually search for.
+Mushi Mushi is one place to improve AI-built apps: it fixes what breaks,
+shows where people get stuck, and cleans up the code. Your users tap a button
+to tell you what broke, Mushi Mushi checks your live site too, and every bug
+gets a plain-English explanation and a fix your AI can apply. These pages map
+that onto the situations people actually search for.
 
 **Your situation**
 

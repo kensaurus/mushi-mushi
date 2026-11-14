@@ -1,4 +1,5 @@
-/// Mushi Mushi Flutter SDK — open-source, LLM-driven bug intake & autofix.
+/// Mushi Mushi Flutter SDK — open source. One place to improve AI-built apps:
+/// fix bugs, smooth user journeys and clean up the code.
 ///
 /// Public surface intentionally mirrors the JS, iOS, and Android SDKs so
 /// cross-platform docs stay accurate.
