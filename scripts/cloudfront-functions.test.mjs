@@ -729,6 +729,37 @@ describe('cloudfront-mushi-docs-response', () => {
     }
   });
 
+  it('tags the twin of a noindex page noindex, follow, and leaves other twins indexable', () => {
+    assert.equal(respondTo('/mushi-mushi/docs/llm-md/operating/ci-runners.md').headers['x-robots-tag'].value, 'noindex, follow');
+    assert.equal(respondTo('/mushi-mushi/docs/llm-md/operating/index.md').headers['x-robots-tag'].value, 'noindex, follow');
+    assert.equal(respondTo('/mushi-mushi/docs/llm-md/sdks/web.md').headers['x-robots-tag'], undefined);
+    assert.equal(respondTo('/mushi-mushi/docs/llm-md/admin/journeys.md').headers['x-robots-tag'], undefined);
+    // The HTML page itself gets its noindex from <meta name="robots">, not here.
+    assert.equal(respondTo('/mushi-mushi/docs/operating/ci-runners.html').headers['x-robots-tag'], undefined);
+  });
+
+  it('marks exactly the twins whose page front matter sets robots index: false', () => {
+    // apps/docs/lib/noindex.ts reads `robots: { index: false }` (or a
+    // "noindex" string) from front matter; the edge list must match it.
+    const contentDir = join(__dirname, '..', 'apps', 'docs', 'content');
+    const pages = readdirSync(contentDir, { recursive: true })
+      .map((f) => String(f).replace(/\\/g, '/'))
+      .filter((f) => f.endsWith('.mdx'));
+    const noindex = [];
+    for (const rel of pages) {
+      const src = readFileSync(join(contentDir, rel), 'utf8');
+      const fm = src.startsWith('---') ? src.slice(3, src.indexOf('\n---', 3)) : '';
+      if (/^robots:\s*\n\s+index:\s*false\b/m.test(fm) || /^robots:\s*['"]?[^\n]*\bnoindex\b/m.test(fm)) {
+        noindex.push(rel.replace(/\.mdx$/, ''));
+      }
+    }
+    assert.ok(noindex.length > 0, 'expected some noindex pages');
+    for (const rel of pages.map((f) => f.replace(/\.mdx$/, ''))) {
+      const tagged = respondTo(`/mushi-mushi/docs/llm-md/${rel}.md`).headers['x-robots-tag']?.value === 'noindex, follow';
+      assert.equal(tagged, noindex.includes(rel), rel);
+    }
+  });
+
   it('no longer carries a 404 body it could never serve', () => {
     // CloudFront does not invoke viewer-response on origin >= 400; the 404
     // is the bucket ErrorDocument + response headers policy instead

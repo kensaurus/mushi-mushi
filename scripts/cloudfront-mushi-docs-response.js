@@ -50,6 +50,28 @@ function buildSecurityHeaders() {
   };
 }
 
+// llm-md twins of noindex pages (see the twin branch in handler).
+var NOINDEX_TWINS = {
+  'operating': 1,
+  'operating/ci-runners': 1,
+  'operating/deployment': 1,
+  'operating/status': 1,
+  'admin/ci': 1,
+  'admin/credits': 1,
+  'admin/design': 1,
+  'admin/experiments': 1,
+  'admin/fullstack-audit': 1,
+  'admin/health': 1,
+  'admin/iterate': 1,
+  'admin/judge': 1,
+  'admin/prompt-lab': 1,
+  'admin/query': 1,
+  'admin/queue': 1,
+  'admin/research': 1,
+  'admin/skill-pipelines': 1,
+  'admin/ux-runs': 1
+};
+
 function handler(event) {
   var response = event.response;
   var request = event.request;
@@ -101,7 +123,16 @@ function handler(event) {
       ? 'https://kensaur.us/mushi-mushi/docs/' + path
       : 'https://kensaur.us/mushi-mushi/';
     response.headers['link'] = { value: '<' + page + '>; rel="canonical"' };
+    // A page whose front matter sets `robots: { index: false }` (operator-only
+    // pages, apps/docs/lib/noindex.ts) is noindex as HTML; its twin must not
+    // be the copy that gets indexed instead. A CloudFront Function cannot read
+    // front matter, so the paths are listed here; cloudfront-functions.test.mjs
+    // compares this list with every page's front matter.
+    if (NOINDEX_TWINS[path] === 1) {
+      response.headers['x-robots-tag'] = { value: 'noindex, follow' };
+    }
   }
 
   return response;
 }
+

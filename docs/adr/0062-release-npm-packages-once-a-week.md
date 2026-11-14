@@ -1,6 +1,6 @@
 # 0062. Release the npm packages once a week
 
-Status: Proposed (for the owner) Date: 2026-11-14
+Status: Accepted 2026-11-14 by the owner (delegated to the lead). Date: 2026-11-14
 
 Related: `docs/DEPLOYMENT.md` §1.1, `.github/workflows/release.yml`
 (unchanged by this ADR), ADR [0044](0044-release-trains-batch-approved-fixes.md)
@@ -38,12 +38,11 @@ What that costs:
 - **Each release runs the whole publish job** (build, provenance, smoke
   test, registry sync) and a version-PR CI run on the shared runner.
 
-## Decision (proposed)
+## Decision
 
-1. **One release a week.** Changesets keep landing with each feature PR, as
-   now. The "chore: version packages" PR collects them all week and is
-   merged once, on a fixed release day. The proposed day is Tuesday, so a
-   bad release has the rest of the working week to be fixed. `release.yml`
+1. **One release a week, on Thursday (JST).** Changesets keep landing with
+   each feature PR, as now. The "chore: version packages" PR collects them
+   all week and is merged once, on Thursday in Japan time. `release.yml`
    does not change: it publishes when the version PR merges, as it does now.
 2. **An out-of-band patch release only for:**
    - a security fix;
@@ -75,6 +74,5 @@ What that costs:
   for each release is larger and easier to read.
 - The MCP registry entry, the SDK version matrix and the docs version pins
   move once a week.
-- If the owner accepts this, the status line above changes to Accepted with
-  the owner's name and date, and DEPLOYMENT.md §1.1's "Release cadence" note
-  loses its "proposed" label.
+- DEPLOYMENT.md §1.1's "Release cadence" note states the Thursday (JST)
+  release day.
