@@ -40,17 +40,18 @@ Related: `packages/mcp/src/feature-groups.ts` (`PRESET_TOOLS.vibe`,
    names both counts, and Glama's own build spec (set in its admin, not in
    the repo Dockerfile) runs with `MUSHI_FEATURES=vibe`.
 
-## Not changed here (follow-ups)
+5. **Plugin bundles and the VS Code extension keep the full default** so
+   updates don't shrink existing users' tool lists; revisit only with an
+   in-product notice. Decided 2026-11-14 (the lead, on the owner's
+   delegation). It covers:
+   - the Cursor and Claude plugin bundles (`packages/cursor-plugin/mcp.json`,
+     `plugins/mushi-debugger/.mcp.json`);
+   - the VS Code extension's `mushiMushi.features` setting, which releases
+     through `publish-vscode-extension.yml`, not Changesets.
 
-- **The Cursor and Claude plugin bundles** (`packages/cursor-plugin/mcp.json`,
-  `plugins/mushi-debugger/.mcp.json`). A plugin update rewrites the config
-  for everyone who already installed it, so switching them would silently
-  shrink existing users' tool lists. Decide separately: either accept that
-  on a release note, or ship it with a visible changelog line.
-- **The VS Code extension's `mushiMushi.features` setting** defaults to the
-  old groups. Changing a setting default moves every existing user who never
-  set it, and the extension releases on its own path
-  (`publish-vscode-extension.yml`, not Changesets).
+   A plugin or extension update rewrites the config, or moves the setting
+   default, for everyone who already installed it. That would break the rule
+   that existing installs never change silently.
 
 ## Rejected
 
