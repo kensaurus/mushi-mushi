@@ -226,9 +226,9 @@ describe('landing cinematic copy SSOT', () => {
     // The eyebrow keeps its dot stamp: the navbar mark and the figure are enough.
     expect(hero).toContain('docs-editorial-hero__stamp landing-hanko')
     // A real product visual: the bug-to-fix walkthrough, a poster until the
-    // reader presses play. No GIF, no autoplay, and the video only loads then.
+    // reader presses play. No autoplay, and the video only loads then.
+    // (lib/demo-videos.test.ts already keeps animated images out of docs sources.)
     expect(visual).toContain("['bug-to-fix']")
-    expect(visual).not.toMatch(/\.gif\b/)
     expect(visual).toMatch(/\{playing \? \(\s*<video/)
     expect(visual).toContain('onClick={() => setPlaying(true)}')
     expect(visual.match(/<button\s/g)).toHaveLength(1)
