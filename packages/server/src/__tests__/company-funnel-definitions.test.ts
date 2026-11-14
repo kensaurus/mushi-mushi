@@ -94,7 +94,9 @@ describe('company_funnel_weekly definitions', () => {
     expect(opens).toContain("se.event_name = 'report_opened'")
     expect(opens).toContain('eu.external_user_id = proj.owner_id::text')
     expect(opens).toContain("proj.owner_signed_up_at + interval '7 days'")
-    expect(opens).toContain("'admin_test_report'")
+    // "Real" is the ingest rule (20261114090000): no wizard, localhost, test,
+    // seed or hand-filed report. funnel-real-report-parity.test.ts pins it.
+    expect(opens).toContain('public.is_activation_candidate_report(')
   })
 })
 

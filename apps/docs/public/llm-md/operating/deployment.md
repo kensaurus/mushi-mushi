@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/deployment
 ---
 title: Deployment & releases
 description: How Mushi Mushi's maintainers ship the SDKs, edge functions, console and docs. A public summary of the release process; app developers never need to run it.
+robots:
+  index: false
+  follow: true
 ---
 
 # Deployment & releases

@@ -1,7 +1,7 @@
 Pod::Spec.new do |s|
   s.name             = 'mushi_mushi'
   s.version          = '0.2.0'
-  s.summary          = 'Flutter plugin for Mushi Mushi — LLM-driven bug intake & autofix.'
+  s.summary          = 'Flutter plugin for Mushi Mushi: one place to improve AI-built apps.'
   s.description      = <<-DESC
     Mushi Mushi Flutter SDK — bottom-sheet bug reporter, shake-to-report,
     offline queue, and device context capture for Flutter apps on iOS.

@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import type { PageMapItem } from 'nextra'
 import { getPageMap } from 'nextra/page-map'
+import { isNoindexFrontMatter } from '../lib/noindex'
 import { lastModifiedFromFrontMatter } from '../lib/sitemap-dates'
 import { DOCS_SITE, PRODUCT_ROOT } from '../lib/structured-data'
 
@@ -30,8 +31,17 @@ function collectRoutes(items: PageMapItem[], acc: Map<string, Date | undefined>)
     // A leaf is always a page. A folder is one only if it has an index child.
     const index = children?.find((c) => 'name' in c && c.name === 'index')
     const isPage = !children || index !== undefined
-    if (isPage && 'route' in item && item.route.startsWith('/') && !item.route.includes('#')) {
-      acc.set(item.route, lastModifiedFromFrontMatter(frontMatterOf(index ?? item)))
+    // A page whose front matter sets `robots: { index: false }` is noindex
+    // (lib/noindex.ts) and a sitemap may submit only indexable URLs.
+    const frontMatter = frontMatterOf(index ?? item)
+    if (
+      isPage &&
+      'route' in item &&
+      item.route.startsWith('/') &&
+      !item.route.includes('#') &&
+      !isNoindexFrontMatter(frontMatter)
+    ) {
+      acc.set(item.route, lastModifiedFromFrontMatter(frontMatter))
     }
     if (children) {
       collectRoutes(children, acc)

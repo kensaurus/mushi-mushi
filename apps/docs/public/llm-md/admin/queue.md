@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/queue
 ---
 title: Processing jobs
 description: The Processing jobs page in the Mushi Mushi console shows reports waiting to be diagnosed, retries and dead-letter jobs, and lets you retry failed ones.
+robots:
+  index: false
+  follow: true
 ---
 
 # Processing jobs

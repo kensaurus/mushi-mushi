@@ -17,7 +17,7 @@ Add under the relevant category (Developer Tools / Monitoring). Ready-to-paste
 entry (alphabetical insertion — match surrounding format):
 
 ```md
-- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - Your AI shipped it. Mushi Mushi tells you why it broke — plain diagnosis and a paste-ready fix prompt in Cursor. No second LLM key.
+- [Mushi Mushi](https://github.com/kensaurus/mushi-mushi) 🏎️ ☁️ - One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. Plain-English diagnosis and a fix prompt in Cursor or Claude Code.
 ```
 
 (Legend: 🏎️ = TypeScript/Node, ☁️ = cloud/remote available. Confirm the repo's

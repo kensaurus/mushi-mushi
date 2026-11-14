@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/experiments
 ---
 title: Experiments
 description: The Experiments page in the Mushi Mushi console defines and runs A/B tests on your app and analyses them with CUPED variance reduction and sequential testing.
+robots:
+  index: false
+  follow: true
 ---
 
 # Experiments

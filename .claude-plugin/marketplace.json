@@ -5,14 +5,14 @@
     "url": "https://github.com/kensaurus"
   },
   "metadata": {
-    "description": "Mushi Mushi — bug capture with plain-English AI diagnosis and paste-ready fixes, wired into Claude Code",
+    "description": "Mushi Mushi for Claude Code. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.",
     "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "mushi-debugger",
       "source": "./plugins/mushi-debugger",
-      "description": "Triage and fix Mushi Mushi bug reports without leaving Claude Code: hosted MCP (OAuth sign-in, no keys), a mushi-debugger subagent that pulls reports, diagnosis and fix context, and the Mushi Mushi skills (setup, triage, debug, test, SDK upgrade, live-site check)",
+      "description": "One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. Inside Claude Code: hosted MCP (OAuth sign-in, no keys), a mushi-debugger subagent that pulls reports, diagnosis and fix context, and the Mushi Mushi skills (setup, triage, debug, test, SDK upgrade, live-site check)",
       "category": "debugging"
     }
   ]

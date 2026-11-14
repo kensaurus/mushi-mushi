@@ -50,9 +50,9 @@ Tick these off in order. Most are one-time.
 Keywords have been populated. Now confirm each package README opens strong:
 
 - [ ] Every SDK `README.md` leads with the canonical v2 hero (`MUSHI_TAGLINE_V2.hero`
-  / `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Your AI wrote it. Mushi tells
-  you why it broke."* followed by the sub-hero *"Plain-English diagnosis + a
-  paste-ready fix, right inside Cursor."* The legacy 12-word Sentry-contrast line
+  / `MUSHI_TAGLINE.full` in `@mushi-mushi/brand`): *"Your AI built it. Mushi
+  Mushi makes it better."* (ADR 0058) followed by `MUSHI_TAGLINE_V2.subHero`.
+  The legacy 12-word Sentry-contrast line
   is comparison-tables-only — never the opener. CI enforces the v2 hero on every
   primary README via `scripts/check-tagline-consistency.mjs`.
 - [ ] 60-second install snippet immediately under the tagline. No wall-of-text.

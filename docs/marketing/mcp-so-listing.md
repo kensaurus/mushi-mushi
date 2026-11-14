@@ -7,7 +7,7 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 | Field | Public surface | Value |
 | --- | --- | --- |
 | **Title** | Page heading | `Mushi Mushi` |
-| **Description** | Subtitle under `@kensaurus` | Your AI built it. Mushi Mushi makes it better: fix bugs, smooth user journeys and clean up the code, with a paste-ready prompt in Cursor. No second LLM key. |
+| **Description** | Subtitle under `@kensaurus` | MCP server for Cursor, Claude Code and Copilot. One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code. |
 | **Content** | Overview tab | Unnamed `<textarea>` (4th on form, index 3) — not TipTap; paste markdown below |
 | **Server Config** | Right rail | JSON below |
 
@@ -45,9 +45,9 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 3. Paste overview markdown below, submit, hard-refresh [mcp.so/server/mushi-mushi](https://mcp.so/server/mushi-mushi).
 
 ```markdown
-## Why it broke — in your editor
+## One place to improve AI-built apps
 
-Mushi turns user-felt bugs into a plain diagnosis and a paste-ready fix prompt. Works from Cursor, Claude Code, or VS Code over MCP.
+Mushi Mushi fixes what breaks, shows where people get stuck, and cleans up the code. Each bug a user reports gets a plain-English diagnosis and a fix prompt your agent can apply. Works from Cursor, Claude Code or VS Code over MCP.
 
 **Install:** [kensaur.us/mushi-mushi/docs/connect](https://kensaur.us/mushi-mushi/docs/connect) · `npx mushi-mushi setup --ide cursor`
 

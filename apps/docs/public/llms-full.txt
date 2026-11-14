@@ -3280,10 +3280,11 @@ description: Where Mushi Mushi fits. An open-source Sentry alternative, a debugg
 
 # Use cases & comparisons
 
-Mushi Mushi is bug fixing for AI-built apps: your users tap a button to tell
-you what broke, Mushi Mushi checks your live site too, and every bug gets a
-plain-English explanation and a fix your AI can apply. These pages map that
-onto the situations people actually search for.
+Mushi Mushi is one place to improve AI-built apps: it fixes what breaks,
+shows where people get stuck, and cleans up the code. Your users tap a button
+to tell you what broke, Mushi Mushi checks your live site too, and every bug
+gets a plain-English explanation and a fix your AI can apply. These pages map
+that onto the situations people actually search for.
 
 **Your situation**
 
@@ -3509,9 +3510,9 @@ having written the module; every investigation starts cold. The fix itself is
 cheap — an agent can write it in seconds — but only once someone has worked
 out **what actually broke and where**.
 
-Mushi Mushi is built around that bottleneck. It's bug fixing for AI-built
-apps: it turns raw user reports into diagnoses an agent (or you) can act on
-right away.
+Mushi Mushi is one place to improve AI-built apps, and fixing what breaks is
+the pillar built around that bottleneck: it turns raw user reports into
+diagnoses an agent (or you) can act on right away.
 
 ## The pipeline
 
@@ -18253,6 +18254,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating
 ---
 title: Operating (maintainers)
 description: Runbooks for maintainers running Mushi Mushi Cloud or publishing the open-source packages (deployment, releases and status). Not needed to use the SDK.
+robots:
+  index: false
+  follow: true
 ---
 
 # Operating Mushi Mushi
@@ -18298,6 +18302,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/ci-runners
 ---
 title: CI runners
 description: See where your tests run and why a Mushi Mushi fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.
+robots:
+  index: false
+  follow: true
 ---
 
 # CI runners
@@ -18711,6 +18718,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/deployment
 ---
 title: Deployment & releases
 description: How Mushi Mushi's maintainers ship the SDKs, edge functions, console and docs. A public summary of the release process; app developers never need to run it.
+robots:
+  index: false
+  follow: true
 ---
 
 # Deployment & releases
@@ -18801,6 +18811,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/status
 
 ---
 description: Mushi Mushi Cloud status. The live status page for the API, hosted MCP, console and docs, what it checks, and what is and is not promised about uptime.
+robots:
+  index: false
+  follow: true
 ---
 
 # Status & Uptime
@@ -20032,6 +20045,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ci
 ---
 title: CI runners
 description: The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.
+robots:
+  index: false
+  follow: true
 ---
 
 # CI runners
@@ -20738,6 +20754,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/credits
 ---
 title: Spend credits
 description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi Mushi can spend them fixing bugs, improving apps with skills and checking sites.
+robots:
+  index: false
+  follow: true
 ---
 
 # Spend credits
@@ -20944,6 +20963,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/design
 ---
 title: Design system
 description: The Design system page in Mushi Mushi shows tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft PR.
+robots:
+  index: false
+  follow: true
 ---
 
 # Design system
@@ -21216,6 +21238,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/experiments
 ---
 title: Experiments
 description: The Experiments page in the Mushi Mushi console defines and runs A/B tests on your app and analyses them with CUPED variance reduction and sequential testing.
+robots:
+  index: false
+  follow: true
 ---
 
 # Experiments
@@ -22079,6 +22104,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit
 ---
 title: Full-stack audit
 description: The Full-stack audit in Mushi Mushi runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
+robots:
+  index: false
+  follow: true
 ---
 
 # Full-stack audit
@@ -22293,6 +22321,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/health
 ---
 title: Mushi Mushi health
 description: The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.
+robots:
+  index: false
+  follow: true
 ---
 
 # Mushi Mushi health [#mushi-health]
@@ -22969,6 +23000,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/iterate
 ---
 title: Improvement runs
 description: The Improvement runs page in Mushi Mushi queues runs where one AI critiques a live URL against your goal and a second scores it, iteration by iteration.
+robots:
+  index: false
+  follow: true
 ---
 
 # Improvement runs
@@ -23229,6 +23263,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/judge
 ---
 title: Triage grading
 description: The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.
+robots:
+  index: false
+  follow: true
 ---
 
 # Triage grading
@@ -24600,6 +24637,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/prompt-lab
 ---
 title: AI prompts
 description: The AI prompts page in the Mushi Mushi console lets you edit and A/B compare the prompts behind each AI step before you promote a new version.
+robots:
+  index: false
+  follow: true
 ---
 
 # AI prompts
@@ -24884,6 +24924,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/query
 ---
 title: SQL query
 description: Ask about your bug data in Mushi Mushi in plain English or in read-only SQL; the SQL query page shows the SQL it ran, the result rows and a short summary.
+robots:
+  index: false
+  follow: true
 ---
 
 # SQL query
@@ -24999,6 +25042,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/queue
 ---
 title: Processing jobs
 description: The Processing jobs page in the Mushi Mushi console shows reports waiting to be diagnosed, retries and dead-letter jobs, and lets you retry failed ones.
+robots:
+  index: false
+  follow: true
 ---
 
 # Processing jobs
@@ -25695,6 +25741,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/research
 ---
 title: Research
 description: The Research page in the Mushi Mushi console runs a web search through your Firecrawl key and lets you attach useful results to a bug.
+robots:
+  index: false
+  follow: true
 ---
 
 # Research
@@ -26458,6 +26507,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 ---
 title: Agent skills
 description: Agent skills in Mushi Mushi recommend skills from the kenji skills and skills.sh ecosystem for each classified bug and run them as pipelines during review.
+robots:
+  index: false
+  follow: true
 ---
 
 # Agent skills (skill pipelines)
@@ -26995,6 +27047,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 ---
 title: UX runs
 description: The UX runs page in Mushi Mushi shows each screen your agent worked on in a mushi ux run, with its plan, attempts, before/after screenshots, and what was kept.
+robots:
+  index: false
+  follow: true
 ---
 
 # UX runs

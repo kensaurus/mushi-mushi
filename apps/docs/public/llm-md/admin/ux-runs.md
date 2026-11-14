@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ux-runs
 ---
 title: UX runs
 description: The UX runs page in Mushi Mushi shows each screen your agent worked on in a mushi ux run, with its plan, attempts, before/after screenshots, and what was kept.
+robots:
+  index: false
+  follow: true
 ---
 
 # UX runs

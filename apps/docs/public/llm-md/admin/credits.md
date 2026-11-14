@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/credits
 ---
 title: Spend credits
 description: Spend credits lists expiring Cursor and Firecrawl credits and every way Mushi Mushi can spend them fixing bugs, improving apps with skills and checking sites.
+robots:
+  index: false
+  follow: true
 ---
 
 # Spend credits

@@ -56,7 +56,10 @@ const STAGES = [
 type StageKey = (typeof STAGES)[number]
 
 const STAGE_LABEL: Record<StageKey, string> = {
-  visits: 'Visits',
+  // Cookieless page views without referrer spam since 20261114090000, not
+  // people (the counter keeps no visitor id). The consented measure is
+  // visits_consented in the RPC.
+  visits: 'Page views',
   signups: 'Signups',
   projects: 'Projects',
   keys: 'Keys',

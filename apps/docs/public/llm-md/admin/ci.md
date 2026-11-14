@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/ci
 ---
 title: CI runners
 description: The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.
+robots:
+  index: false
+  follow: true
 ---
 
 # CI runners

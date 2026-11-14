@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/health
 ---
 title: Mushi Mushi health
 description: The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.
+robots:
+  index: false
+  follow: true
 ---
 
 # Mushi Mushi health [#mushi-health]

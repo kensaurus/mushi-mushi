@@ -31,6 +31,14 @@ packages (see §1.3).
 
 ### 1.1 Routine release
 
+> **Release cadence (proposed, [ADR 0062](./adr/0062-release-npm-packages-once-a-week.md)):**
+> merge the version PR once a week, on release day (proposed: Tuesday), not
+> after each batch of fixes. `@mushi-mushi/cli` was published 26 times from
+> 2026-10-15 to 2026-11-13. Between release days the version PR stays open and
+> keeps collecting changesets. Release out of band only for a security fix, a
+> version that breaks installs or setup, or a bug that stops reports from being
+> sent; say which in the version PR body. `release.yml` is unchanged.
+
 1. **On the feature PR**, add a changeset for every modified published package:
    ```bash
    pnpm changeset
@@ -44,7 +52,7 @@ packages (see §1.3).
    suppression), push an empty commit to `changeset-release/master`. If
    `check:sdk-version-matrix` fails, run `pnpm gen:sdk-version-matrix` on that
    branch and commit `apps/docs/content/sdks/index.mdx`.
-4. **Merge the version PR.** This is what publishes to npm.
+4. **Merge the version PR** (on release day, see the cadence note above). This is what publishes to npm.
 5. **Dispatch the release if it does not auto-start within ~2 minutes** — squash
    merges attributed to `github-actions[bot]` usually suppress the `push` trigger;
    version-PR squash commits that include `[skip ci]` suppress it too:

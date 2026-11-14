@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/design
 ---
 title: Design system
 description: The Design system page in Mushi Mushi shows tokens, contrast pairs, type scale and a deviance score for off-token code. Token and rule edits open a draft PR.
+robots:
+  index: false
+  follow: true
 ---
 
 # Design system
