@@ -38,8 +38,9 @@
 --    SPAM_REFERRER_HOSTS in _shared/landing-visits.ts; add a host to both
 --    and the parity test in landing-visits.test.ts). Its unit changes from
 --    people to page views; the earlier measure stays as visits_consented,
---    and visits_spam_excluded reports what the denylist left out. With
---    p_source set, visits counts only views whose ?src= tag equals it.
+--    and visits_spam_excluded reports what the denylist left out. visits is
+--    not source-filtered, as before; page views by ?src= tag live in
+--    gtm_daily_scorecard.
 --
 -- Both function bodies are the previous repo definitions (20261029120000,
 -- 20261111090000), which match prod prosrc apart from comments and
@@ -295,8 +296,9 @@ begin
     -- row per UTC day, path, ?src= tag and referrer host, recorded without
     -- consent and without anything personal. Referrer spam
     -- (is_spam_referrer_host, 20261111090000) is left out; spam rows stay in
-    -- the table. With p_source set, only views whose ?src= tag equals it
-    -- count (the tag is the same lowercase value signup_first_touch stores).
+    -- the table. Not source-filtered, like the visits it replaces: p_source
+    -- matches signup_source first, a different vocabulary from the ?src= tag
+    -- (gtm_daily_scorecard reports page views by ?src=).
     page_views as (
       select v.day,
              sum(v.views) filter (where not public.is_spam_referrer_host(v.referrer_host))::bigint as n,
@@ -304,7 +306,6 @@ begin
       from public.landing_page_views_daily v
       where v.day >= (v_start at time zone 'utc')::date
         and v.day <  (v_end at time zone 'utc')::date
-        and (v_source is null or v.src = v_source)
       group by v.day
     ),
     -- Growth-loop exposure. The widget's "Bug reports by Mushi" mark emits
@@ -497,7 +498,7 @@ end;
 $fn$;
 
 comment on function public.company_funnel_weekly(integer, text) is
-  'Mushi company funnel per ISO week (newest first) + signups/activated by source (signup_source, else the first-touch utm_source stored as signup_first_touch). Excludes operator_users and synthetic accounts everywhere, tester-only accounts from signups, and projects in complimentary organizations from every project count; visits = cookieless page views (landing_page_views_daily) without referrer spam, filtered on ?src= when a source is given; visits_spam_excluded = the spam views left out; visits_consented = distinct anon ids with landing_view or docs_page_view (the earlier visits); keys = first key leaving the console; activated = first real end-user report (is_activation_candidate_report: no wizard, localhost, test, seed, hand-filed or Mushi-filed report); activated_opened = owner opened such a report within 7 days of signup; habit = report_opened, fix_context_pulled or fix_dispatched (console or MCP) in 3 of 4 weeks; loop_impressions / loop_clicks = widget-mark events across all projects except the self project; loop_signups = signups whose loop_ref is a widget loop ref; sdk_seen_localhost / sdk_seen_live / first_real_report / first_diagnosis_viewed / first_fix_dispatched / first_fix_merged = outside projects reaching that new-user step that week (server product_events, one per project; a first_real_report whose report fails is_activation_candidate_report is left out). Service role only — GET /v1/admin/growth/funnel behind requireOperator.';
+  'Mushi company funnel per ISO week (newest first) + signups/activated by source (signup_source, else the first-touch utm_source stored as signup_first_touch). Excludes operator_users and synthetic accounts everywhere, tester-only accounts from signups, and projects in complimentary organizations from every project count; visits = cookieless page views (landing_page_views_daily) without referrer spam (not source-filtered); visits_spam_excluded = the spam views left out; visits_consented = distinct anon ids with landing_view or docs_page_view (the earlier visits); keys = first key leaving the console; activated = first real end-user report (is_activation_candidate_report: no wizard, localhost, test, seed, hand-filed or Mushi-filed report); activated_opened = owner opened such a report within 7 days of signup; habit = report_opened, fix_context_pulled or fix_dispatched (console or MCP) in 3 of 4 weeks; loop_impressions / loop_clicks = widget-mark events across all projects except the self project; loop_signups = signups whose loop_ref is a widget loop ref; sdk_seen_localhost / sdk_seen_live / first_real_report / first_diagnosis_viewed / first_fix_dispatched / first_fix_merged = outside projects reaching that new-user step that week (server product_events, one per project; a first_real_report whose report fails is_activation_candidate_report is left out). Service role only — GET /v1/admin/growth/funnel behind requireOperator.';
 
 -- Service role only, as before.
 revoke all on function public.company_funnel_weekly(integer, text) from public, anon, authenticated;

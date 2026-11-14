@@ -79,7 +79,9 @@ describe('company_funnel_weekly — visits, source fallback, loop columns', () =
     const pageViews = cte(body, 'page_views', 'loop_events')
     expect(pageViews).toContain('from public.landing_page_views_daily v')
     expect(pageViews).toContain('filter (where not public.is_spam_referrer_host(v.referrer_host))')
-    expect(pageViews).toContain('(v_source is null or v.src = v_source)')
+    // Not source-filtered, as visits never was: p_source matches signup_source
+    // first, a different vocabulary from the ?src= tag.
+    expect(pageViews).not.toContain('v_source')
     expect(weeklyColumn(body, 'visits_spam_excluded')).toContain('sum(pv.spam)')
     expect(body).toMatch(/'visits',\s+w\.visits,/)
     expect(body).toMatch(/'visits_spam_excluded',\s+w\.visits_spam_excluded,/)
