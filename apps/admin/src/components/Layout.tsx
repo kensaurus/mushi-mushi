@@ -878,7 +878,10 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Phone header is ONE row (B26): menu, team, project, search. The
             two-row version with the wordmark took a third of a 390px screen
             once the page banners stacked under it; the wordmark lives in the
-            menu drawer. The switchers truncate instead of overflowing. */}
+            menu drawer. The switchers truncate instead of overflowing.
+            This header paints over the drawer's brand row, so Kenji's face
+            (the home link) sits here, beside the menu button: 24 px, no
+            wordmark (2026-11-14). */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <Btn
             type="button"
@@ -890,6 +893,14 @@ export function Layout({ children }: { children: ReactNode }) {
           >
             <IconMenu size={18} />
           </Btn>
+          <a
+            href={MUSHI_CANONICAL_URLS.home}
+            aria-label="Mushi Mushi home"
+            data-testid="brand-home-link-mobile"
+            className="flex shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <img src={kenjiFace} alt="" aria-hidden="true" width={24} height={24} className="size-6 rounded-full" draggable={false} />
+          </a>
           <div className="flex min-w-0 flex-1 items-center gap-1.5 [&>*]:min-w-0">
             {!isDesktopHeader && (
               <>

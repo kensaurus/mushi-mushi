@@ -140,8 +140,9 @@ the guide is (owner, 2026-11-13).
 - In the chrome (since 2026-11-14): `kenji-face.webp` is the icon cut to its
   paper disc with a thin vermillion ring, 96 px, transparent, in
   `apps/admin/src/assets/brand/` and `apps/docs/assets/brand/`. It sits before
-  the wordmark in the console sidebar (alone in the icon rail), before
-  "Mushi Mushi" in the docs navbar, and in the landing hero's eyebrow, where
+  the wordmark in the console sidebar (alone in the icon rail and in the
+  phone header), before "Mushi Mushi" in the docs navbar (only at widths
+  where the row has room; see `globals.css`), and in the landing hero's eyebrow, where
   the vermillion dot stamp was. The console brand and the docs logo both link
   to the landing page; decorative (`alt=""`), the link carries the name.
 - The landing hero shows the `wave` pose beside the copy at 1024 px and up

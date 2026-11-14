@@ -242,6 +242,14 @@ describe('the brand mark links home', () => {
     expect(link.contains(beta)).toBe(false)
   })
 
+  it('puts the face link in the phone header, which covers the drawer brand row', () => {
+    renderAt('/reports')
+    const link = container!.querySelector<HTMLAnchorElement>('header [data-testid="brand-home-link-mobile"]')
+    expect(link?.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link?.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link?.querySelector('img')?.getAttribute('alt')).toBe('')
+  })
+
   it('shows only the face in the icon rail, with the same link', () => {
     state.collapsed = true
     renderAt('/reports')

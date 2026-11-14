@@ -397,6 +397,18 @@ main :not(pre) > code {
   user-select: none;
 }
 
+/* The face shows only where the navbar row has room for it. Up to about
+   455px (logo, GitHub, Free check, menu) the wordmark ran under the GitHub
+   icon; from 640px search, "— docs" and the auth links fill the row until
+   about 1200px. Phones keep the name; the hero eyebrow carries the face on
+   the landing. (Below about 1100px the row already overflows and pushes the
+   logo off the left edge; that predates the face.) */
+@media (max-width: 480px), (min-width: 640px) and (max-width: 1219px) {
+  .docs-logo-face {
+    display: none;
+  }
+}
+
 /* "Beta" chip beside the navbar logo (owner, 2026-11-07). Outlined in the
    text colour so it reads in both themes without a new colour token. */
 .docs-logo-beta {
@@ -1232,6 +1244,17 @@ main :not(pre) > code {
   user-select: none;
 }
 
+/* The eyebrow needs 293px at 390; a smaller face and gap keep it on one line. */
+@media (max-width: 420px) {
+  .landing-cinematic-hero .docs-editorial-hero__eyebrow {
+    gap: 0.5rem;
+  }
+  .landing-hero-face {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+}
+
 /* Field Kenji waving beside the hero copy, desktop only. A paper spot sits
    behind the watercolour so he reads on the dark theme, as in <Mascot>. Same
    motion as the docs guide: one entrance, three slow 2 px sways, then rest. */
@@ -1244,8 +1267,10 @@ main :not(pre) > code {
     display: block;
     position: absolute;
     z-index: 1;
+    /* Beside the headline: the hero runs taller than the viewport, so a
+       bottom anchor would put him below the fold. */
     right: 2%;
-    bottom: 1.5rem;
+    top: clamp(2.5rem, 7vh, 5rem);
     width: clamp(14rem, 22vw, 21rem);
     aspect-ratio: 1;
     pointer-events: none;
