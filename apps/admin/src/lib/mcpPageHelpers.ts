@@ -168,8 +168,8 @@ export function buildEnvBlock(projectId: string): string {
     `MUSHI_API_ENDPOINT=${MUSHI_MCP_API}`,
     'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
-    '# Optional: lean tool set (default in admin snippets). Omit or set to "all" for full catalog.',
-    'MUSHI_FEATURES=triage,fixes,inventory,setup,docs',
+    '# The vibe tool set (ADR 0063). vibe,fixes also dispatches fixes to cloud agents; all lists every tool.',
+    'MUSHI_FEATURES=vibe',
     '',
   ].join('\n')
 }

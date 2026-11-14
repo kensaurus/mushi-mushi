@@ -132,7 +132,8 @@ describe('ClientConnectButton for Claude Code', () => {
     press(/Show Claude Code command/)
     await flush()
     const text = container.textContent ?? ''
-    expect(text).toContain(`claude mcp add --transport http mushi ${HOSTED}`)
+    // New installs carry the vibe preset (ADR 0063); the URL is quoted for zsh.
+    expect(text).toContain(`claude mcp add --transport http mushi "${HOSTED}?features=vibe"`)
     expect(text).not.toMatch(/--header|Authorization|Bearer/)
     expect(text).toContain('No key is created or copied')
     expect(mint.getOrMintMcpKey).not.toHaveBeenCalled()

@@ -1,5 +1,11 @@
-# Glama introspection image — installs the published @mushi-mushi/mcp from npm
-# and starts the stdio MCP server with offline env vars so Glama's build test
+# NOTE (2026-11-14): Glama does NOT build from this file. Its build spec lives in
+# the Glama admin (it installs @mushi-mushi/mcp@latest and runs
+# `mcp-proxy -- mushi-mcp`, with MUSHI_FEATURES=vibe in its placeholder
+# parameters and env schema). Change the tool set there, not only here. This
+# image is a local, offline reproduction of that inspection.
+#
+# Introspection image — installs the published @mushi-mushi/mcp from npm
+# and starts the stdio MCP server with offline env vars so a build test
 # and tools/list inspection succeed without live credentials. Pulling the
 # published package is far more reliable for an external builder than compiling
 # the whole monorepo (pnpm install across 43 packages).
@@ -19,8 +25,8 @@ ENV NODE_ENV=production \
     MUSHI_PROJECT_ID=00000000-0000-0000-0000-000000000001 \
     MUSHI_API_ENDPOINT=http://127.0.0.1:1/offline \
     MUSHI_FEATURES=vibe
-# vibe = the 12-tool preset new installs get (packages/mcp/src/feature-groups.ts
-# PRESET_TOOLS); glama.json lists the same set. Glama scores tool count, and the
-# full list (features=all) scored 1/5.
+# vibe = the 12-tool preset new installs get (ADR 0063; PRESET_TOOLS in
+# packages/mcp/src/feature-groups.ts); glama.json lists the same set. Glama
+# scores tool count, and the full list (features=all) scored 1/5.
 
 ENTRYPOINT ["mushi-mcp"]

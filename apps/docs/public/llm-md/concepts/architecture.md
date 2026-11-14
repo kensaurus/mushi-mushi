@@ -124,7 +124,7 @@ The same tool catalog ships on two transports:
 | Transport | Entry | Notes |
 |---|---|---|
 | **stdio** | `npx @mushi-mushi/mcp` | Local editor subprocess; env from `.env.local` or `mcp.json` |
-| **Streamable HTTP** | `/functions/v1/mcp` | Remote orchestrators; `?features=triage,fixes,inventory,setup,docs` for lean default |
+| **Streamable HTTP** | `/functions/v1/mcp` | Remote orchestrators; `?features=vibe` for the dozen-tool set new installs get, `vibe,fixes` to dispatch fixes, `all` for every tool |
 
 Catalog source of truth: `packages/mcp/src/catalog.ts`, mirrored in
 `apps/admin/src/lib/mcpCatalog.ts`, guarded by `pnpm check:catalog-sync`.

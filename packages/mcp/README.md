@@ -63,7 +63,7 @@ Claude Desktop does not expand `${VAR}` references in this file; Cursor and VS C
 
 The full catalog has 133 tools, plus 8 resources (`project://dashboard`, `project://stats`, …) and 4 prompts (`summarize_report_for_fix`, `triage_next_steps`, …). Every tool carries read-only and destructive hints, so your editor can ask before it changes anything. Full list: [MCP tool reference](https://kensaur.us/mushi-mushi/docs/sdks/mcp-tools).
 
-**Tool groups.** New installs get a lean default: `triage`, `fixes`, `inventory`, `setup`, `docs`. Turn on more with `MUSHI_FEATURES=triage,qa,codebase` (stdio) or `?features=…` on the hosted URL, or everything with `all`. Groups: `qa`, `skills`, `codebase`, `rewards`, `admin`, `audit`, `usage`. For a chat tool such as Lovable, or an editor that caps how many tools it loads, `vibe` gives about a dozen tools for the core loop. Add `?read_only=1` to the hosted URL to hide every write tool.
+**Tool sets.** New installs (the console buttons, `npx mushi-mushi setup`, the docs commands) write `vibe`: about a dozen tools for the core loop of report, diagnosis and fix context. Add `fixes` (`MUSHI_FEATURES=vibe,fixes`, or `?features=vibe,fixes` on the hosted URL) to dispatch fixes to cloud agents, or use `all` for everything. A config with no `MUSHI_FEATURES` or `?features=` keeps the earlier groups, `triage`, `fixes`, `inventory`, `setup` and `docs`. Other groups: `qa`, `skills`, `codebase`, `rewards`, `admin`, `audit`, `usage`. Add `?read_only=1` to the hosted URL to hide every write tool.
 
 ## Keys and safety
 

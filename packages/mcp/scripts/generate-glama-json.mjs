@@ -31,9 +31,10 @@ const featureGroupsUrl = pathToFileURL(resolve(PKG_ROOT, 'dist/feature-groups.js
 const { PRESET_TOOLS } = await import(featureGroupsUrl)
 
 // Directory listings show the `vibe` preset, the tool set new installs get
-// (decided 2026-11-14): Glama scores tool count, and the full list scored 1/5. The Dockerfile Glama builds runs with MUSHI_FEATURES=vibe, so
-// the declared list matches what its inspection sees. `features=all` still
-// lists every tool; the description names both counts.
+// (ADR 0063): Glama scores tool count, and the full list scored 1/5. Glama's
+// own build spec (in its admin, not the repo Dockerfile) sets
+// MUSHI_FEATURES=vibe, so the declared list matches what its inspection sees.
+// `features=all` still lists every tool; the description names both counts.
 const allTools = [...TOOL_CATALOG, ...TDD_TOOL_CATALOG, ...CODEBASE_TOOL_CATALOG]
 const vibe = new Set(PRESET_TOOLS.vibe)
 const tools = allTools

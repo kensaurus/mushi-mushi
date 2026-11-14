@@ -12,8 +12,13 @@ import { dirname } from 'node:path'
 import { CONFIG_PATH } from './config.js'
 import { MUSHI_MCP_PIN_SPEC } from './version.js'
 
-/** Lean default — mirrors DEFAULT_FEATURE_GROUPS in @mushi-mushi/mcp/feature-groups */
-const DEFAULT_MUSHI_FEATURES = 'triage,fixes,inventory,setup,docs'
+/**
+ * The tool set a new config gets: the `vibe` preset (ADR 0063), the same as
+ * NEW_INSTALL_FEATURES in @mushi-mushi/mcp/clients. `vibe,fixes` also
+ * dispatches fixes to cloud agents; `all` lists every tool. Written
+ * explicitly, so a later change to the server's default never moves it.
+ */
+const DEFAULT_MUSHI_FEATURES = 'vibe'
 
 /** MCP clients the CLI writes config for. Each expands env references differently. */
 export const MCP_CLIENTS = ['cursor', 'claude', 'continue', 'zed'] as const

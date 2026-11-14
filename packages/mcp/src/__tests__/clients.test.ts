@@ -229,7 +229,7 @@ describe('Claude Code builder', () => {
     expect(MCP_OAUTH_CLIENT_IDS).toContain(cc.id)
     const oauth = buildOAuthInstall('claude-code', { mcpOAuthUrl: 'https://kensaur.us/mushi-mushi/hosted-mcp/' })
     if (oauth.kind !== 'command') throw new Error('expected command')
-    expect(oauth.text).toBe('claude mcp add --transport http mushi https://kensaur.us/mushi-mushi/hosted-mcp/')
+    expect(oauth.text).toBe('claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"')
     expect(oauth.text).not.toMatch(/--header|Authorization|Bearer/)
     // No other client claims it without a URL-only install to back it.
     for (const c of MCP_CLIENTS) {
@@ -323,8 +323,21 @@ describe('pinSpec override', () => {
   })
 })
 
+describe('new installs get the vibe preset (ADR 0063)', () => {
+  it('every key-based client config names vibe explicitly', () => {
+    for (const client of MCP_CLIENTS) {
+      const result = client.build(SAMPLE_INPUT)
+      const text = JSON.stringify(result) + (result.kind === 'deeplink' ? atobSafe(result.url) + decodeURIComponent(result.url) : '')
+      expect(text, client.id).toMatch(/MUSHI_FEATURES[^,}]*vibe|features=vibe/)
+      expect(text, client.id).not.toMatch(/triage,fixes,inventory|triage%2Cfixes/)
+    }
+  })
+})
+
 describe('OAuth install variant (public surfaces)', () => {
   const OAUTH_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/'
+  // New installs carry the vibe preset explicitly (ADR 0063).
+  const INSTALLED_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe'
 
   it('never carries a key or a header, so the client runs its own OAuth sign-in', () => {
     for (const id of MCP_OAUTH_CLIENT_IDS) {
@@ -340,7 +353,7 @@ describe('OAuth install variant (public surfaces)', () => {
     if (result.kind !== 'deeplink') throw new Error('expected deeplink')
     expect(result.url.startsWith('cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=')).toBe(true)
     const config = JSON.parse(atob(decodeURIComponent(new URL(result.url).searchParams.get('config') ?? '')))
-    expect(config).toEqual({ url: OAUTH_URL })
+    expect(config).toEqual({ url: INSTALLED_URL })
   })
 
   it('VS Code: the documented vscode:mcp/install?{json} form with the name inside', () => {
@@ -349,21 +362,26 @@ describe('OAuth install variant (public surfaces)', () => {
       if (result.kind !== 'deeplink') throw new Error('expected deeplink')
       const prefix = `${id}:mcp/install?`
       expect(result.url.startsWith(prefix)).toBe(true)
-      expect(JSON.parse(decodeURIComponent(result.url.slice(prefix.length)))).toEqual({ name: 'mushi', type: 'http', url: OAUTH_URL })
+      expect(JSON.parse(decodeURIComponent(result.url.slice(prefix.length)))).toEqual({ name: 'mushi', type: 'http', url: INSTALLED_URL })
     }
   })
 
-  it('Claude Code: claude mcp add with the bare URL', () => {
+  it('Claude Code: claude mcp add with the quoted URL (zsh globs an unquoted ?)', () => {
     expect(buildOAuthInstall('claude-code', { mcpOAuthUrl: OAUTH_URL })).toEqual({
       kind: 'command',
-      text: `claude mcp add --transport http mushi ${OAUTH_URL}`,
+      text: `claude mcp add --transport http mushi "${INSTALLED_URL}"`,
     })
+  })
+
+  it('writes the features a caller asks for instead of the vibe default', () => {
+    const result = buildOAuthInstall('any', { mcpOAuthUrl: OAUTH_URL, features: ['vibe', 'fixes'] })
+    expect(result).toEqual({ kind: 'remote-url', url: `${OAUTH_URL}?features=vibe%2Cfixes`, headerSnippet: '' })
   })
 
   it('Windsurf keeps its serverUrl key', () => {
     const result = buildOAuthInstall('windsurf', { mcpOAuthUrl: OAUTH_URL })
     if (result.kind !== 'config') throw new Error('expected config')
-    expect(JSON.parse(result.json)).toEqual({ mcpServers: { mushi: { serverUrl: OAUTH_URL } } })
+    expect(JSON.parse(result.json)).toEqual({ mcpServers: { mushi: { serverUrl: INSTALLED_URL } } })
   })
 })
 
