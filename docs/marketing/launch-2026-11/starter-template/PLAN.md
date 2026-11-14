@@ -195,7 +195,7 @@ footer link as breakage, and a starter should not ship one.
 ```markdown
 # Your App: a starter that passes the free check on day one
 
-Your AI wrote it. Mushi Mushi tells you why it broke.
+Your AI built it. Mushi Mushi makes it better.
 
 A one-page waitlist site built with Vite and React, with the
 Mushi Mushi report button already in. It avoids the things people hit

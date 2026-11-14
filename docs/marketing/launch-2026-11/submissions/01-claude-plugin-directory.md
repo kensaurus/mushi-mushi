@@ -89,7 +89,7 @@ The master copy has no `?features=vibe`. Adding it keeps the connection to the
 ```markdown
 # Mushi Mushi for Claude Code
 
-Your AI wrote it. Mushi Mushi tells you why it broke.
+Your AI built it. Mushi Mushi makes it better.
 
 This plugin connects Claude Code to Mushi Mushi. When someone using your app
 taps "Report a problem", Mushi Mushi explains what went wrong in plain English
