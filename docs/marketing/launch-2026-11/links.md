@@ -76,6 +76,13 @@ for a different asset.
 | `x.fieldkenji` | X | Field Kenji post (`posts/10`) | `/docs/demo/diagnosis` |
 | `devto.toolcatalog` | dev.to | tool-catalog article (outline, `posts/11`) | `/docs/connect`, `/docs/demo/diagnosis` |
 | `github-readme` | GitHub README | the "Check your live app" button and the hero image (in use before this table listed it) | `/docs/check`, `/docs/demo/diagnosis` |
+| `reddit.cursor` | Reddit r/cursor | MCP context post (`mushi-mushi/01-reddit-cursor`) | `/docs/check`, `/docs/connect` |
+| `reddit.indiehackers` | Reddit r/indiehackers | the one Self Promotion post (`mushi-mushi/02-reddit-indiehackers`) | `/docs/check` |
+| `reddit.claudecode` | Reddit r/ClaudeCode | weekly showcase-thread comment (Show HN fallback, `mushi-mushi/README.md`) | `/docs/check` |
+
+The other five products in this folder don't use `src`. Their links follow the
+`utm_*` and store-link standard in each product's `README.md` (campaigns
+`launch-2611-<venue>`).
 
 ## How to read the results
 
