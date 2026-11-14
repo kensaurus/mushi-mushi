@@ -5,7 +5,7 @@ Mushi Mushi has two characters with two jobs.
 | Character | Who | Job | Where |
 | --- | --- | --- | --- |
 | **Mushi-chan** | A small red ladybug | The product mascot and the brand's narrator | README, social posts, launch art, changelog voice |
-| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next | The console, the docs quickstarts, the Bounties pages |
+| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next. His face is also the app icon | The console, the docs quickstarts, the landing hero, the Bounties pages; his face in the console sidebar, the docs navbar and the hero eyebrow |
 
 Kenji is the human guide beside Mushi-chan. She stays the mark; he explains.
 
@@ -51,7 +51,7 @@ accent. Each app draws him in its own art style; this is Mushi Mushi's.
 
 | Pose | Journey state | Console | Docs | Bounties |
 | --- | --- | --- | --- | --- |
-| `wave` | Welcome, first open | Sign-in; Set up overview before any app exists | Quickstart | Join |
+| `wave` | Welcome, first open | Sign-in; Set up overview before any app exists | Quickstart; landing hero (desktop only) | Join |
 | `point` | A setup step or a tip | First run "Name your project"; Set up tabs; first diagnosis before sending | | Empty leaderboard |
 | `magnify` | Diagnosing, loading | First diagnosis while sending, queued and classifying; Set up "Test it" tab | | |
 | `found` | Diagnosis ready, success | First diagnosis ready; setup complete; editor connected | | |
@@ -96,7 +96,9 @@ journey state; `fieldGuide.test.ts` checks each one.
 
 ### Placement rules
 
-- **At most one Kenji per screen.** Each route has one owner.
+- **At most one Kenji per screen.** Each route has one owner. This counts
+  the posed figure, the guide. His round face in the chrome (sidebar, navbar,
+  hero eyebrow) is the brand mark, like the favicon, and does not count.
 - **Never in a customer's app.** Not in the SDK widget (`packages/web`,
   `packages/core`, `packages/react-native`) and not in the "powered by"
   footer (`_shared/brand-footer.ts`). Customers' apps are not our canvas.
@@ -135,5 +137,15 @@ the guide is (owner, 2026-11-13).
 - Social card: `scripts/gen-og-card.mjs` uses the icon as the brand stamp and
   the wave pose beside the headline. GitHub's social preview is uploaded by
   hand from `docs/social-preview/og-card.png`.
+- In the chrome (since 2026-11-14): `kenji-face.webp` is the icon cut to its
+  paper disc with a thin vermillion ring, 96 px, transparent, in
+  `apps/admin/src/assets/brand/` and `apps/docs/assets/brand/`. It sits before
+  the wordmark in the console sidebar (alone in the icon rail), before
+  "Mushi Mushi" in the docs navbar, and in the landing hero's eyebrow, where
+  the vermillion dot stamp was. The console brand and the docs logo both link
+  to the landing page; decorative (`alt=""`), the link carries the name.
+- The landing hero shows the `wave` pose beside the copy at 1024 px and up
+  (a `<picture>` source, so phones download nothing). It is decorative and
+  not clickable, so the hero keeps its two actions (ADR 0056).
 - The SDK widget, the npm packages, `packages/brand` and the testers app keep
   their marks. The placement rules above apply to the icon too.

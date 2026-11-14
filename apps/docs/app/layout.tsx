@@ -13,6 +13,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
+import kenjiFace from '../assets/brand/kenji-face.webp'
 import { bannerRelease } from '../lib/release-headline'
 import {
   DOCS_SITE,
@@ -105,9 +106,20 @@ const navbar = (
   <Navbar
     logo={
       <span className="relative whitespace-nowrap font-semibold tracking-tight">
+        {/* Field Kenji's face, the app icon (docs/mascot/README.md). Nextra wraps the
+            logo in a link to "/", which is the landing under any basePath. */}
+        <img
+          src={kenjiFace.src}
+          alt=""
+          aria-hidden="true"
+          width={24}
+          height={24}
+          className="docs-logo-face"
+          draggable={false}
+        />
         {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px,
             and on the landing (globals.css), which is the product page, not the docs. */}
-        Mushi Mushi <span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
+        Mushi Mushi<span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
         <span className="docs-logo-beta" title="Mushi Mushi is in beta">Beta</span>
       </span>
     }

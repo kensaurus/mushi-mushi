@@ -63,6 +63,8 @@ import { PAGE_SHELL_CLASS, pageLayoutWidthForPath } from '../lib/pageLayout'
 import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+import kenjiFace from '../assets/brand/kenji-face.webp'
 
 type NavItem = BuiltNavItem
 
@@ -470,20 +472,39 @@ export function Layout({ children }: { children: ReactNode }) {
   // gets `compact: false` because the mobile sidebar is a full overlay.
   const renderSidebarContent = (compact: boolean) => (
     <>
-      {/* Brand — collapses to a single "M" stamp in compact mode so the
-          rail still has a recognisable identity at the top. */}
+      {/* Brand — Field Kenji's face (the app icon, docs/mascot/README.md) and
+          the wordmark, linking back to the landing page (owner, 2026-11-14).
+          The compact rail keeps only the face. A plain <a>: the landing is a
+          different site, not a console route. */}
       <div className="border-b border-edge/60 overflow-visible shrink-0">
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
           {compact ? (
-            <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
-              <span className="text-brand">m</span>
-              <span className="text-fg-secondary">m</span>
+            <h1 className="leading-none">
+              <a
+                href={MUSHI_CANONICAL_URLS.home}
+                aria-label="Mushi Mushi home"
+                title="Mushi Mushi home"
+                data-testid="brand-home-link"
+                className="flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <img src={kenjiFace} alt="" aria-hidden="true" width={28} height={28} className="size-7 rounded-full" draggable={false} />
+              </a>
             </h1>
           ) : (
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold tracking-tight leading-none">
-                <span className="text-brand">mushi</span>
-                <span className="text-fg-secondary">mushi</span>
+                <a
+                  href={MUSHI_CANONICAL_URLS.home}
+                  aria-label="Mushi Mushi home"
+                  data-testid="brand-home-link"
+                  className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <img src={kenjiFace} alt="" aria-hidden="true" width={24} height={24} className="size-6 shrink-0 rounded-full" draggable={false} />
+                  <span>
+                    <span className="text-brand">mushi</span>
+                    <span className="text-fg-secondary">mushi</span>
+                  </span>
+                </a>
               </h1>
               {/* Mushi Mushi is in beta (owner, 2026-11-07). The chip says so and
                   asks for feedback in the same click: Help & support sends a bug

@@ -385,6 +385,18 @@ main :not(pre) > code {
   vertical-align: 1px;
 }
 
+/* Field Kenji's face before the navbar wordmark (owner, 2026-11-14): the
+   app icon, cut to its paper disc so it sits on either theme. */
+.docs-logo-face {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.45rem;
+  border-radius: 9999px;
+  vertical-align: -0.4rem;
+  user-select: none;
+}
+
 /* "Beta" chip beside the navbar logo (owner, 2026-11-07). Outlined in the
    text colour so it reads in both themes without a new colour token. */
 .docs-logo-beta {
@@ -1209,8 +1221,70 @@ main :not(pre) > code {
   display: block;
 }
 
-.landing-hanko {
+/* Kenji's face in the hero eyebrow (the app icon; it replaced the dot stamp). */
+.landing-hero-face {
+  display: block;
+  flex: none;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 9999px;
   transform-origin: center;
+  user-select: none;
+}
+
+/* Field Kenji waving beside the hero copy, desktop only. A paper spot sits
+   behind the watercolour so he reads on the dark theme, as in <Mascot>. Same
+   motion as the docs guide: one entrance, three slow 2 px sways, then rest. */
+.landing-hero-guide {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .landing-hero-guide {
+    display: block;
+    position: absolute;
+    z-index: 1;
+    right: 2%;
+    bottom: 1.5rem;
+    width: clamp(14rem, 22vw, 21rem);
+    aspect-ratio: 1;
+    pointer-events: none;
+  }
+
+  .landing-hero-guide::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 84%;
+    aspect-ratio: 1;
+    transform: translateX(-50%);
+    border-radius: 9999px;
+    background: var(--mushi-paper-wash);
+    box-shadow: inset 0 0 0 1px var(--mushi-rule);
+  }
+
+  .dark .landing-hero-guide::before {
+    background: var(--mushi-dark-ink);
+  }
+
+  .landing-hero-guide img {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    user-select: none;
+  }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .landing-hero-guide {
+    animation: docs-guide-enter var(--mushi-duration-slow) var(--mushi-ease-stamp) 200ms both;
+  }
+  .landing-hero-guide img {
+    animation: docs-guide-idle 3600ms ease-in-out 1100ms 3;
+  }
 }
 
 .landing-section-title {

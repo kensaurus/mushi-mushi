@@ -219,6 +219,27 @@ describe('landing cinematic copy SSOT', () => {
     expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
   })
 
+  it('brings Field Kenji into the hero as decoration only: his face in the eyebrow, the wave pose on desktop (owner, 2026-11-14)', () => {
+    const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
+    // The face replaced the dot stamp; both images are decorative.
+    expect(hero).toContain("from '../../assets/brand/kenji-face.webp'")
+    expect(hero).not.toContain('docs-editorial-hero__stamp')
+    expect(hero).toMatch(/alt: '',\s*'aria-hidden': true/)
+    // The wave figure only loads at 1024px+; phones get a blank pixel, so the
+    // address box stays above the fold and nothing heavy downloads.
+    expect(hero).toContain("from '../../assets/mascot/mascot-wave.webp'")
+    expect(hero).toContain('<div className="landing-hero-guide" aria-hidden="true">')
+    expect(hero).toContain('media="(min-width: 1024px)"')
+    expect(hero).toMatch(/<img src=\{BLANK_PIXEL\} alt=""/)
+    const css = read('app', 'globals.css')
+    const guide = css.slice(css.indexOf('.landing-hero-guide {'))
+    expect(guide).toMatch(/^\.landing-hero-guide \{\s*display: none;/)
+    expect(guide).toContain('pointer-events: none')
+    // Idle motion only when the reader allows it, and it stops after three cycles.
+    expect(css).toMatch(/@media \(min-width: 1024px\) and \(prefers-reduced-motion: no-preference\) \{\s*\.landing-hero-guide \{/)
+    expect(css).toMatch(/\.landing-hero-guide img \{\s*animation: docs-guide-idle [^;]* 3;/)
+  })
+
   it('groups the FAQ, no coding first, and answers "what does it collect" and "how do I remove it"', () => {
     expect(LANDING_FAQ_GROUPS.map((g) => g.label)).toEqual(['No coding', 'Developers'])
     for (const item of LANDING_FAQ) expect(['no-code', 'developers']).toContain(item.group)

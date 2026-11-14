@@ -219,6 +219,41 @@ describe('the icon rail shows where you are too', () => {
 })
 
 /**
+ * Owner, 2026-11-14: "clicking on the icon brings user back to the landing
+ * page". The brand (Kenji's face + wordmark) is one link to the landing; the
+ * Beta chip stays its own link to /feedback, never nested inside it.
+ */
+describe('the brand mark links home', () => {
+  function brandLinks(): HTMLAnchorElement[] {
+    return [...container!.querySelectorAll<HTMLAnchorElement>('aside [data-testid="brand-home-link"]')]
+  }
+
+  it('links the full sidebar brand to the landing page, with the Beta chip beside it', () => {
+    renderAt('/reports')
+    const [link] = brandLinks()
+    expect(link).toBeDefined()
+    expect(link.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link.querySelector('img')?.getAttribute('alt')).toBe('')
+    expect(link.textContent).toBe('mushimushi')
+    expect(link.querySelector('a')).toBeNull()
+    const beta = container!.querySelector('aside a[href="/feedback"][aria-label="Beta: send feedback"]')
+    expect(beta).not.toBeNull()
+    expect(link.contains(beta)).toBe(false)
+  })
+
+  it('shows only the face in the icon rail, with the same link', () => {
+    state.collapsed = true
+    renderAt('/reports')
+    const [link] = brandLinks()
+    expect(link.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
+    expect(link.getAttribute('aria-label')).toBe('Mushi Mushi home')
+    expect(link.querySelector('img')).not.toBeNull()
+    expect(link.textContent).toBe('')
+  })
+})
+
+/**
  * Console audit 2026-11-11, finding 8: a builder (not a Mushi Mushi operator)
  * saw 21 More pages including SQL query, Processing jobs and Agent skills.
  */

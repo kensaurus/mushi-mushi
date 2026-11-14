@@ -11,12 +11,14 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { motion } from 'motion/react'
+import { motion, type Variants } from 'motion/react'
 import { LANDING_HERO, LANDING_INSTALL_LEAD } from '@/lib/landing-copy'
 import { LandingCheckBox } from './LandingCheckBox'
 import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
-import { landingStampVariants } from './landing-stagger'
+import kenjiFace from '../../assets/brand/kenji-face.webp'
+import wave from '../../assets/mascot/mascot-wave.webp'
+import waveSm from '../../assets/mascot/mascot-wave-sm.webp'
 
 const InkMothCanvas = dynamic(
   () => import('./InkMothCanvas').then((m) => m.InkMothCanvas),
@@ -45,6 +47,25 @@ function useShowDesktopCanvas(reducedMotion: boolean): boolean {
 
 const STAMP_EASE = [0.22, 1, 0.36, 1] as const
 
+/** A small settle, not the old stamp's spin: it is a face now. */
+const landingFaceVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.85 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.45, ease: STAMP_EASE } },
+}
+
+const FACE_PROPS = {
+  src: kenjiFace.src,
+  alt: '',
+  'aria-hidden': true,
+  width: 22,
+  height: 22,
+  className: 'landing-hero-face',
+  draggable: false,
+} as const
+
+/** 1×1 transparent GIF: the hero figure's fallback below 1024px. */
+const BLANK_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+
 export function CinematicEditorialHero({
   eyebrow,
   title,
@@ -65,16 +86,32 @@ export function CinematicEditorialHero({
         <div className="landing-ink-poster" aria-hidden="true" />
       )}
 
+      {/* Field Kenji waves beside the copy on a desktop. Decorative and not
+          clickable, so the hero keeps its two actions. Phones get no figure:
+          the <source> only matches at 1024px+, and the fallback is a blank
+          pixel, so a phone downloads nothing and the address box stays
+          above the fold. Motion is CSS (globals.css), still under reduced motion. */}
+      <div className="landing-hero-guide" aria-hidden="true">
+        <picture>
+          <source
+            media="(min-width: 1024px)"
+            srcSet={`${waveSm.src} 300w, ${wave.src} 600w`}
+            sizes="21rem"
+          />
+          <img src={BLANK_PIXEL} alt="" width={336} height={336} decoding="async" draggable={false} />
+        </picture>
+      </div>
+
       <div className="landing-cinematic-hero__content">
         {eyebrow ? (
           <p className="docs-editorial-hero__eyebrow">
+            {/* Kenji's face, the app icon, where the vermillion dot stamp was. */}
             {skipEnter ? (
-              <span className="docs-editorial-hero__stamp landing-hanko" aria-hidden="true" />
+              <img {...FACE_PROPS} />
             ) : (
-              <motion.span
-                className="docs-editorial-hero__stamp landing-hanko"
-                aria-hidden="true"
-                variants={landingStampVariants}
+              <motion.img
+                {...FACE_PROPS}
+                variants={landingFaceVariants}
                 initial="hidden"
                 animate="visible"
               />

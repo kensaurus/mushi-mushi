@@ -36,6 +36,19 @@ describe('docs layout accessible names', () => {
     expect(layout.slice(iconAt, chromeAt)).toContain('aria-hidden="true"')
   })
 
+  it("puts Kenji's face in the navbar logo, decorative, inside Nextra's home link (owner, 2026-11-14)", () => {
+    const logoAt = layout.indexOf('logo={')
+    const logo = layout.slice(logoAt, layout.indexOf('</span>\n    }', logoAt))
+    expect(layout).toContain("import kenjiFace from '../assets/brand/kenji-face.webp'")
+    expect(logo).toContain('src={kenjiFace.src}')
+    expect(logo).toContain('alt=""')
+    expect(logo).toContain('aria-hidden="true"')
+    expect(logo).toContain('Mushi Mushi ')
+    // Nextra links the logo to "/" (the landing under any basePath) unless
+    // logoLink overrides it; an absolute URL here would send local dev to prod.
+    expect(layout).not.toMatch(/logoLink\s*=/)
+  })
+
   it('gives the shared search field a programmatic label', () => {
     expect(layout).toContain('search={<Search aria-label="Search docs" />}')
   })
