@@ -1,5 +1,12 @@
 # HELD: Product Hunt. Do not launch until every gate below is true
 
+Rewritten 2026-11-14 for ADR 0058 ("One place to improve AI-built apps"): the
+tagline, description and first comment now carry the three pillars. Numbers
+moved to the 2026-11-14 scoreboard (35 user reports, 2,049 others). The
+outside-install gate below has the same owner decision as
+`08-show-hn.notes.md` gate 4; for a one-shot Product Hunt launch the
+recommendation is to **keep** it.
+
 > PLAN.md "Stop doing" #9 rules out Product Hunt before live installs exist.
 > A Product Hunt launch is one-shot, so it waits for the same gates as Show HN
 > (`08-show-hn.notes.md`):
@@ -16,12 +23,12 @@ Paste file: `09-product-hunt.HELD.paste.md`. Each `Field:` line maps to the
 Product Hunt form. The first comment goes in as the maker comment right after
 launch.
 
-## Field limits (checked 2026-11-13)
+## Field limits (re-measured 2026-11-14)
 
 | Field | Limit | Draft |
 |---|---|---|
-| Tagline | 60 characters | 54 |
-| Description | 260 characters | 226 |
+| Tagline | 60 characters | 38 |
+| Description | 260 characters | 238 |
 | Gallery | 1270×760 recommended | below |
 | Thumbnail | 240×240 | `img/ph-thumb-field-kenji.png` |
 
@@ -31,9 +38,11 @@ Re-measure the lengths after any edit.
 
 All re-queried 2026-11-13. Re-run each one on launch day.
 
-- **36, about 2,040, nine apps:** `select public_scoreboard(60);` on project
-  `dxptnwrhwsqckaftyymj` returned `user_reports` 36, `other_reports` 2,042 and
-  `apps` 9.
+- **35, about 2,050, nine apps:** the public scoreboard at 2026-11-14 02:04
+  UTC returned `userReports` 35, `otherReports` 2,049 and `apps` 9 (on
+  2026-11-13 it was 36 and 2,042; the 60-day window moves).
+- **The three pillars and the hourly-watch and code-audit key requirement:**
+  ADR 0058 §1, ADR 0056 §1.
 - **Free plan, one app and 100 diagnoses a month; "I pay for the model":**
   the live sample-diagnosis page ("Get this for your own app") and ADR 0056.
 - **"Home page and three pages it links to", "Lovable App", public pages

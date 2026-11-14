@@ -7,7 +7,7 @@
     "mushi-stdio": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
       "env": {
         "MUSHI_API_KEY": "${MUSHI_API_KEY}",
         "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",

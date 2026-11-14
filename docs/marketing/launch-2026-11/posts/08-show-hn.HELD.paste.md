@@ -1,19 +1,25 @@
-Show HN: Mushi Mushi – find and fix what broke in your AI-built app
+Show HN: Mushi Mushi – find what's broken or confusing in an AI-built app
 
-I build apps with AI and run nine of them with real users. The surprise was how rarely people report bugs. In 60 days, 36 reports came through the in-app button, while about 2,040 reports came from automated checks and my own testing.
+I build apps with Cursor and Claude Code and run nine of them with real users. I didn't write most of that code by hand, so when something breaks I often don't know where to look. Mushi Mushi is the tool I built for that, and it runs on all nine.
 
-Mushi Mushi is what I built for that. It's open source (MIT SDKs, AGPLv3 server) and has two ways in:
+It does three things:
 
-1. A free check of a live site, with no sign-up: broken links and images, pages that don't load, template titles like "Lovable App", and errors on load. It reads public pages only.
+1. Finds what breaks. A small report button for your users (one script tag, or one prompt in Lovable or Bolt), plus checks of the live site. Each report comes back as a plain-English cause and a fix prompt your coding agent can apply. An MCP server lets Claude Code or Cursor pull the report and the fix context directly.
 
-2. A small report button for your users (one script tag, or one prompt in Lovable or Bolt). Each report comes back as a plain-English cause and a fix prompt your AI editor can apply. An MCP server lets Claude Code, Cursor or Lovable pull the report and the fix context directly.
+2. Shows where people get stuck. It maps how visitors move through the app and flags dead ends, loops and pages people leave from, each with a suggestion.
 
-On my own apps, a second model reviews the AI-written fixes before they merge. In 60 days it reviewed 1,803 and held 596.
+3. Improves the code: known vulnerable dependencies, code audits and repo clean-up, as draft PRs you review.
 
-What's free for one app: the button and the diagnoses (I pay for the model), the one-time site check, and a scan of your dependencies for known vulnerabilities once GitHub is connected. The hourly site watch and the code audits need your own keys or a local agent.
+What you can try right now, without signing up, is the check. Paste a live URL and it reads your home page and three pages it links to, the way a first visitor would, and tells you what is broken: pages that error or show nothing, dead links and images, a title still saying "Lovable App". Public pages only.
 
-Live numbers: https://kensaur.us/mushi-mushi/docs/proof?src=hn.show
+The numbers from my own apps over the last 60 days: people pressed the report button 35 times. About 2,050 reports came from automatic checks and my own testing. 526 fixes merged. Before merging, a second model reviews the fix against the report; it made 1,803 reviews and said "hold" 596 times.
+
+The honest limits: I'm still most of its users. Setup has more steps than it should. The free plan covers one app and 100 diagnoses a month, and I pay for the model on those; the hourly site watch and the code audits need your own model keys or a local agent.
+
+The SDKs are MIT and the server is AGPLv3; a separate enterprise folder is source-available. Self-hosting is free.
+
 Try the check: https://kensaur.us/mushi-mushi/docs/check?src=hn.show
+Live numbers: https://kensaur.us/mushi-mushi/docs/proof?src=hn.show
 Code: https://github.com/kensaurus/mushi-mushi
 
-I'd like to hear what the check misses on your site, and whether the plain-English explanations are actually useful or just noise.
+I'd like to hear what the check misses on your site, and whether the plain-English diagnoses are useful or just noise.

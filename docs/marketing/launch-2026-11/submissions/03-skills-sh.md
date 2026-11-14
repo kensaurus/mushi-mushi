@@ -37,17 +37,37 @@ Researched 2026-11-11 through Firecrawl; sources were cached 11-10 and 11-11.
   (https://github.com/vercel-labs/skills/blob/main/skills/find-skills/SKILL.md).
   That is why the description words matter more than the listing page.
 
-## The gap
+## State on 2026-11-14
 
-Every current description starts from Mushi Mushi's own words: "bug mediator",
-"MCP server", "SDK keys". A builder whose app broke types "my app is broken",
-"users say it doesn't work", "lovable bug" or "check my live site". None of the
-five skills says those words.
+Patches 1 and 2 below are **on master** (`53587e74b`, #1106, 2026-11-13):
+`skills/mushi-mushi/SKILL.md` carries the new description, and
+`skills/mushi-check-live-app/SKILL.md` exists.
 
-## Patch (outside this lane: `skills/` is not in the GTM lane's files)
+The `mushi-mushi` description on master still leads with the ADR 0056 job
+("Find out what is broken in your live app…"). ADR 0058 makes bug fixing one
+pillar, not the category. A follow-up for the skills lane: open the
+description with the `MUSHI_TAGLINE_V2.pitch` string from
+`packages/brand/src/index.js`, copied as it is, then keep master's "Start
+here: …" and "Use when …" sentences unchanged:
 
-1. **`skills/mushi-mushi/SKILL.md`**, `description:` line. The old text uses
-   the retired "bug mediator" category (ADR 0056 §3).
+> One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
+
+The search words a builder types ("app is broken", "button does nothing",
+"Lovable") stay in the "Use when" part, which is what `npx skills find`
+matches.
+
+## The gap (as found on 2026-11-11)
+
+On 2026-11-11, every description started from Mushi Mushi's own words of the
+time: "bug mediator", "MCP server", "SDK keys". A builder whose app broke types
+"my app is broken", "users say it doesn't work", "lovable bug" or "check my
+live site". None of the five skills said those words.
+
+## Patch (outside this lane: `skills/` is not in the GTM lane's files; applied on master in #1106)
+
+1. **`skills/mushi-mushi/SKILL.md`**, `description:` line. The text of
+   2026-11-11 used the "bug mediator" category, retired by ADR 0056 §3. ADR
+   0058 now governs; see "State on 2026-11-14" above.
 
    ```yaml
    description: "Find out what is broken in your live app and get it fixed, in plain words, with Mushi Mushi. Use when a user says the app is broken or a button does nothing, when you want to check a live Lovable, Bolt, Cursor or Claude Code app for broken pages, or to install the Mushi Mushi report button, MCP server or keys."

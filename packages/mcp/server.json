@@ -46,7 +46,7 @@
         },
         {
           "name": "MUSHI_FEATURES",
-          "description": "Comma-separated feature groups to expose (triage,fixes,inventory,setup,docs). Defaults to the lean catalog; use 'all' for the full tool set.",
+          "description": "Tool set to expose. Recommended: vibe (12 tools: triage, plain-English diagnosis, fix context, setup, docs). Add fixes (vibe,fixes) to dispatch fixes to cloud agents; all lists every tool. Unset keeps the earlier groups (triage,fixes,inventory,setup,docs).",
           "isRequired": false,
           "isSecret": false
         }
