@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/skill-pipelines
 ---
 title: Agent skills
 description: Agent skills in Mushi Mushi recommend skills from the kenji skills and skills.sh ecosystem for each classified bug and run them as pipelines during review.
+robots:
+  index: false
+  follow: true
 ---
 
 # Agent skills (skill pipelines)

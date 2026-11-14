@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/prompt-lab
 ---
 title: AI prompts
 description: The AI prompts page in the Mushi Mushi console lets you edit and A/B compare the prompts behind each AI step before you promote a new version.
+robots:
+  index: false
+  follow: true
 ---
 
 # AI prompts

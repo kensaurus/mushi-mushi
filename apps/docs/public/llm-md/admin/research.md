@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/research
 ---
 title: Research
 description: The Research page in the Mushi Mushi console runs a web search through your Firecrawl key and lets you attach useful results to a bug.
+robots:
+  index: false
+  follow: true
 ---
 
 # Research

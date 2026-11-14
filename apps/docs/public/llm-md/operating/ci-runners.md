@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/operating/ci-runners
 ---
 title: CI runners
 description: See where your tests run and why a Mushi Mushi fix waits. Tell a broken fix from a stopped test machine, and add your own machine as a runner safely.
+robots:
+  index: false
+  follow: true
 ---
 
 # CI runners

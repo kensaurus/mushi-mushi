@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/judge
 ---
 title: Triage grading
 description: The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.
+robots:
+  index: false
+  follow: true
 ---
 
 # Triage grading

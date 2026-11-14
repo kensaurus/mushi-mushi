@@ -5,6 +5,9 @@ Source: https://kensaur.us/mushi-mushi/docs/admin/fullstack-audit
 ---
 title: Full-stack audit
 description: The Full-stack audit in Mushi Mushi runs one health check across RLS gaps, recent backend errors and API contract drift, and returns a readable scorecard.
+robots:
+  index: false
+  follow: true
 ---
 
 # Full-stack audit
