@@ -70,10 +70,26 @@ describe('company_funnel_weekly — visits, source fallback, loop columns', () =
     expect(file >= '20260922000100_funnel_visits_by_source.sql').toBe(true)
   })
 
-  it('counts visits from landing_view and docs_page_view', () => {
+  // 20261114090000: visits reads the cookieless counter. The consent-gated
+  // measure below read 0 or 1 a week; it stays as visits_consented.
+  it('counts visits from the cookieless counter, without referrer spam, per UTC day', () => {
     const visits = weeklyColumn(body, 'visits')
-    expect(eventList(visits).sort()).toEqual(['docs_page_view', 'landing_view'])
-    expect(visits).toContain('count(distinct se.anon_id)')
+    expect(visits).toContain('from page_views pv')
+    expect(visits).toContain("(wk.week_start at time zone 'utc')::date")
+    const pageViews = cte(body, 'page_views', 'loop_events')
+    expect(pageViews).toContain('from public.landing_page_views_daily v')
+    expect(pageViews).toContain('filter (where not public.is_spam_referrer_host(v.referrer_host))')
+    expect(pageViews).toContain('(v_source is null or v.src = v_source)')
+    expect(weeklyColumn(body, 'visits_spam_excluded')).toContain('sum(pv.spam)')
+    expect(body).toMatch(/'visits',\s+w\.visits,/)
+    expect(body).toMatch(/'visits_spam_excluded',\s+w\.visits_spam_excluded,/)
+  })
+
+  it('keeps the consent-gated measure as visits_consented (landing_view and docs_page_view)', () => {
+    const consented = weeklyColumn(body, 'visits_consented')
+    expect(eventList(consented).sort()).toEqual(['docs_page_view', 'landing_view'])
+    expect(consented).toContain('count(distinct se.anon_id)')
+    expect(body).toMatch(/'visits_consented',\s+w\.visits_consented,/)
     for (const name of ['landing_view', 'docs_page_view']) expect(name in MUSHI_EVENTS).toBe(true)
   })
 
