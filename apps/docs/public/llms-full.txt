@@ -18414,8 +18414,8 @@ Money is always an estimate. GitHub's bill is the real figure.
 **Settings → General → CI cost** holds the figures behind the estimates, per
 organization: your GitHub plan, the idle and under-load watts of your
 machines, your price per kWh and currency, an optional wear cost per busy
-hour, and which runners share one physical machine (`Alienware: aw-,
-alienware-`). Until you save them, Mushi Mushi uses example figures and says so.
+hour, and which runners share one physical machine (for example
+`build-box: <your-runner-prefix>-`). Until you save them, Mushi Mushi uses example figures and says so.
 On WSL2, `mushi runner heartbeat` sends a hash of the VM's boot id, so
 distros on one PC count as one machine without any setting.
 
@@ -18518,7 +18518,7 @@ request and again when the change runs. Mushi Mushi fills in nothing for you:
   (for example a dispatcher that flips runner labels). Mushi Mushi shows those
   repos read-only and never competes with it.
 - **Standby runners**: runner names or labels that are only a fallback
-  (`kensaurus-local-*`). They are never a target.
+  (for example `<your-runner-label>-*`). They are never a target.
 
 ## Machine health: heartbeat and job hooks
 
