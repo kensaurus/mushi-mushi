@@ -60,6 +60,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { docsUrl } from '../lib/docsUrl'
+import { LINK_ACCENT } from '../lib/chipTone'
 import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import { groupCiAdvice } from '../lib/ciAdvice'
@@ -106,16 +107,25 @@ export function resolveCiView(viewParam: string | null, hash: string): CiView {
   return SECTION_VIEW[hash.replace(/^#/, '')] ?? 'now'
 }
 
-/** "Updated 12 s ago", ticking. */
+/**
+ * "Updated 12 s ago", ticking. While a sync runs, the Refresh button shows the spinner and a
+ * polite live region says so once; the timestamp itself is never announced (it ticks every 5 s).
+ * A loose "Updating…" used to replace it beside the button (owner, 2026-11-14).
+ */
 function UpdatedAgo({ at, validating }: { at: string | null; validating: boolean }) {
   const now = useNow(5_000)
-  if (validating) return <span className="text-2xs text-fg-muted">Updating…</span>
-  if (!at) return null
-  const secs = Math.max(0, Math.round((now - Date.parse(at)) / 1000))
+  const secs = at ? Math.max(0, Math.round((now - Date.parse(at)) / 1000)) : null
   return (
-    <span className="text-2xs text-fg-muted tabular-nums" data-testid="ci-updated-ago">
-      Updated {formatSeconds(secs)} ago
-    </span>
+    <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {validating ? 'Updating CI runners' : ''}
+      </span>
+      {secs != null && (
+        <span className="text-2xs text-fg-muted tabular-nums" data-testid="ci-updated-ago">
+          Updated {formatSeconds(secs)} ago
+        </span>
+      )}
+    </>
   )
 }
 
@@ -266,7 +276,13 @@ export function CiPage() {
         helpHowToUse="Start with the queue: a long Waiting column means too few machines. A job marked “Test machine stopped” was not a code failure; re-run it. Speed it up lists changes with the evidence behind each one."
       >
         <UpdatedAgo at={data?.refreshedAt ?? data?.generatedAt ?? null} validating={(live.syncing || page.isValidating) && !page.loading} />
-        <Btn size="sm" variant="ghost" onClick={() => void live.sync()} disabled={live.syncing} title="Read the latest jobs from GitHub now">
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={() => void live.sync()}
+          loading={(live.syncing || page.isValidating) && !page.loading}
+          title="Read the latest jobs from GitHub now"
+        >
           Refresh
         </Btn>
         {projectId && (
@@ -306,7 +322,7 @@ export function CiPage() {
               <Callout tone="warn" label="GitHub access">
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>{notice}</span>
-                  <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className="font-medium text-brand hover:underline">
+                  <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
                     How to give Mushi Mushi access ↗
                   </a>
                 </span>

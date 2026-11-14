@@ -151,7 +151,7 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
         </ul>
         {counts.infra > 0 && (
           <p className="text-2xs text-fg-muted">
-            <span className={`font-medium ${CI_OUTCOME_STYLE.infra.text}`}>{CI_OUTCOME_STYLE.infra.label}</span> is not a code failure: the
+            <span className="font-medium text-fg">{CI_OUTCOME_STYLE.infra.label}</span> is not a code failure: the
             machine died or never picked the job up, so the code was never tested. Re-run those jobs.
           </p>
         )}

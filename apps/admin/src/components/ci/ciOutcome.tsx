@@ -23,8 +23,6 @@ export interface CiOutcomeStyle {
   chip: string
   /** Solid fill for bars and swatches. */
   fill: string
-  /** Left stripe on cards. */
-  stripe: string
   /** Text and icon colour on a plain surface. */
   text: string
 }
@@ -37,7 +35,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconClock,
     chip: CHIP_TONE.neutral,
     fill: 'bg-fg-faint',
-    stripe: 'border-l-fg-faint',
     text: 'text-fg-secondary',
   },
   running: {
@@ -47,7 +44,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconPlay,
     chip: CHIP_TONE.infoSubtle,
     fill: 'bg-info',
-    stripe: 'border-l-info',
     text: 'text-info',
   },
   passed: {
@@ -57,7 +53,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconCheck,
     chip: CHIP_TONE.okSubtle,
     fill: 'bg-ok',
-    stripe: 'border-l-ok',
     text: 'text-ok',
   },
   code_failure: {
@@ -67,7 +62,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconClose,
     chip: CHIP_TONE.dangerSubtle,
     fill: 'bg-danger',
-    stripe: 'border-l-danger',
     text: 'text-danger',
   },
   infra: {
@@ -77,7 +71,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconServerOff,
     chip: CHIP_TONE.warnSubtle,
     fill: 'bg-warn',
-    stripe: 'border-l-warn',
     text: 'text-warn-foreground',
   },
   cancelled: {
@@ -87,7 +80,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconBan,
     chip: CHIP_TONE.neutral,
     fill: 'bg-fg-faint',
-    stripe: 'border-l-edge',
     text: 'text-fg-muted',
   },
   skipped: {
@@ -97,7 +89,6 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     Icon: IconSkip,
     chip: CHIP_TONE.neutral,
     fill: 'bg-fg-faint',
-    stripe: 'border-l-edge',
     text: 'text-fg-muted',
   },
 }

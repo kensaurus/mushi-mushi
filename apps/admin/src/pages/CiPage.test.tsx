@@ -241,6 +241,38 @@ describe('CiPage', () => {
     expect(q('ci-queue-job-j2')!.dataset.focused).toBeUndefined()
   })
 
+  // The page scrolls, not a column: each column shows 6 cards and a "Show N more" (2026-11-14).
+  describe('a long column', () => {
+    const withWaiting = (n: number) => {
+      const o = ciOverviewFixture()
+      const base = o.jobs.find((j) => j.id === 'j4')!
+      const extra = Array.from({ length: n }, (_, k) => ({ ...base, id: `w${k + 1}`, jobId: 9001 + k, createdAt: `2026-10-21T11:59:${String(k + 1).padStart(2, '0')}Z` }))
+      // A new array: the fixture's jobs list is shared between calls.
+      state.overview = { ...o, jobs: [...o.jobs, ...extra] }
+    }
+    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] > li').length
+
+    it('shows six cards, then all of them on "Show N more"', async () => {
+      withWaiting(6) // 3 in the fixture + 6
+      await render()
+      expect(q('ci-queue-count-waiting')!.textContent).toBe('9')
+      expect(waitingCards()).toBe(6)
+      expect(q('ci-queue-list-waiting')!.className).not.toMatch(/overflow-y-auto|max-h-/)
+      const more = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Show 3 more')!
+      await act(async () => {
+        more.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(waitingCards()).toBe(9)
+    })
+
+    it('opens the column in full when ?job= names a card past the sixth', async () => {
+      withWaiting(6)
+      await render('/ci?job=w6')
+      expect(waitingCards()).toBe(9)
+      expect(q('ci-queue-job-w6')!.dataset.focused).toBe('true')
+    })
+  })
+
   it('draws the timeline with the busiest runner first and "No runner yet" last', async () => {
     await render()
     const lanes = Array.from(host.querySelectorAll('[data-testid^="ci-timeline-lane-"]')).map((el) => el.getAttribute('data-testid'))
