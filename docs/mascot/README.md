@@ -5,7 +5,7 @@ Mushi Mushi has two characters with two jobs.
 | Character | Who | Job | Where |
 | --- | --- | --- | --- |
 | **Mushi-chan** | A small red ladybug | The product mascot and the brand's narrator | README, social posts, launch art, changelog voice |
-| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next. His face is also the app icon and, with Mushi-chan under his magnifier, the brand mark | The console, the docs quickstarts, the landing hero, the Bounties pages; the mark in the console sidebar, the docs navbar and the hero eyebrow |
+| **Field Kenji** | A young, clean-shaven bug naturalist in a field-guide style (pen line and watercolour), with Mushi-chan on his shoulder | The guide inside a flow: he says what is happening and what to do next. His face is also the app icon and, with Mushi-chan under his magnifier, the brand mark | The console, the docs quickstarts, the landing hero, the Bounties pages; the mark in the console and Bounties sidebars, the docs navbar, the favicon and the app icons |
 
 Kenji is the human guide beside Mushi-chan. She stays the mark; he explains.
 
@@ -97,8 +97,8 @@ journey state; `fieldGuide.test.ts` checks each one.
 ### Placement rules
 
 - **At most one Kenji per screen.** Each route has one owner. This counts
-  the posed figure, the guide. The mark in the chrome (sidebar, navbar,
-  hero eyebrow) is the brand, like the favicon, and does not count.
+  the posed figure, the guide. The mark in the chrome (sidebar, navbar) is
+  the brand, like the favicon, and does not count.
 - **Never in a customer's app.** Not in the SDK widget (`packages/web`,
   `packages/core`, `packages/react-native`) and not in the "powered by"
   footer (`_shared/brand-footer.ts`). Customers' apps are not our canvas.
@@ -120,21 +120,27 @@ The pipeline, prompts and spend log live in the glot.it repo
 
 ### Icon
 
-Since 2026-11-13 the console and docs icons are Field Kenji's face in a paper
-specimen disc on the vermillion field, with Mushi-chan on the rim of his
-glasses. Before that they were the 虫 hanko stamp, which said nothing about who
-the guide is (owner, 2026-11-13).
+Since 2026-11-14 the console and docs icons are mark B: Field Kenji's face in
+a paper specimen disc on the vermillion field, with Mushi-chan inside a brass
+magnifier lens over his chin, so the icon shows the job (owner: every icon
+shows the feature or function). From 2026-11-13 to 11-14 it was the face
+alone, with Mushi-chan on the rim of his glasses, where she was a red speck
+below 48 px. Before that it was the 虫 hanko stamp, which said nothing about
+who the guide is.
 
-- Master: `docs/mascot/field-kenji-icon.png` (1024², opaque). It came from the
-  same pipeline as the poses, with the style sheet and `mushi-happy.png` as
-  references, picked from two options for legibility at 32 px.
+- Master: `docs/mascot/field-kenji-mark-icon.png` (1024², opaque), composed on
+  `docs/mascot/field-kenji-icon.png` (the face, from the same pipeline as the
+  poses) with the lens described under the chrome mark below. At 16 px
+  Mushi-chan is a red dot in a brass ring; from 32 px she reads as a ladybug.
 - Console (`apps/admin/public`): `favicon.svg` is a 64 px render inside an SVG
   with explicit `width` and `height`, which `src/lib/favicon.ts` needs to draw
   the badge. `icons/icon-192.png` and `icons/icon-512.png` are the PWA icons;
-  `icons/icon-maskable-512.png` holds the art at 80% on the vermillion field.
+  `icons/icon-maskable-512.png` holds the art at 80% on the vermillion field,
+  so the lens stays inside the maskable safe circle (only the handle's tip can
+  be cropped).
 - Docs (`apps/docs/public`): the same `favicon.svg`, plus `apple-touch-icon.png`,
   `icon-192.png` and `icon-512.png`.
-- Social card: `scripts/gen-og-card.mjs` uses the icon as the brand stamp and
+- Social card: `scripts/gen-og-card.mjs` still uses the face icon as the brand stamp and
   the wave pose beside the headline. GitHub's social preview is uploaded by
   hand from `docs/social-preview/og-card.png`.
 - The brand mark in the chrome (since 2026-11-14) shows the job as well as
@@ -149,16 +155,19 @@ the guide is (owner, 2026-11-13).
   - Mushi-chan inside the lens, drawn flat (shell `#d94545`, black head,
     centre line and four spots) so she reads as a ladybug at 10 px.
   - Never put a border-radius on it: that clips the handle.
-- The mark sits before
-  the wordmark in the console sidebar (alone in the icon rail and in the
-  phone header), before "Mushi Mushi" in the docs navbar (only at widths
-  where the row has room; see `globals.css`), and in the landing hero's eyebrow, where
-  the vermillion dot stamp was. The console brand and the docs logo both link
-  to the landing page; decorative (`alt=""`), the link carries the name.
-- The landing hero shows the `magnify` pose (magnifier in hand, Mushi-chan
-  on his shoulder) beside the copy at 1024 px and up (a `<picture>` source,
-  so phones download nothing). It is decorative and not clickable, so the
-  hero keeps its two actions (ADR 0056). The slot (`HERO_GUIDES` in
-  `CinematicEditorialHero.tsx`) holds one figure or a pair side by side.
+- The mark sits before the wordmark in the console and Bounties sidebars
+  (alone in the icon rail and in the console's phone header) and before
+  "Mushi Mushi" in the docs navbar (hidden at 480 px and below, where the row
+  is full). The console and Bounties brands and the docs logo all link to the
+  landing page; decorative (`alt=""`), the link carries the name. The hero
+  eyebrow keeps its vermillion dot: two marks and a figure on one screen was
+  one Kenji too many (owner, 2026-11-14).
+- The landing hero's right half, at 1024 px and up (`LandingHeroVisual.tsx`),
+  shows the poster of the real-bug walkthrough (`bug-to-fix`), which plays on
+  click, with the `magnify` pose (magnifier in hand, Mushi-chan on his
+  shoulder) at its lower-right corner, peering in. Everything is a `<picture>`
+  source, so phones download nothing. The figure is decorative and not
+  clickable. The slot (`HERO_GUIDES`) holds one figure or a pair side by
+  side, for a second character.
 - The SDK widget, the npm packages, `packages/brand` and the testers app keep
   their marks. The placement rules above apply to the icon too.

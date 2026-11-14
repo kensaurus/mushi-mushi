@@ -26,9 +26,7 @@ More words, in plain English: [the glossary](/glossary).
 
 ## Will my customers actually report bugs?
 
-Most won't. Most people who hit a bug just leave. So reporting takes one tap for the people who do speak up, and Mushi Mushi can also look for bugs itself: [check your live site free](/check?src=landing-customers), with no sign-up, or connect the [deeper checks](/what-it-does) when you want them.
-
-On my own 9 apps, about 98% of the bugs in the 60 days to 2026-11-11 came from checks, code reviews, error alerts and my own notes, not from people's reports. [See the live numbers](/proof).
+You don't have to wait for them. Reporting takes one tap, and Mushi Mushi also looks for bugs itself: [check your live site free](/check?src=landing-customers), with no sign-up, or connect the [deeper checks](/what-it-does). [Where the bugs came from on my own apps](/proof).
 
 ## See it work, on a real bug
 
@@ -44,13 +42,7 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 
 I build apps with Cursor and Claude Code, mostly on my own, and they have real users. When one broke, I often didn't know where to start, because I hadn't written the code line by line.
 
-So I built Mushi Mushi and ran it on 9 of my apps. In the 60 days to 2026-11-11, people sent 34 bug reports, and some of those were my own testing. My own checks (code audits, Sentry, the site watch, the first-time user test) found 2,031. [The live numbers are here](/proof).
-
-Most people never report: they hit a bug and leave. So Mushi Mushi doesn't only wait for the button. It also checks your app itself. Of the 523 fixes merged in those 60 days, two started from a person's report. The rest started from those checks, error alerts and my own notes.
-
-The button still matters: a report tells you what a real person was trying to do when it broke.
-
-It is early, and I'm still its main user. If something confuses you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) and I'll read it. — Kenji
+So I built Mushi Mushi and run it on 9 of my own apps. What it found and fixed there, counted live: [the numbers are here](/proof).
 
 ## What this is (and is not)
 

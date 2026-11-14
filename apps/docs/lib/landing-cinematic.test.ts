@@ -219,28 +219,47 @@ describe('landing cinematic copy SSOT', () => {
     expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
   })
 
-  it('brings Field Kenji into the hero as decoration that shows the job: the mark in the eyebrow, the magnify pose on desktop (owner, 2026-11-14)', () => {
+  it('fills the hero right half with the real-bug clip and Kenji with his magnifier, desktop only (owner, 2026-11-14)', () => {
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
-    // The mark (Kenji + Mushi-chan under his magnifier) replaced the dot stamp;
-    // both images are decorative.
-    expect(hero).toContain("from '../../assets/brand/kenji-mark.webp'")
-    expect(hero).not.toContain('docs-editorial-hero__stamp')
-    expect(hero).toMatch(/alt: '',\s*'aria-hidden': true/)
-    // The figure only loads at 1024px+; phones get a blank pixel, so the
-    // address box stays above the fold and nothing heavy downloads.
-    expect(hero).toContain("from '../../assets/mascot/mascot-magnify.webp'")
-    expect(hero).toContain('<div className="landing-hero-guide" data-guides={HERO_GUIDES.length} aria-hidden="true">')
-    // The slot is ready for a pair of guides.
-    expect(read('app', 'globals.css')).toContain(".landing-hero-guide[data-guides='2'] {")
-    expect(hero).toContain('media="(min-width: 1024px)"')
-    expect(hero).toMatch(/<img src=\{BLANK_PIXEL\} alt=""/)
+    const visual = read('components', 'landing', 'LandingHeroVisual.tsx')
+    expect(hero).toContain('<LandingHeroVisual />')
+    // The eyebrow keeps its dot stamp: the navbar mark and the figure are enough.
+    expect(hero).toContain('docs-editorial-hero__stamp landing-hanko')
+    // A real product visual: the bug-to-fix walkthrough, a poster until the
+    // reader presses play. No GIF, no autoplay, and the video only loads then.
+    expect(visual).toContain("['bug-to-fix']")
+    expect(visual).not.toMatch(/\.gif\b/)
+    expect(visual).toMatch(/\{playing \? \(\s*<video/)
+    expect(visual).toContain('onClick={() => setPlaying(true)}')
+    expect(visual.match(/<button\s/g)).toHaveLength(1)
+    expect(visual).not.toMatch(/<Link\s|<a\s/)
+    // Phones download nothing: every image is a <source media> over a blank pixel.
+    expect(visual).toContain("const DESKTOP = '(min-width: 1024px)'")
+    expect(visual.match(/media=\{DESKTOP\}/g)).toHaveLength(2)
+    expect(visual.match(/src=\{BLANK_PIXEL\}/g)).toHaveLength(2)
+    // Kenji with his magnifier, decorative; the slot takes a second guide later.
+    expect(visual).toContain("from '../../assets/mascot/mascot-magnify.webp'")
+    expect(visual).toContain('<div className="landing-hero-guide" data-guides={HERO_GUIDES.length} aria-hidden="true">')
     const css = read('app', 'globals.css')
-    const guide = css.slice(css.indexOf('.landing-hero-guide {'))
-    expect(guide).toMatch(/^\.landing-hero-guide \{\s*display: none;/)
-    expect(guide).toContain('pointer-events: none')
-    // Idle motion only when the reader allows it, and it stops after three cycles.
-    expect(css).toMatch(/@media \(min-width: 1024px\) and \(prefers-reduced-motion: no-preference\) \{\s*\.landing-hero-guide \{/)
+    expect(css).toContain(".landing-hero-guide[data-guides='2'] {")
+    expect(css.slice(css.indexOf('.landing-hero-visual {'))).toMatch(/^\.landing-hero-visual \{\s*display: none;/)
+    // Entrance and idle motion only when the reader allows it; the sway stops after three cycles.
+    expect(css).toMatch(/@media \(min-width: 1024px\) and \(prefers-reduced-motion: no-preference\) \{\s*\.landing-hero-visual__frame \{/)
     expect(css).toMatch(/\.landing-hero-guide img \{\s*animation: docs-guide-idle [^;]* 3;/)
+  })
+
+  it('keeps the honest numbers on /proof, linked from the landing (owner, 2026-11-14)', () => {
+    const landing = read('content', 'index.mdx')
+    const proof = read('app', 'proof', 'ProofClient.tsx')
+    const moved = [/Most won't/, /about 98%/, /two started from a person/, /still its main user/]
+    for (const line of moved) {
+      expect(landing).not.toMatch(line)
+    }
+    for (const line of [/won&apos;t report it/, /about 98% of the bugs/, /two started from a person&apos;s report/, /still its main user/]) {
+      expect(proof).toMatch(line)
+    }
+    expect(landing).toContain('](/proof)')
+    expect(landing).toContain('/check?src=landing-customers')
   })
 
   it('groups the FAQ, no coding first, and answers "what does it collect" and "how do I remove it"', () => {

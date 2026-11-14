@@ -487,7 +487,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 aria-label="Mushi Mushi home"
                 title="Mushi Mushi home"
                 data-testid="brand-home-link"
-                className="flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className="flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <img src={brandMark} alt="" aria-hidden="true" width={28} height={28} className="size-7" draggable={false} />
               </a>
@@ -882,8 +882,8 @@ export function Layout({ children }: { children: ReactNode }) {
             once the page banners stacked under it; the wordmark lives in the
             menu drawer. The switchers truncate instead of overflowing.
             This header paints over the drawer's brand row, so the mark
-            (the home link) sits here, beside the menu button: 24 px, no
-            wordmark (2026-11-14). */}
+            (the home link) sits here, beside the menu button: a 24 px mark in a
+            32 px hit area like its neighbours, no wordmark (2026-11-14). */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
           <Btn
             type="button"
@@ -899,7 +899,7 @@ export function Layout({ children }: { children: ReactNode }) {
             href={MUSHI_CANONICAL_URLS.home}
             aria-label="Mushi Mushi home"
             data-testid="brand-home-link-mobile"
-            className="flex shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="flex size-8 shrink-0 items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6" draggable={false} />
           </a>

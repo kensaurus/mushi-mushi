@@ -397,15 +397,78 @@ main :not(pre) > code {
   user-select: none;
 }
 
-/* The face shows only where the navbar row has room for it. Up to about
-   455px (logo, GitHub, Free check, menu) the wordmark ran under the GitHub
-   icon; from 640px search, "— docs" and the auth links fill the row until
-   about 1200px. Phones keep the name; the hero eyebrow carries the face on
-   the landing. (Below about 1100px the row already overflows and pushes the
-   logo off the left edge; that predates the face.) */
-@media (max-width: 480px), (min-width: 640px) and (max-width: 1219px) {
+/* Up to about 455px the row (logo, GitHub, Free check, menu) has no room
+   for the mark: the wordmark ran under the GitHub icon. Phones keep the
+   name. */
+@media (max-width: 480px) {
   .docs-logo-face {
     display: none;
+  }
+}
+
+/* Tablet navbar (2026-11-14). From 768 to 1279px the 16rem search box,
+   GitHub and the auth links overflowed the row, and Nextra's justify-end
+   pushed the logo off the left edge. The navbar search collapses to an icon
+   button and opens over the row while you type; Ctrl+K still focuses it.
+   Scoped to the navbar: the mobile menu's search keeps its full field. */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .nextra-navbar .nextra-search {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .nextra-navbar .nextra-search::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 1rem;
+    height: 1rem;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 20 20'/%3E%3C/svg%3E") center / contain no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 20 20'/%3E%3C/svg%3E") center / contain no-repeat;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .nextra-navbar .nextra-search input {
+    width: 2.25rem !important;
+    height: 2.25rem;
+    padding: 0 !important;
+    color: transparent;
+    caret-color: transparent;
+    cursor: pointer;
+  }
+
+  .nextra-navbar .nextra-search input::placeholder {
+    color: transparent;
+  }
+
+  .nextra-navbar .nextra-search kbd {
+    display: none;
+  }
+
+  .nextra-navbar .nextra-search:focus-within::before {
+    display: none;
+  }
+
+  .nextra-navbar .nextra-search input:focus,
+  .nextra-navbar .nextra-search input:not(:placeholder-shown) {
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 30;
+    width: 16rem !important;
+    padding: 0.5rem 0.75rem !important;
+    color: inherit;
+    caret-color: auto;
+    cursor: text;
+    background-color: var(--mushi-paper);
+    box-shadow: 0 0 0 1px var(--mushi-rule), 0 0.5rem 1.25rem -0.5rem rgba(0, 0, 0, 0.35);
+  }
+
+  .nextra-navbar .nextra-search input:focus::placeholder {
+    color: var(--mushi-ink-muted);
   }
 }
 
@@ -1191,7 +1254,7 @@ main :not(pre) > code {
 
 @media (min-width: 1024px) {
   .landing-cinematic-hero__content {
-    max-width: 40rem;
+    max-width: var(--landing-copy-width, 40rem);
   }
 }
 
@@ -1233,47 +1296,115 @@ main :not(pre) > code {
   display: block;
 }
 
-/* The brand mark in the hero eyebrow (it replaced the dot stamp). */
-.landing-hero-mark {
-  display: block;
-  flex: none;
-  width: 1.375rem;
-  height: 1.375rem;
+.landing-hanko {
   transform-origin: center;
-  user-select: none;
 }
 
-/* The eyebrow needs 293px at 390; a smaller mark and gap keep it on one line. */
-@media (max-width: 420px) {
-  .landing-cinematic-hero .docs-editorial-hero__eyebrow {
-    gap: 0.5rem;
-  }
-  .landing-hero-mark {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
-}
-
-/* The guide figures beside the hero copy, desktop only (Field Kenji with his
-   magnifier for now). A paper spot sits behind the watercolour so the art
-   reads on the dark theme, as in <Mascot>. Same motion as the docs guide: one
-   entrance, three slow 2 px sways, then rest. The slot holds one figure or a
-   pair ([data-guides="2"]): side by side, overlapping a little, on one wide
-   spot. */
-.landing-hero-guide {
+/* The hero's right half on a desktop (LandingHeroVisual, owner 2026-11-14):
+   the real-bug clip's poster in a frame, play on click, with Field Kenji at
+   its lower-right corner peering in through his magnifier. A paper spot sits
+   behind the watercolour so he reads on the dark theme, as in <Mascot>.
+   The guide slot holds one figure or a pair ([data-guides="2"]): side by
+   side, overlapping a little, on one wide spot. Nothing shows below 1024px.
+   The copy column narrows to 34rem below 1280px so the frame has room. */
+.landing-hero-visual {
   display: none;
 }
 
 @media (min-width: 1024px) {
-  .landing-hero-guide {
+  .landing-cinematic-hero {
+    --landing-copy-width: 34rem;
+  }
+
+  .landing-hero-visual {
     display: block;
     position: absolute;
     z-index: 1;
     /* Beside the headline: the hero runs taller than the viewport, so a
-       bottom anchor would put him below the fold. */
-    right: 2%;
+       bottom anchor would put it below the fold. */
     top: clamp(2.5rem, 7vh, 5rem);
-    width: clamp(14rem, 22vw, 21rem);
+    left: calc(var(--landing-copy-width) + 2.5rem);
+    right: 0;
+    pointer-events: none;
+  }
+
+  .landing-hero-visual__frame {
+    position: relative;
+    width: 86%;
+    max-width: 36rem;
+    overflow: hidden;
+    border: 1px solid var(--mushi-rule);
+    border-radius: 0.75rem;
+    background: var(--mushi-paper-wash);
+    box-shadow: 0 1.25rem 2.5rem -1.25rem color-mix(in oklch, var(--mushi-ink) 35%, transparent);
+    pointer-events: auto;
+  }
+
+  .dark .landing-hero-visual__frame {
+    box-shadow: 0 1.25rem 2.5rem -1.25rem rgba(0, 0, 0, 0.7);
+  }
+
+  .landing-hero-visual__media {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    background: var(--mushi-paper-wash);
+  }
+
+  /* Centred: the poster carries the walkthrough's own caption at its foot. */
+  .landing-hero-visual__play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.85rem 0.45rem 0.7rem;
+    border: 0;
+    border-radius: 9999px;
+    /* Cream on the dark poster in both themes (the theme's ink pill vanished
+       on it in light mode). */
+    background: var(--mushi-dark-ink);
+    color: var(--mushi-dark-paper);
+    font-family: var(--mushi-font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0.4rem 1rem -0.4rem rgba(0, 0, 0, 0.45);
+  }
+
+  .landing-hero-visual__play:hover {
+    opacity: 0.92;
+  }
+
+  .landing-hero-visual__play:focus-visible {
+    outline: 2px solid var(--mushi-vermillion);
+    outline-offset: 2px;
+  }
+
+  .landing-hero-visual__play-long {
+    display: none;
+  }
+
+  .landing-hero-visual__play-icon {
+    width: 0;
+    height: 0;
+    border-top: 0.32rem solid transparent;
+    border-bottom: 0.32rem solid transparent;
+    border-left: 0.5rem solid var(--mushi-vermillion);
+  }
+
+  .landing-hero-guide {
+    position: absolute;
+    right: 0;
+    bottom: -16%;
+    width: 36%;
     aspect-ratio: 1;
     pointer-events: none;
   }
@@ -1287,7 +1418,7 @@ main :not(pre) > code {
     aspect-ratio: 1;
     transform: translateX(-50%);
     border-radius: 9999px;
-    background: var(--mushi-paper-wash);
+    background: var(--mushi-paper);
     box-shadow: inset 0 0 0 1px var(--mushi-rule);
   }
 
@@ -1311,11 +1442,19 @@ main :not(pre) > code {
     user-select: none;
   }
 
+  /* While the clip plays he steps aside, clear of the video controls. */
+  .landing-hero-visual[data-playing='true'] .landing-hero-guide {
+    /* translate and scale, not transform: the entrance animation holds
+       transform (fill-mode both) and would override it. */
+    translate: 0 58%;
+    scale: 0.8;
+    transform-origin: 100% 100%;
+  }
+
   .landing-hero-guide[data-guides='2'] {
     display: flex;
     align-items: flex-end;
-    /* 24vw clears the copy at 1024px, where the headline runs 640px wide. */
-    width: clamp(15rem, 24vw, 28rem);
+    width: 52%;
     aspect-ratio: 5 / 3;
   }
 
@@ -1337,12 +1476,30 @@ main :not(pre) > code {
   }
 }
 
+@media (min-width: 1280px) {
+  .landing-cinematic-hero {
+    --landing-copy-width: 40rem;
+  }
+
+  .landing-hero-visual__play-long {
+    display: inline;
+  }
+}
+
 @media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .landing-hero-visual__frame {
+    animation: docs-guide-enter var(--mushi-duration-slow) var(--mushi-ease-stamp) 120ms both;
+  }
   .landing-hero-guide {
-    animation: docs-guide-enter var(--mushi-duration-slow) var(--mushi-ease-stamp) 200ms both;
+    animation: docs-guide-enter var(--mushi-duration-slow) var(--mushi-ease-stamp) 320ms both;
   }
   .landing-hero-guide img {
-    animation: docs-guide-idle 3600ms ease-in-out 1100ms 3;
+    animation: docs-guide-idle 3600ms ease-in-out 1200ms 3;
+  }
+  .landing-hero-visual[data-playing='true'] .landing-hero-guide {
+    transition:
+      translate var(--mushi-duration-slow) var(--mushi-ease-stamp),
+      scale var(--mushi-duration-slow) var(--mushi-ease-stamp);
   }
 }
 

@@ -248,6 +248,8 @@ describe('the brand mark links home', () => {
     expect(link?.getAttribute('href')).toBe('https://kensaur.us/mushi-mushi')
     expect(link?.getAttribute('aria-label')).toBe('Mushi Mushi home')
     expect(link?.querySelector('img')?.getAttribute('alt')).toBe('')
+    // A 32 px hit area like the menu and search buttons beside it.
+    expect(link?.className).toContain('size-8')
   })
 
   it('shows only the face in the icon rail, with the same link', () => {

@@ -119,14 +119,14 @@ const navbar = (
         />
         {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px,
             and on the landing (globals.css), which is the product page, not the docs. */}
-        Mushi Mushi<span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
+        Mushi Mushi <span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
         <span className="docs-logo-beta" title="Mushi Mushi is in beta">Beta</span>
       </span>
     }
   >
     {/* Plain site links for a first-time visitor (audit 2026-11-11). Hidden
         below lg: at 390px the row is already full, and the menu carries the pages. */}
-    <span className="hidden items-center gap-4 text-sm lg:inline-flex">
+    <span className="hidden items-center gap-4 whitespace-nowrap text-sm lg:inline-flex">
       <Link href="/how-it-works" className="hover:underline">How it works</Link>
       <Link href="/pricing" className="hover:underline">Pricing</Link>
       <Link href="/what-is-mushi-mushi" className="hover:underline">Docs</Link>

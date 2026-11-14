@@ -157,7 +157,9 @@ export function NavbarAuthChrome() {
   // "Start free" opens the console's sign-up form and "Sign in" its login
   // (BL-173). Checklist sync keeps its own sign-in on the checklist
   // (MigrationChecklist). Below sm only "Free check" shows, so the row fits
-  // at 390px.
+  // at 390px. "Start free" waits for xl: from 640 to 1279px the row also holds
+  // the logo, search and GitHub, and with it the logo ran off the left edge
+  // (2026-11-14). Sign-up stays one click away on the landing and /check.
   return (
     <div className="flex items-center gap-1">
       <a
@@ -168,7 +170,7 @@ export function NavbarAuthChrome() {
       </a>
       <a
         href={`${ADMIN_CONSOLE}/signup?src=docs-nav`}
-        className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase sm:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
+        className="hidden whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-2xs uppercase xl:inline-block tracking-[0.16em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-paper-wash)] hover:text-[var(--mushi-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mushi-vermillion)]"
       >
         Start free
       </a>

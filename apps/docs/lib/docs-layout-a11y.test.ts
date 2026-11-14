@@ -43,10 +43,23 @@ describe('docs layout accessible names', () => {
     expect(logo).toContain('src={brandMark.src}')
     expect(logo).toContain('alt=""')
     expect(logo).toContain('aria-hidden="true"')
-    expect(logo).toContain('Mushi Mushi ')
+    // A space before the "— docs" suffix (it once rendered "Mushi Mushi— docs").
+    expect(logo).toContain('Mushi Mushi <span className="docs-logo-suffix')
     // Nextra links the logo to "/" (the landing under any basePath) unless
     // logoLink overrides it; an absolute URL here would send local dev to prod.
     expect(layout).not.toMatch(/logoLink\s*=/)
+  })
+
+  it('collapses the navbar search to an icon on tablets so the logo stays on screen (2026-11-14)', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../app/globals.css'), 'utf8')
+    const block = css.slice(css.indexOf('@media (min-width: 768px) and (max-width: 1279px) {'))
+    expect(block).toMatch(/^@media \(min-width: 768px\) and \(max-width: 1279px\) \{\s*\.nextra-navbar \.nextra-search \{\s*width: 2\.25rem;/)
+    // Typing opens the full field over the row; the mobile menu's search is untouched.
+    expect(block).toContain('.nextra-navbar .nextra-search input:focus,')
+    expect(block).toContain('width: 16rem !important;')
+    // The mark only drops on phones.
+    expect(css).toMatch(/@media \(max-width: 480px\) \{\s*\.docs-logo-face \{\s*display: none;/)
+    expect(layout).toContain('whitespace-nowrap text-sm lg:inline-flex')
   })
 
   it('gives the shared search field a programmatic label', () => {
