@@ -18,6 +18,9 @@ ENV NODE_ENV=production \
     MUSHI_API_KEY=glama-introspection \
     MUSHI_PROJECT_ID=00000000-0000-0000-0000-000000000001 \
     MUSHI_API_ENDPOINT=http://127.0.0.1:1/offline \
-    MUSHI_FEATURES=all
+    MUSHI_FEATURES=vibe
+# vibe = the 12-tool preset new installs get (packages/mcp/src/feature-groups.ts
+# PRESET_TOOLS); glama.json lists the same set. Glama scores tool count, and the
+# full list (features=all) scored 1/5.
 
 ENTRYPOINT ["mushi-mcp"]

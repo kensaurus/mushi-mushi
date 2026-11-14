@@ -467,7 +467,10 @@ describe('QA run tool project parameter', () => {
       expect(mdx.split('\n').find((line) => line.startsWith(row)), name).toContain(PROJECT_PARAM)
       expect(twin.split('\n').find((line) => line.startsWith(row)), name).toContain(PROJECT_PARAM)
       expect(full.split('\n').find((line) => line.startsWith(row)), name).toContain(PROJECT_PARAM)
-      expect(glama.tools.find((t) => t.name === name)?.description, name).toContain(PROJECT_PARAM)
+      // glama.json lists only the vibe preset (scripts/check-catalog-count.mjs
+      // pins it); a QA tool it does list must carry the parameter docs too.
+      const listed = glama.tools.find((t) => t.name === name)
+      if (listed) expect(listed.description, name).toContain(PROJECT_PARAM)
       expect(discovery.tools[name]?.description, name).toContain(PROJECT_PARAM)
     }
   })

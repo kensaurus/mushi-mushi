@@ -4,7 +4,8 @@
  *
  * Counts MCP **tools** in packages/mcp/src/catalog.ts (TOOL_CATALOG +
  * TDD_TOOL_CATALOG + CODEBASE_TOOL_CATALOG) and asserts that glama.json
- * mentions the same tool count. (smithery.yaml was removed on 2026-11-14:
+ * lists the `vibe` preset and names both counts (the preset, and the whole
+ * catalog under features=all). (smithery.yaml was removed on 2026-11-14:
  * Smithery shut down its hosted services on 2026-10-31.) Resources and prompts are
  * counted separately for logging — they must not be marketed as "tools".
  *
@@ -64,33 +65,62 @@ if (toolCount === 0) {
 
 let hasError = false
 
-/** Replace the first `N tools` / `N tool` mention in a string. */
-function replaceToolCount(src, count) {
-  return src.replace(/(\d+)\s+(tools?)/, `${count} $2`)
+// ─── 2. Check glama.json ─────────────────────────────────────────────────────
+//
+// glama.json lists the `vibe` preset (PRESET_TOOLS.vibe in feature-groups.ts),
+// the tool set new installs and directory listings get, and its description
+// names two counts: "<N> tools by default" (the preset) and
+// "features=all lists <M> tools" (the whole catalog).
+
+const featureGroupsSrc = readFileSync(join(ROOT, 'packages', 'mcp', 'src', 'feature-groups.ts'), 'utf8')
+const vibeBlock = /\bvibe:\s*\[([\s\S]*?)\]/.exec(featureGroupsSrc)
+const vibeTools = vibeBlock ? [...vibeBlock[1].matchAll(/'([a-z_][a-z0-9_]*)'/g)].map((m) => m[1]) : []
+if (vibeTools.length === 0) {
+  console.error('✗ Failed to parse PRESET_TOOLS.vibe from feature-groups.ts.')
+  process.exit(1)
 }
 
-// ─── 2. Check glama.json ─────────────────────────────────────────────────────
-
 const glamaPath = join(ROOT, 'glama.json')
-const glamaSrc = readFileSync(glamaPath, 'utf8')
-const glamaCountMatch = glamaSrc.match(/(\d+)\s+tools?/)
-const glamaCount = glamaCountMatch ? parseInt(glamaCountMatch[1], 10) : null
+let glamaSrc = readFileSync(glamaPath, 'utf8')
+const glama = JSON.parse(glamaSrc)
+const defaultMatch = /(\d+) tools by default/.exec(glama.description ?? '')
+const allMatch = /features=all lists (\d+) tools/.exec(glama.description ?? '')
+const defaultCount = defaultMatch ? parseInt(defaultMatch[1], 10) : null
+const allCount = allMatch ? parseInt(allMatch[1], 10) : null
 
-if (glamaCount !== toolCount) {
-  if (FIX) {
-    const updated = replaceToolCount(glamaSrc, toolCount)
-    writeFileSync(glamaPath, updated, 'utf8')
-    console.log(`✓ glama.json updated from ${glamaCount} to ${toolCount} tools.`)
+if (defaultCount !== vibeTools.length || allCount !== toolCount) {
+  if (FIX && defaultMatch && allMatch) {
+    glamaSrc = glamaSrc
+      .replace(/\d+ tools by default/, `${vibeTools.length} tools by default`)
+      .replace(/features=all lists \d+ tools/, `features=all lists ${toolCount} tools`)
+    writeFileSync(glamaPath, glamaSrc, 'utf8')
+    console.log(`✓ glama.json counts updated to ${vibeTools.length} by default / ${toolCount} with features=all.`)
   } else {
     console.error(
-      `✗ glama.json says "${glamaCount} tools" but catalog.ts has ${toolCount} tools` +
-        ` (${resourceCount} resources · ${promptCount} prompts are separate).\n` +
+      `✗ glama.json description says "${defaultCount} tools by default" and "features=all lists ${allCount} tools";` +
+        ` expected ${vibeTools.length} (PRESET_TOOLS.vibe) and ${toolCount} (catalog.ts;` +
+        ` ${resourceCount} resources · ${promptCount} prompts are separate).\n` +
         `  Fix: run "node scripts/check-catalog-count.mjs --fix" or update glama.json manually.`
     )
     hasError = true
   }
 } else {
-  console.log(`✓ glama.json tool count matches (${toolCount}).`)
+  console.log(`✓ glama.json counts match (${vibeTools.length} by default, ${toolCount} with features=all).`)
+}
+
+const listed = (glama.tools ?? []).map((t) => t.name)
+const missing = vibeTools.filter((name) => !listed.includes(name))
+const extra = listed.filter((name) => !vibeTools.includes(name))
+if (missing.length || extra.length) {
+  console.error(
+    `✗ glama.json tools[] must be exactly PRESET_TOOLS.vibe.` +
+      (missing.length ? ` Missing: ${missing.join(', ')}.` : '') +
+      (extra.length ? ` Extra: ${extra.join(', ')}.` : '') +
+      `\n  Fix: pnpm --filter @mushi-mushi/mcp build && node packages/mcp/scripts/generate-glama-json.mjs`
+  )
+  hasError = true
+} else {
+  console.log(`✓ glama.json tools[] is the vibe preset (${listed.length}).`)
 }
 
 // ─── 3. Soft-check AGENTS.md + generated MDX for "N tools" ───────────────────
