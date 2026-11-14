@@ -34,7 +34,7 @@ interface HeroGuide {
 }
 
 /** Left to right. Each pose shows the job; a second character joins here. */
-export const HERO_GUIDES: readonly HeroGuide[] = [{ id: 'kenji', full: magnify.src, small: magnifySm.src }]
+const HERO_GUIDES: readonly HeroGuide[] = [{ id: 'kenji', full: magnify.src, small: magnifySm.src }]
 
 interface WalkthroughClip {
   id: string
