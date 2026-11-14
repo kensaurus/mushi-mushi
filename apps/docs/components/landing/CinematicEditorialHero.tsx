@@ -17,6 +17,7 @@ import { LandingCheckBox } from './LandingCheckBox'
 import { LandingInstallStrip } from './LandingInstallStrip'
 import { usePrefersReducedMotion } from './use-prefers-reduced-motion'
 import { landingStampVariants } from './landing-stagger'
+import { LandingHeroVisual } from './LandingHeroVisual'
 
 const InkMothCanvas = dynamic(
   () => import('./InkMothCanvas').then((m) => m.InkMothCanvas),
@@ -64,6 +65,11 @@ export function CinematicEditorialHero({
       ) : (
         <div className="landing-ink-poster" aria-hidden="true" />
       )}
+
+      {/* Desktop only: the real-bug clip's poster (play on click) with Field
+          Kenji peering at it through his magnifier. Phones download none of
+          it and stay address-box-first (LandingHeroVisual). */}
+      <LandingHeroVisual />
 
       <div className="landing-cinematic-hero__content">
         {eyebrow ? (

@@ -6,6 +6,8 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
+import brandMark from '../../assets/brand/kenji-mark.webp'
 import { Btn, Loading } from '../ui'
 import { Drawer } from '../Drawer'
 import { useAuth } from '../../lib/auth'
@@ -151,15 +153,34 @@ function renderSidebarContent(compact: boolean, user: ReturnType<typeof useAuth>
     <>
       <div className="shrink-0 overflow-visible border-b border-edge/60">
         <div className={`chrome-top-row ${compact ? 'justify-center px-2' : 'px-4'}`}>
+          {/* Same brand as the console sidebar (Layout.tsx): the mark plus the
+              wordmark, one link to the landing page; the rail keeps the mark. */}
           {compact ? (
-            <h1 className="text-center text-sm font-bold leading-none tracking-tight" aria-label="mushimushi bounties">
-              <span className="text-brand">m</span>
-              <span className="text-fg-secondary">m</span>
+            <h1 className="leading-none">
+              <a
+                href={MUSHI_CANONICAL_URLS.home}
+                aria-label="Mushi Mushi home"
+                title="Mushi Mushi home"
+                data-testid="brand-home-link"
+                className="flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <img src={brandMark} alt="" aria-hidden="true" width={28} height={28} className="size-7" draggable={false} />
+              </a>
             </h1>
           ) : (
             <h1 className="text-sm font-bold leading-none tracking-tight">
-              <span className="text-brand">mushi</span>
-              <span className="text-fg-secondary">mushi</span>
+              <a
+                href={MUSHI_CANONICAL_URLS.home}
+                aria-label="Mushi Mushi home"
+                data-testid="brand-home-link"
+                className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6 shrink-0" draggable={false} />
+                <span>
+                  <span className="text-brand">mushi</span>
+                  <span className="text-fg-secondary">mushi</span>
+                </span>
+              </a>
             </h1>
           )}
         </div>

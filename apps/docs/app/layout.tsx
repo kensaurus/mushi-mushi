@@ -13,6 +13,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
+import brandMark from '../assets/brand/kenji-mark.webp'
 import { bannerRelease } from '../lib/release-headline'
 import {
   DOCS_SITE,
@@ -105,6 +106,17 @@ const navbar = (
   <Navbar
     logo={
       <span className="relative whitespace-nowrap font-semibold tracking-tight">
+        {/* The mark: Field Kenji with Mushi-chan under his magnifier (docs/mascot/README.md). Nextra wraps the
+            logo in a link to "/", which is the landing under any basePath. */}
+        <img
+          src={brandMark.src}
+          alt=""
+          aria-hidden="true"
+          width={24}
+          height={24}
+          className="docs-logo-face"
+          draggable={false}
+        />
         {/* "— docs" drops on phones so the logo, GitHub, Console and Sign in fit one row at 390px,
             and on the landing (globals.css), which is the product page, not the docs. */}
         Mushi Mushi <span className="docs-logo-suffix hidden opacity-60 sm:inline">— docs</span>
@@ -114,7 +126,7 @@ const navbar = (
   >
     {/* Plain site links for a first-time visitor (audit 2026-11-11). Hidden
         below lg: at 390px the row is already full, and the menu carries the pages. */}
-    <span className="hidden items-center gap-4 text-sm lg:inline-flex">
+    <span className="hidden items-center gap-4 whitespace-nowrap text-sm lg:inline-flex">
       <Link href="/how-it-works" className="hover:underline">How it works</Link>
       <Link href="/pricing" className="hover:underline">Pricing</Link>
       <Link href="/what-is-mushi-mushi" className="hover:underline">Docs</Link>
