@@ -43,6 +43,9 @@ const PINNED_FILES = [
   'docs/operators/mcp-multi-project.md',
   'docs/operators/reporter-comms-and-mcp-setup.md',
   'packages/mcp/README.md',
+  // The Cursor plugin bundle installs this into every user's editor; an
+  // unpinned npx -y is what a marketplace security review flags.
+  'packages/cursor-plugin/mcp.json',
 ]
 
 // The hosted MCP's generated catalog copy reports this version in serverInfo

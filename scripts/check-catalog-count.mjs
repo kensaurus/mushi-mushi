@@ -3,8 +3,9 @@
  * check-catalog-count.mjs
  *
  * Counts MCP **tools** in packages/mcp/src/catalog.ts (TOOL_CATALOG +
- * TDD_TOOL_CATALOG + CODEBASE_TOOL_CATALOG) and asserts that glama.json and
- * smithery.yaml mention the same tool count. Resources and prompts are
+ * TDD_TOOL_CATALOG + CODEBASE_TOOL_CATALOG) and asserts that glama.json
+ * mentions the same tool count. (smithery.yaml was removed on 2026-11-14:
+ * Smithery shut down its hosted services on 2026-10-31.) Resources and prompts are
  * counted separately for logging — they must not be marketed as "tools".
  *
  * Usage:
@@ -92,37 +93,7 @@ if (glamaCount !== toolCount) {
   console.log(`✓ glama.json tool count matches (${toolCount}).`)
 }
 
-// ─── 3. Check smithery.yaml (if it mentions a count) ─────────────────────────
-
-const smitheryPath = join(ROOT, 'smithery.yaml')
-try {
-  const smitherySrc = readFileSync(smitheryPath, 'utf8')
-  const smitheryCountMatch = smitherySrc.match(/(\d+)\s+tools?/)
-  if (smitheryCountMatch) {
-    const smitheryCount = parseInt(smitheryCountMatch[1], 10)
-    if (smitheryCount !== toolCount) {
-      if (FIX) {
-        const updated = replaceToolCount(smitherySrc, toolCount)
-        writeFileSync(smitheryPath, updated, 'utf8')
-        console.log(`✓ smithery.yaml updated from ${smitheryCount} to ${toolCount} tools.`)
-      } else {
-        console.error(
-          `✗ smithery.yaml says "${smitheryCount} tools" but catalog.ts has ${toolCount}.\n` +
-            `  Fix: run "node scripts/check-catalog-count.mjs --fix".`
-        )
-        hasError = true
-      }
-    } else {
-      console.log(`✓ smithery.yaml tool count matches (${toolCount}).`)
-    }
-  } else {
-    console.log(`  smithery.yaml: no tool count mention found — skipping.`)
-  }
-} catch {
-  console.log(`  smithery.yaml not found — skipping.`)
-}
-
-// ─── 4. Soft-check AGENTS.md + generated MDX for "N tools" ───────────────────
+// ─── 3. Soft-check AGENTS.md + generated MDX for "N tools" ───────────────────
 
 for (const rel of [
   'AGENTS.md',

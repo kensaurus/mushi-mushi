@@ -13,6 +13,11 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
 
 ## Server Config (paste verbatim)
 
+The hosted entry signs in with OAuth in the browser (no key). The stdio entry
+uses Mushi Mushi Cloud by default; `MUSHI_API_ENDPOINT` is only for
+self-hosting. Never paste the raw `*.supabase.co` URL: OAuth login needs the
+kensaur.us host (see `canonical-urls.md`).
+
 ```json
 {
   "mcpServers": {
@@ -21,18 +26,12 @@ Canonical URLs: [`canonical-urls.md`](./canonical-urls.md)
       "args": ["-y", "@mushi-mushi/mcp@latest"],
       "env": {
         "MUSHI_API_KEY": "<YOUR_MUSHI_API_KEY>",
-        "MUSHI_PROJECT_ID": "<YOUR_PROJECT_UUID>",
-        "MUSHI_API_ENDPOINT": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api",
-        "MUSHI_FEATURES": "triage,fixes,inventory,setup,docs"
+        "MUSHI_PROJECT_ID": "<YOUR_PROJECT_UUID>"
       }
     },
     "mushi-mushi-hosted": {
       "type": "http",
-      "url": "https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs",
-      "headers": {
-        "Authorization": "Bearer <YOUR_MUSHI_API_KEY>",
-        "X-Mushi-Project-Id": "<YOUR_PROJECT_UUID>"
-      }
+      "url": "https://kensaur.us/mushi-mushi/hosted-mcp/"
     }
   }
 }

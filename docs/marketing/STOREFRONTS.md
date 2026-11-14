@@ -162,7 +162,7 @@ See [`canonical-urls.md`](./canonical-urls.md). Do not use `api.mushimushi.dev` 
 | Name | `Mushi Mushi` |
 | Registry name | `io.github.kensaurus/mushi-mushi` |
 | npm package | `@mushi-mushi/mcp` · install `npx -y @mushi-mushi/mcp@latest` |
-| Hosted HTTP URL | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs` |
+| Hosted HTTP URL | `https://kensaur.us/mushi-mushi/hosted-mcp/` (OAuth sign-in; `server.json` `remotes`) |
 | API endpoint | `https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api` |
 | Repo | `https://github.com/kensaurus/mushi-mushi` |
 | Homepage | `https://kensaur.us/mushi-mushi` |
