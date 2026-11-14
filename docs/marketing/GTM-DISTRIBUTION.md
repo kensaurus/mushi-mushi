@@ -294,8 +294,7 @@ API, Connect, and Toolbox; Smithery accounts and API keys; The Smithery CLI and
 SDKs" ([smithery.ai/future](https://www.smithery.ai/future)). Our listing returns
 404 (checked 2026-11-11). The publish steps that used to live here are in git
 history; `smithery.yaml`, `smithery-config-schema.json` and
-`smithery-external-publish.json` are kept only until a housekeeping pass removes
-them. The hosted-MCP auth surfaces they relied on (RFC 9728 PRM, RFC 8414
+`smithery-external-publish.json` were removed on 2026-11-14. The hosted-MCP auth surfaces they relied on (RFC 9728 PRM, RFC 8414
 metadata, `401` + `WWW-Authenticate`) still serve every other OAuth client;
 verify them with `node scripts/verify-hosted-mcp.mjs`.
 

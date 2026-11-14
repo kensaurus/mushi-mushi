@@ -316,9 +316,8 @@ agent "what's broken in prod?" and it pulls the plain-English diagnosis plus a
 ready-to-paste fix over MCP. Optional: dispatch a sandboxed agent to open a
 draft PR.
 
-Config schema and smithery.yaml are in the repo so you can see exactly which
-env vars it needs before installing anything. Repo + Smithery link in a
-comment.
+The MCP server's `server.json` is in the repo so you can see exactly which
+env vars it needs before installing anything. Repo link in a comment.
 
 Genuinely curious which MCP server design choices people here have regretted.
 Scope creep in tool count is the one I keep fighting.
