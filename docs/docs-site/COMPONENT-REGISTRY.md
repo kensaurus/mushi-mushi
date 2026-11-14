@@ -30,7 +30,7 @@ Both patterns are supported. Register new shared components in `mdx-components.t
 | Component | Purpose | Typical page |
 |-----------|---------|--------------|
 | `EditorialHero` | Landing/chapter hero — **the only H1** on marketing pages | `/`, concepts |
-| `AdminDocHero` | Console screenshot/GIF hero from catalog | `/admin/*` |
+| `AdminDocHero` | Console screenshot/demo-clip hero from catalog (clips play through `DocVideo`) | `/admin/*` |
 | `OssTrustStrip` | Open-source trust bullets (license, self-host) | `/` |
 | `WhereToStartGrid` | Three-path “where to start” decision grid | `/` |
 | `QuickstartGrid` | Four platform install cards with commands | `/` |

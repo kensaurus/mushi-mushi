@@ -8,8 +8,11 @@ export interface AdminScreenshotEntry {
   image: string
   /** Optional light-mode pair for pages that ship both themes. */
   light?: string
-  /** Optional animated demo (GIF). */
-  gif?: string
+  /**
+   * Demo clip file stem (no extension) when it isn't `{slug}-demo` — DocVideo
+   * loads `{video}.webm` / `.mp4` / `-poster.webp`.
+   */
+  video?: string
   alt: string
   caption: string
   /** Live admin route suffix — joined with ADMIN_DEMO_BASE. */
@@ -24,7 +27,7 @@ export const GLOTIT_DEMO_URL = 'https://kensaur.us/glot-it'
 export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   index: {
     image: 'report-detail-dark.png',
-    gif: 'tour-console-v2.gif',
+    video: 'tour-console-v2',
     alt: 'Mushi admin console — DiagnosisFixHero plus animated walk through dashboard, reports, fixes, and Connect',
     caption: 'Live admin demo · free signup · 4-stop incident loop tour',
     route: '/dashboard',
@@ -32,7 +35,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   dashboard: {
     image: 'dashboard-dark.png',
     light: 'dashboard-light.png',
-    gif: 'dashboard-demo.gif',
+    video: 'dashboard-demo',
     alt: 'Dashboard — flow canvas with KPI tiles, severity histogram, and inbox queue',
     caption: 'Morning check in 30 seconds — backlog, in-flight fixes, LLM cost',
     route: '/dashboard',
@@ -57,7 +60,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   reports: {
     image: 'reports-dark.png',
-    gif: 'glotit-report-flow.gif',
+    video: 'glotit-report-flow',
     alt: 'Reports inbox with severity stripes and fix actions',
     caption: 'User-felt bugs from glot.it land here with screenshot + breadcrumbs',
     route: '/reports',
@@ -126,7 +129,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   'qa-coverage': {
     image: 'qa-coverage-dark.png',
-    gif: 'qa-coverage-demo.gif',
+    video: 'qa-coverage-demo',
     alt: 'QA Coverage — scheduled user-story tests with Firecrawl / Browserbase / local Playwright',
     caption: 'NL prompts or Playwright scripts on cron — failures thread to Slack',
     route: '/qa-coverage',
@@ -157,7 +160,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   iterate: {
     image: 'intelligence-dark.png',
-    gif: 'tour-console-v2.gif',
+    video: 'tour-console-v2',
     alt: 'Iterate (PDCA) — producer/critic loop with selectable personas',
     caption: 'Live progress + draft-PR exit',
     route: '/iterate',
@@ -212,7 +215,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   rewards: {
     image: 'rewards-dark.png',
-    gif: 'rewards-demo.gif',
+    video: 'rewards-demo',
     alt: 'Rewards program — point rules, tier ladder, and contributor leaderboard',
     caption: 'Automatic report.submitted / report.triaged points + one-click preset install',
     route: '/rewards',
@@ -237,7 +240,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   'sdk-health': {
     image: 'projects-dark.png',
-    gif: 'glotit-report-flow.gif',
+    video: 'glotit-report-flow',
     alt: 'SDK health — per-runtime heartbeat and version alerts',
     caption: 'glot.it dogfood project — web + React Native heartbeats',
     route: '/sdk-health',
@@ -286,7 +289,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   explore: {
     image: 'explore-dark.png',
-    gif: 'explore-demo.gif',
+    video: 'explore-demo',
     alt: 'Codebase Atlas — ReactFlow graph coloured by architectural layer',
     caption: 'Semantic search over vector embeddings of indexed source files',
     route: '/explore',
@@ -297,4 +300,9 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     caption: 'worker_jobs with 14d throughput histogram',
     route: '/queue',
   },
+}
+
+/** Demo clip stem for an admin docs page: the entry's `video`, else `{page}-demo`. */
+export function adminDemoVideo(page: string, entry: AdminScreenshotEntry): string {
+  return entry.video ?? `${page}-demo`
 }

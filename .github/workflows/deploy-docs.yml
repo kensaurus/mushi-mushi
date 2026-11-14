@@ -217,8 +217,26 @@ jobs:
             --exclude "*.txt" \
             --exclude "*.xml" \
             --exclude "*.md" \
+            --exclude "*.mp4" \
+            --exclude "*.webm" \
+            --exclude "*.webp" \
             --exclude "version.json" \
             --exclude "_pagefind/*"
+
+      - name: Sync demo clips and posters to S3 (explicit types)
+        # Docs demo clips (DocVideo) and their posters. Their types are set
+        # here, not guessed: the CLI's guess depends on the runner's mime
+        # table, and the docs send X-Content-Type-Options: nosniff.
+        run: |
+          for pair in "mp4:video/mp4" "webm:video/webm" "webp:image/webp"; do
+            aws s3 sync apps/docs/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+              --cache-control "public, max-age=31536000, immutable" \
+              --content-type "${pair#*:}" \
+              --no-guess-mime-type \
+              --exclude "*" \
+              --include "*.${pair%%:*}" \
+              --exclude "_pagefind/*"
+          done
 
       - name: Sync Pagefind search bundle to S3 (short cache)
         # pagefind.js, pagefind-worker.js and pagefind-entry.json keep the same
