@@ -64,7 +64,7 @@ import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
-import kenjiFace from '../assets/brand/kenji-face.webp'
+import brandMark from '../assets/brand/kenji-mark.webp'
 
 type NavItem = BuiltNavItem
 
@@ -472,9 +472,11 @@ export function Layout({ children }: { children: ReactNode }) {
   // gets `compact: false` because the mobile sidebar is a full overlay.
   const renderSidebarContent = (compact: boolean) => (
     <>
-      {/* Brand — Field Kenji's face (the app icon, docs/mascot/README.md) and
-          the wordmark, linking back to the landing page (owner, 2026-11-14).
-          The compact rail keeps only the face. A plain <a>: the landing is a
+      {/* Brand — the mark (Field Kenji's face with Mushi-chan under his
+          magnifier, so it shows the bug-finding job at 24 px; see
+          docs/mascot/README.md) and the wordmark, linking back to the landing
+          page (owner, 2026-11-14). The compact rail keeps only the mark.
+          A plain <a>: the landing is a
           different site, not a console route. */}
       <div className="border-b border-edge/60 overflow-visible shrink-0">
         <div className={`chrome-top-row ${compact ? 'px-2 justify-center' : 'px-4'}`}>
@@ -487,7 +489,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 data-testid="brand-home-link"
                 className="flex rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                <img src={kenjiFace} alt="" aria-hidden="true" width={28} height={28} className="size-7 rounded-full" draggable={false} />
+                <img src={brandMark} alt="" aria-hidden="true" width={28} height={28} className="size-7" draggable={false} />
               </a>
             </h1>
           ) : (
@@ -499,7 +501,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   data-testid="brand-home-link"
                   className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
-                  <img src={kenjiFace} alt="" aria-hidden="true" width={24} height={24} className="size-6 shrink-0 rounded-full" draggable={false} />
+                  <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6 shrink-0" draggable={false} />
                   <span>
                     <span className="text-brand">mushi</span>
                     <span className="text-fg-secondary">mushi</span>
@@ -879,7 +881,7 @@ export function Layout({ children }: { children: ReactNode }) {
             two-row version with the wordmark took a third of a 390px screen
             once the page banners stacked under it; the wordmark lives in the
             menu drawer. The switchers truncate instead of overflowing.
-            This header paints over the drawer's brand row, so Kenji's face
+            This header paints over the drawer's brand row, so the mark
             (the home link) sits here, beside the menu button: 24 px, no
             wordmark (2026-11-14). */}
         <header className={`md:hidden flex items-center gap-1.5 px-3 py-1.5 border-b border-edge/60 ${appChromeHeaderClass}`}>
@@ -899,7 +901,7 @@ export function Layout({ children }: { children: ReactNode }) {
             data-testid="brand-home-link-mobile"
             className="flex shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
-            <img src={kenjiFace} alt="" aria-hidden="true" width={24} height={24} className="size-6 rounded-full" draggable={false} />
+            <img src={brandMark} alt="" aria-hidden="true" width={24} height={24} className="size-6" draggable={false} />
           </a>
           <div className="flex min-w-0 flex-1 items-center gap-1.5 [&>*]:min-w-0">
             {!isDesktopHeader && (

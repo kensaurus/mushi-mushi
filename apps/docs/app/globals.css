@@ -385,14 +385,14 @@ main :not(pre) > code {
   vertical-align: 1px;
 }
 
-/* Field Kenji's face before the navbar wordmark (owner, 2026-11-14): the
-   app icon, cut to its paper disc so it sits on either theme. */
+/* The mark before the navbar wordmark (owner, 2026-11-14): Field Kenji's
+   face with Mushi-chan under his magnifier, so it shows the bug-finding job.
+   No border-radius: it would clip the magnifier handle. */
 .docs-logo-face {
   display: inline-block;
   width: 1.5rem;
   height: 1.5rem;
   margin-right: 0.45rem;
-  border-radius: 9999px;
   vertical-align: -0.4rem;
   user-select: none;
 }
@@ -1233,31 +1233,33 @@ main :not(pre) > code {
   display: block;
 }
 
-/* Kenji's face in the hero eyebrow (the app icon; it replaced the dot stamp). */
-.landing-hero-face {
+/* The brand mark in the hero eyebrow (it replaced the dot stamp). */
+.landing-hero-mark {
   display: block;
   flex: none;
   width: 1.375rem;
   height: 1.375rem;
-  border-radius: 9999px;
   transform-origin: center;
   user-select: none;
 }
 
-/* The eyebrow needs 293px at 390; a smaller face and gap keep it on one line. */
+/* The eyebrow needs 293px at 390; a smaller mark and gap keep it on one line. */
 @media (max-width: 420px) {
   .landing-cinematic-hero .docs-editorial-hero__eyebrow {
     gap: 0.5rem;
   }
-  .landing-hero-face {
+  .landing-hero-mark {
     width: 1.125rem;
     height: 1.125rem;
   }
 }
 
-/* Field Kenji waving beside the hero copy, desktop only. A paper spot sits
-   behind the watercolour so he reads on the dark theme, as in <Mascot>. Same
-   motion as the docs guide: one entrance, three slow 2 px sways, then rest. */
+/* The guide figures beside the hero copy, desktop only (Field Kenji with his
+   magnifier for now). A paper spot sits behind the watercolour so the art
+   reads on the dark theme, as in <Mascot>. Same motion as the docs guide: one
+   entrance, three slow 2 px sways, then rest. The slot holds one figure or a
+   pair ([data-guides="2"]): side by side, overlapping a little, on one wide
+   spot. */
 .landing-hero-guide {
   display: none;
 }
@@ -1293,6 +1295,13 @@ main :not(pre) > code {
     background: var(--mushi-dark-ink);
   }
 
+  .landing-hero-guide__figure {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
   .landing-hero-guide img {
     position: relative;
     display: block;
@@ -1300,6 +1309,31 @@ main :not(pre) > code {
     height: 100%;
     object-fit: contain;
     user-select: none;
+  }
+
+  .landing-hero-guide[data-guides='2'] {
+    display: flex;
+    align-items: flex-end;
+    /* 24vw clears the copy at 1024px, where the headline runs 640px wide. */
+    width: clamp(15rem, 24vw, 28rem);
+    aspect-ratio: 5 / 3;
+  }
+
+  .landing-hero-guide[data-guides='2']::before {
+    width: 92%;
+    aspect-ratio: 2 / 1;
+    border-radius: 50%;
+  }
+
+  .landing-hero-guide[data-guides='2'] .landing-hero-guide__figure {
+    flex: 0 0 60%;
+    width: 60%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .landing-hero-guide[data-guides='2'] .landing-hero-guide__figure + .landing-hero-guide__figure {
+    margin-left: -20%;
   }
 }
 

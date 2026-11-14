@@ -13,7 +13,7 @@ import './globals.css'
 import changelog from '../data/changelog.json'
 import { MUSHI_TAGLINE_V2 } from '@mushi-mushi/brand'
 import { JsonLd } from '../components/JsonLd'
-import kenjiFace from '../assets/brand/kenji-face.webp'
+import brandMark from '../assets/brand/kenji-mark.webp'
 import { bannerRelease } from '../lib/release-headline'
 import {
   DOCS_SITE,
@@ -106,10 +106,10 @@ const navbar = (
   <Navbar
     logo={
       <span className="relative whitespace-nowrap font-semibold tracking-tight">
-        {/* Field Kenji's face, the app icon (docs/mascot/README.md). Nextra wraps the
+        {/* The mark: Field Kenji with Mushi-chan under his magnifier (docs/mascot/README.md). Nextra wraps the
             logo in a link to "/", which is the landing under any basePath. */}
         <img
-          src={kenjiFace.src}
+          src={brandMark.src}
           alt=""
           aria-hidden="true"
           width={24}

@@ -219,16 +219,19 @@ describe('landing cinematic copy SSOT', () => {
     expect(existsSync(join(DOCS, 'content', 'demo', 'diagnosis.mdx'))).toBe(true)
   })
 
-  it('brings Field Kenji into the hero as decoration only: his face in the eyebrow, the wave pose on desktop (owner, 2026-11-14)', () => {
+  it('brings Field Kenji into the hero as decoration that shows the job: the mark in the eyebrow, the magnify pose on desktop (owner, 2026-11-14)', () => {
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
-    // The face replaced the dot stamp; both images are decorative.
-    expect(hero).toContain("from '../../assets/brand/kenji-face.webp'")
+    // The mark (Kenji + Mushi-chan under his magnifier) replaced the dot stamp;
+    // both images are decorative.
+    expect(hero).toContain("from '../../assets/brand/kenji-mark.webp'")
     expect(hero).not.toContain('docs-editorial-hero__stamp')
     expect(hero).toMatch(/alt: '',\s*'aria-hidden': true/)
-    // The wave figure only loads at 1024px+; phones get a blank pixel, so the
+    // The figure only loads at 1024px+; phones get a blank pixel, so the
     // address box stays above the fold and nothing heavy downloads.
-    expect(hero).toContain("from '../../assets/mascot/mascot-wave.webp'")
-    expect(hero).toContain('<div className="landing-hero-guide" aria-hidden="true">')
+    expect(hero).toContain("from '../../assets/mascot/mascot-magnify.webp'")
+    expect(hero).toContain('<div className="landing-hero-guide" data-guides={HERO_GUIDES.length} aria-hidden="true">')
+    // The slot is ready for a pair of guides.
+    expect(read('app', 'globals.css')).toContain(".landing-hero-guide[data-guides='2'] {")
     expect(hero).toContain('media="(min-width: 1024px)"')
     expect(hero).toMatch(/<img src=\{BLANK_PIXEL\} alt=""/)
     const css = read('app', 'globals.css')

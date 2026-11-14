@@ -36,11 +36,11 @@ describe('docs layout accessible names', () => {
     expect(layout.slice(iconAt, chromeAt)).toContain('aria-hidden="true"')
   })
 
-  it("puts Kenji's face in the navbar logo, decorative, inside Nextra's home link (owner, 2026-11-14)", () => {
+  it("puts the mark (Kenji + Mushi-chan under his magnifier) in the navbar logo, decorative, inside Nextra's home link (owner, 2026-11-14)", () => {
     const logoAt = layout.indexOf('logo={')
     const logo = layout.slice(logoAt, layout.indexOf('</span>\n    }', logoAt))
-    expect(layout).toContain("import kenjiFace from '../assets/brand/kenji-face.webp'")
-    expect(logo).toContain('src={kenjiFace.src}')
+    expect(layout).toContain("import brandMark from '../assets/brand/kenji-mark.webp'")
+    expect(logo).toContain('src={brandMark.src}')
     expect(logo).toContain('alt=""')
     expect(logo).toContain('aria-hidden="true"')
     expect(logo).toContain('Mushi Mushi ')
