@@ -30,7 +30,7 @@ No signup needed for the read-only demo. Or run one command:
 
 ```bash
 # Claude Code
-claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
 
 # Cursor (writes .cursor/mcp.json)
 npx mushi-mushi setup --ide cursor
@@ -52,6 +52,23 @@ Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 
 </Steps>
 
+### Which tools you get [#tool-sets]
+
+`?features=vibe` gives about a dozen tools: your bug reports, their plain-English
+diagnosis, the fix brief your editor applies, marking a report fixed, replying to
+the reporter, setup checks and these docs. That is the whole loop for fixing in
+your editor, and every install path here writes it.
+
+| You want | Server URL ending (or `MUSHI_FEATURES` for the local server) |
+| --- | --- |
+| Fix bugs in your editor (recommended) | `?features=vibe` |
+| Also dispatch fixes to cloud agents (Cursor Cloud, GitHub) | `?features=vibe,fixes` |
+| Every tool, including QA stories, skills and the codebase atlas | `?features=all` |
+
+A URL with no `?features=` keeps the older, larger default
+(`triage,fixes,inventory,setup,docs`), so connections added before
+2026-11-14 keep their tools.
+
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
 
@@ -63,7 +80,7 @@ credentials**:
 
 ```bash
 # Claude Code
-claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/"
+claude mcp add --transport http mushi "https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe"
 claude mcp login mushi   # or run /mcp inside a session and pick "mushi"
 ```
 

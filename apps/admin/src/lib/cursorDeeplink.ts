@@ -19,12 +19,12 @@
  */
 
 import {
-  DEFAULT_FEATURE_GROUPS,
   appendFeaturesToUrl,
   featuresQueryString,
+  type FeatureGroup,
 } from '@mushi-mushi/mcp/feature-groups'
 import { MUSHI_ICON_PNG_URL } from '@mushi-mushi/mcp/branding'
-import { MCP_PIN_SPEC, projectServerName } from '@mushi-mushi/mcp/clients'
+import { MCP_PIN_SPEC, NEW_INSTALL_FEATURES, projectServerName } from '@mushi-mushi/mcp/clients'
 
 interface McpStdioConfig {
   command: string
@@ -47,7 +47,7 @@ export function buildStdioConfig(
   apiEndpoint: string,
   options?: { features?: readonly string[] },
 ): McpStdioConfig {
-  const features = options?.features ?? DEFAULT_FEATURE_GROUPS
+  const features = options?.features ?? NEW_INSTALL_FEATURES
   return {
     command: 'npx',
     args: ['-y', MCP_PIN_SPEC],
@@ -55,13 +55,13 @@ export function buildStdioConfig(
       MUSHI_API_ENDPOINT: apiEndpoint,
       MUSHI_API_KEY: apiKey,
       MUSHI_PROJECT_ID: projectId,
-      MUSHI_FEATURES: featuresQueryString(features as typeof DEFAULT_FEATURE_GROUPS),
+      MUSHI_FEATURES: featuresQueryString(features as readonly FeatureGroup[]),
     },
     icon: MUSHI_ICON_PNG_URL,
   }
 }
 
-/** Hosted Streamable HTTP MCP config (CI / no subprocess). Appends lean ?features= by default. */
+/** Hosted Streamable HTTP MCP config (CI / no subprocess). Appends ?features=vibe by default (ADR 0063). */
 export function buildHttpConfig(
   projectId: string,
   apiKey: string,
@@ -70,7 +70,7 @@ export function buildHttpConfig(
 ): McpHttpConfig {
   const url = options?.featuresAll
     ? mcpHttpUrl
-    : appendFeaturesToUrl(mcpHttpUrl, (options?.features ?? DEFAULT_FEATURE_GROUPS) as typeof DEFAULT_FEATURE_GROUPS)
+    : appendFeaturesToUrl(mcpHttpUrl, (options?.features ?? NEW_INSTALL_FEATURES) as readonly FeatureGroup[])
   return {
     type: 'http',
     url,
@@ -89,14 +89,14 @@ function buildOrgStdioConfig(
   apiEndpoint: string,
   options?: { features?: readonly string[] },
 ): McpStdioConfig {
-  const features = options?.features ?? DEFAULT_FEATURE_GROUPS
+  const features = options?.features ?? NEW_INSTALL_FEATURES
   return {
     command: 'npx',
     args: ['-y', MCP_PIN_SPEC],
     env: {
       MUSHI_API_ENDPOINT: apiEndpoint,
       MUSHI_API_KEY: apiKey,
-      MUSHI_FEATURES: featuresQueryString(features as typeof DEFAULT_FEATURE_GROUPS),
+      MUSHI_FEATURES: featuresQueryString(features as readonly FeatureGroup[]),
     },
     icon: MUSHI_ICON_PNG_URL,
   }

@@ -81,7 +81,7 @@ describe('buildMcpServerBlock', () => {
         MUSHI_API_ENDPOINT: 'https://api.example.test',
         MUSHI_PROJECT_ID: 'proj-1',
         MUSHI_API_KEY: 'mushi_test_key',
-        MUSHI_FEATURES: 'triage,fixes,inventory,setup,docs',
+        MUSHI_FEATURES: 'vibe',
       },
     })
   })

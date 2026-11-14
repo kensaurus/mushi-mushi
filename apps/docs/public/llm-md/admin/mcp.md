@@ -29,7 +29,7 @@ shows complete when you already have an `mcp:read` key.
 Mint a key with **MCP read** (to browse) or **MCP read + write** (to dispatch fixes), or use **Add to Cursor**, which creates a key for you. This is separate from your app's SDK ingest key (`report:write`).
 
 ### 2. Paste the snippet
-Copy the **Stdio (.cursor/mcp.json)** or **Hosted HTTP** block, or click **Add to Cursor** (or the button for your editor on [Connect](/admin/connect)) for a one-click deeplink. The deeplink includes `MUSHI_FEATURES=triage,fixes,inventory,setup,docs` (lean catalog).
+Copy the **Stdio (.cursor/mcp.json)** or **Hosted HTTP** block, or click **Add to Cursor** (or the button for your editor on [Connect](/admin/connect)) for a one-click deeplink. The deeplink includes `MUSHI_FEATURES=vibe` (the dozen-tool set new installs get).
 
 ### 3. Ask the agent
 Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See [MCP quickstart](/quickstart/mcp) and [Incident loop](/quickstart/incident-loop).
@@ -50,7 +50,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
         "MUSHI_API_KEY": "mushi_...",
-        "MUSHI_FEATURES": "triage,fixes,inventory,setup,docs"
+        "MUSHI_FEATURES": "vibe"
       }
     }
   }
@@ -66,7 +66,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-http": {
       "type": "http",
-      "url": "https://<your-ref>.supabase.co/functions/v1/mcp?features=triage,fixes,inventory,setup,docs",
+      "url": "https://<your-ref>.supabase.co/functions/v1/mcp?features=vibe",
       "headers": {
         "X-Mushi-Api-Key": "mushi_...",
         "X-Mushi-Project-Id": "<your-project-id>"
@@ -76,10 +76,11 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
 }
 ```
 
-Full catalog: append `?features=all` (or set `MUSHI_FEATURES=all` for stdio).
-Smallest set: `?features=vibe` lists a dozen tools for the reported-bug loop (reports,
-diagnosis, fix context, mark fixed, reply, setup, docs); chat connectors such as
-Lovable use it ([guide](/quickstart/lovable-mcp)).
+New installs get `?features=vibe` (`MUSHI_FEATURES=vibe` for stdio): a dozen tools
+for the reported-bug loop (reports, diagnosis, fix context, mark fixed, reply, setup,
+docs). Add `fixes` (`vibe,fixes`) to dispatch fixes to cloud agents, or use `all` for
+the full catalog. A config without `features` keeps the earlier groups
+(`triage,fixes,inventory,setup,docs`). See [Which tools you get](/quickstart/mcp#tool-sets).
 
 ---
 

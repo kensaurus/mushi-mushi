@@ -188,7 +188,7 @@ export function missingApiKeyReport({ env, cli, resolved }: MissingKeyReportInpu
     `    MUSHI_API_ENDPOINT  ${endpointEnv && !isUnexpandedPlaceholder(endpointEnv) ? '= ' + endpointEnv : `unset → ${resolved.endpoint}`}`,
     `    MUSHI_PROJECT_ID    ${resolved.projectId ? '= ' + resolved.projectId : 'unset (account mode)'}`,
     '    MUSHI_SCOPES        optional CSV: mcp:read,mcp:write',
-    '    MUSHI_FEATURES      optional CSV of tool groups, or "all"',
+    '    MUSHI_FEATURES      optional: "vibe" (recommended), a CSV of tool groups, or "all"',
     '    MUSHI_MCP_TIMEOUT_MS  optional per-request timeout in ms (default 15000)',
     '',
     '  Mint a key: Console → Settings → API keys.',

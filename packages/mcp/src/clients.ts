@@ -13,7 +13,7 @@
  *   this module — the single source of truth so the two surfaces never drift.
  *
  * DEPENDENCIES:
- * - feature-groups.ts  (DEFAULT_FEATURE_GROUPS, featuresQueryString, appendFeaturesToUrl)
+ * - feature-groups.ts  (featuresQueryString, appendFeaturesToUrl)
  * - branding.ts        (MUSHI_ICON_PNG_URL)
  *
  * USAGE:
@@ -49,7 +49,6 @@
  */
 
 import {
-  DEFAULT_FEATURE_GROUPS,
   appendFeaturesToUrl,
   featuresQueryString,
   type FeatureGroup,
@@ -122,9 +121,9 @@ export interface McpBuildInput {
   /** Hosted Streamable HTTP MCP URL (`RESOLVED_MCP_HTTP_URL`). */
   mcpHttpUrl: string
   /**
-   * Restrict the exposed tool groups. Omitted → each client's existing default
-   * (the lean `DEFAULT_FEATURE_GROUPS` for stdio deeplinks; all tools for the
-   * config-json clients that historically set no `MUSHI_FEATURES`). The public
+   * Restrict the exposed tool groups. Omitted → `NEW_INSTALL_FEATURES` (the
+   * `vibe` preset), written explicitly into every config so a later change
+   * to the server's own default never moves an installed config. The public
    * keyless demo passes an explicit read-only subset here.
    */
   features?: readonly FeatureGroup[]
@@ -180,6 +179,17 @@ export interface McpClientDef {
  */
 export const LOVABLE_MCP_URL = 'https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe'
 
+/**
+ * The tool set every NEW install gets (ADR 0063): the `vibe` preset, about a
+ * dozen tools that cover the report, its plain-English diagnosis and the fix
+ * context. Configs carry it explicitly (`?features=vibe` or
+ * `MUSHI_FEATURES=vibe`); the hosted server's no-parameter default stays
+ * `DEFAULT_FEATURE_GROUPS`, so configs written before this keep their tools.
+ * Add `fixes` (`vibe,fixes`) to dispatch fixes to cloud agents, or use
+ * `all` for every tool.
+ */
+export const NEW_INSTALL_FEATURES: readonly FeatureGroup[] = ['vibe']
+
 // ─── Shared low-level helpers ─────────────────────────────────────────────────
 
 /** Build a stable, unique, human-readable MCP server slug for a project. */
@@ -197,13 +207,13 @@ function buildStdioConfigObj(
   projectId: string | undefined,
   apiKey: string,
   apiEndpoint: string,
-  features: readonly string[] = DEFAULT_FEATURE_GROUPS,
+  features: readonly string[] = NEW_INSTALL_FEATURES,
   pinSpec?: string,
 ): StdioConfig {
   const env: Record<string, string> = {
     MUSHI_API_ENDPOINT: apiEndpoint,
     MUSHI_API_KEY: apiKey,
-    MUSHI_FEATURES: featuresQueryString(features as typeof DEFAULT_FEATURE_GROUPS),
+    MUSHI_FEATURES: featuresQueryString(features as readonly FeatureGroup[]),
   }
   if (projectId) env.MUSHI_PROJECT_ID = projectId
   return {
@@ -226,11 +236,11 @@ function buildHttpConfigObj(
   projectId: string | undefined,
   apiKey: string,
   mcpHttpUrl: string,
-  features: readonly string[] = DEFAULT_FEATURE_GROUPS,
+  features: readonly string[] = NEW_INSTALL_FEATURES,
   readOnly = false,
 ): HttpConfig {
   const url = withReadOnly(
-    appendFeaturesToUrl(mcpHttpUrl, features as typeof DEFAULT_FEATURE_GROUPS),
+    appendFeaturesToUrl(mcpHttpUrl, features as readonly FeatureGroup[]),
     readOnly,
   )
   const headers: Record<string, string> = {
@@ -322,7 +332,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
       const url = withReadOnly(
-        appendFeaturesToUrl(mcpHttpUrl, features ?? DEFAULT_FEATURE_GROUPS),
+        appendFeaturesToUrl(mcpHttpUrl, features ?? NEW_INSTALL_FEATURES),
         readOnly,
       )
       const headers: Record<string, string> = {
@@ -360,7 +370,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
         MUSHI_API_ENDPOINT: endpoint,
         MUSHI_API_KEY: apiKey,
       }
-      if (features) env.MUSHI_FEATURES = featuresQueryString(features)
+      env.MUSHI_FEATURES = featuresQueryString(features ?? NEW_INSTALL_FEATURES)
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const clineConfig = {
         mcpServers: {
@@ -393,7 +403,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
         ? projectServerName(projectId, projectName)
         : `mushi-${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`
       const url = withReadOnly(
-        appendFeaturesToUrl(mcpHttpUrl, features ?? DEFAULT_FEATURE_GROUPS),
+        appendFeaturesToUrl(mcpHttpUrl, features ?? NEW_INSTALL_FEATURES),
         readOnly,
       )
       const cmd = `claude mcp add --transport http ${name} "${url}" --header "Authorization: Bearer ${apiKey}"`
@@ -416,7 +426,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
         MUSHI_API_ENDPOINT: endpoint,
         MUSHI_API_KEY: apiKey,
       }
-      if (features) env.MUSHI_FEATURES = featuresQueryString(features)
+      env.MUSHI_FEATURES = featuresQueryString(features ?? NEW_INSTALL_FEATURES)
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const desktopConfig = {
         mcpServers: {
@@ -449,7 +459,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
         MUSHI_API_ENDPOINT: endpoint,
         MUSHI_API_KEY: apiKey,
       }
-      if (features) env.MUSHI_FEATURES = featuresQueryString(features)
+      env.MUSHI_FEATURES = featuresQueryString(features ?? NEW_INSTALL_FEATURES)
       if (projectId) env.MUSHI_PROJECT_ID = projectId
       const zedConfig = {
         context_servers: {
@@ -480,7 +490,7 @@ export const MCP_CLIENTS: McpClientDef[] = [
     transport: 'http',
     build({ projectId, apiKey, mcpHttpUrl, features, readOnly }) {
       const url = withReadOnly(
-        appendFeaturesToUrl(mcpHttpUrl, features ?? DEFAULT_FEATURE_GROUPS),
+        appendFeaturesToUrl(mcpHttpUrl, features ?? NEW_INSTALL_FEATURES),
         readOnly,
       )
       const headerSnippet = [
@@ -550,6 +560,8 @@ export interface McpOAuthInstallInput {
   mcpOAuthUrl: string
   /** Defaults to MCP_OAUTH_SERVER_NAME. */
   serverName?: string
+  /** Tool set written into the URL as `?features=`. Defaults to NEW_INSTALL_FEATURES. */
+  features?: readonly FeatureGroup[]
 }
 
 /**
@@ -558,7 +570,7 @@ export interface McpOAuthInstallInput {
  */
 export function buildOAuthInstall(id: McpOAuthClientId, input: McpOAuthInstallInput): McpBuildResult {
   const name = input.serverName ?? MCP_OAUTH_SERVER_NAME
-  const url = input.mcpOAuthUrl
+  const url = appendFeaturesToUrl(input.mcpOAuthUrl, input.features ?? NEW_INSTALL_FEATURES)
   switch (id) {
     case 'cursor':
       // mcp.json remote entry; the payload is the entry itself, no name.
@@ -569,7 +581,8 @@ export function buildOAuthInstall(id: McpOAuthClientId, input: McpOAuthInstallIn
       // (code.visualstudio.com/api/extension-guides/ai/mcp, read 2026-10-14).
       return { kind: 'deeplink', url: `${id}:mcp/install?${encodeURIComponent(JSON.stringify({ name, type: 'http', url }))}` }
     case 'claude-code':
-      return { kind: 'command', text: `claude mcp add --transport http ${name} ${url}` }
+      // Quoted: the URL carries `?features=`, and zsh globs an unquoted `?`.
+      return { kind: 'command', text: `claude mcp add --transport http ${name} "${url}"` }
     case 'windsurf':
       return {
         kind: 'config',
