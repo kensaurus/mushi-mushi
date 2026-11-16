@@ -320,7 +320,6 @@ export type QueueMove = 'top' | 'up' | 'down' | 'bottom' | 'remove'
 /** Report ids one queue request may carry (the server's QUEUE_REQUEST_MAX). */
 export const QUEUE_REQUEST_MAX = 50
 
-const queuePath = (laneId: string) => `/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`
 const reportsWord = (n: number) => (n === 1 ? 'the report' : `${n} reports`)
 
 /** Plain words for what an add did, from the server's counts (added, moved, skipped as already closed). */
@@ -336,7 +335,7 @@ export function queueAddMessage(add: QueueAdd, counts: { added?: number; moved?:
 
 /** Add reports to a lane's queue (`add`), or replace the whole queue with this list (no `add`). */
 export async function putQueue(laneId: string, reportIds: string[], add?: QueueAdd): Promise<WriteResult> {
-  const res = await apiFetch<{ laneId: string; reportIds: string[]; added?: number; moved?: number; skippedClosed?: number }>(queuePath(laneId), {
+  const res = await apiFetch<{ laneId: string; reportIds: string[]; added?: number; moved?: number; skippedClosed?: number }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`, {
     method: 'PUT',
     scope: 'enumeration',
     body: JSON.stringify(add === 'top' ? { reportIds, front: true } : add === 'end' ? { reportIds, append: true } : { reportIds }),
@@ -347,7 +346,7 @@ export async function putQueue(laneId: string, reportIds: string[], add?: QueueA
 
 /** Move one queued report, or take it out. Writes one or two rows, so it works on a queue of any length. */
 export async function moveQueueItem(laneId: string, reportId: string, to: QueueMove): Promise<WriteResult> {
-  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`${queuePath(laneId)}/move`, {
+  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue/move`, {
     method: 'POST',
     scope: 'enumeration',
     body: JSON.stringify({ reportId, to }),
