@@ -189,6 +189,27 @@ export const STAGE_TEXT: Record<RunStage, string> = {
 /** A run that failed in the repo's git hooks, by the text `mushi work` records (git() in commands/work.ts). */
 export const HOOK_FAILURE_RE = /\bgit (?:commit|push) (?:failed|timed out)\b|\b(?:pre-commit|pre-push|commit-msg|husky|lefthook)\b|\bcommit hook\b/i
 
+/**
+ * What failed in those runs, in a few words: the hook steps `mushi work` names ("hook steps
+ * failed: eslint, typecheck-changed"), most frequent first, else the git step. "glot: 6 runs
+ * failed in the repo's git hooks" gave no cause on Pipeline (2026-11-16).
+ * @internal Exported for tests only.
+ */
+export function hookFailureSummary(details: string[]): { steps: string[]; crashed: boolean } {
+  const counts = new Map<string, number>()
+  const add = (step: string) => counts.set(step, (counts.get(step) ?? 0) + 1)
+  for (const d of details) {
+    const named = /hook steps failed: ([^.|]+)/i.exec(d)
+    if (named) for (const step of named[1]!.split(',').map((x) => x.trim()).filter(Boolean)) add(step)
+    else if (/\bgit push (?:failed|timed out)\b/i.test(d)) add('pre-push checks')
+    else if (/\bgit commit (?:failed|timed out)\b/i.test(d)) add('commit checks')
+  }
+  const steps = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([step]) => step).slice(0, 3)
+  // Exit 139 is a segfault: on these machines, the checker ran out of memory.
+  const crashed = details.some((d) => /segmentation fault|exit status 139|out of memory/i.test(d))
+  return { steps, crashed }
+}
+
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 const word = (v: unknown): string | null => (typeof v === 'string' ? v : null)
 const runsOf = (lane: FlagLane): RunTelemetry[] => (Array.isArray(lane.status.inflight) ? (lane.status.inflight as RunTelemetry[]) : [])
@@ -499,13 +520,14 @@ export function deriveWorkerFlags(input: FlagInput): WorkerFlag[] {
       .sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? ''))
     if (hits.length < HOOK_FAILURES_MIN) continue
     const latest = hits[0]!
+    const what = hookFailureSummary(hits.map((c) => c.detail ?? ''))
     flags.push({
       id: `hook_failures:${lane.id}`,
       kind: 'hook_failures',
       severity: 'warn',
       ...base(input.hosts.find((h) => h.id === lane.hostId) ?? null, lane),
-      title: `${lane.name}: ${hits.length} runs failed in the repo's git hooks in 24 h`,
-      cause: `The latest: "${(latest.detail ?? '').slice(0, 200)}". The agent's change may be fine; the repo's own commit or pre-push check failed or hung, and each try spends an agent space and credits.`,
+      title: `${lane.name}: ${hits.length} runs failed in the repo's git hooks in 24 h${what.steps.length ? ` (${what.steps.join(', ')})` : ''}`,
+      cause: `${what.crashed ? 'Some checks crashed (exit 139): the machine ran out of memory for them, so the check, not the change, failed. ' : ''}The latest: "${(latest.detail ?? '').slice(0, 200)}". The agent's change may be fine; the repo's own commit or pre-push check failed or hung, and each try spends an agent space and credits.`,
       sinceSec: ageSince(latest.finishedAt, now),
       actions: [
         { kind: 'pause_lane', label: 'Pause this lane', laneId: lane.id },
