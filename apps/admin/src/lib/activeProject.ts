@@ -68,11 +68,35 @@ export function getActiveProjectIdFromUrl(): string | null {
 }
 
 /**
- * Effective project for API calls: URL param wins over localStorage so deep
- * links and report detail pages stay scoped even when the header pin lags.
+ * A project someone just picked (the header switcher, a report's own app),
+ * until the URL shows it. The switcher stores the pick and fires
+ * ACTIVE_PROJECT_EVENT, which refetches every panel at once, but the URL only
+ * changes on the next render. Those refetches used to read the old URL, so
+ * Fixes showed glot.it's 629 fixes under a "mushi-mushi" header (2026-11-16).
+ */
+let pendingPick: { id: string; at: number } | null = null
+/** A pick the URL never adopts (a cancelled navigation) stops winning after this. */
+const PENDING_PICK_MS = 5_000
+
+if (typeof window !== 'undefined') {
+  // Back/forward means the URL is the user's choice again.
+  window.addEventListener('popstate', () => {
+    pendingPick = null
+  })
+}
+
+/**
+ * Effective project for API calls: a pick the URL has not caught up with yet,
+ * else the URL param (deep links and report pages stay scoped even when the
+ * header pin lags), else localStorage.
  */
 export function getActiveProjectIdForApi(): string | null {
-  return getActiveProjectIdFromUrl() ?? getActiveProjectIdSnapshot()
+  const fromUrl = getActiveProjectIdFromUrl()
+  if (pendingPick) {
+    if (fromUrl === pendingPick.id || Date.now() - pendingPick.at > PENDING_PICK_MS) pendingPick = null
+    else return pendingPick.id
+  }
+  return fromUrl ?? getActiveProjectIdSnapshot()
 }
 
 export function setActiveProjectIdSnapshot(projectId: string): void {
@@ -83,6 +107,8 @@ export function setActiveProjectIdSnapshot(projectId: string): void {
   // CustomEvent, every event cache-busts every usePageData hook, and the
   // report page re-render-loops forever (the "page keeps refreshing" bug).
   if (getActiveProjectIdSnapshot() === projectId) return
+  // Until the URL shows it, API calls follow this pick (getActiveProjectIdForApi).
+  if (getActiveProjectIdFromUrl() !== projectId) pendingPick = { id: projectId, at: Date.now() }
   try {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, projectId)
   } catch {

@@ -106,3 +106,16 @@ describe('deriveProjectPlainStatus', () => {
     expect(status.verdict).toContain('one thing')
   })
 })
+
+describe('the public demo app', () => {
+  it('reads as sample data with nothing to do, not "Needs you"', () => {
+    const s = deriveProjectPlainStatus(project({ name: 'Mushi demo (sample data)', slug: 'mushi-demo' }))
+    expect(s.tone).toBe('sample')
+    expect(s.steps).toEqual([])
+    expect(s.verdict).toContain('sample reports')
+  })
+
+  it('a customer app that merely has "demo" in its name is a real app', () => {
+    expect(deriveProjectPlainStatus(project({ name: 'demo-app', slug: 'demo-app' })).tone).not.toBe('sample')
+  })
+})

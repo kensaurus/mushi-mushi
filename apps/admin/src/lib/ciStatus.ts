@@ -26,7 +26,7 @@ const LOW_PASS_RATE = 0.8
 /** A typical run past this is the app's main delay when nothing else is. */
 const SLOW_RUN_S = 10 * 60
 
-export interface JobMachine {
+interface JobMachine {
   id: string
   /** A person's word for the machine: its hostname, or "GitHub's cloud". */
   name: string
@@ -73,7 +73,7 @@ export interface RunningNow {
   leftS: number | null
 }
 
-export interface AppTime {
+interface AppTime {
   repo: string
   app: string
   jobs7d: number

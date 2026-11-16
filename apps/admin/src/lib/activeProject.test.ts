@@ -19,6 +19,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   ACTIVE_PROJECT_EVENT,
+  getActiveProjectIdForApi,
   getActiveProjectIdSnapshot,
   setActiveProjectIdSnapshot,
 } from './activeProject'
@@ -64,5 +65,41 @@ describe('setActiveProjectIdSnapshot', () => {
     expect(listener).toHaveBeenCalledTimes(2)
     expect(getActiveProjectIdSnapshot()).toBe(PROJECT_B)
     window.removeEventListener(ACTIVE_PROJECT_EVENT, listener)
+  })
+})
+
+describe('getActiveProjectIdForApi after a pick (2026-11-16: glot.it fixes under a mushi-mushi header)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.history.replaceState(null, '', `/fixes?project=${PROJECT_B}`)
+  })
+
+  it('follows a pick at once, before the URL catches up, so the refetch asks for the picked app', () => {
+    let seen: string | null = null
+    const listener = () => {
+      seen = getActiveProjectIdForApi()
+    }
+    window.addEventListener(ACTIVE_PROJECT_EVENT, listener)
+    setActiveProjectIdSnapshot(PROJECT_A)
+    window.removeEventListener(ACTIVE_PROJECT_EVENT, listener)
+    // The switcher's event fired while the URL still named the old app.
+    expect(new URLSearchParams(window.location.search).get('project')).toBe(PROJECT_B)
+    expect(seen).toBe(PROJECT_A)
+  })
+
+  it('hands back to the URL once it shows the pick', () => {
+    setActiveProjectIdSnapshot(PROJECT_A)
+    window.history.replaceState(null, '', `/fixes?project=${PROJECT_A}`)
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_A)
+    // A later deep link to another app wins again: the pick was spent.
+    window.history.replaceState(null, '', `/fixes?project=${PROJECT_B}`)
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
+  })
+
+  it('back/forward cancels a pick the URL never showed', () => {
+    setActiveProjectIdSnapshot(PROJECT_A)
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_A)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
   })
 })
