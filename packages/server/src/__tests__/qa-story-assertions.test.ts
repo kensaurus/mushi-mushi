@@ -199,7 +199,7 @@ describe('qa-story-runner text assertions', () => {
   })
 
   function scrape(body: unknown, status = 200) {
-    const fetchMock = vi.fn(async () => new Response(
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(
       typeof body === 'string' ? body : JSON.stringify(body),
       { status, headers: { 'content-type': typeof body === 'string' ? 'text/html' : 'application/json' } },
     ))
