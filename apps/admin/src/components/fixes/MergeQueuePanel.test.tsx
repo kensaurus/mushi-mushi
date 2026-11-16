@@ -4,6 +4,10 @@
  * The "Merge when ready" panel keeps a frame while its first read runs and
  * says when nothing is queued, instead of rendering nothing and then pushing
  * the fix list down (layout shift on /fixes, measured 2026-10-24).
+ *
+ * A 10rem inner scroll showed about four rows while the heading counted
+ * every pull request ("15 to merge", "13 approved"). The list is on the
+ * page; past eight rows, "Show N more of M" reveals the rest.
  */
 
 import { act, createElement } from 'react'
@@ -87,21 +91,52 @@ describe('MergeQueuePanel', () => {
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('0')
   })
 
-  it('lists queued rows in a box that scrolls inside the panel', async () => {
+  it('lists queued rows on the page, not inside a short scroll box', async () => {
     await render()
     await answer([row()])
-    const list = host.querySelector('ul.max-h-40')
+    const list = host.querySelector('[data-testid="merge-queue-rows"]')
+    expect(list?.className).not.toContain('max-h-40')
+    expect(list?.className).not.toContain('overflow-y-auto')
     expect(list?.textContent).toContain('o/r#7')
+    expect(host.querySelector('[data-testid="merge-queue-more"]')).toBeNull()
     expect(window.localStorage.getItem('mushi:merge-queue-nonempty:p1')).toBe('1')
+  })
+
+  it('shows eight of "15 to merge", then the rest, instead of a four-row window', async () => {
+    await render()
+    const numbers = [291, 310, 304, 285, 286, 287, 288, 289, 299, 293, 294, 295, 296, 297, 298]
+    await answer(numbers.map((pr_number, i) => row({
+      id: `q${i}`,
+      pr_number,
+      state: i < 2 ? 'resolving' : 'queued',
+    })))
+    const list = host.querySelector('[data-testid="merge-queue-rows"]')!
+    expect(list.className).not.toContain('max-h-40')
+    expect(list.className).not.toContain('overflow-y-auto')
+    expect(host.textContent).toContain('15 to merge')
+    expect(host.textContent).toContain('13 approved')
+    expect(list.querySelectorAll('li').length).toBe(8)
+    expect(list.textContent).toContain('Agent resolving')
+    expect(list.textContent).toContain('o/r#291')
+    expect(list.textContent).toContain('o/r#310')
+    expect(list.textContent).toContain('o/r#304')
+    expect(list.textContent).toContain('o/r#285')
+    expect(list.textContent).not.toContain('o/r#299')
+    const more = host.querySelector('[data-testid="merge-queue-more"]') as HTMLButtonElement
+    expect(more.textContent).toBe('Show 7 more of 15')
+    await act(async () => { more.click() })
+    expect(list.querySelectorAll('li').length).toBe(15)
+    expect(list.textContent).toContain('o/r#299')
+    expect(host.querySelector('[data-testid="merge-queue-more"]')).toBeNull()
   })
 
   it('lets a long ref break and gives the reason its own line on a phone', async () => {
     await render()
     await answer([row({ repo: 'kensaurus/solo-boss-cloud-documentation', pr_number: 789 })])
-    const link = host.querySelector('ul.max-h-40 a')!
+    const link = host.querySelector('[data-testid="merge-queue-rows"] a')!
     expect(link.className).toContain('wrap-anywhere')
     expect(link.textContent).toBe('kensaurus/solo-boss-cloud-documentation#789')
-    const reason = [...host.querySelectorAll('ul.max-h-40 span')].find((s) => s.textContent?.includes('Approved'))!
+    const reason = [...host.querySelectorAll('[data-testid="merge-queue-rows"] span')].find((s) => s.textContent?.includes('Approved'))!
     expect(reason.className).toContain('flex-auto')
     expect(reason.className).not.toContain('flex-1')
   })

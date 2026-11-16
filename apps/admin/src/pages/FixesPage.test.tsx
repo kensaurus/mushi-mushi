@@ -329,7 +329,7 @@ describe('FixesPage', () => {
     expect(document.querySelector('[aria-label="Fixes status"]')?.textContent).toContain('1 fix running.')
   })
 
-  it('the All list does not call shipped or failed rows drafts', async () => {
+  it('the All list does not call a mix of shipped, failed and draft rows drafts', async () => {
     mocks.hideTableChrome = true
     mocks.fixes = [
       fix({
@@ -342,11 +342,22 @@ describe('FixesPage', () => {
         report_title: 'Shipped fix',
       }),
       fix({ id: 'b', report_id: 'r2', report_title: 'Still broken' }),
+      fix({
+        id: 'c',
+        report_id: 'r3',
+        status: 'completed',
+        pr_state: 'draft',
+        pr_url: 'https://github.com/o/r/pull/9',
+        report_fix_state: 'pr_open',
+        retryable: false,
+        report_title: 'Draft fix',
+      }),
     ]
-    mocks.total = 2
+    mocks.total = 3
     await render('/fixes')
-    expect(document.body.textContent).toContain('2 fixes — tap a row for details')
-    expect(document.body.textContent).not.toContain('draft fix')
+    expect(document.body.textContent).toContain('3 fixes — tap a row for details')
+    expect(document.body.textContent).not.toContain('draft fixes')
+    expect(document.body.textContent).not.toContain('draft fix —')
   })
 
   it('QA 94: the old pipeline tab link opens the In flight filter', async () => {

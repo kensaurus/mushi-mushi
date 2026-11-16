@@ -5,8 +5,8 @@
 /**
  * "Auto-fix stopped" is reports still unfixed. "Why auto-fix stopped" names
  * one cause only when that cause is the only one. With several causes its
- * number is the full unfixed total, not the most common cause's count, and
- * the subtitle does not call the whole pile "PR closed without merge".
+ * number is the full unfixed total, the subtitle lists each cause's count,
+ * and it does not call the whole pile "PR closed without merge".
  */
 
 import { act, createElement } from 'react'
@@ -48,36 +48,42 @@ function render(data: FixSummary) {
   })
 }
 
-/** The KPI card that shows `label`, including its number and subtitle. */
-function tileText(label: string): string {
+/** The KPI card that shows `label`: its numeral, subtitle, and info tip. */
+function tile(label: string): { value: string; sublabel: string; detail: string } {
   const labelEl = [...host.querySelectorAll('div')].find(
     (el) => el.textContent === label && el.className.includes('uppercase'),
   )
   expect(labelEl, label).toBeTruthy()
-  return labelEl?.parentElement?.parentElement?.parentElement?.textContent ?? ''
+  const root = labelEl?.parentElement?.parentElement?.parentElement
+  const value = root?.querySelector('.tabular-nums')?.textContent ?? ''
+  const sublabel = [...(root?.querySelectorAll('span') ?? [])].find((s) => s.className.includes('truncate'))?.textContent ?? ''
+  const detail = root?.querySelector('[role="img"]')?.getAttribute('aria-label') ?? ''
+  return { value, sublabel, detail }
 }
 
 describe('FixSummaryRow failed subtitle', () => {
-  it('keeps the unfixed total when several causes exist, and does not show only the top cause', () => {
+  it('keeps the unfixed total when several causes exist, and lists each count', () => {
     render(summary({
-      failed: 20,
-      total: 20,
+      failed: 35,
+      total: 35,
       failureBreakdown: [
-        { category: 'pr_closed_unmerged', count: 17 },
-        { category: 'ci_failed', count: 3 },
+        { category: 'pr_closed_unmerged', count: 18 },
+        { category: 'ci_failed', count: 15 },
+        { category: 'unknown', count: 2 },
       ],
     }))
-    const stopped = tileText('Auto-fix stopped')
-    expect(stopped).toContain('20')
-    expect(stopped).toContain('reports still unfixed')
-    expect(stopped).not.toContain('several causes')
-    expect(stopped).not.toContain('PR closed without merge')
+    const stopped = tile('Auto-fix stopped')
+    expect(stopped.value).toBe('35')
+    expect(stopped.sublabel).toBe('reports still unfixed')
+    expect(stopped.sublabel).not.toContain('PR closed without merge')
 
-    const why = tileText('Why auto-fix stopped')
-    expect(why).toContain('20')
-    expect(why).not.toContain('17')
-    expect(why).toContain('several causes')
-    expect(why).not.toContain('PR closed without merge')
+    const why = tile('Why auto-fix stopped')
+    expect(why.value).toBe('35')
+    expect(why.sublabel).toBe('several causes · 18 + 15 + 2')
+    expect(why.sublabel).not.toContain('PR closed without merge')
+    expect(why.detail).toContain('18× PR closed without merge')
+    expect(why.detail).toContain('15× CI failed')
+    expect(why.detail).toContain('2× Unrecognised error')
   })
 
   it('names the cause and its count when every stopped report failed that way', () => {
@@ -86,22 +92,21 @@ describe('FixSummaryRow failed subtitle', () => {
       total: 9,
       failureBreakdown: [{ category: 'pr_closed_unmerged', count: 2 }],
     }))
-    const stopped = tileText('Auto-fix stopped')
-    expect(stopped).toContain('9')
-    expect(stopped).toContain('reports still unfixed')
+    const stopped = tile('Auto-fix stopped')
+    expect(stopped.value).toBe('9')
+    expect(stopped.sublabel).toBe('reports still unfixed')
 
-    const why = tileText('Why auto-fix stopped')
-    expect(why).toContain('2')
-    expect(why).not.toContain('9')
-    expect(why).toContain('PR closed without merge')
-    expect(why).not.toContain('several causes')
+    const why = tile('Why auto-fix stopped')
+    expect(why.value).toBe('2')
+    expect(why.sublabel).toBe('PR closed without merge')
+    expect(why.sublabel).not.toContain('several causes')
   })
 
   it('keeps the In flight subtitle as queued or running', () => {
     render(summary({ inProgress: 1, failed: 0 }))
-    const inflight = tileText('In flight')
-    expect(inflight).toContain('1')
-    expect(inflight).toContain('queued or running')
-    expect(inflight).not.toContain('still running')
+    const inflight = tile('In flight')
+    expect(inflight.value).toBe('1')
+    expect(inflight.sublabel).toBe('queued or running')
+    expect(inflight.sublabel).not.toContain('still running')
   })
 })

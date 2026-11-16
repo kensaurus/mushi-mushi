@@ -47,13 +47,15 @@ export function FixSummaryRow({ summary, successRate }: Props) {
   const showSpec = specWarnings > 0;
 
   // When any failure has a categorised reason, show why auto-fix stopped.
-  // One cause is named on the tile. Several causes must not borrow the most
-  // common label ("PR closed without merge") for the whole pile: the number
-  // is then the full unfixed total, the same as "Auto-fix stopped", and the
-  // per-cause counts stay in the tile's explanation.
+  // One cause is named on the tile. Several causes keep the full unfixed
+  // total (the same number as "Auto-fix stopped") and list each cause's
+  // count, most common first. The top cause's name is not that subtitle:
+  // it used to read as if every stopped report was "PR closed without merge"
+  // when the split was several causes. The names are on the info tip.
   const breakdown = summary.failureBreakdown ?? [];
   const showBreakdown = breakdown.length > 0;
   const mixedCauses = breakdown.length > 1;
+  const causeCounts = breakdown.map((b) => String(b.count)).join(' + ');
   const cols = (5 + (showSpec ? 1 : 0) + (showBreakdown ? 1 : 0)) as 5 | 6 | 7;
   const topFailure = breakdown[0];
   const breakdownTitle = breakdown
@@ -121,7 +123,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
           label="Why auto-fix stopped"
           value={mixedCauses ? summary.failed : topFailure.count}
           accent="danger"
-          sublabel={mixedCauses ? 'several causes' : fixCauseLabel(topFailure.category)}
+          sublabel={mixedCauses ? `several causes · ${causeCounts}` : fixCauseLabel(topFailure.category)}
           meaning={`Why the last attempt stopped on each still-unfixed report, most common first.
 ${breakdownTitle}
 
