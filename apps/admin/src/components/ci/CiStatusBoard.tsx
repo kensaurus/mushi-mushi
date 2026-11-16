@@ -69,7 +69,11 @@ export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
 export function CiStatusBoard({ overview }: { overview: CiOverview }) {
   const now = useNow(30_000)
   const status = useMemo(() => buildCiStatus(overview, now), [overview, now])
-  const failures = useMemo(() => groupFailures(overview, now), [overview, now])
+  const grouped = useMemo(() => groupFailures(overview, now), [overview, now])
+  // Draft PRs skip CI on purpose: one line under the list, never a failure card each
+  // (5 of 8 "failures" were drafts, 2026-11-16).
+  const failures = grouped.filter((g) => !g.draftOnly)
+  const drafts = grouped.filter((g) => g.draftOnly)
 
   return (
     <div className="space-y-4" data-testid="ci-status-board">
@@ -154,7 +158,8 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
         </h3>
         {failures.length === 0 ? (
           <p className="text-xs text-fg-muted">Nothing failed in the last 2 hours.</p>
-        ) : (
+        ) : null}
+        {failures.length > 0 && (
           <ul className="space-y-2" data-testid="ci-broke">
             {failures.slice(0, 8).map((g) => (
               <li key={g.key} className="rounded-md border border-edge-subtle px-3 py-2" data-testid={`ci-broke-${g.key}`}>
@@ -164,12 +169,8 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                   <span className="text-2xs text-fg-faint">
                     <RelativeTime value={new Date(g.at).toISOString()} />
                   </span>
-                  {g.draftOnly && <Badge tone="neutral">draft: not a failure</Badge>}
                 </p>
-                {g.draftOnly ? (
-                  <p className="mt-0.5 text-2xs text-fg-muted">This pull request was a draft, and drafts skip CI on purpose. Mark it ready for review and CI runs.</p>
-                ) : (
-                  <ul className="mt-1 space-y-0.5">
+                <ul className="mt-1 space-y-0.5">
                     {g.broke.map(({ failure: f, step }) => (
                       <li key={f.job.id} className="text-2xs text-fg-secondary">
                         <span className="font-medium text-fg">{f.job.jobName}</span>
@@ -183,15 +184,20 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     ))}
                     {g.summaries.length > 0 && (
                       <li className="text-2xs text-fg-muted">
-                        Also red: {g.summaries.map((f) => f.job.jobName).join(', ')}, a summary check that fails whenever the job above fails.
+                        Also red: {[...new Set(g.summaries.map((f) => f.job.jobName))].join(', ')}, {g.summaries.length === 1 ? 'a summary check that fails' : 'summary checks that fail'} whenever the job above fails.
                       </li>
                     )}
-                  </ul>
-                )}
+                </ul>
               </li>
             ))}
             {failures.length > 8 && <li className="text-2xs text-fg-muted">and {failures.length - 8} more in the queue below.</li>}
           </ul>
+        )}
+        {drafts.length > 0 && (
+          <p className="mt-1.5 text-2xs text-fg-muted" data-testid="ci-broke-drafts">
+            Not failures: {drafts.length} draft {drafts.length === 1 ? 'pull request' : 'pull requests'} skipped CI on purpose (
+            {drafts.map((g) => `${g.app} ${g.prNumber ? `#${g.prNumber}` : 'branch'}`).join(', ')}). Mark one ready for review and its CI runs.
+          </p>
         )}
       </section>
 

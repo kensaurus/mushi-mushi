@@ -9,9 +9,8 @@
 
 import type { ComponentType, ReactNode } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
-import { buildCiQueue, ciOutcomeCounts, ciVerdict, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
-import { useNow } from '../../lib/useNow'
-import { IconAlertTriangle, IconCheck, IconClock, IconGauge, IconInfo, IconPlay } from '../icons'
+import { ciOutcomeCounts, ciVerdict, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
+import { IconAlertTriangle, IconCheck, IconGauge, IconInfo, IconPlay } from '../icons'
 import { Card } from '../ui'
 import { CI_OUTCOME_STYLE, CiOutcomeLegend } from './ciOutcome'
 
@@ -62,9 +61,7 @@ const BAR_ORDER: Array<{ key: 'passed' | 'codeFailures' | 'infra' | 'other'; out
 ]
 
 export function CiSummary({ overview }: { overview: CiOverview }) {
-  const now = useNow(15_000)
-  const verdict = ciVerdict(overview, now)
-  const queue = buildCiQueue(overview.jobs, now)
+  const verdict = ciVerdict(overview)
   const counts = ciOutcomeCounts(overview.stats)
   const { stats } = overview
   const tone = VERDICT_TONE[verdict.tone]
@@ -82,23 +79,8 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Tile
-          Icon={IconClock}
-          label="Waiting now"
-          value={queue.waiting.length}
-          detail={queue.waiting.length ? 'Queued for a free test machine' : 'Nothing is queued'}
-          tone={queue.waiting.length ? 'bg-warn-muted text-warn-foreground' : CI_OUTCOME_STYLE.waiting.chip}
-          href="#ci-queue"
-        />
-        <Tile
-          Icon={IconPlay}
-          label="Running now"
-          value={queue.running.length}
-          detail={queue.running.length ? 'On a test machine right now' : 'No machine is busy'}
-          tone={CI_OUTCOME_STYLE.running.chip}
-          href="#ci-queue"
-        />
+      {/* Waiting and running now are the status board's, right above: the week only. */}
+      <div className="grid grid-cols-2 gap-2">
         <Tile
           Icon={IconGauge}
           label="Half the jobs wait at most"

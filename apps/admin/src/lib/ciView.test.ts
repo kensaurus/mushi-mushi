@@ -376,11 +376,12 @@ describe('summary: outcome counts and verdict', () => {
   it('leads with a long wait, then machine trouble, then code failures, else healthy', () => {
     const o = ciOverviewFixture()
     // j2 has waited 30 min in the fixture.
-    expect(ciVerdict(o, FIXTURE_NOW)).toMatchObject({ tone: 'warn', headline: expect.stringContaining('waiting for a test machine') })
+    // The live queue is the status board's; the week's verdict never repeats it.
+    expect(ciVerdict(o).headline).not.toContain('waiting for a test machine')
     const noQueue = { ...o, jobs: o.jobs.filter((j) => jobOutcome(j) !== 'waiting') }
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 5, codeFailures: 2 } }, FIXTURE_NOW).headline).toBe('Most failures are the test machine, not your code.')
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 1, codeFailures: 3 } }, FIXTURE_NOW).headline).toContain('3 jobs failed on the code')
-    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }, FIXTURE_NOW).tone).toBe('ok')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 5, codeFailures: 2 } }).headline).toBe('Most failures are the test machine, not your code.')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 1, codeFailures: 3 } }).headline).toContain('3 jobs failed on the code')
+    expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }).tone).toBe('ok')
   })
 
   it('links a CI job to its report and fix attempt', () => {

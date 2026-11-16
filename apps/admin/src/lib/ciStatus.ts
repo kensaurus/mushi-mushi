@@ -100,6 +100,8 @@ export interface CiStatus {
   waiting: number
   /** The longest current wait for a machine. */
   oldestWaitS: number | null
+  /** Why the waiting jobs wait, when it can be read from the data (which machines take them). */
+  waitWhy: string | null
   apps: AppTime[]
   /** The worst delay across apps this week, as a sentence; null when none stands out. */
   bottleneck: string | null
@@ -117,6 +119,48 @@ function appName(overview: Pick<CiOverview, 'repos'>, repo: string): string {
 
 function platformWord(p: string): string {
   return p === 'wsl2' ? 'WSL' : p === 'macos' ? 'Mac' : p === 'windows' ? 'Windows' : 'Linux'
+}
+
+/** GitHub's own machines: a job asking only for these waits on GitHub, not on yours. */
+const GITHUB_LABEL = /^(ubuntu|windows|macos)(-|$)/i
+
+const labelKey = (labels: string[]) => labels.map((l) => l.toLowerCase()).sort().join(',')
+
+/**
+ * Why the waiting jobs wait, read from this window's jobs: which machines have run a job
+ * with the same runs-on labels. "3 jobs wait while 2 machines sit idle" was the first
+ * question the page could not answer (owner, 2026-11-16): the idle ones are not set up
+ * for those labels. No capacity figure exists, so it says "running N now", never "full".
+ */
+function whyWaiting(overview: CiOverview, machines: MachineNow[], idle: string[]): string | null {
+  const groups = new Map<string, CiJob[]>()
+  for (const j of overview.jobs) {
+    if (jobOutcome(j) !== 'waiting') continue
+    groups.set(labelKey(j.labels), [...(groups.get(labelKey(j.labels)) ?? []), j])
+  }
+  const biggest = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
+  if (!biggest) return null
+  const [key, jobs] = biggest
+  const labels = jobs[0]!.labels
+  if (labels.length === 0) return null
+  const quoted = labels.map((l) => `“${l}”`).join(', ')
+  if (labels.every((l) => GITHUB_LABEL.test(l))) return `They wait for GitHub's cloud (${quoted}), not for your machines.`
+  // Machines that ran a job with these labels this window.
+  const takers = new Set<string>()
+  for (const j of overview.jobs) {
+    if (labelKey(j.labels) !== key) continue
+    const m = machineOfJob(overview, j)
+    if (m?.kind === 'self') takers.add(m.id)
+  }
+  const them = jobs.length === 1 ? 'It needs' : 'They need'
+  if (takers.size === 0) return `${them} a machine with the label ${quoted}, and none ran such a job this week: check that a runner is set up for it.`
+  const takerMachines = machines.filter((m) => takers.has(m.id))
+  const takerText = takerMachines.map((m) => `${m.name} (running ${m.running} now)`).join(' and ')
+  const idleOthers = idle.filter((name) => !takerMachines.some((m) => m.name === name))
+  const others = idleOthers.length
+    ? ` ${idleOthers.join(' and ')} ${idleOthers.length === 1 ? 'is' : 'are'} idle but not set up for ${quoted}.`
+    : ''
+  return `${them} a ${quoted} machine; only ${takerText} ${takerMachines.length === 1 ? 'takes' : 'take'} those.${others}`
 }
 
 export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
@@ -196,6 +240,10 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
       return { repo: r.repo, app: r.projectName || repoShortName(r.repo), jobs7d: r.jobs7d, waitP95S: r.queueP95s, runP50S: r.durationP50s, passRate: r.passRate, delay }
     })
     .sort((a, b) => Number(b.delay != null) - Number(a.delay != null) || b.jobs7d - a.jobs7d)
+  // Two repos of one app (solo-boss-cloud and its docs) read as the same row twice: name the repo.
+  const reposOf = new Map<string, Set<string>>()
+  for (const a of apps) reposOf.set(a.app, (reposOf.get(a.app) ?? new Set()).add(a.repo))
+  for (const a of apps) if ((reposOf.get(a.app)?.size ?? 0) > 1) a.app = `${a.app} (${repoShortName(a.repo)})`
   const worstWait = apps.filter((a) => a.delay === 'waiting').sort((a, b) => (b.waitP95S ?? 0) - (a.waitP95S ?? 0))[0]
   const worstFail = apps.filter((a) => a.delay === 'failing').sort((a, b) => (a.passRate ?? 1) - (b.passRate ?? 1))[0]
   const bottleneck = worstWait
@@ -214,9 +262,10 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     tone = 'bad'
     parts.push(`${stale.map((m) => m.name).join(' and ')} stopped reporting: jobs that need ${stale.length === 1 ? 'it' : 'them'} will wait.`)
   }
+  const waitWhy = waiting > 0 ? whyWaiting(overview, machines, idle) : null
   if (waiting > 0 && oldestWaitS != null && oldestWaitS > LONG_WAIT_S) {
     tone = tone === 'bad' ? 'bad' : 'warn'
-    parts.push(`${waiting} job${waiting === 1 ? '' : 's'} waiting for a machine; the oldest for ${minutes(oldestWaitS)}.`)
+    parts.push(`${waiting} job${waiting === 1 ? '' : 's'} waiting for a machine; the oldest for ${minutes(oldestWaitS)}.${waitWhy ? ` ${waitWhy}` : ''}`)
   }
   if (running.length === 0 && waiting === 0 && !stale.length) parts.push('Nothing is running or waiting: CI is idle.')
   else if (running.length > 0 && !parts.length) {
@@ -226,7 +275,7 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     tone = tone === 'bad' ? 'bad' : 'warn'
     parts.push(`Slower than usual: ${slowest.job.jobName} (${slowest.app}), ${minutes(slowest.elapsedS ?? 0)} so far, usually ${minutes(slowest.usualS ?? 0)}.`)
   }
-  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, apps, bottleneck }
+  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, waitWhy, apps, bottleneck }
 }
 
 export interface FailureGroup {
@@ -245,8 +294,8 @@ export interface FailureGroup {
 }
 
 /** A step that only reports the other jobs' results ("Fail unless every needed job succeeded"). */
-const SUMMARY_STEP = /\b(fail (unless|if)|every needed job|all (required|needed)|did not succeed)\b/i
-const SUMMARY_NAME = /^(gate|ci gate|quality gate|all checks|required checks?|ci status)$/i
+const SUMMARY_STEP = /\b(fail (unless|if)|every (needed|upstream) job|all (required|needed)|did not succeed)\b/i
+const SUMMARY_NAME = /^(gate|ci gate|quality gate|all checks|required( checks?)?|ci status)$/i
 const DRAFT_STEP = /\bdraft\b/i
 
 /**
@@ -258,31 +307,50 @@ export function groupFailures(overview: Pick<CiOverview, 'jobs' | 'repos'>, now:
   const failures = recentFailed(overview.jobs, now)
   const failedRuns = new Map<string, number>()
   for (const f of failures) failedRuns.set(`${f.job.repo}|${f.job.runId}`, (failedRuns.get(`${f.job.repo}|${f.job.runId}`) ?? 0) + 1)
-  const groups = new Map<string, FailureGroup>()
-  for (const f of failures) {
+  const groups = new Map<string, FailureGroup & { drafts: RecentFailure[] }>()
+  // Newest first, so a job that failed in two runs (a re-run) is listed once, as its latest
+  // ("Rendered UI Audits failed at …" twice, "Also red: Quality Gate, Quality Gate").
+  const ordered = [...failures].sort((a, b) => b.at - a.at)
+  const seen = new Set<string>()
+  for (const f of ordered) {
     const j = f.job
     const key = `${j.repo}|${j.prNumber != null ? `pr${j.prNumber}` : j.headBranch ?? j.runId}`
+    const jobKey = `${key}|${j.workflowName ?? ''}|${j.jobName}`
+    if (seen.has(jobKey)) continue
+    seen.add(jobKey)
     let g = groups.get(key)
     if (!g) {
-      g = { key, repo: j.repo, app: appName(overview, j.repo), prNumber: j.prNumber, branch: j.headBranch, at: f.at, broke: [], summaries: [], draftOnly: true }
+      g = { key, repo: j.repo, app: appName(overview, j.repo), prNumber: j.prNumber, branch: j.headBranch, at: f.at, broke: [], summaries: [], draftOnly: false, drafts: [] }
       groups.set(key, g)
     }
     g.at = Math.max(g.at, f.at)
     const step = j.failedStep ?? null
-    if (!(step && DRAFT_STEP.test(step))) g.draftOnly = false
+    // "Draft PRs run no CI" is a skip on purpose: never what broke while something else did.
+    if (step && DRAFT_STEP.test(step)) {
+      g.drafts.push(f)
+      continue
+    }
     const siblingFailed = (failedRuns.get(`${j.repo}|${j.runId}`) ?? 0) > 1
     const summary = f.kind === 'code' && ((step != null && SUMMARY_STEP.test(step)) || (SUMMARY_NAME.test(j.jobName.trim()) && siblingFailed))
     if (summary) g.summaries.push(f)
     else g.broke.push({ failure: f, step })
   }
-  // A group of summaries only (the job that broke is older than the window): show them as what broke.
-  for (const g of groups.values()) {
+  const out: FailureGroup[] = []
+  for (const { drafts, ...g } of groups.values()) {
+    if (g.broke.length === 0 && g.summaries.length === 0) {
+      // Only draft skips: not a failure at all.
+      out.push({ ...g, broke: drafts.map((failure) => ({ failure, step: failure.job.failedStep ?? null })), draftOnly: true })
+      continue
+    }
+    g.summaries.push(...drafts)
+    // A group of summaries only (the job that broke is older than the window): show them as what broke.
     if (g.broke.length === 0) {
       g.broke = g.summaries.map((failure) => ({ failure, step: failure.job.failedStep ?? null }))
       g.summaries = []
     }
+    out.push(g)
   }
-  return [...groups.values()].sort((a, b) => b.at - a.at)
+  return out.sort((a, b) => b.at - a.at)
 }
 
 /** "about 3 min left", "usually 9 min", "no usual time yet": the running job's estimate in words. */
