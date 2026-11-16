@@ -57,7 +57,7 @@ describe('pipeline helpers', () => {
   it('openerSummary counts apps by who opened a fix in 24 h', () => {
     const d = (server: number, local: number) =>
       ({ server: { dispatches24h: server }, local: { runs24h: local } }) as unknown as DispatcherStatus
-    expect(openerSummary([d(0, 3), d(2, 0), d(0, 0), d(1, 1)])).toEqual({ server: 2, local: 2, nobody: 1 })
+    expect(openerSummary([d(0, 3), d(2, 0), d(0, 0), d(1, 1)])).toEqual({ server: 2, local: 2, nobody: 1, total: 4 })
   })
 })
 

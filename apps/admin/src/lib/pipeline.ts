@@ -160,7 +160,7 @@ export function pipelinePace(stages: readonly PipelineStage[], dispatchers: read
 }
 
 /** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
-export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number } {
+export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number; total: number } {
   let server = 0
   let local = 0
   let nobody = 0
@@ -171,7 +171,7 @@ export function openerSummary(dispatchers: DispatcherStatus[]): { server: number
     if (l) local++
     if (!s && !l) nobody++
   }
-  return { server, local, nobody }
+  return { server, local, nobody, total: dispatchers.length }
 }
 
 export interface PipelineData {

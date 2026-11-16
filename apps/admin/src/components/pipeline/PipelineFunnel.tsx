@@ -13,7 +13,7 @@ import { ageLabel, STAGE_PLAIN, type PipelineStage } from '../../lib/pipeline'
 interface Props {
   stages: PipelineStage[]
   /** Apps by who opened a fix in 24 h, shown on the Fix PR stage. */
-  openers?: { server: number; local: number; nobody: number } | null
+  openers?: { server: number; local: number; nobody: number; total: number } | null
   selected: string | null
   onSelect: (stageId: string | null) => void
   now: number
@@ -45,7 +45,7 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
               aria-pressed={active}
               data-testid={`pipeline-stage-${s.id}`}
               className={`flex h-full w-full flex-col gap-1.5 rounded-md border p-2.5 text-left motion-safe:transition-colors ${
-                active ? 'border-brand bg-brand/8' : s.stuck > 0 ? 'border-danger/40 bg-danger-muted/30 hover:border-danger/60' : 'border-edge-subtle bg-surface-raised hover:border-edge'
+                active ? 'border-brand bg-brand/8' : s.stuck > 0 && s.id !== 'triaged' ? 'border-danger/40 bg-danger-muted/30 hover:border-danger/60' : 'border-edge-subtle bg-surface-raised hover:border-edge'
               }`}
             >
               <span className="flex items-center justify-between gap-1 text-2xs font-semibold text-fg-secondary">
@@ -58,7 +58,12 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
                 {s.count}
               </span>
               <span className="flex min-h-5 flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs">
-                {s.stuck > 0 ? (
+                {s.stuck > 0 && s.id === 'triaged' ? (
+                  // The backlog: bugs no fix has started on. Waiting, not a person's to-do.
+                  <span className="font-medium text-warn-foreground" data-testid={`pipeline-stage-${s.id}-stuck`}>
+                    {s.stuck} waiting over 3 days
+                  </span>
+                ) : s.stuck > 0 ? (
                   <span className="inline-flex items-center gap-0.5 font-medium text-danger-foreground" data-testid={`pipeline-stage-${s.id}-stuck`}>
                     <IconAlertTriangle size={12} />
                     {s.stuck} stuck
@@ -72,13 +77,18 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
               </span>
               {s.id === 'pr' && openers && (
                 <span className="text-2xs text-fg-muted" data-testid="pipeline-stage-pr-openers">
-                  Last 24 h, apps with a fix started: cloud <span className={openers.server === 0 ? 'font-medium text-danger-foreground' : 'text-fg-secondary'}>{openers.server}</span> · your worker{' '}
-                  <span className="text-fg-secondary">{openers.local}</span>
-                  {openers.nobody > 0 && <> · none {openers.nobody}</>}
+                  {/* Apps, not fixes: the pace line counts fixes. "cloud 0 · your worker 8"
+                      beside "97 fixes started" read as one count (2026-11-16). */}
+                  Apps that started a fix in 24 h:{' '}
+                  <span className="text-fg-secondary">
+                    {openers.total - openers.nobody} of {openers.total}
+                  </span>{' '}
+                  (cloud <span className={openers.server === 0 ? 'font-medium text-danger-foreground' : 'text-fg-secondary'}>{openers.server}</span>, your worker{' '}
+                  <span className="text-fg-secondary">{openers.local}</span>)
                 </span>
               )}
               <span className="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
-                <span className="h-full bg-danger" style={{ width: pct(parts.stuck) }} />
+                <span className={`h-full ${s.id === 'triaged' ? 'bg-warn' : 'bg-danger'}`} style={{ width: pct(parts.stuck) }} />
                 <span className="h-full bg-info" style={{ width: pct(parts.moving) }} />
                 <span className="h-full bg-ok" style={{ width: pct(parts.done) }} />
               </span>

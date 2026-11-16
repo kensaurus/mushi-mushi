@@ -339,7 +339,7 @@ describe('PipelinePage', () => {
 
   it('shows who opens fixes per app, red where auto-fix is on but nothing can dispatch', async () => {
     await render()
-    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Last 24 h, apps with a fix started: cloud 0 · your worker 1 · none 1')
+    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Apps that started a fix in 24 h: 1 of 2 (cloud 0, your worker 1)')
     // Each stage says what it means, and the pace line says how fast fixes land (2026-11-16).
     expect(q('pipeline-stage-ci-plain')!.textContent).toBe('Your tests run on the fix')
     expect(q('pipeline-pace')!.textContent).toMatch(/^Pace: /)
@@ -504,7 +504,9 @@ describe('PipelinePage', () => {
 
   it('the status line names the biggest stuck group and runs its first action that can succeed', async () => {
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('5 items stuck. The biggest: 2 PRs: their own CI is red')
+    expect(q('pipeline-status')!.textContent).toContain('5 items need you. The biggest: 2 PRs: their own CI is red')
+    // Bugs that only wait for a fix are their own count, never "need you" (2026-11-16).
+    expect(q('pipeline-status')!.textContent).toContain('Waiting for a fix')
     const top = q('pipeline-top-action')!
     expect(top.textContent).toBe('Send to CI repair (2)')
     await click(top)

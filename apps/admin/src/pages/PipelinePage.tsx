@@ -128,13 +128,19 @@ export function PipelinePage() {
   const projectNames = useMemo(() => new Map((data?.projects ?? []).map((p) => [p.id, p.name])), [data])
   const stages = data?.stages ?? []
   const stuckTotal = stages.reduce((n, s) => n + s.stuck, 0)
+  // The triaged stage's stuck items are bugs no fix has started on yet: the backlog, with no
+  // action for a person. Counted as "stuck", 1013 of 1013 read the same and every stage was
+  // red (owner's fresh-user review, 2026-11-16). The server's "stuck" is unchanged; this
+  // page separates what needs you from what waits for a fix (the pace line counts that).
+  const backlogStuck = stages.find((s) => s.id === 'triaged')?.stuck ?? 0
+  const needYou = stuckTotal - backlogStuck
   const groups = useMemo(() => {
     if (stage) return stages.find((s) => s.id === stage)?.groups ?? []
     return stages.flatMap((s) => s.groups.filter((g) => g.tone === 'stuck')).sort((a, b) => b.count - a.count)
   }, [stages, stage])
   const showApp = scope === 'all'
   // The biggest stuck group and the first of its actions the server would take.
-  const top = useMemo(() => topStuck(stages.flatMap((s) => s.groups)), [stages])
+  const top = useMemo(() => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)), [stages])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
   const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
@@ -157,7 +163,7 @@ export function PipelinePage() {
       tab === 'workers'
         ? 'Local workers'
         : data
-          ? `${stuckTotal} items stuck across ${stages.filter((s) => s.stuck > 0).length} stages`
+          ? `${needYou} items need you; ${waitingForFix} bugs wait for a fix`
           : page.error
             ? "The pipeline couldn't load"
             : 'Loading the pipeline',
@@ -244,18 +250,21 @@ export function PipelinePage() {
         <>
           <PageStatus
             ariaLabel="Pipeline status"
-            tone={stuckTotal > 0 || nothingOpens ? 'danger' : 'ok'}
+            tone={needYou > 0 || nothingOpens ? 'danger' : waitingForFix > 0 ? 'warn' : 'ok'}
             sentence={
               top
-                ? <>{stuckTotal} {pluralize(stuckTotal, 'item')} stuck. The biggest: <span className="font-medium">{top.group.label}</span>.</>
+                ? <>{needYou} {pluralize(needYou, 'item')} {needYou === 1 ? 'needs' : 'need'} you. The biggest: <span className="font-medium">{top.group.label}</span>.</>
                 : nothingOpens
                   ? agentCredits.state?.out
                     ? `${agentCreditsTitle(agentCredits.state)}, so nothing opens fixes. Nothing already open is stuck.`
                     : 'Nothing already open is stuck, but nothing opened a fix in the last day.'
-                  : 'Nothing is stuck. Every fix is moving.'
+                  : waitingForFix > 0
+                    ? 'Nothing needs you now. Bugs wait for a fix: see the pace below.'
+                    : 'Nothing is stuck. Every fix is moving.'
             }
             metrics={[
-              { label: 'Stuck', value: stuckTotal, tone: stuckTotal > 0 ? 'danger' : 'ok', hint: COUNT_HINTS.stuck },
+              { label: 'Need you', value: needYou, tone: needYou > 0 ? 'danger' : 'ok', hint: `${COUNT_HINTS.stuck} Bugs that only wait for a fix are not counted here.` },
+              { label: 'Waiting for a fix', value: waitingForFix, tone: waitingForFix > 0 ? 'warn' : 'ok', hint: 'Bugs triaged and understood, with no fix started yet.' },
               { label: 'Merged, 7 days', value: (stages.find((s) => s.id === 'merged')?.count ?? 0) + (stages.find((s) => s.id === 'deployed')?.count ?? 0), tone: 'ok', hint: 'Fixes merged in the last 7 days, deployed or not.' },
             ]}
             action={
