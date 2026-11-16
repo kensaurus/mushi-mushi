@@ -135,6 +135,7 @@ describe('Home while a required setup step is open', () => {
   let root: Root
 
   beforeEach(() => {
+    window.localStorage.clear()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -184,7 +185,28 @@ describe('Home while a required setup step is open', () => {
     expect(container.querySelector('[data-testid="home-health-sdk"]')!.textContent).toContain('Add the report button')
     expect(text).toContain('Connect your GitHub repo to see fixes move toward a release.')
     expect(text).toContain('Could not read access and details just now.')
-    // An app with reports opens Home with the explainer closed.
-    expect(container.querySelector('[data-testid="home-how-this-works"] button')!.getAttribute('aria-expanded')).toBe('false')
+    // An app with reports opens Home with the explainer closed, under Needs you.
+    const needs = container.querySelector('[data-testid="home-needs-you"]')!
+    const how = container.querySelector('[data-testid="home-how-this-works"]')!
+    expect(how.querySelector('button')!.getAttribute('aria-expanded')).toBe('false')
+    expect(needs.compareDocumentPosition(how) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('keeps Needs you above a closed explainer when a fix has merged and the report count is 0', async () => {
+    const reports = project.report_count
+    const merged = project.merged_fix_count
+    project.report_count = 0
+    project.merged_fix_count = 101
+    try {
+      await mount()
+      const needs = container.querySelector('[data-testid="home-needs-you"]')!
+      const how = container.querySelector('[data-testid="home-how-this-works"]')!
+      expect(how.querySelector('button')!.getAttribute('aria-expanded')).toBe('false')
+      expect(how.textContent).not.toContain('An AI agent drafts the fix')
+      expect(needs.compareDocumentPosition(how) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    } finally {
+      project.report_count = reports
+      project.merged_fix_count = merged
+    }
   })
 })

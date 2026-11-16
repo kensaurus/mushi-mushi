@@ -383,11 +383,70 @@ describe('AppCard', () => {
 })
 
 describe('HowThisWorks', () => {
-  it('opens by default only when asked (a new app with no reports)', async () => {
-    await render(createElement(HowThisWorks, { defaultOpen: true }))
+  const other = '22222222-2222-4222-8222-222222222222'
+  const keyFor = (id: string) => `mushi:ui:${id}:home:how-this-works`
+  const expanded = () => byTestId('home-how-this-works')!.querySelector('button')!.getAttribute('aria-expanded')
+  const stepsVisible = () => text().includes('An AI agent drafts the fix')
+
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('opens the four steps only when the app has no reports and no merged fix', async () => {
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0 }))
     expect(text()).toContain('Mushi explains it')
     expect(text()).not.toMatch(/PDCA/)
-    await render(createElement(HowThisWorks, { defaultOpen: false, key: 'closed' }))
-    expect(byTestId('home-how-this-works')!.querySelector('button')!.getAttribute('aria-expanded')).toBe('false')
+    expect(expanded()).toBe('true')
+    expect(stepsVisible()).toBe(true)
+
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 5, mergedFixCount: 0, key: 'reports' }))
+    expect(expanded()).toBe('false')
+    expect(stepsVisible()).toBe(false)
+  })
+
+  it('stays a one-line disclosure when a fix has merged, even if the report count is 0', async () => {
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 101 }))
+    expect(expanded()).toBe('false')
+    expect(stepsVisible()).toBe(false)
+    expect(text()).toContain('How this works')
+  })
+
+  it('stays closed while the counts are unknown, then opens once a new app resolves', async () => {
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: null, mergedFixCount: null }))
+    expect(expanded()).toBe('false')
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0 }))
+    expect(expanded()).toBe('true')
+    expect(stepsVisible()).toBe(true)
+  })
+
+  it('remembers a hide, including across a remount, and ignores a broken stored value', async () => {
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0 }))
+    await act(async () => {
+      byTestId('home-how-this-works')!.querySelector('button')!.click()
+    })
+    expect(expanded()).toBe('false')
+    expect(JSON.parse(window.localStorage.getItem(keyFor(P))!)).toEqual({ v: 1, value: false })
+
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0, key: 'again' }))
+    expect(expanded()).toBe('false')
+    expect(stepsVisible()).toBe(false)
+
+    window.localStorage.setItem(keyFor(P), '{not json')
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0, key: 'bad' }))
+    expect(expanded()).toBe('true')
+  })
+
+  it('uses the next project’s choice on the first frame after a switch', async () => {
+    window.localStorage.setItem(keyFor(P), JSON.stringify({ v: 1, value: true }))
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 95, mergedFixCount: 10 }))
+    expect(expanded()).toBe('true')
+    expect(stepsVisible()).toBe(true)
+
+    await render(createElement(HowThisWorks, { projectId: other, reportCount: 95, mergedFixCount: 10 }))
+    expect(expanded()).toBe('false')
+    expect(stepsVisible()).toBe(false)
+
+    await render(createElement(HowThisWorks, { projectId: P, reportCount: 0, mergedFixCount: 0 }))
+    expect(expanded()).toBe('true')
   })
 })

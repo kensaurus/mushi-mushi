@@ -198,7 +198,13 @@ export function DashboardPage() {
             <ActivityCard section={data.activity} />
           </div>
 
-          <HowThisWorks defaultOpen={!!project && project.report_count === 0} />
+          {/* Closed once a fix has merged or a report exists, so the four
+              steps stay below Needs you. The visitor's choice is remembered. */}
+          <HowThisWorks
+            projectId={project?.project_id ?? activeProjectId}
+            reportCount={project ? project.report_count : null}
+            mergedFixCount={project ? project.merged_fix_count : null}
+          />
         </>
       )}
     </div>

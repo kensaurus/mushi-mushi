@@ -34,7 +34,7 @@
  *   Remove the <PageHelp> call once migrated.
  */
 
-import { useLayoutEffect, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 import { isDevFacingHint } from '../lib/devHintCopy'
@@ -44,6 +44,7 @@ import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
 import { stageChipCopy } from '../lib/navRegistry'
 import { PageHelpPopover } from './ui/help-popover'
+import { useNotifyHubTabs } from './hubViewSlot'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
@@ -132,6 +133,9 @@ export function PageHeaderBar({
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
+  const headerRef = useRef<HTMLDivElement>(null)
+  // Home, Mushi health and Team portal their view tabs into this header.
+  useNotifyHubTabs(headerRef)
 
   const chipKey =
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
@@ -166,7 +170,7 @@ export function PageHeaderBar({
   ])
 
   return (
-    <div className="mb-4 w-full min-w-0" data-page-header="">
+    <div ref={headerRef} className="mb-4 w-full min-w-0" data-page-header="">
       {/* ── Primary row ──────────────────────────────────────────────── */}
       {/* flex-wrap: on a phone the actions drop under the title instead of
           pushing past the column edge (they used to scroll <main> sideways
