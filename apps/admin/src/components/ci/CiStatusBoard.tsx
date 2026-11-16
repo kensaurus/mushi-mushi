@@ -112,6 +112,11 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
             </span>
           )}
         </h3>
+        {/* Why they wait, at any wait: "2 waiting" beside "Idle: alienware-ci" asks it
+            before the headline does (it speaks only past 5 min). */}
+        {status.waitWhy && !status.headline.includes(status.waitWhy) && (
+          <p className="-mt-1 mb-1.5 text-2xs text-fg-secondary" data-testid="ci-wait-why">{status.waitWhy}</p>
+        )}
         {status.running.length === 0 ? (
           <p className="text-xs text-fg-muted">Nothing is running.</p>
         ) : (
