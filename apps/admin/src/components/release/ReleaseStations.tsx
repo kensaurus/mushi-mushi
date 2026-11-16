@@ -28,12 +28,12 @@ function stuckLabel(s: Pick<ReleaseStation, 'count' | 'stuck'>): string {
 
 export function ReleaseStations({ stations, href, testId = 'home-release-stations' }: { stations: ReleaseStation[]; href: string; testId?: string }) {
   return (
-    <ol className="grid grid-cols-5 gap-2" aria-label="Fixes on their way to a release" data-testid={testId}>
+    <ol className="flex flex-wrap gap-x-5 gap-y-1.5" aria-label="Fixes on their way to a release" data-testid={testId}>
       {stations.map((s) => (
         // One line per station (2026-11-16, owner: keep it dense): the count,
         // then the name and how many need you. The tall circles-on-a-track
-        // took 80px for five numbers.
-        <li key={s.id} className="flex min-w-0 items-center gap-1.5">
+        // took 80px for five numbers. Stations wrap on narrow screens.
+        <li key={s.id} className="flex items-center gap-1.5">
           <Link
             to={href}
             aria-label={`${s.label}: ${s.count}${s.stuck ? `, ${stuckLabel(s)}` : ''}`}
@@ -49,9 +49,9 @@ export function ReleaseStations({ stations, href, testId = 'home-release-station
           >
             {s.count}
           </Link>
-          <span className="min-w-0 leading-tight">
-            <span className="block truncate text-2xs font-medium text-fg-secondary">{s.label}</span>
-            {s.stuck > 0 && <span className="block truncate text-2xs font-semibold text-danger-foreground">{stuckLabel(s)}</span>}
+          <span className="leading-tight">
+            <span className="block whitespace-nowrap text-2xs font-medium text-fg-secondary">{s.label}</span>
+            {s.stuck > 0 && <span className="block whitespace-nowrap text-2xs font-semibold text-danger-foreground">{stuckLabel(s)}</span>}
           </span>
         </li>
       ))}

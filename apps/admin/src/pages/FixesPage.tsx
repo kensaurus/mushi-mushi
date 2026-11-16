@@ -946,8 +946,6 @@ export function FixesPage() {
                 stats={snapshotStats}
                 ready={readyCount}
                 inFlight={inFlightCount}
-                statsFetchedAt={statsFetchedAt}
-                statsValidating={statsValidating}
               />
             ),
           },

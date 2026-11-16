@@ -180,7 +180,7 @@ export function Card({
  * NN/g #4 Consistency: one separator rhythm across the admin console.
  */
 
-export const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
+const PANEL_HEADER_SEPARATOR = 'border-b border-edge-subtle/80'
 
 interface PanelHeaderProps {
   title: ReactNode

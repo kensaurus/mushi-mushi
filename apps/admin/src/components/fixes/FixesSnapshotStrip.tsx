@@ -21,8 +21,6 @@ interface Props {
    * attempt yet.
    */
   inFlight?: number
-  statsFetchedAt: string | null
-  statsValidating?: boolean
 }
 
 function fixesSentence(stats: FixesStats, inFlight: number, ready: number): string {
