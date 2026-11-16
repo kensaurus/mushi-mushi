@@ -604,6 +604,12 @@ interface StatCardProps {
   to?: string
   /** Override hover CTA copy (defaults to "Go to {destination}"). */
   linkLabel?: string
+  /**
+   * Plain card sharing a row with linked cards. Reserves the link arrow's
+   * width and grows the label, so this card's (i) lines up with theirs.
+   * Off by default: a plain-only strip keeps the icon next to its label.
+   */
+  reserveLinkSlot?: boolean
 }
 
 function StatCardSwapLine({
@@ -680,8 +686,24 @@ function LinkedStatCard(props: StatCardProps & { to: string }) {
   )
 }
 
-function StatCardBody({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkText }: StatCardProps & { linkText: string | null }) {
+function StatCardBody({
+  label,
+  value,
+  accent,
+  delta,
+  trend,
+  detail,
+  hint,
+  tooltip,
+  to,
+  linkText,
+  reserveLinkSlot = false,
+}: StatCardProps & { linkText: string | null }) {
   const help = tooltip ?? hint
+  // A plain card in a row of linked cards (tester home "Accepted") has no
+  // arrow. Without a matching slot the (i) sits inline after the word, while
+  // the linked tiles park theirs at the right edge.
+  const reserveSlot = Boolean(help) && !to && reserveLinkSlot
   return (
     <>
       <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
@@ -694,13 +716,15 @@ function StatCardBody({ label, value, accent, delta, trend, detail, hint, toolti
             />
           </span>
         ) : (
-          <span className="truncate" title={label}>
+          <span className={`${reserveSlot ? 'flex-1 min-w-0 ' : ''}truncate`} title={label}>
             {label}
           </span>
         )}
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
         {to ? (
           <IconArrowRight size={12} className="stat-card-arrow ml-auto shrink-0 text-brand" />
+        ) : reserveSlot ? (
+          <span aria-hidden className="h-3 w-3 shrink-0" />
         ) : null}
       </div>
       <div className="flex items-baseline gap-2">
