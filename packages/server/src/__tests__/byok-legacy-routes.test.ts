@@ -12,9 +12,15 @@
  *   B2  The same key could be pooled twice, and a pooled copy of the legacy
  *       key left the legacy credential behind.
  *   I2/I3  The pool route normalizes pastes and rejects wrong-provider keys.
+ *   BL-098  Removing a legacy key called vault_delete_secret by name and
+ *       destroyed a Vault secret a pooled key still referenced. The routes
+ *       clear the legacy columns first, then call
+ *       vault_delete_secret_by_name_if_unused, and never fall back.
  *
  * No real Vault, network or key: every value is an obvious fake.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { makeFakeDb, type FakeDb } from './__stubs__/fake-supabase.ts'
@@ -25,6 +31,14 @@ const USER = '2000000a-0000-4000-8000-000000000000'
 let db: FakeDb
 /** Vault contents by secret name or id, read through vault_get_secret. */
 let vault: Record<string, string>
+/** Legacy secret name → the Vault id a pooled key may hold. */
+let nameToId: Record<string, string>
+/** When set, the safe delete RPC throws instead of returning an error row. */
+let throwVaultDelete = false
+/** Legacy ref columns as they were at the moment the safe delete RPC ran. */
+let refsAtDelete: Record<string, unknown>
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 vi.mock('../../supabase/functions/_shared/logger.ts', () => {
   const noop = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, child: () => noop }
@@ -67,6 +81,9 @@ const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
 
 beforeEach(() => {
   vault = {}
+  nameToId = {}
+  throwVaultDelete = false
+  refsAtDelete = {}
   fetchMock.mockClear()
   vi.stubGlobal('fetch', fetchMock)
 })
@@ -74,11 +91,29 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function seed(settings: Record<string, unknown>, pool: Array<Record<string, unknown>> = []) {
+function secretStillUsed(id: string): boolean {
+  const refs = new Set([id, `vault://${id}`])
+  return (
+    db.table('byok_keys').some((k) => k.vault_secret_id === id) ||
+    [...db.table('project_settings'), ...db.table('organization_integration_settings')].some((row) =>
+      Object.entries(row).some(([col, v]) => col.endsWith('_ref') && refs.has(String(v))),
+    )
+  )
+}
+
+function seed(
+  settings: Record<string, unknown>,
+  pool: Array<Record<string, unknown>> = [],
+  opts?: { failSafeDelete?: boolean },
+) {
   db = makeFakeDb(
     { project_settings: [{ project_id: P, ...settings }], byok_keys: pool },
     {
       autoId: true,
+      rpcError: (fn) =>
+        opts?.failSafeDelete && fn === 'vault_delete_secret_by_name_if_unused'
+          ? { code: 'PGRST202', message: 'function not found' }
+          : null,
       rpc: (fn, args) => {
         if (fn === 'vault_get_secret') return vault[String(args.secret_id)] ?? null
         if (fn === 'vault_store_secret') {
@@ -86,6 +121,25 @@ function seed(settings: Record<string, unknown>, pool: Array<Record<string, unkn
           vault[id] = String(args.secret_value)
           vault[String(args.secret_name)] = String(args.secret_value)
           return id
+        }
+        if (fn === 'vault_delete_secret_by_name_if_unused') {
+          if (throwVaultDelete) throw new Error('vault rpc down')
+          const row = (db.tables.project_settings[0] ?? {}) as Record<string, unknown>
+          refsAtDelete = {
+            byok_anthropic_key_ref: row.byok_anthropic_key_ref,
+            byok_openai_key_ref: row.byok_openai_key_ref,
+            byok_openai_base_url: row.byok_openai_base_url,
+            byok_firecrawl_key_ref: row.byok_firecrawl_key_ref,
+            byok_browserbase_key_ref: row.byok_browserbase_key_ref,
+          }
+          const name = String(args.secret_name ?? '')
+          const id = nameToId[name] ?? (UUID_RE.test(name) ? name : null)
+          // Mirrors vault_delete_secret_by_name_if_unused: a pooled key, or a
+          // *_ref still holding this id, keeps the secret.
+          if (id && secretStillUsed(id)) return 0
+          delete vault[name]
+          if (id) delete vault[id]
+          return 1
         }
         if (fn === 'vault_delete_secret') {
           delete vault[String(args.secret_name)]
@@ -129,9 +183,11 @@ describe('B1: legacy routes reach every legacy provider', () => {
     expect(settingsRow().byok_firecrawl_key_ref).toBeNull()
     expect(settingsRow().byok_firecrawl_key_hint).toBeNull()
     expect(settingsRow().byok_firecrawl_test_status).toBeNull()
-    expect(rpc('vault_delete_secret')).toEqual([
-      { fn: 'vault_delete_secret', args: { secret_name: `mushi/byok/${P}/firecrawl` } },
+    expect(refsAtDelete.byok_firecrawl_key_ref).toBeNull()
+    expect(rpc('vault_delete_secret_by_name_if_unused')).toEqual([
+      { fn: 'vault_delete_secret_by_name_if_unused', args: { secret_name: `mushi/byok/${P}/firecrawl` } },
     ])
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
   })
 
   it('DELETE /v1/admin/byok/browserbase and anthropic both work', async () => {
@@ -258,9 +314,11 @@ describe('B2 + I2/I3: POST /v1/admin/byok/keys', () => {
     expect(json.data.legacySuperseded).toBe(false)
     expect(settingsRow().byok_firecrawl_key_ref).toBeNull()
     expect(db.tables.byok_keys).toHaveLength(1)
-    expect(rpc('vault_delete_secret').map((c) => c.args.secret_name)).toEqual([
+    expect(refsAtDelete.byok_firecrawl_key_ref).toBeNull()
+    expect(rpc('vault_delete_secret_by_name_if_unused').map((c) => c.args.secret_name)).toEqual([
       `mushi/byok/${P}/firecrawl`,
     ])
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
   })
 
   it('keeps the legacy credential when the pooled copy fails its probe', async () => {
@@ -290,6 +348,7 @@ describe('B2 + I2/I3: POST /v1/admin/byok/keys', () => {
     expect(json.data.legacySuperseded).toBe(true)
     expect(settingsRow().byok_firecrawl_key_ref).toBe(LEGACY_FIRECRAWL.byok_firecrawl_key_ref)
     expect(rpc('vault_delete_secret')).toHaveLength(0)
+    expect(rpc('vault_delete_secret_by_name_if_unused')).toHaveLength(0)
   })
 
   it('a pooled key test reports legacySuperseded when a legacy key is still stored', async () => {
@@ -322,5 +381,150 @@ describe('B2 + I2/I3: POST /v1/admin/byok/keys', () => {
       message: 'This looks like an Anthropic key — paste it in the Anthropic row.',
     })
     expect(rpc('vault_store_secret')).toHaveLength(0)
+  })
+})
+
+describe('BL-098: removing a legacy key does not delete a Vault secret a pooled key still uses', () => {
+  const SHARED = '4000000a-0000-4000-8000-0000000000aa'
+  const poolRow = (provider: string) => ({
+    id: '3000000a-0000-4000-8000-000000000099',
+    project_id: P,
+    provider_slug: provider,
+    vault_secret_id: SHARED,
+    status: 'active',
+  })
+
+  it.each([
+    ['anthropic', '/v1/admin/byok/anthropic', `mushi/byok/${P}/anthropic`, 'byok_anthropic_key_ref'],
+    ['openai', '/v1/admin/byok/openai', `mushi/byok/${P}/openai`, 'byok_openai_key_ref'],
+    ['firecrawl', '/v1/admin/byok/firecrawl', `mushi/byok/${P}/firecrawl`, 'byok_firecrawl_key_ref'],
+    ['browserbase', '/v1/admin/byok/browserbase', `mushi/byok/${P}/browserbase`, 'byok_browserbase_key_ref'],
+  ] as const)(
+    'DELETE %s clears the slot first, then calls vault_delete_secret_by_name_if_unused',
+    async (provider, path, secretName, refCol) => {
+      seed({
+        [refCol]: `vault://${secretName}`,
+        ...(provider === 'openai' ? { byok_openai_base_url: 'https://example.invalid/v1' } : {}),
+      })
+      vault[secretName] = 'sk-FAKE-legacy'
+
+      const { status } = await call('DELETE', path)
+
+      expect(status).toBe(200)
+      expect(settingsRow()[refCol]).toBeNull()
+      if (provider === 'openai') expect(settingsRow().byok_openai_base_url).toBeNull()
+      expect(refsAtDelete[refCol]).toBeNull()
+      if (provider === 'openai') expect(refsAtDelete.byok_openai_base_url).toBeNull()
+      expect(rpc('vault_delete_secret_by_name_if_unused')).toEqual([
+        { fn: 'vault_delete_secret_by_name_if_unused', args: { secret_name: secretName } },
+      ])
+      expect(rpc('vault_delete_secret')).toHaveLength(0)
+      expect(vault[secretName]).toBeUndefined()
+    },
+  )
+
+  it('keeps the secret when a pool row holds the id behind the legacy name', async () => {
+    const name = `mushi/byok/${P}/anthropic`
+    nameToId[name] = SHARED
+    seed({ byok_anthropic_key_ref: `vault://${name}` }, [poolRow('anthropic')])
+    vault[name] = 'sk-ant-FAKE-shared'
+    vault[SHARED] = 'sk-ant-FAKE-shared'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/anthropic')
+
+    expect(status).toBe(200)
+    expect(settingsRow().byok_anthropic_key_ref).toBeNull()
+    expect(refsAtDelete.byok_anthropic_key_ref).toBeNull()
+    expect(vault[SHARED]).toBe('sk-ant-FAKE-shared')
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+    expect(rpc('vault_delete_secret_by_name_if_unused')).toHaveLength(1)
+  })
+
+  it('keeps the secret when the stored ref is the uuid a pool row holds', async () => {
+    seed({ byok_anthropic_key_ref: `vault://${SHARED}` }, [poolRow('anthropic')])
+    vault[SHARED] = 'sk-ant-FAKE-shared'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/anthropic')
+
+    expect(status).toBe(200)
+    expect(rpc('vault_delete_secret_by_name_if_unused')[0].args.secret_name).toBe(SHARED)
+    expect(vault[SHARED]).toBe('sk-ant-FAKE-shared')
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+  })
+
+  it('deletes a vault://uuid secret nobody else references, only after the column is cleared', async () => {
+    seed({ byok_anthropic_key_ref: `vault://${SHARED}` })
+    vault[SHARED] = 'sk-ant-FAKE-only-legacy'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/anthropic')
+
+    expect(status).toBe(200)
+    expect(refsAtDelete.byok_anthropic_key_ref).toBeNull()
+    expect(vault[SHARED]).toBeUndefined()
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+  })
+
+  it('firecrawl delete keeps a secret a pool row still holds', async () => {
+    const name = `mushi/byok/${P}/firecrawl`
+    nameToId[name] = SHARED
+    seed({ byok_firecrawl_key_ref: `vault://${name}` }, [poolRow('firecrawl')])
+    vault[name] = 'fc-FAKE-shared'
+    vault[SHARED] = 'fc-FAKE-shared'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/firecrawl')
+
+    expect(status).toBe(200)
+    expect(vault[SHARED]).toBe('fc-FAKE-shared')
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+  })
+
+  it('does not fall back to vault_delete_secret when the safe RPC errors', async () => {
+    const name = `mushi/byok/${P}/firecrawl`
+    seed({ byok_firecrawl_key_ref: `vault://${name}` }, [], { failSafeDelete: true })
+    vault[name] = 'fc-FAKE'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/firecrawl')
+
+    expect(status).toBe(200)
+    expect(settingsRow().byok_firecrawl_key_ref).toBeNull()
+    expect(vault[name]).toBe('fc-FAKE')
+    expect(rpc('vault_delete_secret_by_name_if_unused')).toHaveLength(1)
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+  })
+
+  it('does not fall back to vault_delete_secret when the safe RPC throws', async () => {
+    const name = `mushi/byok/${P}/browserbase`
+    throwVaultDelete = true
+    seed({ byok_browserbase_key_ref: `vault://${name}` })
+    vault[name] = 'bb_FAKE'
+
+    const { status } = await call('DELETE', '/v1/admin/byok/browserbase')
+
+    expect(status).toBe(200)
+    expect(settingsRow().byok_browserbase_key_ref).toBeNull()
+    expect(vault[name]).toBe('bb_FAKE')
+    expect(rpc('vault_delete_secret')).toHaveLength(0)
+  })
+})
+
+describe('vault_delete_secret_by_name_if_unused (migration 20261116090000)', () => {
+  const sql = readFileSync(
+    resolve(__dirname, '../../supabase/migrations/20261116090000_vault_delete_secret_by_name_if_unused.sql'),
+    'utf8',
+  )
+
+  it('resolves a name or uuid and deletes only through vault_delete_secret_if_unused', () => {
+    expect(sql).toContain('where s.name = secret_name')
+    expect(sql).toContain('where s.id = secret_name::uuid')
+    expect(sql).toContain('return public.vault_delete_secret_if_unused(v_id);')
+    expect(sql).not.toContain('vault_delete_secret(')
+    expect(sql).toContain("set search_path = ''")
+    expect(sql).toContain('security definer')
+    expect(sql).toContain(
+      'grant execute on function public.vault_delete_secret_by_name_if_unused(text) to service_role;',
+    )
+    expect(sql).toContain(
+      'revoke all on function public.vault_delete_secret_by_name_if_unused(text) from public, anon, authenticated;',
+    )
   })
 })

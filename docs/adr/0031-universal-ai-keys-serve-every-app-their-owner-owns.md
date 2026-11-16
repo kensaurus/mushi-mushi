@@ -134,8 +134,12 @@ across the Mushi console, with "universal" as the default.
   column of `project_settings` or `organization_integration_settings`
   (listed from `information_schema` at call time) holding it, as the bare id
   or `vault://<id>`. A missing Vault privilege in the trigger raises a warning
-  instead of blocking the delete. The legacy single-key routes still delete
-  their secret by name (BL-098).
+  instead of blocking the delete. The legacy single-key routes
+  (`DELETE /v1/admin/byok/:provider`, Firecrawl, Browserbase, and retiring a
+  legacy key after its pooled copy validates) clear their ref first, then
+  call `vault_delete_secret_by_name_if_unused`, which resolves the name or
+  `vault://<uuid>` and deletes only through `vault_delete_secret_if_unused`
+  (BL-098). They never fall back to `vault_delete_secret`.
 - Like organization keys, universal keys write no per-project health rows
   (`byok-health` skips keys without a `project_id`).
 
