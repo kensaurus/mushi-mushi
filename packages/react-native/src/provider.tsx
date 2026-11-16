@@ -502,10 +502,12 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         }
         resolveReporterTokenReady()
       } catch {
-        // Storage unavailable — per-session token is fine for fallback
+        // Storage failed: still try to keep the token (plain AsyncStorage), so the reporter's
+        // history survives a restart; only when that fails too is it this session's token.
         if (reporterTokenRef.current === `rn-${config.projectId}-anon`) {
           reporterTokenRef.current = `mushi_${newUuid()}`
         }
+        await saveReporterToken(reporterTokenRef.current, false).catch(() => {})
         resolveReporterTokenReady()
       }
     })().catch(() => {})

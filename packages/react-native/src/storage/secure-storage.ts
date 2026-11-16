@@ -1,5 +1,17 @@
+/** AsyncStorage name of the reporter token (any string is a valid AsyncStorage key). */
 const REPORTER_TOKEN_KEY = '@mushi:reporter_token'
-const QUEUE_CRYPTO_KEY = '@mushi:queue_aes_key'
+/**
+ * SecureStore names. expo-secure-store accepts only letters, digits, ".", "-" and "_", and
+ * throws on anything else: the old '@mushi:reporter_token' / '@mushi:queue_aes_key' threw on
+ * every call (2026-11-16, yen-yen). Each launch then got a new, unsaved reporter token, so
+ * "Your reports" emptied on restart, and a report whose send failed could not be queued
+ * and was lost. Nothing was ever stored under the old SecureStore names (every write threw),
+ * so there is nothing to migrate from them; AsyncStorage keeps its old name.
+ */
+const SECURE_REPORTER_TOKEN_KEY = 'mushi.reporter_token'
+const SECURE_QUEUE_CRYPTO_KEY = 'mushi.queue_aes_key'
+/** @internal Exported for tests only. Every key this file passes to SecureStore. */
+export const SECURE_STORE_KEYS = [SECURE_REPORTER_TOKEN_KEY, SECURE_QUEUE_CRYPTO_KEY] as const
 const LEGACY_QUEUE_KEY = '@mushi:offline_queue'
 export const ENCRYPTED_QUEUE_KEY = '@mushi:offline_queue_enc'
 
@@ -14,13 +26,23 @@ type AsyncStorageLike = {
 
 export type { AsyncStorageLike }
 
-type SecureStoreLike = {
+export type SecureStoreLike = {
   getItemAsync: (key: string) => Promise<string | null>
   setItemAsync: (key: string, value: string) => Promise<void>
   deleteItemAsync: (key: string) => Promise<void>
 }
 
-async function loadAsyncStorage(): Promise<AsyncStorageLike | null> {
+let loaders = { secure: () => loadSecureStoreModule(), async: () => loadAsyncStorageModule() }
+
+/** @internal Exported for tests only: swap the storage modules (optional peers, absent in tests). */
+export function setStorageLoadersForTests(next: { secure: () => Promise<SecureStoreLike | null>; async: () => Promise<AsyncStorageLike | null> } | null): void {
+  loaders = next ?? { secure: () => loadSecureStoreModule(), async: () => loadAsyncStorageModule() }
+}
+
+const loadAsyncStorage = () => loaders.async()
+const loadSecureStore = () => loaders.secure()
+
+async function loadAsyncStorageModule(): Promise<AsyncStorageLike | null> {
   try {
     const mod = await import('@react-native-async-storage/async-storage')
     return mod.default
@@ -29,7 +51,7 @@ async function loadAsyncStorage(): Promise<AsyncStorageLike | null> {
   }
 }
 
-async function loadSecureStore(): Promise<SecureStoreLike | null> {
+async function loadSecureStoreModule(): Promise<SecureStoreLike | null> {
   try {
     // `expo-secure-store` is an optional peer dependency. The `as string` cast
     // keeps the literal specifier in the emitted bundle (so Metro still resolves
@@ -71,12 +93,12 @@ function hasWebCrypto(): boolean {
 
 async function getOrCreateQueueKey(secure: SecureStoreLike): Promise<CryptoKey | null> {
   if (!hasWebCrypto()) return null
-  let rawB64 = await secure.getItemAsync(QUEUE_CRYPTO_KEY)
+  let rawB64 = await secure.getItemAsync(SECURE_QUEUE_CRYPTO_KEY)
   if (!rawB64) {
     const raw = new Uint8Array(32)
     globalThis.crypto.getRandomValues(raw)
     rawB64 = bytesToBase64(raw)
-    await secure.setItemAsync(QUEUE_CRYPTO_KEY, rawB64)
+    await secure.setItemAsync(SECURE_QUEUE_CRYPTO_KEY, rawB64)
   }
   const raw = base64ToBytes(rawB64)
   return globalThis.crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
@@ -86,7 +108,14 @@ export async function encryptQueueBlob(plaintext: string, secureStorage: boolean
   if (!secureStorage) return plaintext
   const secure = await loadSecureStore()
   if (!secure) return plaintext
-  const key = await getOrCreateQueueKey(secure)
+  // A key SecureStore will not keep must never cost the queue: store the report unencrypted
+  // (as with secureStorage off) rather than throw and lose it.
+  let key: CryptoKey | null
+  try {
+    key = await getOrCreateQueueKey(secure)
+  } catch {
+    return plaintext
+  }
   if (!key) return plaintext
   const iv = new Uint8Array(12)
   globalThis.crypto.getRandomValues(iv)
@@ -107,7 +136,12 @@ export async function decryptQueueBlob(stored: string, _secureStorage: boolean):
   if (!stored.startsWith(ENCRYPTED_PREFIX)) return stored
   const secure = await loadSecureStore()
   if (!secure || !hasWebCrypto()) return stored
-  const key = await getOrCreateQueueKey(secure)
+  let key: CryptoKey | null
+  try {
+    key = await getOrCreateQueueKey(secure)
+  } catch {
+    return stored
+  }
   if (!key) return stored
   const combined = base64ToBytes(stored.slice(ENCRYPTED_PREFIX.length))
   if (combined.length < 13) return stored
@@ -121,23 +155,33 @@ export async function decryptQueueBlob(stored: string, _secureStorage: boolean):
   }
 }
 
-/** Load reporter token from SecureStore with one-time migration from AsyncStorage. */
+/**
+ * Load the reporter token: SecureStore first, then AsyncStorage (older installs, or a
+ * SecureStore that refused the write), moving an AsyncStorage token into SecureStore when it can.
+ */
 export async function loadReporterToken(secureStorage: boolean): Promise<string | null> {
   if (secureStorage) {
     const secure = await loadSecureStore()
     if (secure) {
-      const fromSecure = await secure.getItemAsync(REPORTER_TOKEN_KEY)
-      if (fromSecure?.startsWith('mushi_')) return fromSecure
-      const storage = await loadAsyncStorage()
-      if (storage) {
-        const legacy = await storage.getItem(REPORTER_TOKEN_KEY)
-        if (legacy?.startsWith('mushi_')) {
-          await secure.setItemAsync(REPORTER_TOKEN_KEY, legacy)
-          await storage.removeItem(REPORTER_TOKEN_KEY)
-          return legacy
-        }
+      try {
+        const fromSecure = await secure.getItemAsync(SECURE_REPORTER_TOKEN_KEY)
+        if (fromSecure?.startsWith('mushi_')) return fromSecure
+      } catch {
+        // SecureStore unusable: the AsyncStorage copy below is the token.
       }
-      return fromSecure
+      const storage = await loadAsyncStorage()
+      if (!storage) return null
+      const legacy = await storage.getItem(REPORTER_TOKEN_KEY)
+      if (legacy?.startsWith('mushi_')) {
+        try {
+          await secure.setItemAsync(SECURE_REPORTER_TOKEN_KEY, legacy)
+          await storage.removeItem(REPORTER_TOKEN_KEY)
+        } catch {
+          // Keep it in AsyncStorage: same token next launch either way.
+        }
+        return legacy
+      }
+      return null
     }
   }
   const storage = await loadAsyncStorage()
@@ -145,15 +189,23 @@ export async function loadReporterToken(secureStorage: boolean): Promise<string 
   return storage.getItem(REPORTER_TOKEN_KEY)
 }
 
-/** Persist reporter token — SecureStore when enabled, else AsyncStorage. */
+/**
+ * Persist the reporter token: SecureStore when enabled, else (or when SecureStore refuses it)
+ * AsyncStorage. A token that is not saved is a new reporter every launch, and the reporter's
+ * history ("Your reports") is keyed on it.
+ */
 export async function saveReporterToken(token: string, secureStorage: boolean): Promise<void> {
   if (secureStorage) {
     const secure = await loadSecureStore()
     if (secure) {
-      await secure.setItemAsync(REPORTER_TOKEN_KEY, token)
-      const storage = await loadAsyncStorage()
-      if (storage) await storage.removeItem(REPORTER_TOKEN_KEY)
-      return
+      try {
+        await secure.setItemAsync(SECURE_REPORTER_TOKEN_KEY, token)
+        const storage = await loadAsyncStorage()
+        if (storage) await storage.removeItem(REPORTER_TOKEN_KEY)
+        return
+      } catch {
+        // Fall through to AsyncStorage.
+      }
     }
   }
   const storage = await loadAsyncStorage()
