@@ -10,7 +10,8 @@
  * fix_attempts.ci_infra so a stale infra flag cannot outlive the failure.
  *
  * The timeline event still describes the delivery itself; only the columns
- * the report page reads are the rollup.
+ * the report page reads are the rollup. One red delivery whose rollup could
+ * not be read does not write: it used to put a green retry back on "CI failed".
  */
 
 import { fetchLatestCheckRun, type GithubRepoRef } from './github.ts'
@@ -22,6 +23,12 @@ export interface StoredHeadCheck {
   rolledUp: boolean
   /** The stored update must set ci_infra to null. */
   clearInfra: boolean
+  /**
+   * False when this delivery must not change the stored head. A single red
+   * check whose rollup could not be read is not the head: writing it left
+   * the report on "CI failed" after a green retry (report 9e2ec6f0).
+   */
+  write: boolean
 }
 
 interface HeadCheckUpdate {
@@ -56,7 +63,7 @@ export async function resolveStoredHeadCheck(input: {
   // Each completed delivery costs the rollup's reads (installation tokens get
   // 5,000 an hour, shared with everything else the App does).
   if (status && status !== 'completed') {
-    return { status, conclusion: null, rolledUp: false, clearInfra: false }
+    return { status, conclusion: null, rolledUp: false, clearInfra: false, write: true }
   }
   let readFailed = false
   if (input.token && input.ref && input.sha) {
@@ -72,11 +79,16 @@ export async function resolveStoredHeadCheck(input: {
       input.onRollupError?.(err)
     }
   }
-  // One passing job says nothing about the head: when the rollup could not be
-  // read (rate limit, outage), store "running" and let ci-sync read it later,
-  // never this job's success as the PR's. A failing job is still news.
+  // One check is not the head. When the rollup could not be read (rate limit,
+  // outage), a passing job must not be stored as the PR's success: store
+  // "running" and let ci-sync read it later. A failing job is not stored
+  // either: the delivery is often the attempt a retry already replaced, and
+  // writing it put the report back on "CI failed" after GitHub was CLEAN.
   if (readFailed && GREEN_ROLLUP.has(conclusion)) {
-    return { status: 'in_progress', conclusion: null, rolledUp: false, clearInfra: false }
+    return { status: 'in_progress', conclusion: null, rolledUp: false, clearInfra: false, write: true }
+  }
+  if (readFailed) {
+    return { status: status || null, conclusion: null, rolledUp: false, clearInfra: false, write: false }
   }
   const storedConclusion = conclusion || null
   return {
@@ -84,6 +96,7 @@ export async function resolveStoredHeadCheck(input: {
     conclusion: storedConclusion,
     rolledUp,
     clearInfra: rolledUp && GREEN_ROLLUP.has(storedConclusion ?? ''),
+    write: true,
   }
 }
 
@@ -125,6 +138,7 @@ export async function applyHeadCheckRollup<T>(
   },
 ): Promise<{ head: StoredHeadCheck; infra: T | null }> {
   const head = await resolveStoredHeadCheck(input)
+  if (!head.write) return { head, infra: null }
   const infra = input.classifyInfra ? await input.classifyInfra(head) : null
   if (ids.length === 0) return { head, infra }
   const patch = headCheckPatch(head, infra, (input.now ?? new Date()).toISOString())

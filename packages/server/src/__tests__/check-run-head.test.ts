@@ -99,22 +99,24 @@ describe('applyHeadCheckRollup', () => {
     })
   })
 
-  it('keeps the event conclusion and does not clear ci_infra when the rollup cannot be read', async () => {
+  it('does not store one failed check when the rollup cannot be read', async () => {
     fetchLatestCheckRun.mockRejectedValue(new Error('github down'))
     const onRollupError = vi.fn()
+    const classifyInfra = vi.fn(async () => STALE_INFRA)
     const { db, queries } = createFakeDb(() => ({ data: null, error: null }))
-    await applyHeadCheckRollup(db as never, ['attempt-1'], 'one', {
+    const out = await applyHeadCheckRollup(db as never, ['attempt-1'], 'one', {
       eventStatus: 'completed',
       eventConclusion: 'failure',
       token: 'ghs_test',
       ref: REF,
       sha: SHA,
       onRollupError,
+      classifyInfra,
     })
     expect(onRollupError).toHaveBeenCalledOnce()
-    const payload = findQueries(queries, 'fix_attempts', 'update')[0]?.payload as Record<string, unknown>
-    expect(payload.check_run_conclusion).toBe('failure')
-    expect(payload).not.toHaveProperty('ci_infra')
+    expect(classifyInfra).not.toHaveBeenCalled()
+    expect(out.head.write).toBe(false)
+    expect(findQueries(queries, 'fix_attempts', 'update')).toHaveLength(0)
   })
 
   it('never stores one passing job as the head success when the rollup cannot be read', async () => {

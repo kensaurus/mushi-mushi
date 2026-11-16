@@ -611,9 +611,10 @@ export interface CheckRunSnapshot {
  *   - Legacy commit statuses count too (Buildkite, CircleCI, Vercel…).
  *   - A run a later re-run of the same check replaced is left out first
  *     (currentCheckRuns), as GitHub's merge state does.
- *   - Check runs from an older Actions run of the same workflow are left
- *     out too. GitHub scores only the newest run per workflow; the list
- *     still includes the older one (report 9e2ec6f0).
+ *   - Check runs from an older Actions run of the same workflow, and from an
+ *     older attempt of a run that kept its id, are left out too. GitHub
+ *     scores only the newest attempt; the list still includes the older one
+ *     (report 9e2ec6f0).
  */
 export async function fetchLatestCheckRun(
   token: string,
@@ -674,6 +675,12 @@ export interface WorkflowRunOnHead {
 
 function actionsRunId(r: CheckRunLike): string | null {
   return r.details_url?.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
+}
+
+/** GitHub Actions checks. Other apps (CircleCI, Buildkite) keep their own suites. */
+function isActionsCheck(r: CheckRunLike): boolean {
+  if ((r.app?.slug ?? '').toLowerCase() === 'github-actions') return true
+  return actionsRunId(r) != null
 }
 
 function actionsRunNumericId(r: CheckRunLike): number | null {
@@ -755,25 +762,53 @@ function workflowRunIsNewer(a: WorkflowRunOnHead, b: WorkflowRunOnHead): boolean
 }
 
 /**
- * Drop check runs that belong to an older Actions run of the same workflow.
- * A check with no Actions run id is kept (another app, or a run we could
- * not place). Two different workflows that share a job name both stay.
+ * Drop check runs that belong to an older Actions run of the same workflow,
+ * and to an older attempt of a run GitHub still lists.
+ *
+ * Re-run failed jobs keeps the run id and opens a new check suite. The runs
+ * list carries only that suite (`check_suite_id` on the latest attempt). The
+ * failed attempt stays on the check-run list, often with a start that overlaps
+ * the green retry, so name-and-time collapse still scores it (report
+ * 9e2ec6f0: the report page stayed "CI failed" while merge state was CLEAN).
+ * An Actions check whose suite is not the current suite of a run we could
+ * place is that older attempt. A check we cannot place (no suite, or not
+ * Actions) stays. If any current run has no suite id, suite filtering is
+ * off: a missing id must not hide that run's checks. Two different workflows
+ * that share a job name both stay, because each one's current suite stays.
  */
 export function withoutSupersededWorkflowRuns<T extends CheckRunLike>(
   checks: readonly T[],
   runs: readonly WorkflowRunOnHead[],
 ): T[] {
   const deadRuns = supersededWorkflowRunIds(runs)
-  if (deadRuns.size === 0) return [...checks]
   const deadSuites = new Set<number>()
+  const liveSuites = new Set<number>()
+  let newestMissingSuite = false
+  const newest = new Map<number, WorkflowRunOnHead>()
+  for (const run of runs) {
+    if (!Number.isSafeInteger(run.id) || run.id <= 0) continue
+    const wf = run.workflow_id
+    if (wf == null || !Number.isSafeInteger(wf) || wf <= 0) continue
+    const prev = newest.get(wf)
+    if (!prev || (prev.id !== run.id && workflowRunIsNewer(run, prev))) newest.set(wf, run)
+  }
+  for (const run of newest.values()) {
+    if (run.check_suite_id != null && run.check_suite_id > 0) liveSuites.add(run.check_suite_id)
+    else newestMissingSuite = true
+  }
   for (const run of runs) {
     if (deadRuns.has(run.id) && run.check_suite_id != null && run.check_suite_id > 0) deadSuites.add(run.check_suite_id)
   }
+  // Only when every current run named its suite. One missing id disables the
+  // filter so that run's checks are not treated as an old attempt.
+  const dropOtherSuites = !newestMissingSuite && liveSuites.size > 0
+  if (deadRuns.size === 0 && deadSuites.size === 0 && !dropOtherSuites) return [...checks]
   return checks.filter((c) => {
     const runId = actionsRunNumericId(c)
     if (runId != null && deadRuns.has(runId)) return false
     const suite = c.check_suite?.id
     if (typeof suite === 'number' && deadSuites.has(suite)) return false
+    if (dropOtherSuites && typeof suite === 'number' && isActionsCheck(c) && !liveSuites.has(suite)) return false
     return true
   })
 }
@@ -806,7 +841,7 @@ async function listWorkflowRunsForHead(token: string, ref: GithubRepoRef, sha: s
   }
 }
 
-/** Check runs minus older Actions runs of the same workflow. A failed runs read keeps every check. */
+/** Check runs minus older Actions runs and older attempts of a run that kept its id. A failed runs read keeps every check. */
 async function withoutSupersededWorkflowRunsFromGithub<T extends CheckRunLike>(
   token: string,
   ref: GithubRepoRef,
@@ -828,12 +863,26 @@ function supersedes(later: CheckRunLike, earlier: CheckRunLike): boolean {
   if ((later.name ?? '') !== (earlier.name ?? '') || !later.name) return false
   if ((later.app?.id ?? later.app?.slug ?? null) !== (earlier.app?.id ?? earlier.app?.slug ?? null)) return false
   const t = (s: string | null | undefined) => (s ? Date.parse(s) : NaN)
-  const laterStart = t(later.started_at)
-  if (!Number.isFinite(laterStart)) return false
   const runA = actionsRunId(later)
   const runB = actionsRunId(earlier)
-  if (runA && runB && runA === runB) return laterStart > t(earlier.started_at) || !Number.isFinite(t(earlier.started_at))
+  const laterDone = t(later.completed_at)
   const earlierDone = t(earlier.completed_at)
+  // One Actions run, a later attempt: the attempt that finished last is the
+  // one GitHub scores. A retry can carry an earlier or missing started_at
+  // (the passed jobs are copied forward with their old times).
+  if (runA && runB && runA === runB) {
+    const laterStart = t(later.started_at)
+    const earlierStart = t(earlier.started_at)
+    const startedLater = Number.isFinite(laterStart) && (laterStart > earlierStart || !Number.isFinite(earlierStart))
+    // Both finished: the attempt that finished last is the one GitHub scores,
+    // even when its started_at was copied from the first try.
+    if (Number.isFinite(laterDone) && Number.isFinite(earlierDone)) return laterDone > earlierDone
+    // Still running: it replaces the finished attempt only when it started after it.
+    if (!Number.isFinite(laterDone) && Number.isFinite(earlierDone)) return startedLater
+    return startedLater
+  }
+  const laterStart = t(later.started_at)
+  if (!Number.isFinite(laterStart)) return false
   return Number.isFinite(earlierDone) && laterStart >= earlierDone
 }
 

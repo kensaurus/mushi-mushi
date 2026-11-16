@@ -121,6 +121,62 @@ describe('collapseCheckRuns', () => {
     expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs))).toEqual({ status: 'completed', conclusion: 'success' })
   })
 
+  it('a re-run of the same Actions run drops the previous check suite (report 9e2ec6f0)', () => {
+    // Re-run failed jobs keeps the run id and opens a new suite. The failed
+    // attempt stays on the list, and its times can overlap or sit after the
+    // green retry, so name-and-time collapse still scores the failure.
+    // GitHub's runs list carries only the latest suite.
+    const checks = [
+      {
+        name: 'Lint, typecheck, build, doctor',
+        status: 'completed',
+        conclusion: 'failure',
+        started_at: '2026-10-26T21:10:00Z',
+        completed_at: '2026-10-26T21:12:00Z',
+        details_url: 'https://github.com/kensaurus/yen-yen/runs/1',
+        check_suite: { id: 10 },
+        app: { slug: 'github-actions' },
+      },
+      {
+        name: 'Lint, typecheck, build, doctor',
+        status: 'completed',
+        conclusion: 'success',
+        started_at: '2026-10-26T20:55:00Z',
+        completed_at: '2026-10-26T21:03:00Z',
+        details_url: 'https://github.com/kensaurus/yen-yen/runs/2',
+        check_suite: { id: 20 },
+        app: { slug: 'github-actions' },
+      },
+    ]
+    expect(collapseCheckRuns(checks).conclusion).toBe('failure')
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: 20, created_at: '2026-10-26T20:50:00Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs))).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('a non-Actions failure stays when its suite is not a workflow run', () => {
+    const checks = [
+      { name: 'circle', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T21:00:00Z', details_url: 'https://circleci.com/gh/o/r/1', check_suite: { id: 99 }, app: { slug: 'circleci' } },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:55:00Z', completed_at: '2026-10-26T21:03:00Z', details_url: 'https://github.com/o/r/actions/runs/100/job/2', check_suite: { id: 20 }, app: { slug: 'github-actions' } },
+    ]
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: 20, created_at: '2026-10-26T20:50:00Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs)).conclusion).toBe('failure')
+  })
+
+  it('does not drop Actions checks by suite when the current run has no check suite id', () => {
+    const checks = [
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T21:10:00Z', completed_at: '2026-10-26T21:12:00Z', details_url: 'https://github.com/o/r/runs/1', check_suite: { id: 10 }, app: { slug: 'github-actions' } },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:55:00Z', completed_at: '2026-10-26T21:03:00Z', details_url: 'https://github.com/o/r/runs/2', check_suite: { id: 20 }, app: { slug: 'github-actions' } },
+    ]
+    const runs = [
+      { id: 100, workflow_id: 7, check_suite_id: null, created_at: '2026-10-26T20:50:00Z' },
+    ]
+    expect(collapseCheckRuns(withoutSupersededWorkflowRuns(checks, runs)).conclusion).toBe('failure')
+  })
+
   it('drops a superseded run by check suite when the job URL has no run id', () => {
     const checks = [
       { name: 'test', status: 'completed', conclusion: 'cancelled', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T21:00:00Z', details_url: 'https://github.com/o/r/runs/1', check_suite: { id: 10 } },
@@ -175,6 +231,13 @@ describe('collapseCheckRuns', () => {
     expect(collapseCheckRuns([
       { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T20:59:00Z', details_url: 'https://github.com/o/r/actions/runs/77/job/1' },
       { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:58:00Z', completed_at: '2026-10-26T21:03:30Z', details_url: 'https://github.com/o/r/actions/runs/77/job/2' },
+    ])).toEqual({ status: 'completed', conclusion: 'success' })
+  })
+
+  it('a same-run retry that finished last replaces the failure even when it started earlier', () => {
+    expect(collapseCheckRuns([
+      { name: 'test', status: 'completed', conclusion: 'failure', started_at: '2026-10-26T21:00:00Z', completed_at: '2026-10-26T21:02:00Z', details_url: 'https://github.com/o/r/actions/runs/77/job/1' },
+      { name: 'test', status: 'completed', conclusion: 'success', started_at: '2026-10-26T20:50:00Z', completed_at: '2026-10-26T21:05:00Z', details_url: 'https://github.com/o/r/actions/runs/77/job/2' },
     ])).toEqual({ status: 'completed', conclusion: 'success' })
   })
 
