@@ -2,7 +2,7 @@
 # Mushi Mushi — .gitattributes
 # =============================================================================
 # Enforce deterministic line endings (LF) across Windows / macOS / Linux,
-# keep generated files out of diffs and language stats, and mark binaries so
+# keep generated files out of language stats, and mark binaries so
 # git never tries to text-merge them.
 
 # --- Default: auto-normalize text, enforce LF on checkin ---------------------
@@ -55,8 +55,10 @@ Makefile    text eol=lf
 *.webm      binary
 
 # --- Linguist overrides (cleaner GitHub language bar) ------------------------
-# Generated lock files: keep in git, keep out of diffs and language stats.
-pnpm-lock.yaml        linguist-generated=true -diff merge=ours
+# Generated lock files: keep in git, keep out of language stats.
+# pnpm-lock.yaml stays a text diff. `-diff` makes `git diff` call it a
+# binary, which hides a security override from review.
+pnpm-lock.yaml        linguist-generated=true merge=ours
 package-lock.json     linguist-generated=true -diff merge=ours
 yarn.lock             linguist-generated=true -diff merge=ours
 
