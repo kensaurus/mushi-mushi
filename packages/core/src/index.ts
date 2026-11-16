@@ -190,7 +190,6 @@ export {
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
 /** @public */
 export { createPiiScrubber, scrubPii, scrubUrl, type PiiScrubberConfig } from './pii-scrubber';
-export { collectDiagnostics, type MushiDiagnosticsProvider } from './diagnostics';
 /** @public */
 export {
   createBreadcrumbBuffer,

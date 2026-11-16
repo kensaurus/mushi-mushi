@@ -62,9 +62,8 @@ import {
   type MushiAssistantReply,
   type MushiPropertyValue,
   type MushiApiResponse,
-  collectDiagnostics,
-  type MushiDiagnosticsProvider,
 } from '@mushi-mushi/core'
+import { collectDiagnostics, type MushiDiagnosticsProvider } from '@mushi-mushi/core/diagnostics'
 import {
   reporterChannels,
   type MushiReporterNotificationPrefs,

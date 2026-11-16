@@ -42,9 +42,9 @@ import {
   shouldDropCapturedError,
   markPageUnloading,
   flushLastOutboundOnUnload,
-  collectDiagnostics,
-  type MushiDiagnosticsProvider,
 } from '@mushi-mushi/core';
+// Its own entry: the core bundle has a size limit, and apps without a provider skip it.
+import { collectDiagnostics, type MushiDiagnosticsProvider } from '@mushi-mushi/core/diagnostics';
 
 import { MushiWidget } from './widget';
 import { deviceHasReports, markDeviceHasReports, recordToastShown, toastAllowed } from './reporter-inbox';

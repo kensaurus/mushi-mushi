@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/reporter-ui.ts', 'src/reporter-channels.ts'],
+  entry: ['src/index.ts', 'src/reporter-ui.ts', 'src/reporter-channels.ts', 'src/diagnostics.ts'],
   format: ['esm', 'cjs'],
   dts: true,
   sourcemap: true,

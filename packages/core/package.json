@@ -37,6 +37,16 @@
         "types": "./dist/reporter-channels.d.cts",
         "default": "./dist/reporter-channels.cjs"
       }
+    },
+    "./diagnostics": {
+      "import": {
+        "types": "./dist/diagnostics.d.ts",
+        "default": "./dist/diagnostics.js"
+      },
+      "require": {
+        "types": "./dist/diagnostics.d.cts",
+        "default": "./dist/diagnostics.cjs"
+      }
     }
   },
   "typesVersions": {
@@ -46,6 +56,9 @@
       ],
       "reporter-channels": [
         "./dist/reporter-channels.d.ts"
+      ],
+      "diagnostics": [
+        "./dist/diagnostics.d.ts"
       ]
     }
   },
