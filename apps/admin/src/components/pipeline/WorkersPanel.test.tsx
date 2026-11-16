@@ -2,9 +2,11 @@
  * @vitest-environment jsdom
  *
  * /pipeline Workers tab (ADR 0048): machines, lanes and queues from
- * GET /v1/admin/work/lanes; pausing a lane sends only `paused`; moving a
- * queue item sends the whole new order; the empty state shows the install
- * command; "Send to my local worker" appends to the only lane; the pipeline's
+ * GET /v1/admin/work/lanes; pausing a lane sends only `paused`; moving or
+ * removing a queued report sends that one report (POST …/queue/move), never
+ * the whole list; pasted ids go to the top or the end; the empty state shows
+ * the install command; "Send to my local worker" puts the report at the top
+ * of the only lane (fix next); the pipeline's
  * Requeue posts local worker run ids as claimIds. P3 modes: the mode menu
  * offers all five, an audit lane sets its veto model, and a conflict or audit
  * run shows as text (it holds no report).
@@ -158,19 +160,26 @@ describe('WorkersPanel', () => {
     expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1', method: 'PATCH', body: { paused: true } }])
   })
 
-  it('moving a queued report down sends the whole new order', async () => {
+  it('moving a queued report sends only that report and where it goes', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     await click(q('worker-lane-l1-queue-r1-down'))
-    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ['r2', 'r1'] } }])
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue/move', method: 'POST', body: { reportId: 'r1', to: 'down' } }])
   })
 
-  it('removing a queued report sends the rest', async () => {
+  it('Top moves a report to the top; the first report cannot move up', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect((q('worker-lane-l1-queue-r1-top') as HTMLButtonElement).disabled).toBe(true)
+    await click(q('worker-lane-l1-queue-r2-top'))
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue/move', method: 'POST', body: { reportId: 'r2', to: 'top' } }])
+  })
+
+  it('removing a queued report sends only that report', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     await click(q('worker-lane-l1-queue-r2-remove'))
-    expect(state.calls[0]).toEqual({ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ['r1'] } })
+    expect(state.calls[0]).toEqual({ path: '/v1/admin/work/lanes/l1/queue/move', method: 'POST', body: { reportId: 'r2', to: 'remove' } })
   })
 
-  it('pasted report ids (a lane-v4 queue file) are added at the end of the queue', async () => {
+  it('pasted report ids (a lane-v4 queue file) go to the end, or to the top', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     const input = q('worker-lane-l1-add') as HTMLInputElement
     const ids = ['2000000a-0000-4000-8000-000000000000', '2000000b-0000-4000-8000-000000000000']
@@ -180,7 +189,7 @@ describe('WorkersPanel', () => {
 ${ids[1]} ${ids[0]}`)
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    expect(q('worker-lane-l1-add-save')!.textContent).toContain('Add 2')
+    expect(q('worker-lane-l1-add-top')!.textContent).toContain('Add 2 to top')
     await click(q('worker-lane-l1-add-save'))
     expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ids, append: true } }])
   })
@@ -248,11 +257,11 @@ describe('lane modes (P3)', () => {
 })
 
 describe('SendToWorkerButton', () => {
-  it('appends the report to your only lane for the app', async () => {
+  it('puts the report at the top of your only lane for the app (fix next)', async () => {
     await render(createElement(SendToWorkerButton, { projectId: 'p1', reportIds: ['r7'] }))
     expect(state.paths[0]).toBe('/v1/admin/work/lanes?projectId=p1')
     await click(q('send-to-worker'))
-    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ['r7'], append: true } }])
+    expect(state.calls).toEqual([{ path: '/v1/admin/work/lanes/l1/queue', method: 'PUT', body: { reportIds: ['r7'], front: true } }])
   })
 
   it('is hidden when you have no lane for the app', async () => {

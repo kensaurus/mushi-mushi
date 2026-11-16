@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-13 · **810** routes.
+> Generated: 2026-11-16 · **811** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 221 |
 | `apiKeyAuth` | 59 |
-| `jwtAuth` | 411 |
+| `jwtAuth` | 412 |
 | `jwtOrApiKey` | 2 |
 | `public` | 66 |
 | `unknown` | 51 |
@@ -659,6 +659,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/work/lanes` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PATCH | `/v1/admin/work/lanes/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PUT | `/v1/admin/work/lanes/:id/queue` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/admin/work/lanes/:id/queue/move` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | GET | `/v1/admin/work/stats` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work-status.ts` |
 | GET | `/v1/admin/workspace/projects` | `unknown` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.ts` |
 | GET | `/v1/agent-card` | `public` | `packages/server/supabase/functions/api/routes/discovery.ts` |

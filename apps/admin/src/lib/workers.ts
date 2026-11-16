@@ -313,14 +313,47 @@ export function reportIdsIn(text: string): string[] {
   return [...new Set((text.match(REPORT_ID_RE) ?? []).map((id) => id.toLowerCase()))]
 }
 
-export async function putQueue(laneId: string, reportIds: string[], append = false): Promise<WriteResult> {
-  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`, {
+/** Where added reports go: `top` = fixed next (an already-queued one moves up), `end` = after the rest. */
+export type QueueAdd = 'top' | 'end'
+/** One queued report's move (POST …/queue/move). */
+export type QueueMove = 'top' | 'up' | 'down' | 'bottom' | 'remove'
+/** Report ids one queue request may carry (the server's QUEUE_REQUEST_MAX). */
+export const QUEUE_REQUEST_MAX = 50
+
+const queuePath = (laneId: string) => `/v1/admin/work/lanes/${encodeURIComponent(laneId)}/queue`
+const reportsWord = (n: number) => (n === 1 ? 'the report' : `${n} reports`)
+
+/** Plain words for what an add did, from the server's counts (added, moved, skipped as already closed). */
+export function queueAddMessage(add: QueueAdd, counts: { added?: number; moved?: number; skippedClosed?: number }): string {
+  const added = counts.added ?? 0
+  const moved = counts.moved ?? 0
+  const parts: string[] = []
+  if (added) parts.push(add === 'top' ? `Put ${reportsWord(added)} at the top of the queue.` : `Added ${reportsWord(added)} to the end of the queue.`)
+  if (moved) parts.push(add === 'top' ? `Moved ${moved === 1 ? 'one already queued' : `${moved} already queued`} to the top.` : `${moved === 1 ? 'One was' : `${moved} were`} already queued.`)
+  if (counts.skippedClosed) parts.push(`Skipped ${counts.skippedClosed} already fixed or dismissed.`)
+  return parts.join(' ') || 'Nothing changed.'
+}
+
+/** Add reports to a lane's queue (`add`), or replace the whole queue with this list (no `add`). */
+export async function putQueue(laneId: string, reportIds: string[], add?: QueueAdd): Promise<WriteResult> {
+  const res = await apiFetch<{ laneId: string; reportIds: string[]; added?: number; moved?: number; skippedClosed?: number }>(queuePath(laneId), {
     method: 'PUT',
     scope: 'enumeration',
-    body: JSON.stringify(append ? { reportIds, append: true } : { reportIds }),
+    body: JSON.stringify(add === 'top' ? { reportIds, front: true } : add === 'end' ? { reportIds, append: true } : { reportIds }),
   })
   if (!res.ok) return fail(res)
-  return { ok: true, message: append ? `Sent ${reportIds.length === 1 ? 'the report' : `${reportIds.length} reports`} to the lane's queue.` : 'Queue saved.' }
+  return { ok: true, message: add ? queueAddMessage(add, res.data ?? {}) : 'Queue saved.' }
+}
+
+/** Move one queued report, or take it out. Writes one or two rows, so it works on a queue of any length. */
+export async function moveQueueItem(laneId: string, reportId: string, to: QueueMove): Promise<WriteResult> {
+  const res = await apiFetch<{ laneId: string; reportIds: string[] }>(`${queuePath(laneId)}/move`, {
+    method: 'POST',
+    scope: 'enumeration',
+    body: JSON.stringify({ reportId, to }),
+  })
+  if (!res.ok) return fail(res)
+  return { ok: true, message: to === 'remove' ? 'Removed from the queue.' : to === 'top' ? 'Moved to the top: the lane takes it next.' : 'Queue saved.' }
 }
 
 export async function patchHostGuards(hostId: string, guards: Partial<HostGuards>): Promise<WriteResult> {
@@ -374,14 +407,4 @@ export async function createWorkerKey(projectIds: string[], label: string): Prom
   })
   if (!res.ok || !res.data?.key) return { ok: false, message: res.error?.message ?? 'The key was not created.' }
   return { ok: true, key: res.data.key }
-}
-
-/** Move one item of a list up (-1) or down (+1); out of range leaves it as it is. */
-export function moveItem<T>(list: readonly T[], index: number, by: -1 | 1): T[] {
-  const to = index + by
-  if (to < 0 || to >= list.length) return [...list]
-  const next = [...list]
-  const [x] = next.splice(index, 1)
-  next.splice(to, 0, x!)
-  return next
 }
