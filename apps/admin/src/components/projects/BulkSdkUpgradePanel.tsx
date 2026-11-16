@@ -62,6 +62,23 @@ export interface BulkUpgradeProject {
 
 const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running', 'awaiting_lockfile']
 
+/**
+ * A finished job that did not bump this project's SDK to the latest release: it
+ * belongs to an older version. Every row kept its October job and showed
+ * "PR ready · Deploying…" with only Refresh PR, so a newer SDK (0.24.7, the
+ * lost-reports fix) could not be opened from here (2026-11-16).
+ * @internal Exported for tests only.
+ */
+export function upgradeJobSuperseded(
+  plan: Array<{ package: string; to: string }> | undefined,
+  project: Pick<BulkUpgradeProject, 'sdk_package' | 'sdk_latest_version'>,
+): boolean {
+  const latest = project.sdk_latest_version
+  if (!latest || !plan?.length) return false
+  const mine = plan.find((b) => b.package === project.sdk_package)
+  return !mine || mine.to !== latest
+}
+
 // ---------------------------------------------------------------------------
 // Per-row live status pill (mirrors ConnectPage UpgradeStatusIndicator).
 // ---------------------------------------------------------------------------
@@ -285,14 +302,18 @@ function BulkUpgradeRow({
   const lastSyncToken = useRef(0)
   const lastMergeToken = useRef(0)
 
-  // Report status up so the panel header can summarise progress.
+
+  const superseded = state.status === 'completed' && upgradeJobSuperseded(state.plan, project)
+
+  // Report status up so the panel header can summarise progress. A superseded
+  // job counts as not started, so "Open PRs (N)" includes the row.
   useEffect(() => {
-    onStatus(project.id, state.status)
-  }, [project.id, state.status, onStatus])
+    onStatus(project.id, superseded ? 'idle' : state.status)
+  }, [project.id, state.status, onStatus, superseded])
 
   // Report release metadata for panel-level Refresh all / Merge all ready.
   useEffect(() => {
-    if (state.status === 'completed' && state.prUrl && state.jobId) {
+    if (state.status === 'completed' && state.prUrl && state.jobId && !superseded) {
       onReleaseMeta(project.id, {
         releaseStatus: state.releaseStatus,
         jobId: state.jobId,
@@ -312,6 +333,7 @@ function BulkUpgradeRow({
     state.checkRunConclusion,
     state.deployUrl,
     onReleaseMeta,
+    superseded,
   ])
 
   // Fire when the "Open PRs" button bumps the shared runToken — skip rows that
@@ -319,10 +341,10 @@ function BulkUpgradeRow({
   useEffect(() => {
     if (runToken === 0 || runToken === lastRunToken.current) return
     lastRunToken.current = runToken
-    if (state.status === 'completed' && state.prUrl) return
-    if (state.status !== 'idle' && state.status !== 'failed') return
+    if (state.status === 'completed' && state.prUrl && !superseded) return
+    if (state.status !== 'idle' && state.status !== 'failed' && !superseded) return
     void createUpgradePr()
-  }, [runToken, state.status, state.prUrl, createUpgradePr])
+  }, [runToken, state.status, state.prUrl, createUpgradePr, superseded])
 
   // Panel-level Refresh all — sync CI / deploy for every open PR row.
   useEffect(() => {
@@ -342,8 +364,8 @@ function BulkUpgradeRow({
 
   const inFlight = IN_FLIGHT.includes(state.status)
   const signalConflict = catalogPrSignalsConflict(project, state.status)
-  const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl)
-  const showOpenAction = inFlight || state.status === 'idle' || state.status === 'failed'
+  const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl) && !superseded
+  const showOpenAction = inFlight || state.status === 'idle' || state.status === 'failed' || superseded
   const showRefreshAction = hasOpenPr && !inFlight
 
   return (
@@ -358,7 +380,7 @@ function BulkUpgradeRow({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <FreshnessChip project={project} upgradeStatus={state.status} />
-          {state.status !== 'idle' && (
+          {state.status !== 'idle' && !superseded && (
             <RowStatus
               status={state.status}
               prUrl={state.prUrl}
@@ -422,7 +444,7 @@ function BulkUpgradeRow({
       )}
 
       {/* Compact release hint — full actions live in the panel header */}
-      {state.status === 'completed' && state.prUrl && state.releaseStatus && (
+      {state.status === 'completed' && state.prUrl && state.releaseStatus && !superseded && (
         <div className="mt-1">
           <ReleaseStatusPill
             releaseStatus={state.releaseStatus}

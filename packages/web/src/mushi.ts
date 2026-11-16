@@ -42,6 +42,8 @@ import {
   shouldDropCapturedError,
   markPageUnloading,
   flushLastOutboundOnUnload,
+  collectDiagnostics,
+  type MushiDiagnosticsProvider,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -583,6 +585,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   // calls identify() on every focus / visibilitychange / auth re-check.
   let lastIdentifySig: string | null = null;
   const customMetadata: Record<string, unknown> = {};
+  let diagnosticsProvider: MushiDiagnosticsProvider | null = null;
   // Sticky tags applied to every subsequent report. Cleared by
   // `clearTag()` (single key) or `clearTag()` with no args (all keys).
   // We coerce to scalar values at insert time so the wire format is
@@ -1470,6 +1473,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
 
     const capturedEnvironment = captureEnvironment();
+    // Read now, when the reporter presses Send (setDiagnosticsProvider).
+    const hostDiagnostics = await collectDiagnostics(diagnosticsProvider);
 
     const report: MushiReport = {
       id: newUuid(),
@@ -1490,6 +1495,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         : {}),
       metadata: {
         ...customMetadata,
+        ...(hostDiagnostics ?? {}),
         ...(userInfo ? { user: userInfo } : {}),
         ...(sentryCtx?.release ? { sentryRelease: sentryCtx.release } : {}),
       },
@@ -1732,6 +1738,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     setMetadata(key, value) {
       customMetadata[key] = value;
+    },
+
+    setDiagnosticsProvider(provider) {
+      diagnosticsProvider = provider;
     },
 
     setScreen(screen) {
@@ -2517,6 +2527,7 @@ function createNoopInstance(): MushiSDKInstance {
     on: () => () => {},
     setUser: () => {},
     setMetadata: () => {},
+    setDiagnosticsProvider: () => {},
     setScreen: () => {},
     isOpen: () => false,
     open: () => {},
