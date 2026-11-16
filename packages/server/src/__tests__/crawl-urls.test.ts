@@ -72,6 +72,26 @@ describe('pickCrawlUrls', () => {
     ])
   })
 
+  it('canonicalizes markdown and text mirrors and spreads pages across sections', () => {
+    const base = 'https://lets-talk.example'
+    const links = [
+      `${base}/docs/a.md`,
+      `${base}/docs/a`,
+      `${base}/docs/b.txt`,
+      `${base}/docs/c`,
+      `${base}/docs/d`,
+      `${base}/pricing`,
+      `${base}/blog/hello.md`,
+    ]
+    expect(pickCrawlUrls(links, base, 5)).toEqual([
+      `${base}/`,
+      `${base}/docs/a`,
+      `${base}/pricing`,
+      `${base}/blog/hello`,
+      `${base}/docs/b`,
+    ])
+  })
+
   it('caps at maxPages and always includes the start page', () => {
     const many = Array.from({ length: 30 }, (_, i) => `https://a.example/p${i}`)
     const picked = pickCrawlUrls(many, 'https://a.example', 5)

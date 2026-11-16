@@ -51,7 +51,7 @@ describe('per-minute edge crons fire only when there is work', () => {
   it('checks QA stories the way the runner does, and never skips a run it would make', () => {
     // Null schedule is */15 in the runner too; unknown cron syntax fires.
     expect(sql).toContain("coalesce(s.schedule_cron, '*/15 * * * *')")
-    expect(fn('qa-story-runner/index.ts')).toContain("s.schedule_cron ?? '*/15 * * * *'")
+    expect(fn('qa-story-runner/schedule.ts')).toContain('*/15 * * * *')
     expect(sql).toMatch(/else true\s+end/)
     // Abandoned manual runs: same 10 minutes as ABANDONED_MANUAL_RUN_MS.
     expect(sql).toContain("r.started_at < p_now - interval '10 minutes'")
@@ -71,7 +71,8 @@ describe('per-minute edge crons fire only when there is work', () => {
     expect(tickSql).toContain("jsonb_build_object('trigger', 'cron', 'tick', date_trunc('minute', now()))")
     expect(tickSql).toContain("where mushi.qa_story_runner_has_work(date_trunc('minute', now()));")
     expect(fn('qa-story-runner/index.ts')).toContain('const matchAt = cronTickTime(body.tick, now)')
-    expect(fn('qa-story-runner/index.ts')).toContain("cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)")
+    expect(fn('qa-story-runner/index.ts')).toContain('selectDueStories(')
+    expect(fn('qa-story-runner/schedule.ts')).toContain('cronMatches(')
 
     const { cronTickTime } = await import('../../supabase/functions/qa-story-runner/cron-tick.ts')
     const now = new Date('2026-11-11T09:50:20Z')

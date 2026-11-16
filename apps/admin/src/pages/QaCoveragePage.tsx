@@ -48,6 +48,7 @@ import {
   type QaCoverageFilter,
 } from '../lib/qaCoverageFilter'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { LOCAL_PROVIDER_SCHEDULE_NOTE } from '../lib/qaProviderGuide'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
 import { CreateStoryModal } from '../components/qa-coverage/CreateStoryModal'
@@ -225,6 +226,9 @@ export function StoryCard({
           >
             {PROVIDER_LABEL[coverage.browser_provider] ?? coverage.browser_provider}
           </span>
+          {coverage.browser_provider === 'local' && (
+            <p className="text-3xs text-fg-muted leading-snug">{LOCAL_PROVIDER_SCHEDULE_NOTE}</p>
+          )}
         </div>
 
         {onRunNow ? (
@@ -589,6 +593,9 @@ function StoryDrawer({
           >
             {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
           </span>
+          {story.browser_provider === 'local' && (
+            <span className="text-3xs text-fg-muted">{LOCAL_PROVIDER_SCHEDULE_NOTE}</span>
+          )}
           {story.schedule_cron && (
             <span className="inline-flex items-center gap-1 text-3xs font-mono text-fg-faint">
               <IconClock className="h-2.5 w-2.5" />

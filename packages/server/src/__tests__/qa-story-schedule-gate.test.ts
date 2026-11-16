@@ -37,11 +37,13 @@ describe('qa-story-runner cron selection', () => {
     expect(query).toContain(".eq('approval_status', 'approved')")
 
     const due = runnerSrc.slice(
-      runnerSrc.indexOf('const dueStories'),
+      runnerSrc.indexOf('const matchAt'),
       runnerSrc.indexOf('if (dueStories.length === 0)'),
     )
     expect(due).toContain('isApprovedForSchedule(s)')
-    expect(due).toContain("cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)")
+    expect(due).toContain('isEdgeSchedulable(s)')
+    expect(due).toContain('selectDueStories(')
+    expect(due).toContain('matchAt')
   })
 
   it('leaves a manual run outside the approval gate', () => {

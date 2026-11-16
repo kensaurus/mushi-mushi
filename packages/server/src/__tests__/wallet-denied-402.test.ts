@@ -148,6 +148,23 @@ describe('a wallet refusal is a 402, not a 500', () => {
     expect(failed?.row.error_message).toBe('wallet denied: insufficient')
   })
 
+  it('returns 202 and records the refusal after waitUntil', async () => {
+    const jobs: Promise<unknown>[] = []
+    vi.stubGlobal('EdgeRuntime', {
+      waitUntil: (p: Promise<unknown>) => {
+        jobs.push(p)
+      },
+    })
+    await import('../../supabase/functions/story-mapper/index.ts')
+    const res = await h.served!(post({ run_id: 'run-1', project_id: 'p1', base_url: 'https://app.example.com' }))
+    expect(res.status).toBe(202)
+    const json = await res.json() as { ok: boolean; accepted: boolean }
+    expect(json).toMatchObject({ ok: true, accepted: true, run_id: 'run-1' })
+    await Promise.all(jobs)
+    const failed = h.updates.find((u) => u.table === 'story_map_runs' && u.row.status === 'failed')
+    expect(failed?.row.error_message).toBe('wallet denied: insufficient')
+  })
+
   it('inventory-propose answers 402', async () => {
     await import('../../supabase/functions/inventory-propose/index.ts')
     expect(h.served).toBeTypeOf('function')

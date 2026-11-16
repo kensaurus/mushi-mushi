@@ -40,5 +40,9 @@ export const QA_PROVIDER_DEFINITIONS: QaProviderDefinition[] = [
   },
 ]
 
+/** Shown on a local story: the cloud cron does not run it. */
+export const LOCAL_PROVIDER_SCHEDULE_NOTE =
+  'Runs only through mushi qa run on your machine. The cloud schedule skips this story.'
+
 export const QA_COVERAGE_EXPLAINER_SUMMARY =
   'Each QA story is a user-flow test that runs on a schedule. Pick Firecrawl for quick smoke checks, Browserbase for full browser flows in the cloud, or local Playwright when you need maximum control.'

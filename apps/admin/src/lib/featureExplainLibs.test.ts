@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { QA_PROVIDER_DEFINITIONS } from './qaProviderGuide'
+import { LOCAL_PROVIDER_SCHEDULE_NOTE, QA_PROVIDER_DEFINITIONS } from './qaProviderGuide'
 import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from './reportsExplainer'
 import { INBOX_PDCA_STAGES } from './inboxExplainer'
 import { EXPLORE_ATLAS_TABS } from './exploreExplainer'
@@ -19,6 +19,7 @@ import { PDCA_STAGES } from './pdca'
 describe('qaProviderGuide', () => {
   it('resolves known providers', () => {
     expect(QA_PROVIDER_DEFINITIONS.find((p) => p.id === 'browserbase')?.label).toMatch(/Browserbase/)
+    expect(LOCAL_PROVIDER_SCHEDULE_NOTE).toContain('mushi qa run')
   })
 })
 

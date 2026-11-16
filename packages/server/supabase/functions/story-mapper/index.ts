@@ -12,7 +12,9 @@
  * Result: Write an inventory_proposals row (source='live_crawl') so the
  *         existing ProposalReviewModal flow handles review + accept.
  *
- * Triggered via POST /v1/admin/inventory/:pid/map-from-live
+ * Triggered via POST /v1/admin/inventory/:pid/map-from-live.
+ * The crawl and the model call run after a 202 (EdgeRuntime.waitUntil) so
+ * the gateway's ~150s idle limit does not turn a long map into a 504.
  */
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -185,6 +187,12 @@ Deno.serve(
       )
     }
 
+    // Crawl + model stay off the request that the gateway times out at ~150s.
+    // The story_map_runs row is already inserted by map-from-live. With
+    // EdgeRuntime.waitUntil the handler returns 202 and this promise keeps
+    // running. Without it (tests, local serve) the caller still gets the
+    // finished status, including a wallet 402.
+    const runMap = async (): Promise<Response> => {
     // Mark run as running
     await db.from('story_map_runs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', run_id)
 
@@ -427,5 +435,22 @@ Deno.serve(
         { status: 500, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    }
+
+    const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+    if (edgeRuntime && typeof edgeRuntime.waitUntil === 'function') {
+      edgeRuntime.waitUntil(
+        runMap().then((res) => {
+          if (!res.ok) log.warn('story-mapper background finished non-2xx', { run_id, status: res.status })
+        }).catch((err) => {
+          log.error('story-mapper background crashed', { run_id, error: String(err).slice(0, 300) })
+        }),
+      )
+      return new Response(
+        JSON.stringify({ ok: true, accepted: true, run_id }),
+        { status: 202, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+    return await runMap()
   }),
 )

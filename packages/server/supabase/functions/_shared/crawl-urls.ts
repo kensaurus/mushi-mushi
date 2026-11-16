@@ -5,6 +5,9 @@
  *          (/en/preface, /ja/preface, /zh/preface, …) plus sitemap.xml, so a
  *          15-page crawl of the-wanting-mind covered about four screens
  *          (2026-10-10). Files are skipped and each page is kept once.
+ *          Markdown and text mirrors (/docs/a.md, /docs/a.txt) are the same
+ *          page as /docs/a. Sections take turns so one prefix cannot fill
+ *          the page budget.
  */
 
 /** Language prefixes the apps use; a two-letter route outside this list is kept. */
@@ -14,7 +17,9 @@ const LOCALES = new Set([
   'zh-cn', 'zh-tw', 'zh-hk', 'zh-hans', 'zh-hant', 'pt-br', 'en-us', 'en-gb', 'es-mx',
 ]);
 
-const FILE_RE = /\.(?:xml|txt|json|pdf|png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|zip|webmanifest)$/i;
+const FILE_RE = /\.(?:xml|json|pdf|png|jpe?g|gif|svg|webp|avif|ico|css|js|mjs|map|zip|webmanifest)$/i;
+/** Raw mirrors of an HTML page. Scraped as the unsuffixed URL, then deduped. */
+const MIRROR_RE = /\.(?:md|txt)$/i;
 
 interface Candidate {
   url: string;
@@ -35,6 +40,10 @@ function candidate(link: string, base: URL, basePath: string): Candidate | null 
   // apex for a site served from www got a 1-page crawl (review 2026-10-10).
   const sameSite = (h: string) => h.toLowerCase().replace(/^www\./, '');
   if (sameSite(u.host) !== sameSite(base.host)) return null;
+  u.pathname = u.pathname.replace(/\/+$/, '') || '/';
+  if (MIRROR_RE.test(u.pathname)) {
+    u.pathname = u.pathname.replace(MIRROR_RE, '') || '/';
+  }
   const path = u.pathname.replace(/\/+$/, '') || '/';
   if (basePath && path !== basePath && !path.startsWith(`${basePath}/`)) return null;
   if (FILE_RE.test(path)) return null;
@@ -52,10 +61,15 @@ function candidate(link: string, base: URL, basePath: string): Candidate | null 
   };
 }
 
+function sectionOf(key: string): string {
+  return key.split('/').filter(Boolean)[0]?.toLowerCase() ?? '';
+}
+
 /**
- * Up to `maxPages` URLs, one per page: the start URL first, then the map's
- * order. For a page found in several languages, the unprefixed or English
- * copy is kept.
+ * Up to `maxPages` URLs, one per page: the start URL first, then one URL
+ * from each first path segment in turn (so /docs cannot fill the budget).
+ * For a page found in several languages, the unprefixed or English copy
+ * is kept. .md/.txt mirrors collapse onto the unsuffixed URL.
  */
 export function pickCrawlUrls(links: string[], baseUrl: string, maxPages: number): string[] {
   const base = new URL(baseUrl);
@@ -68,5 +82,33 @@ export function pickCrawlUrls(links: string[], baseUrl: string, maxPages: number
     // Map keeps first-insertion order, so a better copy keeps its page's place.
     if (!seen || c.rank < seen.rank) best.set(c.key, c);
   }
-  return [...best.values()].slice(0, Math.max(1, maxPages)).map((c) => c.url);
+  const ranked = [...best.values()];
+  const cap = Math.max(1, maxPages);
+  const start = ranked[0];
+  const buckets: Candidate[][] = [];
+  const bySection = new Map<string, Candidate[]>();
+  for (const c of ranked.slice(1)) {
+    const section = sectionOf(c.key);
+    let bucket = bySection.get(section);
+    if (!bucket) {
+      bucket = [];
+      bySection.set(section, bucket);
+      buckets.push(bucket);
+    }
+    bucket.push(c);
+  }
+  const picked: Candidate[] = [];
+  if (start) picked.push(start);
+  let moved = true;
+  while (picked.length < cap && moved) {
+    moved = false;
+    for (const bucket of buckets) {
+      if (picked.length >= cap) break;
+      const next = bucket.shift();
+      if (!next) continue;
+      picked.push(next);
+      moved = true;
+    }
+  }
+  return picked.map((c) => c.url);
 }

@@ -17,9 +17,8 @@
 //      API to create a session and delegate to a pre-deployed script
 //      stored in the story's `script` column (Browserbase executes it
 //      on their cloud Chromium via the Stagehand / Playwright bridge).
-//   3. For `local` provider stories: marks status='skipped' with a
-//      reason that the local provider requires the CLI runner. The
-//      operator's local mushi-dev server picks these up via long-polling.
+//   3. For `local` provider stories: the cron path does not select them
+//      and does not write a run row. They run only through `mushi qa run`.
 //
 // Cron
 // ────
@@ -35,10 +34,10 @@
 //
 // Rate limits
 // ───────────
-// Per-project concurrency is capped at MAX_CONCURRENT_PER_PROJECT
-// to prevent a user with 100 stories from monopolising edge function
-// compute. Stories are queued as FIFO; skipped ones get a 'skipped'
-// run row with the reason.
+// Per-project concurrency is capped at MAX_CONCURRENT_PER_PROJECT.
+// Stories past the cap are not started and get no run row, so they stay
+// due. The next tick picks them up, oldest last real run first
+// (schedule.ts, DUE_CARRY_MINUTES).
 // ============================================================
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
@@ -56,6 +55,7 @@ import { safeFetch } from '../_shared/inventory-guards.ts'
 import { monitorScrapeBody } from '../_shared/monitor-url.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
 import { cronTickTime, isApprovedForSchedule } from './cron-tick.ts'
+import { DUE_CARRY_MINUTES, isEdgeSchedulable, selectDueStories, storyIsDue } from './schedule.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -96,32 +96,6 @@ interface RunResult {
   provider_session_url: string | null
   error_message: string | null
   evidence: Array<{ kind: string; data: string; mime: string; step_label?: string }>
-}
-
-// ── Cron matching ─────────────────────────────────────────────────────────
-function cronMatches(expression: string, now: Date): boolean {
-  // Minimal 5-field cron matcher (min, hour, dom, month, dow).
-  // We only need minute-level precision for story scheduling.
-  const fields = expression.trim().split(/\s+/)
-  if (fields.length < 5) return true // invalid → always run
-
-  function matchField(field: string, val: number): boolean {
-    if (field === '*') return true
-    if (field.startsWith('*/')) {
-      const step = parseInt(field.slice(2), 10)
-      return step > 0 && val % step === 0
-    }
-    return field.split(',').some((v) => parseInt(v, 10) === val)
-  }
-
-  const [min, hour, dom, mon, dow] = fields
-  return (
-    matchField(min, now.getUTCMinutes()) &&
-    matchField(hour, now.getUTCHours()) &&
-    matchField(dom, now.getUTCDate()) &&
-    matchField(mon, now.getUTCMonth() + 1) &&
-    matchField(dow, now.getUTCDay())
-  )
 }
 
 // ── Target URL resolution ─────────────────────────────────────────────────
@@ -670,6 +644,34 @@ async function executeManualRun(
   return new Response(JSON.stringify({ ok: true, status: result.status }), { status: 200 })
 }
 
+/** Newest non-skipped start per story. A full page means the read was cut off. */
+const LAST_RUN_ROW_CAP = 1000
+
+async function loadLastRealRuns(
+  db: SupabaseClient,
+  ids: string[],
+): Promise<{ byId: Map<string, string>; complete: boolean }> {
+  const byId = new Map<string, string>()
+  if (ids.length === 0) return { byId, complete: true }
+  const { data, error } = await db
+    .from('qa_story_runs')
+    .select('story_id, started_at')
+    .in('story_id', ids)
+    .neq('status', 'skipped')
+    .order('started_at', { ascending: false })
+    .limit(LAST_RUN_ROW_CAP)
+  if (error || !data) {
+    rlog.warn('last-run lookup failed; this tick uses the current minute only', {
+      err: error?.message ?? 'no rows',
+    })
+    return { byId, complete: false }
+  }
+  for (const row of data as Array<{ story_id: string; started_at: string }>) {
+    if (!byId.has(row.story_id)) byId.set(row.story_id, row.started_at)
+  }
+  return { byId, complete: data.length < LAST_RUN_ROW_CAP }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────
 Deno.serve(
   withSentry('qa-story-runner', async (req: Request) => {
@@ -760,15 +762,31 @@ Deno.serve(
     // time: the tick only calls when a story is due that minute, so a call
     // pg_net delivers a minute late must not miss it.
     const matchAt = cronTickTime(body.tick, now)
-    const dueStories = (stories ?? []).filter((s: QaStory) =>
-      isApprovedForSchedule(s) &&
-      cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)
+    // Explicit local stories run only through `mushi qa run` and get no
+    // row. A missing provider stays (isEdgeSchedulable). Overflow past
+    // the per-project cap is omitted, not marked skipped, and stays due
+    // for the carry window, oldest last real run first.
+    const schedulable = (stories ?? []).filter((s: QaStory) =>
+      isApprovedForSchedule(s) && isEdgeSchedulable(s),
+    )
+    const maybeDue = schedulable.filter((s) =>
+      storyIsDue(s.schedule_cron, matchAt, null, DUE_CARRY_MINUTES),
+    )
+    const lastRuns = await loadLastRealRuns(db, maybeDue.map((s) => s.id))
+    const dueStories = selectDueStories(
+      maybeDue.map((s) => ({
+        ...s,
+        last_run_at: lastRuns.byId.get(s.id) ?? null,
+      })),
+      matchAt,
+      MAX_CONCURRENT_PER_PROJECT,
+      lastRuns.complete ? DUE_CARRY_MINUTES : 0,
     )
 
     // Nothing due this minute: answer before writing a cron_runs row. The
     // pg_cron job only calls when mushi.qa_story_runner_has_work() says a
     // story may be due (2026-11-11 cost audit), so this is the rare tick
-    // where its looser check and cronMatches disagree.
+    // where its looser cron check and storyIsDue disagree.
     if (dueStories.length === 0) {
       rlog.info('no stories due', { total: stories?.length ?? 0 })
       return new Response(JSON.stringify({ ok: true, data: { due: 0, abandoned } }), {
@@ -791,24 +809,10 @@ Deno.serve(
     try {
       rlog.info('stories due', { total: stories?.length ?? 0, due: dueStories.length })
 
-      // Rate-limit by project
-      const projectCounts: Record<string, number> = {}
-
       for (const story of dueStories) {
         const pid = story.project_id
-        projectCounts[pid] = (projectCounts[pid] ?? 0) + 1
-        if (projectCounts[pid] > MAX_CONCURRENT_PER_PROJECT) {
-          // Write a skipped run
-          await db.from('qa_story_runs').insert({
-            story_id: story.id,
-            project_id: pid,
-            status: 'skipped',
-            latency_ms: 0,
-            summary: `Rate limited: max ${MAX_CONCURRENT_PER_PROJECT} concurrent stories per project.`,
-            error_message: 'rate_limited',
-          })
-          continue
-        }
+        // Second gate: a local story never gets a scheduled run row.
+        if (!isEdgeSchedulable(story)) continue
 
         // Insert a 'running' row so the UI shows live status
         const { data: runRow, error: runInsertErr } = await db
@@ -824,9 +828,13 @@ Deno.serve(
 
         const runId: string = runRow.id
 
+        // A missing provider is schedulable and runs as the edge default.
+        // Explicit 'local' is filtered above and in executeManualRun.
+        const provider = story.browser_provider ?? 'firecrawl_actions'
+
         // Resolve API key: always derived from browser_provider (byok_provider is
         // an optional override for non-default key pools).
-        const resolvedApiKey = await resolveStoryApiKey(db, story, pid)
+        const resolvedApiKey = await resolveStoryApiKey(db, { ...story, browser_provider: provider }, pid)
 
         // Resolve the target URL: story.target_url → prompt URL → project settings → env.
         // Fail the run explicitly if nothing resolves — this surfaces a clear error
@@ -834,7 +842,6 @@ Deno.serve(
         const resolvedTargetUrl = await resolveTargetUrl(db, story, pid)
 
         let result: RunResult
-        const provider = story.browser_provider
 
         if (!resolvedTargetUrl && (provider === 'firecrawl_actions' || provider === 'browserbase')) {
           result = {

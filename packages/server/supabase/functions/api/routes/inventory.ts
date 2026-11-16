@@ -1709,10 +1709,13 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
 
       const runId = run.id
 
-      // Invoke story-mapper edge function fire-and-forget
+      // The row is the job. Return 202 before the crawl: story-mapper's own
+      // request also answers 202 and finishes under EdgeRuntime.waitUntil.
+      // waitUntil here only keeps this isolate alive long enough to send
+      // that invoke; without it the runtime can drop the fetch.
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!
       const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      fetch(`${supabaseUrl}/functions/v1/story-mapper`, {
+      const invoke = fetch(`${supabaseUrl}/functions/v1/story-mapper`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
         body: JSON.stringify({
@@ -1725,10 +1728,12 @@ export function registerInventoryRoutes(app: Hono<{ Variables: Variables }>): vo
           triggered_by: userId,
         }),
       }).catch((err) => {
-        log.warn('story-mapper invoke failed (fire-and-forget)', { runId, error: String(err) })
+        log.warn('story-mapper invoke failed', { runId, error: String(err) })
       })
+      const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+      if (edgeRuntime && typeof edgeRuntime.waitUntil === 'function') edgeRuntime.waitUntil(invoke)
 
-      return c.json({ ok: true, data: { runId, status: 'pending' } })
+      return c.json({ ok: true, data: { runId, status: 'pending' } }, 202)
     },
   )
 

@@ -62,6 +62,7 @@ describe('StoryCard controls', () => {
     expect(open!.contains(replay!)).toBe(false)
     expect(play!.closest('[role="button"]')).toBeNull()
     expect(host.textContent).toContain('skipped')
+    expect(host.textContent).toContain('mushi qa run')
     expect(host.textContent).not.toContain('0%')
 
     await act(async () => { (open as HTMLButtonElement).click() })
