@@ -1,5 +1,11 @@
 # @mushi-mushi/mcp
 
+## 0.31.3
+
+### Patch Changes
+
+- e4266e6: The docs index the MCP `search_mushi_docs` tool reads now describes the CI runners page's new **Right now** board and **Machines** view.
+
 ## 0.31.2
 
 ### Patch Changes

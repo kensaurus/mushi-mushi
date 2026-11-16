@@ -317,7 +317,7 @@ Add to `.cursor/mcp.json` in your repo root:
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.3"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -349,7 +349,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "mushi": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.3"],
       "env": {
         "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
         "MUSHI_API_KEY": "mushi_..."
@@ -6486,7 +6486,7 @@ flowchart TB
 Mushi Mushi ships BOTH MCP transports so you can pick the one that matches
 your client:
 
-- **stdio** — `npx -y @mushi-mushi/mcp@0.31.2`. Default for editor
+- **stdio** — `npx -y @mushi-mushi/mcp@0.31.3`. Default for editor
   integrations (Cursor / Claude Desktop / Claude Code / Continue /
   Cline / Zed / Windsurf). Your client launches the server as a
   subprocess and pipes JSON-RPC over stdio.
@@ -10119,7 +10119,7 @@ entry.
 
 ## Two transports
 
-- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.2`. This is what
+- **stdio (local)**: `npx -y @mushi-mushi/mcp@0.31.3`. This is what
   `mushi setup --stdio` writes, and what `setup` always writes for Continue and
   Zed. Use it for any client that only runs local servers. Your client launches
   the server as a subprocess and pipes JSON-RPC over stdio.
@@ -23681,7 +23681,7 @@ Restart your IDE, then ask: *"list mushi tools"* or *"call diagnose_setup"*. See
   "mcpServers": {
     "mushi-myproject": {
       "command": "npx",
-      "args": ["-y", "@mushi-mushi/mcp@0.31.2"],
+      "args": ["-y", "@mushi-mushi/mcp@0.31.3"],
       "env": {
         "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api",
         "MUSHI_PROJECT_ID": "<your-project-id>",
