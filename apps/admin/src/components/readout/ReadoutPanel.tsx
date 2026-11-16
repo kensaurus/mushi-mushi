@@ -48,9 +48,16 @@ export function ReadoutPanel({
           <span className="font-normal text-fg-muted">
             · {title.replace(/\s*readout$/i, '')} endpoints and raw signals
           </span>
+          {/* Inline, after a real space. As a flex sibling the chip is its own
+              line, and stripping that newline glues the words: "signalsnow". */}
+          {freshness ? (
+            <>
+              {' '}
+              <FreshnessPill {...freshness} />
+            </>
+          ) : null}
         </span>
       }
-      trailing={freshness ? <FreshnessPill {...freshness} /> : undefined}
     >
       {children}
     </DisclosurePanel>
