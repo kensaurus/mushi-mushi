@@ -22,7 +22,7 @@
 
 import { RESOLVED_REPORT_STATUSES } from './fix-report-truth.ts'
 import { ciHeadState, followupTrigger, FOLLOWUP_REASONS, type CiHeadState, type CiJobForRepair, type PriorFollowup } from './review-followup.ts'
-import { localHandoff } from './local-followup.ts'
+import { LOCAL_FIX_AGENT, localHandoff } from './local-followup.ts'
 import { parseCheckNameList } from './merge-queue.ts'
 import { ROOT_CAUSE_OF_GROUP } from './health-checks.ts'
 
@@ -418,7 +418,10 @@ function followupBlock(kind: 'findings' | 'ci_repair', ctx: BlockContext): strin
     ci = ciHeadState(ctx.ciJobs.get(rv.head_sha) ?? [])
   }
   const head = rv.head_sha ?? null
-  if (cloud.ready) {
+  // A PR a local lane opened goes to the local lanes even when cloud agents can run
+  // (api/routes/pipeline.ts sendFollowup): the cloud trigger would refuse it.
+  const localPr = a.agent === LOCAL_FIX_AGENT
+  if (cloud.ready && !localPr) {
     const decision = followupTrigger({
       review: { status: rv.status, verdict: rv.verdict, head_sha: head },
       attempt: { pr_url: a.pr_url, pr_state: a.pr_state, merged_at: a.merged_at, agent: a.agent },
@@ -435,7 +438,8 @@ function followupBlock(kind: 'findings' | 'ci_repair', ctx: BlockContext): strin
     cloudFollowupsOn: cloud.enabled,
     ciCodeRed: kind === 'ci_repair' ? ci?.state === 'code_failure' : undefined,
   })
-  return handoff.ok ? null : `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}`
+  if (handoff.ok) return null
+  return localPr ? `The local mushi work lanes cannot take it: ${handoff.message}` : `${cloud.why}, and the local mushi work lanes cannot take it: ${handoff.message}`
 }
 
 /** Per action of a group: the refusal the server would give for this item, from facts it already has. */
