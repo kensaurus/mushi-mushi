@@ -26,6 +26,26 @@ interface Props {
   auditLog: boolean
 }
 
+type HomeKey = { label: string; kind: 'sdk' | 'mcp' | 'other'; lastUsedAt: string | null }
+
+/**
+ * One row per key name and kind, newest use first: every `mushi login` mints a "cli-login"
+ * key, so Home listed five identical rows (2026-11-16).
+ */
+function groupKeys(keys: HomeKey[]): Array<HomeKey & { count: number }> {
+  const out = new Map<string, HomeKey & { count: number }>()
+  for (const k of keys) {
+    const id = `${k.label}\u0000${k.kind}`
+    const seen = out.get(id)
+    if (!seen) out.set(id, { ...k, count: 1 })
+    else {
+      seen.count++
+      if (k.lastUsedAt && (!seen.lastUsedAt || k.lastUsedAt > seen.lastUsedAt)) seen.lastUsedAt = k.lastUsedAt
+    }
+  }
+  return [...out.values()]
+}
+
 export function AccessCard({ section, auditLog }: Props) {
   return (
     <Section title="Access and details" id="home-access">
@@ -73,9 +93,12 @@ export function AccessCard({ section, auditLog }: Props) {
                 <Link to="/projects" className="text-link hover:underline">Create a key</Link>
               ) : (
                 <ul className="space-y-1">
-                  {a.keys.map((k, i) => (
-                    <li key={`${k.label}-${i}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                      <span className="min-w-0 truncate text-fg">{k.label}</span>
+                  {groupKeys(a.keys).map((k) => (
+                    <li key={`${k.label}-${k.kind}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                      <span className="min-w-0 truncate text-fg">
+                        {k.label}
+                        {k.count > 1 && <span className="ml-1 text-fg-muted">×{k.count}</span>}
+                      </span>
                       <Badge tone="neutral">{KIND_LABEL[k.kind]}</Badge>
                       <span className="text-fg-muted">
                         {k.lastUsedAt ? (

@@ -78,6 +78,7 @@ jobs:
     permissions:
       contents: read
       id-token: write  # Required for GitHub OIDC → AWS role assumption
+      deployments: write  # Records the deploy as a GitHub deployment (last step)
 
     steps:
       # SUPPLY-CHAIN HARDENING: this job uses AWS_ACCESS_KEY_ID,
@@ -362,6 +363,24 @@ jobs:
           fi
           DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/admin/version.json" | jq -r '.version // "unknown"')
           echo "Deployed version: $DEPLOYED"
+
+      - name: Record the deploy for Mushi Mushi (GitHub deployment)
+        # Home and Pipeline said "No deploy seen yet" for mushi-mushi (2026-11-16): Mushi
+        # Mushi records deploys from GitHub's deployment_status event, and this job made
+        # none. A deployment record from the job's own token fires it. Not a job-level
+        # `environment:`, which would change the OIDC subject the deploy role trusts.
+        # Never fails the deploy.
+        if: ${{ github.event_name == 'push' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_WHAT: Admin console
+        run: |
+          id=$(jq -n --arg ref "$GITHUB_SHA" --arg d "$DEPLOY_WHAT" \
+            '{ref: $ref, environment: "production", auto_merge: false, required_contexts: [], description: $d}' \
+            | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
+          gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" -f state=success -f environment=production > /dev/null
+          echo "::notice::Recorded deployment $id for $GITHUB_SHA"
 
       - name: Verify GoTrue OAuth providers enabled
         env:
