@@ -1,8 +1,13 @@
 /**
  * FILE: apps/admin/src/components/graph/GraphCanvas.tsx
  * PURPOSE: ReactFlow visualization wrapper. Owns the canvas chrome
- *          (background, controls, minimap, in-canvas hint, legend, empty
+ *          (background, controls, minimap, pan/zoom hint, legend, empty
  *          panel) so the page can stay focused on data + state.
+ *
+ *          The pan/zoom hint is a header row inside the fixed-height frame,
+ *          not a React Flow overlay. The sentence stays one line and scrolls
+ *          sideways at a narrow width, and each middot stays on the phrase
+ *          before it so a line cannot open with "·" (report 8171741f).
  */
 
 import { useEffect, useState } from 'react'
@@ -98,6 +103,23 @@ interface Props {
 
 const HINT_KEY = 'mushi.graph.hintSeen'
 
+// The middot belongs to the phrase before the break. A wrap then continues
+// with "scroll" / "click", never with "·".
+const HINT_PARTS = [
+  'Drag to pan ·',
+  ' scroll to zoom ·',
+  ' click a node for blast radius',
+] as const
+
+function hintAlreadySeen(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(HINT_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
 export function GraphCanvas({
   flowNodes,
   flowEdges,
@@ -112,7 +134,9 @@ export function GraphCanvas({
   blastLoading = false,
   onClearSelection,
 }: Props) {
-  const [hintDismissed, setHintDismissed] = useState(false)
+  // Read on the first render so a returning visitor does not flash the
+  // header and shift the canvas.
+  const [hintDismissed, setHintDismissed] = useState(() => hintAlreadySeen())
   const { resolved } = useTheme()
   const dotGrid = readVizToken(
     resolved === 'dark' ? 'viz-node-border-dark' : 'viz-node-border-light',
@@ -164,97 +188,117 @@ export function GraphCanvas({
       // 600px) yields: 380 px at 920 px viewport, 540 px at 1080 px, and
       // caps at 600 px even on tall displays — leaving the panels visible
       // without scrolling on most desktop monitors.
-      className="border border-edge rounded-md bg-surface-root"
+      className="flex w-full min-w-0 flex-col border border-edge rounded-md bg-surface-root"
       style={{
         height: 'clamp(380px, calc(100dvh - 540px), 600px)',
-        display: hidden ? 'none' : 'block',
+        ...(hidden ? { display: 'none' } : {}),
       }}
       role="region"
       aria-label={`Knowledge graph visualization with ${filteredCount} nodes and ${filteredEdgeCount} edges. Switch to Table view for a screen-reader-friendly list.`}
       tabIndex={0}
     >
-      <ReactFlow
-        nodes={flowNodes}
-        edges={flowEdges}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.15}
-        maxZoom={2}
-        proOptions={{ hideAttribution: true }}
-        nodesDraggable
-        nodesConnectable={false}
-        elementsSelectable
-        panOnDrag
-        panOnScroll={false}
-        zoomOnScroll
-        nodeOrigin={[0.5, 0.5]}
-        nodeTypes={{ default: ReactFlowChip }}
-        aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
-      >
-        <Background gap={24} color={dotGrid} />
-        <Panel position="bottom-right">
-          <ZoomControls />
-        </Panel>
-        {!hintDismissed && (
-          <Panel position="top-center">
-            <Card  className="flex items-center gap-2 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary">
-              <span aria-hidden="true">🖱️</span>
-              <span>Drag to pan · scroll to zoom · click a node for blast radius</span>
-              <button
-                type="button"
-                onClick={dismissHint}
-                className="ml-2 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
-                aria-label="Dismiss hint"
-              >
-                ✕
-              </button>
-            </Card>
+      {!hintDismissed && (
+        <div
+          data-testid="graph-pan-zoom-hint"
+          className="flex min-w-0 shrink-0 items-center gap-2 border-b border-edge/70 bg-surface-raised/90 px-3 py-1.5 text-2xs text-fg-secondary"
+        >
+          <span aria-hidden="true" className="shrink-0">
+            🖱️
+          </span>
+          <div
+            data-testid="graph-pan-zoom-hint-scroll"
+            className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+          >
+            <p
+              data-testid="graph-pan-zoom-hint-line"
+              className="flex w-max flex-nowrap whitespace-nowrap"
+            >
+              {HINT_PARTS.map((part) => (
+                <span key={part} data-hint-part="" className="shrink-0 whitespace-nowrap">
+                  {part}
+                </span>
+              ))}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={dismissHint}
+            className="shrink-0 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+            aria-label="Dismiss hint"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="relative min-h-0 w-full flex-1">
+        <ReactFlow
+          className="h-full w-full"
+          nodes={flowNodes}
+          edges={flowEdges}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          fitView
+          fitViewOptions={{ padding: 0.2 }}
+          minZoom={0.15}
+          maxZoom={2}
+          proOptions={{ hideAttribution: true }}
+          nodesDraggable
+          nodesConnectable={false}
+          elementsSelectable
+          panOnDrag
+          panOnScroll={false}
+          zoomOnScroll
+          nodeOrigin={[0.5, 0.5]}
+          nodeTypes={{ default: ReactFlowChip }}
+          aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
+        >
+          <Background gap={24} color={dotGrid} />
+          <Panel position="bottom-right">
+            <ZoomControls />
           </Panel>
-        )}
-        <Panel position="bottom-left">
-          <GraphLegend />
-        </Panel>
-        {selectedNode && onClearSelection && (
-          // In-canvas detail panel.
-          // Wrapped in a fixed-width track so the floating card never
-          // exceeds ~22rem regardless of node label length (long labels
-          // truncate inside the panel via `wrap-break-word`). Pointer
-          // events: auto so the panel intercepts clicks (otherwise the
-          // ReactFlow `onPaneClick` swallows them and the user can't
-          // scroll the blast-radius list). Max-h leaves headroom above
-          // the bottom-right Controls overlay.
-          <Panel position="top-right">
-            <div className="w-[22rem] max-w-[calc(100vw-3rem)] max-h-[min(70%,28rem)] overflow-y-auto rounded-md shadow-raised pointer-events-auto">
-              <GraphSidePanel
-                node={selectedNode}
-                blastRadius={blastRadius}
-                blastLoading={blastLoading}
-                onClear={onClearSelection}
-              />
-            </div>
+          <Panel position="bottom-left">
+            <GraphLegend />
           </Panel>
-        )}
-        {filteredCount === 0 && (
-          <Panel position="top-center">
-            <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
-              <div className="font-medium text-fg mb-0.5">No nodes match these filters</div>
-              <div className="text-fg-muted">
-                Try the{' '}
-                <button
-                  type="button"
-                  onClick={onResetView}
-                  className="underline hover:text-fg"
-                >
-                  All
-                </button>{' '}
-                view, enable more node/edge types, or uncheck "Hide isolated nodes".
+          {selectedNode && onClearSelection && (
+            // In-canvas detail panel.
+            // Wrapped in a fixed-width track so the floating card never
+            // exceeds ~22rem regardless of node label length (long labels
+            // truncate inside the panel via `wrap-break-word`). Pointer
+            // events: auto so the panel intercepts clicks (otherwise the
+            // ReactFlow `onPaneClick` swallows them and the user can't
+            // scroll the blast-radius list). Max-h leaves headroom above
+            // the bottom-right Controls overlay.
+            <Panel position="top-right">
+              <div className="w-[22rem] max-w-[calc(100vw-3rem)] max-h-[min(70%,28rem)] overflow-y-auto rounded-md shadow-raised pointer-events-auto">
+                <GraphSidePanel
+                  node={selectedNode}
+                  blastRadius={blastRadius}
+                  blastLoading={blastLoading}
+                  onClear={onClearSelection}
+                />
               </div>
-            </Card>
-          </Panel>
-        )}
-      </ReactFlow>
+            </Panel>
+          )}
+          {filteredCount === 0 && (
+            <Panel position="top-center">
+              <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
+                <div className="font-medium text-fg mb-0.5">No nodes match these filters</div>
+                <div className="text-fg-muted">
+                  Try the{' '}
+                  <button
+                    type="button"
+                    onClick={onResetView}
+                    className="underline hover:text-fg"
+                  >
+                    All
+                  </button>{' '}
+                  view, enable more node/edge types, or uncheck "Hide isolated nodes".
+                </div>
+              </Card>
+            </Panel>
+          )}
+        </ReactFlow>
+      </div>
     </div>
   )
 }
