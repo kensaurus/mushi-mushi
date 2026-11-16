@@ -8,6 +8,10 @@
  *          drives next-step focus off `activeProject.steps`, so progress survives
  *          across browsers/devices and stays in sync with what the rest of the
  *          admin sees.
+ *
+ *          The Verify card refetches time-to-first-diagnosis when a test report
+ *          is sent or a report row changes, so it leaves "waiting" once that
+ *          test report is classified (report 9b7624e6).
  */
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,11 +19,12 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
+import { invalidateTimeToFirstDiagnosis } from '../lib/useTimeToFirstDiagnosis'
 import { usePageData } from '../lib/usePageData'
-import type { TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
+import { TimeToFirstDiagnosisCard } from '../components/onboarding/TimeToFirstDiagnosisCard'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetupReadout'
 import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
@@ -165,6 +170,9 @@ export function OnboardingPage() {
   const reloadAll = useCallback(() => {
     reloadStats()
     setup.reload()
+    // The Verify card and the rail read a route this reload used to skip, so a
+    // classified test report left them on "waiting" (report 9b7624e6).
+    invalidateTimeToFirstDiagnosis()
   }, [reloadStats, setup])
 
   useRealtimeReload(['projects', 'project_api_keys', 'reports', 'fix_attempts'], reloadAll)
@@ -1064,85 +1072,6 @@ export function OnboardingPage() {
       </p>
       ) : null}
     </div>
-  )
-}
-
-/** Format a millisecond interval as a short human string ("1m 48s", "42s"). */
-function formatDiagnosisDuration(ms: number): string {
-  const totalSec = Math.max(0, Math.round(ms / 1000))
-  if (totalSec < 60) return `${totalSec}s`
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const rem = m % 60
-  return rem ? `${h}h ${rem}m` : `${h}h`
-}
-
-/**
- * Surfaces the phase-1 north-star: time from making a key to the
- * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
- * install — the one number to protect before spending on reach.
- */
-function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean; onOpenSdk: () => void }) {
-  const { data, loading } = usePageData<TimeToFirstDiagnosis>(
-    '/v1/admin/onboarding/time-to-first-diagnosis',
-  )
-  if (!hasApiKey || loading) return null
-
-  const ms = data?.ms ?? null
-  const TARGET_MS = 2 * 60 * 1000
-
-  if (ms != null) {
-    const underTarget = ms <= TARGET_MS
-    return (
-      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
-            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
-              {formatDiagnosisDuration(ms)}
-            </p>
-          </div>
-          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-info'}`}>
-            {underTarget ? 'Under the 2-minute target ✓' : 'Target: under 2 minutes'}
-          </span>
-        </div>
-        <p className="mt-2 text-xs text-fg-muted leading-relaxed">
-          From making your key to your first plain-English read of a bug from your app.
-        </p>
-      </Card>
-    )
-  }
-
-  // Only test or seed reports so far: the pipeline works, and the clock is
-  // still waiting on the app (report 9b7624e6). Sending another test report
-  // never clears this card, so it points at the SDK instead.
-  if (data?.testDiagnosisAt) {
-    return (
-      <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
-        <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
-        <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi Mushi works for this app.</p>
-        <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-          The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
-          app with its bug button.
-        </p>
-        <Btn size="sm" variant="ghost" className="mt-2" onClick={onOpenSdk}>
-          Install the SDK
-        </Btn>
-      </Card>
-    )
-  }
-
-  return (
-    <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
-      <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
-      <p className="mt-1 text-xs text-fg-muted leading-relaxed">
-        Send a test bug below, then report a bug from your app. Target: a plain-English read in under 2 minutes
-        from making the key.
-      </p>
-    </Card>
   )
 }
 
