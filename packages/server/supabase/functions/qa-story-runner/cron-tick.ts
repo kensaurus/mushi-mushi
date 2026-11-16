@@ -7,6 +7,9 @@
  * and sends that minute as `tick`. Matching schedules against the arrival
  * time instead would skip the story whenever pg_net delivers the call in the
  * next minute.
+ *
+ * isApprovedForSchedule is the cron path's approval gate (migration
+ * 20260602000002). Manual runs do not use it.
  */
 
 /** A tick older than this is ignored (the call runs as of its arrival). */
@@ -24,4 +27,13 @@ export function cronTickTime(tick: string | undefined, now: Date): Date {
   if (!Number.isFinite(t)) return now
   if (t - now.getTime() > MAX_TICK_LEAD_MS || now.getTime() - t > MAX_TICK_LAG_MS) return now
   return new Date(t)
+}
+
+/**
+ * Scheduled runs require approval_status = 'approved'.
+ * pending_review and rejected stories stay off the cron even when enabled
+ * is still true. A missing status does not run.
+ */
+export function isApprovedForSchedule(story: { approval_status?: string | null }): boolean {
+  return story.approval_status === 'approved'
 }
