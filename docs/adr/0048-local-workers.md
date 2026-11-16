@@ -338,3 +338,31 @@ db4c8383a), which also stayed open and would have been tried again after the
   on one worktree, with no agent (`--dry-run` only counts).
 - Migration `20261112100000_work_claims_outcome_gone.sql` widens the outcome
   CHECK.
+
+## Amendment 2026-11-16: the queue moves one report at a time, and only waiting reports count
+
+Driving the console as a user on 2026-11-16, the glot.it lane's queue could
+not be changed at all. It held 209 reports (50 already fixed or dismissed)
+against a cap of 50, set in #827 with no stated reason. Add answered "A lane
+holds at most 50 queued reports", and Move up, Move down and Remove resent
+the whole list as one PUT, which the 50-id limit refused with raw API text.
+
+- **One report per move.** `POST /v1/admin/work/lanes/:id/queue/move
+  { reportId, to: top | up | down | bottom | remove }` writes one or two
+  rows and answers the fresh queue. Ties in `position` (a replace writes
+  0..n, an append epoch seconds, a requeue minus epoch) are renumbered once
+  before a swap. The full-list PUT stays for replacing a queue.
+- **Fix next.** `PUT …/queue { reportIds, front: true }` puts reports first,
+  in the order given; one already queued moves up instead of being ignored.
+  "Send to my local worker" (report detail, Bugs list, pipeline groups) now
+  uses it, so a report someone sends is the lane's next one.
+- **Only waiting reports count.** Every queue write first drops fixed,
+  verified, dismissed, deleted or moved reports, and the lanes answer hides
+  them. `QUEUE_MAX` is 200 waiting reports per lane (the claim reads only the
+  head); one request carries at most 50 ids (`QUEUE_REQUEST_MAX`). Adding only
+  closed reports answers `ALREADY_CLOSED`; a vanished report `NOT_QUEUED`.
+- **Not done: adding a lane from the console.** `mushi worker install --lane`
+  replaces the machine's whole lane list, so a console hint that prints it
+  would wipe the other lanes. A console-declared lane (the machine clones the
+  linked repo itself) changes this ADR's "lanes come from worker.json" rule and
+  needs the owner's amendment first.

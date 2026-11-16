@@ -115,6 +115,7 @@
     "GET /v1/admin/work/hosts/:id/cursor-login": {"allow": "jwt-only", "note": "ADR 0048 amendment 2026-10-28 (b): where a Switch account stands, with the Cursor approve link, for the machine's owner in the console only. The link is never sent to MCP or the CLI."},
     "PATCH /v1/admin/work/lanes/:id": {"allow": "jwt-only", "note": "ADR 0048: a lane's settings (paused, model, mode, concurrency, stop date, drain) change from the console; the worker reads them on its next heartbeat."},
     "PUT /v1/admin/work/lanes/:id/queue": {"allow": "jwt-only", "note": "ADR 0048: a lane's queue order is set from the console. Scripts queue a filed report with POST /v1/admin/projects/:id/reports {queue: {laneId}} (mushi reports file)."},
+    "POST /v1/admin/work/lanes/:id/queue/move": {"allow": "jwt-only", "note": "ADR 0048 amendment 2026-11-16: one queued report to the top, up, down, bottom or out, from the console's lane card. Same reach as PUT …/queue."},
     "PATCH /v1/admin/work/hosts/:id": {"allow": "jwt-only", "note": "ADR 0048: a worker's machine guards (agents at once, memory and GitHub quota floors), set by the machine's owner in the console."},
     "DELETE /v1/admin/work/hosts/:id": {"allow": "credentials", "note": "ADR 0048: revokes a worker and its key from the console. On the machine itself, mushi worker revoke does the same with the worker key."},
     "POST /v1/admin/work/key": {"cli": ["worker install"], "note": "ADR 0048: mints a worker:run key for the apps a lane serves; shown once."},

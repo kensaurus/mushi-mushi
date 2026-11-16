@@ -259,9 +259,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     if (this._order.length > 0) {
       out = [...out].sort((a, b) => {
         for (const { key, ascending } of this._order) {
-          const av = String(readPath(a, key) ?? '')
-          const bv = String(readPath(b, key) ?? '')
-          const cmp = ascending ? av.localeCompare(bv) : bv.localeCompare(av)
+          const ar = readPath(a, key)
+          const br = readPath(b, key)
+          // Numbers sort as numbers, as Postgres does for integer columns ("9" < "59").
+          const cmp0 = typeof ar === 'number' && typeof br === 'number' ? ar - br : String(ar ?? '').localeCompare(String(br ?? ''))
+          const cmp = ascending ? cmp0 : -cmp0
           if (cmp !== 0) return cmp
         }
         return 0

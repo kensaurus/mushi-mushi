@@ -23,7 +23,6 @@ import {
   laneRuns,
   MIN_SEVERITY_OPTIONS,
   MODEL_RE,
-  moveItem,
   OUTCOME_LABEL,
   reportIdsIn,
   sinceLabel,
@@ -32,6 +31,8 @@ import {
   type LaneConfig,
   type LaneSettings,
   type MinSeverity,
+  type QueueAdd,
+  type QueueMove,
   type RunTelemetry,
   type WorkerHost,
   type WorkerLane,
@@ -44,8 +45,10 @@ interface Props {
   now: number
   showApp: boolean
   onPatch: (lane: WorkerLane, patch: LaneSettings) => Promise<WriteResult>
-  /** Replace the queue with this order, or (append) add these at its end. */
-  onQueue: (lane: WorkerLane, reportIds: string[], append?: boolean) => Promise<WriteResult>
+  /** Add these to the queue's top or end (`add`), or replace the queue with this order. */
+  onQueue: (lane: WorkerLane, reportIds: string[], add?: QueueAdd) => Promise<WriteResult>
+  /** Move one queued report, or take it out (one or two rows, any queue length). */
+  onMove: (lane: WorkerLane, reportId: string, to: QueueMove) => Promise<WriteResult>
   /** After a run was stopped. */
   onChanged?: () => void
 }
@@ -131,7 +134,7 @@ function RunTitle({ reportId, title, className }: { reportId: string | null; tit
   )
 }
 
-export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onChanged }: Props) {
+export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onMove, onChanged }: Props) {
   const c = lane.config
   const [model, setModel] = useState(c.model ?? '')
   const [reviewModel, setReviewModel] = useState(lane.reviewModel ?? '')
@@ -153,14 +156,19 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
     setNote(await onPatch(lane, patch))
     setBusy(null)
   }
-  const queue = async (key: string, ids: string[], append = false) => {
-    setBusy(key)
-    const res = await onQueue(lane, ids, append)
+  const add = async (where: QueueAdd) => {
+    setBusy(`add:${where}`)
+    const res = await onQueue(lane, pastedIds, where)
     setNote(res)
-    if (res.ok && append) setPasted('')
+    if (res.ok) setPasted('')
     setBusy(null)
   }
-  const ids = lane.queue.map((q) => q.reportId)
+  const move = async (reportId: string, to: QueueMove) => {
+    setBusy(`${to}:${reportId}`)
+    setNote(await onMove(lane, reportId, to))
+    setBusy(null)
+  }
+  const last = lane.queue.length - 1
   // Conflicts and audit lanes find their own work; they read no queue (the server refuses one).
   const takesQueue = c.mode === 'fix' || c.mode === 'followups' || c.mode === 'skill'
 
@@ -324,6 +332,9 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
       {takesQueue && (
       <div className="space-y-1">
         <p className="text-2xs font-medium text-fg-secondary">Queue ({lane.queue.length}): taken first, top to bottom</p>
+        {c.mode === 'fix' && lane.queue.length > 0 && (
+          <p className="text-2xs text-fg-muted">Queued reports go whatever the lane&apos;s &ldquo;Takes&rdquo; setting; fixed or dismissed ones leave on their own.</p>
+        )}
         {lane.queue.length === 0 ? (
           <p className="text-2xs text-fg-muted">
             {c.mode === 'skill'
@@ -340,13 +351,16 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
                 </Link>
                 {q.severity && <Badge tone="neutral">{q.severity}</Badge>}
                 <span className="flex shrink-0 gap-0.5">
-                  <Btn size="sm" variant="ghost" aria-label="Move up" disabled={i === 0 || busy != null} onClick={() => void queue(`up:${q.reportId}`, moveItem(ids, i, -1))} data-testid={`${testId}-queue-${q.reportId}-up`}>
+                  <Btn size="sm" variant="ghost" aria-label="Move to the top: fix it next" title="Move to the top: fix it next" disabled={i === 0 || busy != null} loading={busy === `top:${q.reportId}`} onClick={() => void move(q.reportId, 'top')} data-testid={`${testId}-queue-${q.reportId}-top`}>
+                    Top
+                  </Btn>
+                  <Btn size="sm" variant="ghost" aria-label="Move up" disabled={i === 0 || busy != null} onClick={() => void move(q.reportId, 'up')} data-testid={`${testId}-queue-${q.reportId}-up`}>
                     <IconChevronUp size={12} />
                   </Btn>
-                  <Btn size="sm" variant="ghost" aria-label="Move down" disabled={i === ids.length - 1 || busy != null} onClick={() => void queue(`down:${q.reportId}`, moveItem(ids, i, 1))} data-testid={`${testId}-queue-${q.reportId}-down`}>
+                  <Btn size="sm" variant="ghost" aria-label="Move down" disabled={i === last || busy != null} onClick={() => void move(q.reportId, 'down')} data-testid={`${testId}-queue-${q.reportId}-down`}>
                     <IconChevronDown size={12} />
                   </Btn>
-                  <Btn size="sm" variant="ghost" aria-label="Remove from the queue" disabled={busy != null} onClick={() => void queue(`rm:${q.reportId}`, ids.filter((x) => x !== q.reportId))} data-testid={`${testId}-queue-${q.reportId}-remove`}>
+                  <Btn size="sm" variant="ghost" aria-label="Remove from the queue" disabled={busy != null} onClick={() => void move(q.reportId, 'remove')} data-testid={`${testId}-queue-${q.reportId}-remove`}>
                     <IconClose size={12} />
                   </Btn>
                 </span>
@@ -367,13 +381,23 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onC
           </div>
           <Btn
             size="sm"
+            disabled={pastedIds.length === 0 || busy != null}
+            loading={busy === 'add:top'}
+            onClick={() => void add('top')}
+            title="The lane takes these next, before the rest of its queue"
+            data-testid={`${testId}-add-top`}
+          >
+            {pastedIds.length > 1 ? `Add ${pastedIds.length} to top` : 'Add to top'}
+          </Btn>
+          <Btn
+            size="sm"
             variant="ghost"
             disabled={pastedIds.length === 0 || busy != null}
-            loading={busy === 'add'}
-            onClick={() => void queue('add', pastedIds, true)}
+            loading={busy === 'add:end'}
+            onClick={() => void add('end')}
             data-testid={`${testId}-add-save`}
           >
-            {pastedIds.length > 1 ? `Add ${pastedIds.length}` : 'Add'}
+            Add to end
           </Btn>
         </div>
       </div>

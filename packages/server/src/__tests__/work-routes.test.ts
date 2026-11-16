@@ -358,6 +358,76 @@ describe('console routes', () => {
     expect(foreign.status).toBe(422)
   })
 
+  const jwt = { authMethod: 'jwt' }
+  const queueOf = (s: { db: FakeDb }, lane: string) =>
+    s.db.table('work_queue').filter((q) => q.lane_id === lane).sort((a, b) => Number(a.position) - Number(b.position)).map((q) => q.report_id)
+  const seedQueue = (s: { db: FakeDb; laneA: string }, ids: string[], position: (i: number) => number = (i) => i) =>
+    ids.forEach((id, i) => s.db.table('work_queue').push({ id: `q${i}`, lane_id: s.laneA, project_id: P1, report_id: id, position: position(i), source: 'console', added_by: null, created_at: `2026-10-27T00:00:0${i}Z` }))
+
+  it('a closed report in the queue never counts toward the cap, and the next write drops it', async () => {
+    const s = await registered({ reports: [report(1, { status: 'fixed' }), report(2), report(3)] })
+    seedQueue(s, [R(1), R(2)])
+    const res = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.laneA }, body: { reportIds: [R(3)], append: true }, vars: jwt })
+    expect(res.status).toBe(200)
+    expect(res.body.data).toMatchObject({ reportIds: [R(2), R(3)], added: 1 })
+  })
+
+  it('front puts new reports first in the given order, and moves an already-queued one up instead of ignoring it', async () => {
+    const s = await registered({ reports: [report(1), report(2), report(3), report(4)] })
+    seedQueue(s, [R(1), R(2), R(3)], (i) => 1_800_000_000 + i) // appended rows carry epoch positions
+    const res = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.laneA }, body: { reportIds: [R(4), R(3)], front: true }, vars: jwt })
+    expect(res.body.data).toMatchObject({ reportIds: [R(4), R(3), R(1), R(2)], added: 1, moved: 1 })
+  })
+
+  it('adding only closed reports says so instead of queueing nothing silently', async () => {
+    const s = await registered({ reports: [report(1, { status: 'dismissed' })] })
+    const res = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.laneA }, body: { reportIds: [R(1)], front: true }, vars: jwt })
+    expect([res.status, res.body.error?.code]).toEqual([409, 'ALREADY_CLOSED'])
+  })
+
+  it('a full queue names how many wait and what to do', async () => {
+    const reports = Array.from({ length: work.QUEUE_MAX + 1 }, (_, i) => ({ ...report(1), id: `3${String(i).padStart(7, '0')}-0000-4000-8000-000000000000` }))
+    const s = await registered({ reports })
+    seedQueue(s, reports.slice(0, work.QUEUE_MAX).map((r) => r.id))
+    const res = await s.app.call('PUT', '/v1/admin/work/lanes/:id/queue', { params: { id: s.laneA }, body: { reportIds: [reports[work.QUEUE_MAX]!.id], append: true }, vars: jwt })
+    expect(res.status).toBe(409)
+    expect(res.body.error?.message).toContain(`${work.QUEUE_MAX} reports waiting`)
+  })
+
+  it('move writes one report at a time: top, down, bottom and remove, on a queue longer than one request', async () => {
+    const reports = Array.from({ length: 60 }, (_, i) => ({ ...report(1), id: `4${String(i).padStart(7, '0')}-0000-4000-8000-000000000000` }))
+    const s = await registered({ reports })
+    seedQueue(s, reports.map((r) => r.id))
+    const last = reports[59]!.id
+    const move = (reportId: string, to: string) => s.app.call('POST', '/v1/admin/work/lanes/:id/queue/move', { params: { id: s.laneA }, body: { reportId, to }, vars: jwt })
+    const top = await move(last, 'top')
+    expect(top.status).toBe(200)
+    expect(top.body.data.reportIds[0]).toBe(last)
+    expect((await move(last, 'down')).body.data.reportIds.slice(0, 2)).toEqual([reports[0]!.id, last])
+    expect((await move(last, 'bottom')).body.data.reportIds.at(-1)).toBe(last)
+    const removed = await move(last, 'remove')
+    expect(removed.body.data.reportIds).toHaveLength(59)
+    expect(queueOf(s, s.laneA)).not.toContain(last)
+  })
+
+  it('move up keeps the order right when positions tie, and a report no longer queued is a clear 404', async () => {
+    const s = await registered({ reports: [report(1), report(2), report(3)] })
+    seedQueue(s, [R(1), R(2), R(3)], () => 0) // a requeue and a replace can leave equal positions
+    const up = await s.app.call('POST', '/v1/admin/work/lanes/:id/queue/move', { params: { id: s.laneA }, body: { reportId: R(3), to: 'up' }, vars: jwt })
+    expect(up.body.data.reportIds).toEqual([R(1), R(3), R(2)])
+    const gone = await s.app.call('POST', '/v1/admin/work/lanes/:id/queue/move', { params: { id: s.laneA }, body: { reportId: R(4), to: 'top' }, vars: jwt })
+    expect([gone.status, gone.body.error?.code]).toEqual([404, 'NOT_QUEUED'])
+    const bad = await s.app.call('POST', '/v1/admin/work/lanes/:id/queue/move', { params: { id: s.laneA }, body: { reportId: R(1), to: 'sideways' }, vars: jwt })
+    expect(bad.status).toBe(400)
+  })
+
+  it('a viewer cannot change a queue', async () => {
+    const s = setup({ reports: [report(1)] }, { [P1]: 'viewer' })
+    s.db.table('work_lanes').push({ id: '5000000a-0000-4000-8000-000000000000', host_id: 'h', project_id: P1, name: 'v', mode: 'fix', paused: false, concurrency: 1, drain: false })
+    const res = await s.app.call('POST', '/v1/admin/work/lanes/:id/queue/move', { params: { id: '5000000a-0000-4000-8000-000000000000' }, body: { reportId: R(1), to: 'top' }, vars: jwt })
+    expect(res.status).toBe(403)
+  })
+
   it('mints a worker:run account key only for apps the caller reaches as a non-viewer', async () => {
     const s = setup({}, { [P1]: 'member', [P2]: null })
     const refused = await s.app.call('POST', '/v1/admin/work/key', { body: { projectIds: [P1, P2] }, vars: { authMethod: 'apiKey', apiKeyScopes: ['mcp:write'] } })

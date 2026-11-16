@@ -33,6 +33,7 @@ import { useToast } from '../../lib/toast'
 import {
   durationLabel,
   patchHostGuards,
+  moveQueueItem,
   patchLane,
   putQueue,
   revokeHost,
@@ -41,6 +42,8 @@ import {
   STAGE_LABEL,
   type HostGuards,
   type LaneSettings,
+  type QueueAdd,
+  type QueueMove,
   type RunStage,
   type WorkerHost,
   type WorkerLane,
@@ -249,10 +252,20 @@ export function WorkersPanel({ projectId, now }: Props) {
     [reload, toast],
   )
   const onQueue = useCallback(
-    async (lane: WorkerLane, reportIds: string[], append = false) => {
-      const res = await putQueue(lane.id, reportIds, append)
+    async (lane: WorkerLane, reportIds: string[], add?: QueueAdd) => {
+      const res = await putQueue(lane.id, reportIds, add)
       if (res.ok) reload()
       else toast.error(res.message)
+      return res
+    },
+    [reload, toast],
+  )
+  // Reload either way: a failed move (the lane just took the report) still shows the fresh queue.
+  const onMove = useCallback(
+    async (lane: WorkerLane, reportId: string, to: QueueMove) => {
+      const res = await moveQueueItem(lane.id, reportId, to)
+      reload()
+      if (!res.ok) toast.error(res.message)
       return res
     },
     [reload, toast],
@@ -352,7 +365,7 @@ export function WorkersPanel({ projectId, now }: Props) {
         ) : (
           <ul className="space-y-2">
             {data.lanes.map((l) => (
-              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} onChanged={reload} />
+              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} onMove={onMove} onChanged={reload} />
             ))}
           </ul>
         )}
