@@ -17,7 +17,7 @@ import { buildCiStatus, durationWords, estimateLine, groupFailures, type Machine
 import { formatPercent } from '../../lib/ciView'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { useNow } from '../../lib/useNow'
-import { Badge, DataTableCell, DataTableHead, RelativeTime } from '../ui'
+import { Badge, Card, DataTableCell, DataTableHead, RelativeTime } from '../ui'
 import { IconExternalLink } from '../icons'
 
 const TONE_BOX: Record<'ok' | 'warn' | 'bad', string> = {
@@ -44,7 +44,8 @@ function Meter({ label, pct }: { label: string; pct: number | null }) {
 /** One real machine: its name, what it runs now, how busy it is. */
 export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
   return (
-    <li className="min-w-0 rounded-md border border-edge-subtle bg-surface-raised p-3" data-testid={testId ?? `ci-machine-${m.id}`}>
+    <li className="min-w-0" data-testid={testId ?? `ci-machine-${m.id}`}>
+      <Card className="h-full p-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-semibold text-fg">{m.name}</span>
         {m.detail && <span className="text-2xs text-fg-muted">{m.detail}</span>}
@@ -60,6 +61,7 @@ export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
         <Meter label="CPU busy" pct={m.busyPct} />
         <Meter label="Memory" pct={m.memPct} />
       </div>
+      </Card>
     </li>
   )
 }
@@ -113,8 +115,8 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
             {status.running.map((r) => {
               const pct = r.usualS && r.elapsedS != null ? Math.min(100, Math.round((r.elapsedS / r.usualS) * 100)) : null
               return (
-                <li key={r.job.id} className="grid gap-1 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)] sm:items-center sm:gap-3" data-testid={`ci-running-${r.job.id}`}>
-                  <div className="min-w-0">
+                <li key={r.job.id} className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:gap-3" data-testid={`ci-running-${r.job.id}`}>
+                  <div className="min-w-0 sm:flex-1">
                     <p className="text-xs">
                       {r.job.htmlUrl ? (
                         <a href={r.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
@@ -127,7 +129,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     </p>
                     <p className="text-2xs text-fg-muted">on {r.machine?.name ?? 'a machine'}</p>
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 sm:w-56 sm:shrink-0">
                     <p className={`text-2xs ${r.slow ? 'font-medium text-warn-foreground' : 'text-fg-secondary'}`}>
                       {r.elapsedS != null ? `${durationWords(r.elapsedS)} so far · ` : ''}
                       {estimateLine(r)}
