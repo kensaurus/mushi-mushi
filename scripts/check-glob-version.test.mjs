@@ -18,7 +18,10 @@
  *
  * TECHNICAL DETAILS:
  * - Reads package.json overrides and pnpm-lock.yaml resolutions.
- * - When node_modules is installed, checks .pnpm copies and globSync().
+ * - When node_modules is installed, checks glob copies that another
+ *   installed package links, then globSync().
+ * - A glob@* directory with no inbound link is a pnpm virtual-store
+ *   leftover. It is not an active dependency.
  *
  * NOTES:
  * - A 14.x newer than 14.0.2 is still a fix. The ceiling stays below 15.
@@ -26,7 +29,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,6 +69,77 @@ function assertNotVulnerable(version, where) {
   }
 }
 
+/** Record one installed glob directory, following a pnpm symlink once. */
+function considerGlobDir(globDir, seen, manifests) {
+  if (!existsSync(globDir)) return
+  let real
+  try {
+    real = realpathSync(globDir)
+  } catch {
+    return
+  }
+  const manifest = path.join(real, 'package.json')
+  if (!existsSync(manifest) || seen.has(manifest)) return
+  seen.add(manifest)
+  manifests.push(manifest)
+}
+
+/**
+ * Glob packages reachable from the installed dependency graph.
+ * Skips glob@* store entries themselves: pnpm can leave those behind
+ * after an upgrade even when nothing links them.
+ */
+function reachableGlobManifests(store) {
+  const manifests = []
+  const seen = new Set()
+  let names
+  try {
+    names = readdirSync(store)
+  } catch {
+    return manifests
+  }
+  for (const name of names) {
+    if (name.startsWith('glob@')) continue
+    const globDir = name === 'node_modules'
+      ? path.join(store, 'node_modules', 'glob')
+      : path.join(store, name, 'node_modules', 'glob')
+    considerGlobDir(globDir, seen, manifests)
+  }
+  considerGlobDir(path.join(store, '..', 'glob'), seen, manifests)
+  return manifests
+}
+
+/** Assert every linked glob is outside the advisory. Returns the patched copies. */
+function checkInstalledGlobs(store) {
+  const patched = []
+  for (const manifest of reachableGlobManifests(store)) {
+    const installed = JSON.parse(readFileSync(manifest, 'utf8')).version
+    assertNotVulnerable(installed, manifest)
+    if (compare(parseVersion(installed), FLOOR) >= 0) patched.push(manifest)
+  }
+  return patched
+}
+
+function makeStore() {
+  const root = mkdtempSync(path.join(tmpdir(), 'mushi-glob-store-'))
+  const store = path.join(root, 'node_modules', '.pnpm')
+  mkdirSync(store, { recursive: true })
+  return { root, store }
+}
+
+function writeGlobPackage(store, version) {
+  const dir = path.join(store, `glob@${version}`, 'node_modules', 'glob')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'glob', version }))
+  return dir
+}
+
+function linkGlob(store, dependent, version) {
+  const linkDir = path.join(store, dependent, 'node_modules')
+  mkdirSync(linkDir, { recursive: true })
+  symlinkSync(path.join('..', '..', `glob@${version}`, 'node_modules', 'glob'), path.join(linkDir, 'glob'), 'dir')
+}
+
 test('the glob 11 and 13 overrides are a bounded 14.0.2 floor', () => {
   const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
   for (const key of ['glob@11', 'glob@13']) {
@@ -93,21 +167,40 @@ test('pnpm-lock.yaml resolves no vulnerable glob', () => {
   assert.ok(patched.length > 0, `expected a glob >= 14.0.2, found ${[...versions].join(', ')}`)
 })
 
+test('an unreferenced glob left in the pnpm store is not an active dependency', () => {
+  const { root, store } = makeStore()
+  try {
+    mkdirSync(path.join(store, 'glob@11.1.0'), { recursive: true })
+    writeGlobPackage(store, '13.0.6')
+    writeGlobPackage(store, '14.0.4')
+    writeGlobPackage(store, '7.2.3')
+    linkGlob(store, 'workbox-build@7.4.1', '14.0.4')
+    linkGlob(store, 'rimraf@3.0.2', '7.2.3')
+
+    const versions = reachableGlobManifests(store).map((manifest) => JSON.parse(readFileSync(manifest, 'utf8')).version)
+    assert.deepEqual(new Set(versions), new Set(['14.0.4', '7.2.3']))
+    assert.equal(checkInstalledGlobs(store).length, 1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a glob the dependency graph still links is still checked', () => {
+  const { root, store } = makeStore()
+  try {
+    writeGlobPackage(store, '11.1.0')
+    writeGlobPackage(store, '14.0.4')
+    linkGlob(store, '@sentry+bundler-plugin-core@5.3.0', '11.1.0')
+    assert.throws(() => checkInstalledGlobs(store), /GHSA-3g3m-2fjr-6pw4/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('installed glob copies are patched when node_modules is present', () => {
   const store = path.join(ROOT, 'node_modules', '.pnpm')
   if (!existsSync(store)) return
-  const dirs = readdirSync(store).filter((name) => name.startsWith('glob@'))
-  assert.ok(dirs.length > 0, 'pnpm store has no glob package')
-  const patched = []
-  for (const dir of dirs) {
-    const version = dir.slice('glob@'.length).split('(')[0].split('_')[0]
-    assertNotVulnerable(version, 'node_modules/.pnpm')
-    const manifest = path.join(store, dir, 'node_modules', 'glob', 'package.json')
-    if (!existsSync(manifest)) continue
-    const installed = JSON.parse(readFileSync(manifest, 'utf8')).version
-    assertNotVulnerable(installed, manifest)
-    if (compare(parseVersion(installed), FLOOR) >= 0) patched.push(manifest)
-  }
+  const patched = checkInstalledGlobs(store)
   assert.ok(patched.length > 0, 'node_modules has no glob >= 14.0.2')
 
   const requireGlob = createRequire(patched[0])
