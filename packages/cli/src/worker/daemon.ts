@@ -183,6 +183,8 @@ interface LaneRuntime {
   nextFollowupAt: number
   /** Machine-side failures in a row; any other ending resets it. */
   infraStreak: number
+  /** When this lane last got an agent space (a run, job or follow-up started); 0 = never. Drives fairOrder. */
+  servedAt: number
   state: string
   /** The state the last heartbeat sent, and since when (for "waited 3 h for an agent space"). */
   seenState: string
@@ -191,6 +193,20 @@ interface LaneRuntime {
   tracks: Map<string, RunTrack>
   counters: { runs: number; prs: number; pushes: number; timeouts: number; errors: number; idle: number; agentMs: number }
   last: string
+}
+
+/**
+ * @internal Exported for tests only. The order lanes ask for an agent space in
+ * on each tick: the lane served longest ago first (never served first), config
+ * order on ties. A fixed order let the first lanes in worker.json take every
+ * freed space: on 2026-11-16, with 17 lanes and 2 agents, mushi-mushi ran 5
+ * times in a row while glot.it, tsumagoi, yen-yen and HHTP waited 100 minutes.
+ */
+export function fairOrder<T extends { servedAt: number }>(lanes: readonly T[]): T[] {
+  return lanes
+    .map((lane, i) => ({ lane, i }))
+    .sort((a, b) => a.lane.servedAt - b.lane.servedAt || a.i - b.i)
+    .map((x) => x.lane)
 }
 
 /** @internal Exported for tests only. How long a lane waits after `streak` machine-side failures in a row. */
@@ -228,6 +244,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     nextClaimAt: 0,
     nextFollowupAt: 0,
     infraStreak: 0,
+    servedAt: 0,
     state: deps.notReady?.has(local.name) ? 'not-ready' : 'starting',
     seenState: '',
     stateAt: deps.now(),
@@ -372,6 +389,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claim.id, ac)
     lane.state = 'working'
     const t0 = deps.now()
+    lane.servedAt = t0
     const runModel = model(claim.model ?? lane.config?.model)
     const track = newRun(claim.id, 'fix', { reportId: claim.report.id, model: runModel, now: t0, stage: 'prepare' })
     lane.tracks.set(claim.id, track)
@@ -433,6 +451,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     lane.running.set(claimId, ac)
     lane.state = 'working'
     const t0 = deps.now()
+    lane.servedAt = t0
     const track = newRun(claimId, kind, { model: lane.config?.model ?? null, now: t0 })
     lane.tracks.set(claimId, track)
     const log = (l: string) => {
@@ -487,6 +506,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
   function startFollowup(lane: LaneRuntime, f: LocalFollowupCandidate): void {
     lane.followup = true
     const t0 = deps.now()
+    lane.servedAt = t0
     // A follow-up holds an agent space like a claim does, so the console sees it too.
     const runId = `followup-${f.fixId.replace(/-/g, '').slice(0, 8).toLowerCase()}`
     const track = newRun(runId, 'followup', { model: lane.config?.model ?? null, now: t0, stage: 'prepare' })
@@ -697,7 +717,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
     waitWhy = null
     hostState = 'working'
     const now = deps.now()
-    for (const l of lanes) {
+    for (const l of fairOrder(lanes)) {
       if (stopped) break
       await laneStep(l, now, guards)
     }
