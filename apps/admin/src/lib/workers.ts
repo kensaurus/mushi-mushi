@@ -323,7 +323,7 @@ export const QUEUE_REQUEST_MAX = 50
 const reportsWord = (n: number) => (n === 1 ? 'the report' : `${n} reports`)
 
 /** Plain words for what an add did, from the server's counts (added, moved, skipped as already closed). */
-export function queueAddMessage(add: QueueAdd, counts: { added?: number; moved?: number; skippedClosed?: number }): string {
+function queueAddMessage(add: QueueAdd, counts: { added?: number; moved?: number; skippedClosed?: number }): string {
   const added = counts.added ?? 0
   const moved = counts.moved ?? 0
   const parts: string[] = []
