@@ -17,9 +17,10 @@
 //      API to create a session and delegate to a pre-deployed script
 //      stored in the story's `script` column (Browserbase executes it
 //      on their cloud Chromium via the Stagehand / Playwright bridge).
-//   3. For `local` provider stories: marks status='skipped' with a
-//      reason that the local provider requires the CLI runner. The
-//      operator's local mushi-dev server picks these up via long-polling.
+//   3. For `local` provider stories: the scheduled path does not select
+//      them and does not write a qa_story_runs row. They run via the CLI
+//      (`mushi qa run`). A manual edge invocation still records
+//      status='skipped' on the run row the API already inserted.
 //
 // Cron
 // ────
@@ -55,7 +56,7 @@ import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
 import { monitorScrapeBody } from '../_shared/monitor-url.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
-import { cronTickTime, isApprovedForSchedule } from './cron-tick.ts'
+import { cronTickTime, isApprovedForSchedule, isEdgeScheduledProvider } from './cron-tick.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -705,10 +706,12 @@ Deno.serve(
     })
     if (abandoned > 0) rlog.info('abandoned manual runs', { failed: abandoned })
 
-    // Scheduled runs: enabled and approved. pending_review and rejected
-    // stories are not executed, even when enabled is still true
-    // (20260602000002). Manual runs go through executeManualRun and are
-    // not filtered here. The previous select embedded
+    // Scheduled runs: enabled, approved, and not local. pending_review and
+    // rejected stories are not executed, even when enabled is still true
+    // (20260602000002). Local stories run via the CLI; selecting them here
+    // wrote a skipped qa_story_runs row on every matching tick. Manual runs
+    // go through executeManualRun and are not filtered here. The previous
+    // select embedded
     // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
     // which referenced a non-existent `projects → mushi_runtime_config`
     // foreign key (PostgREST returned PGRST200 → 500). The embedded
@@ -722,6 +725,7 @@ Deno.serve(
       .select('*')
       .eq('enabled', true)
       .eq('approval_status', 'approved')
+      .neq('browser_provider', 'local')
 
     if (storiesErr) {
       // Truncate the message before logging and persisting — a transient Supabase
@@ -762,6 +766,7 @@ Deno.serve(
     const matchAt = cronTickTime(body.tick, now)
     const dueStories = (stories ?? []).filter((s: QaStory) =>
       isApprovedForSchedule(s) &&
+      isEdgeScheduledProvider(s) &&
       cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)
     )
 

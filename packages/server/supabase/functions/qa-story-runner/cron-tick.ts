@@ -10,6 +10,11 @@
  *
  * isApprovedForSchedule is the cron path's approval gate (migration
  * 20260602000002). Manual runs do not use it.
+ *
+ * isEdgeScheduledProvider keeps browser_provider = 'local' off the cron
+ * path. The edge runner cannot start a local browser, and recording those
+ * stories as skipped every tick filled qa_story_runs. The CLI runs them.
+ * Manual runs do not use this helper.
  */
 
 /** A tick older than this is ignored (the call runs as of its arrival). */
@@ -36,4 +41,12 @@ export function cronTickTime(tick: string | undefined, now: Date): Date {
  */
 export function isApprovedForSchedule(story: { approval_status?: string | null }): boolean {
   return story.approval_status === 'approved'
+}
+
+/**
+ * Scheduled edge runs execute firecrawl and browserbase stories.
+ * `local` stays on the CLI; a missing provider is not treated as local.
+ */
+export function isEdgeScheduledProvider(story: { browser_provider?: string | null }): boolean {
+  return story.browser_provider !== 'local'
 }
