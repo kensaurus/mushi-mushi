@@ -91,3 +91,72 @@ describe('groupFailures', () => {
     expect(g.summaries).toEqual([])
   })
 })
+
+/** The live shape of 2026-11-16: three "kensaurus-local" jobs wait; only overseas-ci runs those; two machines idle. */
+function waitingForLocal(): CiOverview {
+  const base = ciOverviewFixture()
+  const host = (hostId: string, hostname: string) => ({ ...base.hosts[0]!, hostId, hostname, stale: false, runners: [] })
+  const tmpl = base.jobs.find((j) => j.id === 'j2')!
+  const run = base.jobs.find((j) => j.id === 'j1')!
+  const local = ['kensaurus-local']
+  return {
+    ...base,
+    hosts: [host('h-os', 'overseas-ci'), host('h-a1', 'alienware-ci'), host('h-a2', 'alienwarex16')],
+    runners: [{ ...base.runners[0]!, name: 'aw-glot.it-1', hostId: 'h-os', labels: local }],
+    jobs: [
+      { ...run, id: 'r1', labels: local, runnerName: 'aw-glot.it-1' },
+      ...['w1', 'w2', 'w3'].map((id) => ({ ...tmpl, id, labels: local, createdAt: '2026-10-21T11:45:00Z' })),
+    ],
+  }
+}
+
+describe('why jobs wait', () => {
+  it('names the only machine that takes the label, and says the idle ones are not set up for it', () => {
+    const s = buildCiStatus(waitingForLocal(), FIXTURE_NOW)
+    expect(s.waitWhy).toBe('They need a “kensaurus-local” machine; only overseas-ci (running 1 now) takes those. alienware-ci and alienwarex16 are idle but not set up for “kensaurus-local”.')
+    expect(s.headline).toContain('3 jobs waiting for a machine; the oldest for 15 min. They need a “kensaurus-local” machine')
+  })
+
+  it('says when no machine ever ran the label, and when the wait is on GitHub', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.filter((j) => j.id !== 'r1')
+    expect(buildCiStatus(o, FIXTURE_NOW).waitWhy).toMatch(/none ran such a job this week: check that a runner is set up for it\.$/)
+    o.jobs = o.jobs.map((j) => ({ ...j, labels: ['ubuntu-latest'] }))
+    expect(buildCiStatus(o, FIXTURE_NOW).waitWhy).toBe("They wait for GitHub's cloud (“ubuntu-latest”), not for your machines.")
+  })
+})
+
+describe('groupFailures: one line per job, drafts apart', () => {
+  it('lists a job that failed in two runs once, and a summary check once', () => {
+    const o = withJobs([
+      failed({ id: 'a1', jobName: 'Rendered UI Audits', runId: 20, failedStep: 'Console chrome contract', completedAt: '2026-10-21T11:40:00Z' }),
+      failed({ id: 'a2', jobName: 'Quality Gate', runId: 20, failedStep: 'Gate on every upstream job', completedAt: '2026-10-21T11:40:00Z' }),
+      failed({ id: 'b1', jobName: 'Rendered UI Audits', runId: 21, failedStep: 'Console chrome contract', completedAt: '2026-10-21T11:50:00Z' }),
+      failed({ id: 'b2', jobName: 'Quality Gate', runId: 21, failedStep: 'Gate on every upstream job', completedAt: '2026-10-21T11:50:00Z' }),
+    ])
+    const g = groupFailures(o, FIXTURE_NOW).find((x) => x.prNumber === 1032)!
+    expect(g.broke.map((b) => b.failure.job.id)).toEqual(['b1'])
+    expect(g.summaries.map((f) => f.job.id)).toEqual(['b2'])
+  })
+
+  it('a draft step next to a real failure is a summary, never what broke; "required" is a summary name', () => {
+    const o = withJobs([
+      failed({ id: 'c1', jobName: 'Lint, Type-check & Build', runId: 30, prNumber: 413, failedStep: 'Dead code (production)' }),
+      failed({ id: 'c2', jobName: 'required', runId: 30, prNumber: 413, failedStep: 'Draft PRs run no CI' }),
+      failed({ id: 'c3', jobName: 'required', runId: 31, prNumber: 413, workflowName: 'gate', failedStep: 'Gate on every upstream job' }),
+    ])
+    const g = groupFailures(o, FIXTURE_NOW).find((x) => x.prNumber === 413)!
+    expect(g.draftOnly).toBe(false)
+    expect(g.broke.map((b) => b.failure.job.id)).toEqual(['c1'])
+    expect(g.summaries.map((f) => f.job.id).sort()).toEqual(['c2', 'c3'])
+  })
+})
+
+describe('the week table', () => {
+  it('names the repo when two rows would share an app name', () => {
+    const base = ciOverviewFixture()
+    const r0 = base.repos[0]!
+    const o = { ...base, repos: [{ ...r0, repo: 'kensaurus/solo-boss-cloud', projectName: 'solo-boss-cloud', jobs7d: 5 }, { ...r0, repo: 'kensaurus/solo-boss-cloud-documentation', projectName: 'solo-boss-cloud', jobs7d: 4 }] }
+    expect(buildCiStatus(o, FIXTURE_NOW).apps.map((a) => a.app).sort()).toEqual(['solo-boss-cloud (solo-boss-cloud)', 'solo-boss-cloud (solo-boss-cloud-documentation)'])
+  })
+})

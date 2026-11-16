@@ -219,12 +219,12 @@ describe('CiPage', () => {
     }
   })
 
-  it('opens with a plain verdict, live tiles and the outcome bar', async () => {
+  it("opens the week with a plain verdict and the outcome bar, not the board's live queue again", async () => {
     await render()
-    expect(q('ci-verdict')!.textContent).toMatch(/waiting for a test machine|test machine, not your code|failed on the code|healthy/)
+    expect(q('ci-verdict')!.textContent).toMatch(/test machine, not your code|failed on the code|healthy/)
     const summary = q('ci-summary')!
-    expect(summary.textContent).toContain('Waiting now')
-    expect(summary.textContent).toContain('Running now')
+    expect(summary.textContent).not.toContain('Waiting now')
+    expect(summary.textContent).not.toContain('Running now')
     expect(summary.textContent).toContain('Test machine stopped')
     expect(summary.querySelector('[role="img"]')?.getAttribute('aria-label')).toMatch(/passed/)
   })

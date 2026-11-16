@@ -486,7 +486,8 @@ describe('FixesPage', () => {
       const timeout = document.querySelector('[data-testid="fixes-stopped-sandbox_timeout"]')!
       expect(timeout.textContent).toContain('Ran out of time')
       expect(document.querySelector('[data-testid="fixes-stopped-needs_human-retry"]')).toBeNull()
-      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('would stop the same way')
+      // Each cause says what to do instead, in its own words (not one shared "not a code change").
+      expect(document.querySelector('[data-testid="fixes-stopped-needs_human-no-retry"]')!.textContent).toContain('a person must decide')
       click(document.querySelector('[data-testid="fixes-stopped-sandbox_timeout-retry"]'))
       expect(document.body.textContent).toContain('stopped by "Ran out of time"')
       expect(mocks.apiFetch.mock.calls.some(([p]) => p === '/v1/admin/fixes/dispatch')).toBe(false)

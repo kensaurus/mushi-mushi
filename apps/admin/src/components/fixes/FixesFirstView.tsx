@@ -38,6 +38,31 @@ function causeFix(cause: string, agentsOut: boolean): { label: string; to: strin
   return null
 }
 
+/**
+ * What to do about a cause a retry will not clear: each in its own words, linked to where
+ * it is done. "A retry would stop the same way: the agent says this is not a code change"
+ * used to sit under "Needs your decision" and "Code is in another repo" too, and "None of
+ * these can be retried right now" gave no next step (owner's fresh-user review, 2026-11-16).
+ */
+function nextStep(cause: string, pipelineHref: string): { text: string; link: { label: string; to: string } | null } | null {
+  switch (cause) {
+    case 'needs_human':
+      return { text: 'The agent says a person must decide. Open each to fix it yourself or dismiss it.', link: null }
+    case 'already_fixed':
+      return { text: 'The agent says the code already does this. Check, then close the ones that are fixed.', link: { label: 'Check and close', to: pipelineHref } }
+    case 'not_actionable':
+      return { text: 'Nothing in the report points to code. Add detail to the report, or dismiss it.', link: null }
+    case 'wrong_repo':
+      return { text: 'The code lives in another repo. Connect that repo to its app, or dismiss these.', link: { label: 'Connect a repo', to: '/connect' } }
+    case 'pr_closed_unmerged':
+      return { text: 'Someone closed the pull request without merging. Reopen it on GitHub, or start a new fix from the report.', link: null }
+    case 'ci_failed':
+      return { text: 'Their own CI is red. CI repair sends an agent to fix the failing check.', link: { label: 'Send to CI repair', to: pipelineHref } }
+    default:
+      return null
+  }
+}
+
 interface StoppedReason {
   cause: string
   label: string
@@ -45,13 +70,13 @@ interface StoppedReason {
   fixes: FixAttempt[]
   /** Of those, the ones a retry can clear now. */
   retryable: FixAttempt[]
-  /** Why there is no Retry, when there is none. */
+  /** Why there is no Retry, and what to do instead, when there is none. */
   noRetry: string | null
   fix: { label: string; to: string } | null
 }
 
 /** Stopped reports grouped by why, biggest first. */
-function stoppedReasons(fixes: FixAttempt[], agentsOut: boolean): StoppedReason[] {
+function stoppedReasons(fixes: FixAttempt[], agentsOut: boolean, pipelineHref: string): StoppedReason[] {
   const byCause = new Map<string, FixAttempt[]>()
   for (const f of fixes) {
     if (!needsAttention(f)) continue
@@ -60,19 +85,21 @@ function stoppedReasons(fixes: FixAttempt[], agentsOut: boolean): StoppedReason[
   }
   return [...byCause.entries()]
     .map(([cause, list]) => {
-      const fix = causeFix(cause, agentsOut)
+      const keyFix = causeFix(cause, agentsOut)
       const repeats = RETRY_REPEATS.has(cause)
-      const retryable = repeats || fix ? [] : list.filter((f) => f.retryable === true)
-      const noRetry = repeats
-        ? 'A retry would stop the same way: the agent says this is not a code change.'
-        : cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut
+      const retryable = repeats || keyFix ? [] : list.filter((f) => f.retryable === true)
+      const step = retryable.length === 0 ? nextStep(cause, pipelineHref) : null
+      const noRetry =
+        cause === AGENT_OUT_OF_USAGE_BUCKET && agentsOut
           ? "A retry goes to the same account, which is out of credits. Fix them with Claude Code on your own computer, or wait until the credits come back."
-          : fix
-          ? 'A retry fails the same way until the key works.'
-          : retryable.length === 0
-            ? 'None of these can be retried right now.'
-            : null
-      return { cause, label: fixCauseLabel(cause), fixes: list, retryable, noRetry, fix }
+          : keyFix
+            ? 'A retry fails the same way until the key works.'
+            : step
+              ? step.text
+              : retryable.length === 0
+                ? 'No retry is offered for these. Show them to see each one’s reason.'
+                : null
+      return { cause, label: fixCauseLabel(cause), fixes: list, retryable, noRetry, fix: keyFix ?? step?.link ?? null }
     })
     .sort((a, b) => b.fixes.length - a.fixes.length)
 }
@@ -116,12 +143,12 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
   const ready = readyFixes(fixes, pipeline)
   const queued = queuedFixIds(pipeline)
   const toQueue = ready.filter((f) => !queued.has(f.id))
-  const reasons = stoppedReasons(fixes, agentsOut)
+  const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
+  const reasons = stoppedReasons(fixes, agentsOut, pipelineHref)
   const listed = reasons.reduce((n, r) => n + r.fixes.length, 0)
   // The reasons come from the attempts loaded below (the newest 200), so they
   // can cover fewer reports than the status line's "Stopped 48" (it read 47).
   const stopped = Math.max(listed, stoppedTotal ?? 0)
-  const pipelineHref = projectId ? `/pipeline?project=${encodeURIComponent(projectId)}` : '/pipeline'
 
   return (
     <div className="space-y-3" data-testid="fixes-first-view">
@@ -157,7 +184,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-ready-list">
             {ready.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
-                <Link to={`/reports/${f.report_id}`} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
+                <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
                   {fixReportLabel(f)}
                 </Link>
                 <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">
@@ -207,13 +234,14 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
                   >
                     Retry {r.retryable.length}
                   </Btn>
-                ) : r.fix ? (
-                  <Link to={r.fix.to} className="text-2xs font-medium text-brand hover:underline" title={r.noRetry ?? undefined}>
-                    {r.fix.label} →
-                  </Link>
                 ) : (
                   <span className="basis-full pl-11 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
                     {r.noRetry}
+                    {r.fix && (
+                      <Link to={r.fix.to} className="ml-1.5 font-medium text-brand hover:underline">
+                        {r.fix.label} →
+                      </Link>
+                    )}
                   </span>
                 )}
               </li>

@@ -38,13 +38,13 @@ The **Now** view opens with plain answers, in this order:
 
 | Part | What it answers |
 | --- | --- |
-| The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. |
+| The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. For waiting jobs it says why: which machine takes jobs with their labels, and which idle machines are not set up for them. |
 | **Machines right now** | Which machine runs what: one card per real machine, by name, with how busy its CPU and memory are. Jobs on GitHub's machines show as **GitHub's cloud**. Idle machines are listed on one line. |
 | **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. |
-| **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A draft pull request's skipped CI is marked as not a failure. |
-| **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. |
+| **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A job that failed in a re-run too is listed once. Draft pull requests that skipped CI on purpose are one line below the list, not failures. |
+| **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. Two repos of one app show their repo name. |
 
-**Last 7 days** follows: the week's counts and pass rate.
+**Last 7 days** follows: the week's counts and pass rate. It does not repeat what is waiting or running now; that is the board above.
 
 ## Test machine or your code
 

@@ -111,7 +111,9 @@ export function FilterChip({
           role="img"
           aria-label={`${count} results`}
         >
-          {count > 999 ? '999+' : count}
+          {/* The exact count up to 99,999: "All 999+" beside "2115 total" read as a
+              different number (2026-11-16). */}
+          {count > 99_999 ? '99k+' : count.toLocaleString('en-US')}
         </span>
       )}
     </button>

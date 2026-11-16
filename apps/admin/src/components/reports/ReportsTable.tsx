@@ -218,7 +218,7 @@ export function ReportsTable({
               />
               <SortHeader
                 label="Conf."
-                fullLabel="Confidence"
+                fullLabel="Confidence: how sure Mushi Mushi is about the severity and category"
                 field="confidence"
                 current={sort}
                 dir={dir}

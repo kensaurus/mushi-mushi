@@ -603,43 +603,32 @@ export interface CiVerdict {
   detail: string
 }
 
-const LONG_WAIT_S = 10 * 60
-
-/** One plain sentence for the top of /ci: does anything need you, and what. */
-export function ciVerdict(o: Pick<CiOverview, 'jobs' | 'stats' | 'window'>, now: number): CiVerdict {
-  const queue = buildCiQueue(o.jobs, now)
-  const oldestWait = queue.waiting.reduce((m, j) => Math.max(m, jobElapsedSeconds(j, now) ?? 0), 0)
+/**
+ * One plain sentence for the CI page's "Last 7 days": does the week need you, and what.
+ * The live queue (running, waiting) is the status board's, right above it: repeating
+ * "3 jobs are waiting" here said the same thing twice (2026-11-16).
+ */
+export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
   const c = ciOutcomeCounts(o.stats)
   const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
-  const live =
-    queue.running.length || queue.waiting.length
-      ? `${queue.running.length} running, ${queue.waiting.length ? `${queue.waiting.length} waiting` : 'none waiting'}. `
-      : ''
 
-  if (queue.waiting.length > 0 && oldestWait >= LONG_WAIT_S) {
-    return {
-      tone: 'warn',
-      headline: `${queue.waiting.length} job${queue.waiting.length === 1 ? ' is' : 's are'} waiting for a test machine, the longest for ${formatSeconds(oldestWait)}.`,
-      detail: `${live}Check that your runners are online, or add a machine (mushi runner add).`,
-    }
-  }
   if (c.infra > 0 && c.infra >= c.codeFailures) {
     return {
       tone: 'warn',
       headline: 'Most failures are the test machine, not your code.',
-      detail: `${live}${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
+      detail: `${c.infra} of ${c.infra + c.codeFailures} failed jobs in ${days} never finished testing. Re-run them; "Speed it up" below says why the machine stops.`,
     }
   }
   if (c.codeFailures > 0) {
     return {
       tone: 'neutral',
       headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
-      detail: `${live}${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+      detail: `${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
     }
   }
   return {
     tone: 'ok',
     headline: c.total ? `CI is healthy: every finished job passed in ${days}.` : `No jobs in ${days}.`,
-    detail: `${live}${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+    detail: `${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
   }
 }
