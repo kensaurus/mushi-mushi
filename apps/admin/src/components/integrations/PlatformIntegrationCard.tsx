@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/integrations/PlatformIntegrationCard.tsx
  * PURPOSE: One Sentry/Langfuse/GitHub/Cursor card. Pure presentation: shows
  *          service icon, status-coded left border, last probe + sparkline,
- *          external link to the service, and the edit form. Mutations bubble
+ *          external link to the service, and the edit form. The Cursor
+ *          default model uses the shared model picker. Mutations bubble
  *          up to the page via callbacks. The title shares a row with the
  *          icon buttons; status text and the description sit on a full-width
  *          row under that, so a 390px card does not squeeze them into the
@@ -26,6 +27,7 @@ import { SentryImportPanel } from './SentryImportPanel'
 import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { IntegrationCredentialChips } from './IntegrationCredentialChips'
 import type { FieldSource, HealthRow, PlatformDef } from './types'
+import { CursorModelPicker } from '../settings/CursorModelPicker'
 import { ConnectionStatus } from '../ui/ConnectionStatus'
 import { connectionFromProbe, isMissingSentrySecret, sentryConnection, type ConnectionView } from '../../lib/integrationConnection'
 import { SentrySecretMissingPanel } from './SentrySecretMissingPanel'
@@ -557,7 +559,22 @@ export function PlatformIntegrationCard({
                 {/* Secrets use SecretInput (type="text", CSS-masked, reveal
                     toggle) so password managers never offer to save an API
                     token as the site login. */}
-                {(() => {
+                {field.name === 'cursor_default_model' ? (
+                  <CursorModelPicker
+                    value={draft[field.name] ?? ''}
+                    onChange={(spec) => onChangeField(field.name, spec)}
+                    label={field.label}
+                    labelled={false}
+                    emptyLabel={
+                      isDraftEmpty && fieldSource === 'env'
+                        ? 'Environment variable'
+                        : isDraftEmpty && fieldSource === 'org'
+                          ? 'Organization default'
+                          : 'Cursor account default'
+                    }
+                  />
+                ) : (
+                (() => {
                   const FieldInput = field.type === 'password' ? SecretInput : Input
                   return (
                 <FieldInput
@@ -575,7 +592,8 @@ export function PlatformIntegrationCard({
                   autoComplete="off"
                 />
                   )
-                })()}
+                })()
+                )}
                 {/* Source coverage hint — shown when the draft is empty but covered */}
                 {isDraftEmpty && fieldSource === 'env' && (
                   <p className="mt-0.5 text-2xs text-fg-faint leading-snug">
