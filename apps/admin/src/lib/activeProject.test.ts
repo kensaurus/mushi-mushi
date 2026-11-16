@@ -19,8 +19,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   ACTIVE_PROJECT_EVENT,
+  clearActiveProject,
   getActiveProjectIdForApi,
   getActiveProjectIdSnapshot,
+  pickActiveProject,
   setActiveProjectIdSnapshot,
 } from './activeProject'
 
@@ -71,6 +73,7 @@ describe('setActiveProjectIdSnapshot', () => {
 describe('getActiveProjectIdForApi after a pick (2026-11-16: glot.it fixes under a mushi-mushi header)', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    clearActiveProject()
     window.history.replaceState(null, '', `/fixes?project=${PROJECT_B}`)
   })
 
@@ -80,26 +83,33 @@ describe('getActiveProjectIdForApi after a pick (2026-11-16: glot.it fixes under
       seen = getActiveProjectIdForApi()
     }
     window.addEventListener(ACTIVE_PROJECT_EVENT, listener)
-    setActiveProjectIdSnapshot(PROJECT_A)
+    pickActiveProject(PROJECT_A)
     window.removeEventListener(ACTIVE_PROJECT_EVENT, listener)
     // The switcher's event fired while the URL still named the old app.
     expect(new URLSearchParams(window.location.search).get('project')).toBe(PROJECT_B)
     expect(seen).toBe(PROJECT_A)
   })
 
-  it('hands back to the URL once it shows the pick', () => {
-    setActiveProjectIdSnapshot(PROJECT_A)
+  it('hands back to the URL once it moves, to the pick or anywhere else', () => {
+    pickActiveProject(PROJECT_A)
     window.history.replaceState(null, '', `/fixes?project=${PROJECT_A}`)
     expect(getActiveProjectIdForApi()).toBe(PROJECT_A)
-    // A later deep link to another app wins again: the pick was spent.
     window.history.replaceState(null, '', `/fixes?project=${PROJECT_B}`)
     expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
   })
 
-  it('back/forward cancels a pick the URL never showed', () => {
-    setActiveProjectIdSnapshot(PROJECT_A)
-    expect(getActiveProjectIdForApi()).toBe(PROJECT_A)
+  it('back/forward and clearing the app cancel a pick the URL never showed', () => {
+    pickActiveProject(PROJECT_A)
     window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
+    pickActiveProject(PROJECT_A)
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_A)
+    clearActiveProject()
+    expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
+  })
+
+  it('a background store write (not a pick) never overrides the URL', () => {
+    setActiveProjectIdSnapshot(PROJECT_A)
     expect(getActiveProjectIdForApi()).toBe(PROJECT_B)
   })
 })

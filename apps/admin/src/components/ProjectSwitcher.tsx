@@ -18,6 +18,7 @@ import {
   getActiveProjectIdSnapshot,
   isValidProjectId,
   refetchProjectData,
+  pickActiveProject,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
 import { invalidateApiCache } from '../lib/supabase'
@@ -420,7 +421,7 @@ export function ProjectSwitcher() {
   function pickInTeam(projectId: string, orgId: string) {
     setActiveOrgIdSnapshot(orgId)
     rememberTeamProject(orgId, projectId)
-    setActiveProjectIdSnapshot(projectId)
+    pickActiveProject(projectId)
     setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_ORG_QUERY_PARAM, orgId)
@@ -444,7 +445,7 @@ export function ProjectSwitcher() {
   function pick(id: string) {
     const orgId = getActiveOrgIdSnapshot()
     if (orgId) rememberTeamProject(orgId, id)
-    setActiveProjectIdSnapshot(id)
+    pickActiveProject(id)
     setStoredProjectScopeMode('project')
     const next = new URLSearchParams(searchParams)
     next.set(ACTIVE_PROJECT_QUERY_PARAM, id)

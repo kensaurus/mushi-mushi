@@ -20,6 +20,7 @@ export function isValidProjectId(value: string | null | undefined): value is str
 }
 
 export function clearActiveProject(): void {
+  pendingPick = null
   if (typeof window === 'undefined') return
   try {
     window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
@@ -68,13 +69,15 @@ export function getActiveProjectIdFromUrl(): string | null {
 }
 
 /**
- * A project someone just picked (the header switcher, a report's own app),
- * until the URL shows it. The switcher stores the pick and fires
- * ACTIVE_PROJECT_EVENT, which refetches every panel at once, but the URL only
- * changes on the next render. Those refetches used to read the old URL, so
- * Fixes showed glot.it's 629 fixes under a "mushi-mushi" header (2026-11-16).
+ * An app the person just picked in the header switcher, until the URL moves.
+ * The pick stores the app and fires ACTIVE_PROJECT_EVENT, which refetches every
+ * panel at once, but the URL only changes on the next render. Those refetches
+ * used to read the old URL, so Fixes showed glot.it's 629 fixes under a
+ * "mushi-mushi" header (2026-11-16). Only an explicit pick (`pickActiveProject`)
+ * does this: a background store write never overrides the URL (a report page
+ * stays on the app its link names).
  */
-let pendingPick: { id: string; at: number } | null = null
+let pendingPick: { id: string; urlAtPick: string | null; at: number } | null = null
 /** A pick the URL never adopts (a cancelled navigation) stops winning after this. */
 const PENDING_PICK_MS = 5_000
 
@@ -93,10 +96,25 @@ if (typeof window !== 'undefined') {
 export function getActiveProjectIdForApi(): string | null {
   const fromUrl = getActiveProjectIdFromUrl()
   if (pendingPick) {
-    if (fromUrl === pendingPick.id || Date.now() - pendingPick.at > PENDING_PICK_MS) pendingPick = null
+    // The URL moved (to the pick, or anywhere else), the pick was replaced or
+    // cleared, or it is old: the URL is the answer again.
+    const moved = fromUrl !== pendingPick.urlAtPick
+    const replaced = getActiveProjectIdSnapshot() !== pendingPick.id
+    if (moved || replaced || Date.now() - pendingPick.at > PENDING_PICK_MS) pendingPick = null
     else return pendingPick.id
   }
   return fromUrl ?? getActiveProjectIdSnapshot()
+}
+
+/**
+ * The person picked this app (header switcher): store it, and let API calls
+ * follow it until the URL catches up. Use `setActiveProjectIdSnapshot` for
+ * any write that is not a person's pick.
+ */
+export function pickActiveProject(projectId: string): void {
+  const urlAtPick = getActiveProjectIdFromUrl()
+  pendingPick = urlAtPick === projectId ? null : { id: projectId, urlAtPick, at: Date.now() }
+  setActiveProjectIdSnapshot(projectId)
 }
 
 export function setActiveProjectIdSnapshot(projectId: string): void {
@@ -107,8 +125,6 @@ export function setActiveProjectIdSnapshot(projectId: string): void {
   // CustomEvent, every event cache-busts every usePageData hook, and the
   // report page re-render-loops forever (the "page keeps refreshing" bug).
   if (getActiveProjectIdSnapshot() === projectId) return
-  // Until the URL shows it, API calls follow this pick (getActiveProjectIdForApi).
-  if (getActiveProjectIdFromUrl() !== projectId) pendingPick = { id: projectId, at: Date.now() }
   try {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, projectId)
   } catch {
