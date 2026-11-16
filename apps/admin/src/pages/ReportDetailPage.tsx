@@ -950,7 +950,7 @@ function DeviceAndBuildPanel({
             <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
             {row.label === 'Platform' ? (
               <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+                className={`inline-flex items-center px-1.5 py-px rounded-sm text-2xs font-semibold ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
               >
                 {row.value}
               </span>

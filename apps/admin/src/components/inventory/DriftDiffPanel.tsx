@@ -17,7 +17,7 @@ interface Props {
 export function DriftDiffPanel({ missingInInventory, missingInApp, mismatches }: Props) {
   const col = (title: string, items: DriftBucketItem[], tone: string) => (
     <div className={`rounded-md border p-3 ${tone}`}>
-      <h4 className="text-2xs font-semibold uppercase tracking-wider mb-2">{title}</h4>
+      <h4 className="text-2xs font-semibold mb-2">{title}</h4>
       {items.length === 0 ? (
         <p className="text-2xs text-fg-faint">None</p>
       ) : (

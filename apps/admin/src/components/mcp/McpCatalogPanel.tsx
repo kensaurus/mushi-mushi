@@ -55,7 +55,7 @@ export function McpCatalogPanel({
                     {groupTools.map((t) => (
                       <span
                         key={t.name}
-                        className="font-mono text-2xs rounded-sm border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-fg-secondary"
+                        className="font-mono text-2xs rounded-sm bg-surface-overlay px-1.5 py-px text-fg-secondary"
                         title={t.useCase}
                       >
                         {t.name}

@@ -215,13 +215,13 @@ export function StoryCard({
               </span>
             )}
             {!coverage.enabled && !isQueued && (
-              <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-full">
+              <span className="text-3xs text-fg-faint bg-surface-overlay px-1.5 py-px rounded-sm">
                 disabled
               </span>
             )}
           </div>
           <span
-            className={`inline-block text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[coverage.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+            className={`inline-block text-3xs px-1.5 py-px rounded-sm font-medium ${PROVIDER_BADGE[coverage.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
           >
             {PROVIDER_LABEL[coverage.browser_provider] ?? coverage.browser_provider}
           </span>
@@ -253,7 +253,7 @@ export function StoryCard({
           <div className="flex items-center gap-1.5">
             {/* Live status badge from qa_stories — immediate, not MV-lagged */}
             {coverage.last_run_status && (
-              <span className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${STATUS_BG[coverage.last_run_status] ?? 'bg-surface-overlay border-edge-subtle text-fg-secondary'}`}>
+              <span className={`text-3xs px-1.5 py-px rounded-sm font-medium ${STATUS_BG[coverage.last_run_status] ?? 'bg-surface-overlay text-fg-secondary'}`}>
                 {coverage.last_run_status}
               </span>
             )}
@@ -388,7 +388,7 @@ function RunDetail({
       {/* Assertion failures */}
       {run.assertion_failures?.length > 0 && (
         <div>
-          <div className="text-3xs font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1.5">
             Assertion failures ({run.assertion_failures.length})
           </div>
           <div className="rounded-sm border border-edge-subtle overflow-hidden">
@@ -426,7 +426,7 @@ function RunDetail({
       )}
       {!evLoading && evidence.length > 0 && (
         <div>
-          <div className="text-3xs font-semibold text-fg-muted uppercase tracking-wider mb-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1.5">
             Evidence ({evidence.length})
           </div>
           <div className="space-y-2">
@@ -434,7 +434,7 @@ function RunDetail({
               <div key={ev.id} className="rounded-sm border border-edge-subtle overflow-hidden">
                 {/* Evidence header */}
                 <div className="flex items-center gap-2 px-2.5 py-1.5 bg-surface-raised border-b border-edge-subtle">
-                  <span className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${EVIDENCE_BADGE[ev.kind] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}>
+                  <span className={`text-3xs px-1.5 py-px rounded-sm font-medium ${EVIDENCE_BADGE[ev.kind] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}>
                     {ev.kind}
                   </span>
                   {ev.step_label && (
@@ -585,7 +585,7 @@ function StoryDrawer({
       {story && (
         <div className="flex items-center gap-2 flex-wrap">
           <span
-            className={`text-3xs border px-1.5 py-0.5 rounded-sm font-medium ${PROVIDER_BADGE[story.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+            className={`text-3xs px-1.5 py-px rounded-sm font-medium ${PROVIDER_BADGE[story.browser_provider] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
           >
             {PROVIDER_LABEL[story.browser_provider] ?? story.browser_provider}
           </span>
@@ -596,7 +596,7 @@ function StoryDrawer({
             </span>
           )}
           {!story.enabled && (
-            <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle px-1.5 py-0.5 rounded-sm">
+            <span className="text-3xs text-fg-faint bg-surface-overlay px-1.5 py-px rounded-sm">
               disabled
             </span>
           )}
@@ -736,7 +736,7 @@ function StoryDrawer({
 
           {story?.prompt && (
             <div className="space-y-1">
-              <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">Prompt</span>
+              <span className="text-2xs font-semibold text-fg-secondary">Prompt</span>
               <p className="text-sm text-fg-secondary leading-relaxed">{story.prompt}</p>
             </div>
           )}
@@ -755,7 +755,7 @@ function StoryDrawer({
           {/* Run history */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+              <span className="text-2xs font-semibold text-fg-secondary">
                 Run history
               </span>
               {hasActiveRun && (

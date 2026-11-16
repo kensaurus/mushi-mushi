@@ -174,7 +174,7 @@ export function ReportsTable({
             <col className={REPORTS_TABLE_COL.confidence} />
             <col className={REPORTS_TABLE_COL.action} />
           </colgroup>
-          <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
+          <thead className="bg-surface-raised text-2xs text-fg-secondary sticky top-0 z-10 font-semibold">
             <tr>
               <th scope="col" className={`${REPORTS_TABLE_COL.stripe} p-0`} aria-label="Severity stripe" />
               <th scope="col" className={`${REPORTS_TABLE_COL.checkbox} ${TABLE_CELL.pxLead} py-2 text-left pl-3`}>

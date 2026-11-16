@@ -78,7 +78,7 @@ export function ReportPdcaStory({ report, dispatchState, showInternals = false }
     // <header> inside it broke the list for screen readers (REPORT A14).
     <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
       <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+        <h3 className="text-2xs font-semibold text-fg-secondary">
           The story so far
         </h3>
         <span className="text-3xs text-fg-faint">Explained → Fix written → Fix checked → Fix live</span>
@@ -169,7 +169,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           {detailsClean.map((d, i) => (
             <span
               key={i}
-              className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 text-3xs font-mono text-fg-muted"
+              className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-1.5 py-px text-3xs font-mono text-fg-muted"
             >
               {d}
             </span>

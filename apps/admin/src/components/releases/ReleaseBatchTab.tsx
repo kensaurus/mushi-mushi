@@ -117,7 +117,7 @@ function Gates({ b }: { b: RepoBatch }) {
   if (b.mode === 'each' || b.members.length === 0) return null
   return (
     <div data-testid="batch-gates">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Rules to ride</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Rules to ride</h4>
       <ul className="mt-1 space-y-0.5">
         {b.gates.map((g) => (
           <li key={g.id} className="flex items-baseline gap-2 text-xs">
@@ -138,7 +138,7 @@ function Migrations({ b }: { b: RepoBatch }) {
   const where = m.source === 'recipe' ? `the recipe's folder (${m.globs.join(', ')})` : m.globs.join(', ')
   return (
     <div data-testid="batch-migrations">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Database migrations</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Database migrations</h4>
       {m.files.length > 0 ? (
         <div className={`mt-1 rounded-sm px-2.5 py-2 ${CHIP_TONE.warnSubtle}`}>
           <p className="text-xs">
@@ -168,7 +168,7 @@ function Deploy({ b }: { b: RepoBatch }) {
   const d = b.deploy
   return (
     <div data-testid="batch-deploy">
-      <h4 className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">Deploy after the last train</h4>
+      <h4 className="text-2xs font-semibold text-fg-secondary">Deploy after the last train</h4>
       <p className="mt-1 text-xs text-fg-secondary">
         {d.train ? (
           <>

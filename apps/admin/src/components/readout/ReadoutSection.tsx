@@ -21,7 +21,7 @@ export function ReadoutSection({
         <span className="inline-flex h-6 w-6 items-center justify-center rounded-sm border border-edge-subtle bg-surface-overlay text-fg-muted">
           {icon}
         </span>
-        <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-secondary">{title}</h3>
+        <h3 className="text-2xs font-semibold text-fg-secondary">{title}</h3>
       </div>
       {children}
     </div>

@@ -164,9 +164,9 @@ export function EnvironmentFields({ environment, sessionId }: {
               {uaChips.map((chip) => (
                 <span
                   key={chip.label}
-                  className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-2xs ${BROWSER_CHIP[chip.tone]}`}
+                  className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-px text-2xs ${BROWSER_CHIP[chip.tone]}`}
                 >
-                  <span className="text-3xs font-medium uppercase tracking-wider opacity-70">{chip.label}</span>
+                  <span className="text-3xs font-semibold opacity-70">{chip.label}</span>
                   <span className="font-mono">{chip.value}</span>
                 </span>
               ))}
@@ -361,13 +361,13 @@ export function ConsoleLogs({ logs }: { logs: ReportDetail['console_logs'] }) {
               </time>
             ) : null}
             <span
-              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide ${badge}`}
+              className={`mt-0.5 inline-flex min-w-11 shrink-0 items-center justify-center rounded-sm px-1.5 py-0.5 text-3xs font-semibold ${badge}`}
             >
               {level}
             </span>
             {/* Phase 4c: row-level provenance badge — "SDK" or "Sentry" */}
             <span
-              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
+              className="mt-0.5 shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
               title={entry.correlationId ? `Captured by Mushi Mushi SDK (correlationId: ${entry.correlationId})` : 'Captured by Mushi Mushi SDK — console-wrap instrumentation'}
             >
               SDK
@@ -459,7 +459,7 @@ function BackendSpanCorrelation({
             key={span.id}
             className="flex items-center gap-1.5 rounded-sm border border-edge-subtle/40 bg-editorial-paper-wash px-2 py-1"
           >
-            <span className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30">
+            <span className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground">
               backend
             </span>
             <code
@@ -547,7 +547,7 @@ export function NetworkLogs({
               </span>
               {/* Phase 4c: capture method provenance badge ("fetch" | "xhr" | "SDK") */}
               <span
-                className="shrink-0 inline-flex items-center rounded-sm px-1 py-0.5 text-3xs font-medium bg-surface-overlay text-fg-faint border border-edge-subtle"
+                className="shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-medium bg-surface-overlay text-fg-faint"
                 title={
                   captureMethod === 'xhr'
                     ? 'Captured via XMLHttpRequest patch'
@@ -560,7 +560,7 @@ export function NetworkLogs({
               </span>
               {hasTrace && (
                 <span
-                  className="shrink-0 rounded-sm px-1 py-0.5 font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground border border-accent/30"
+                  className="shrink-0 rounded-sm px-1 py-px font-mono text-3xs font-semibold bg-accent-muted/55 text-accent-foreground"
                   title={`W3C trace: ${traceId}`}
                 >
                   {isExpanded ? '▲ trace' : '▼ trace'}

@@ -28,7 +28,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 function DiagramGroupNode({ data }: NodeProps<Node<DiagramFlowData>>) {
   return (
     <div className="h-full w-full rounded-md border border-edge-subtle bg-surface-raised/40">
-      <div className="px-3 pt-2 text-2xs font-semibold uppercase tracking-wider text-fg-muted">{data.label}</div>
+      <div className="px-3 pt-2 text-2xs font-semibold text-fg-secondary">{data.label}</div>
     </div>
   )
 }

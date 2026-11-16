@@ -19,15 +19,19 @@ import {
  *  - screenshot: report has an attached screenshot
  *  - area: AI-generated product-area label (e.g. "Checkout")
  *  No LLM call — purely from existing row data. */
-export function ReportTagChips({ row, className = '' }: { row: ReportRow; className?: string }) {
+/** The page the report came from, as a path ("/api/calendar"), or null. */
+function rowPagePath(row: ReportRow): string | null {
   const route =
     (row.environment as { route?: string } | null | undefined)?.route
     ?? (row.environment as { url?: string } | null | undefined)?.url
-  // Derive the displayable page path — strip origin, query and fragment
-  const pagePath = (() => {
-    const path = routePathname(route)
-    return path && path.startsWith('/') && path !== '/' ? path : null
-  })()
+  const path = routePathname(route)
+  return path && path.startsWith('/') && path !== '/' ? path : null
+}
+
+export function ReportTagChips({ row, className = '' }: { row: ReportRow; className?: string }) {
+  // The info line above already shows this path (as the activity link): a
+  // second chip put the same path on a third line of every row (2026-11-16).
+  const pagePath = resolveReportPath(row).path === rowPagePath(row) ? null : rowPagePath(row)
   // screenshot_url / screenshot_path are not on ReportRow (they live on
   // ReportDetail) but may be present when the row is used in a wider context.
   // Access via unknown to avoid TS index-signature complaint.
@@ -46,7 +50,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
           <Link
             to={`/activity?route=${encodeURIComponent(pagePath)}`}
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs font-mono text-fg-muted hover:text-brand hover:border-brand/40 transition-opacity max-w-40 truncate"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs font-mono text-fg-muted hover:text-brand transition-opacity max-w-40 truncate"
           >
             📄 {pagePath}
           </Link>
@@ -59,7 +63,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted hover:text-brand hover:border-brand/40 transition-opacity"
+            className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs text-fg-muted hover:text-brand transition-opacity"
           >
             📷 screenshot
           </a>
@@ -67,7 +71,7 @@ export function ReportTagChips({ row, className = '' }: { row: ReportRow; classN
       )}
       {hasScreenshot && !screenshotUrl && (
         <Tooltip portal content="Screenshot attached">
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-edge-subtle bg-surface-overlay px-1 py-0.5 text-2xs text-fg-muted cursor-help">
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-surface-overlay px-1 py-px text-2xs text-fg-muted cursor-help">
             📷 screenshot
           </span>
         </Tooltip>
@@ -96,7 +100,7 @@ function LayerPill({ layer }: { layer: ReportLayer }) {
   return (
     <Tooltip portal content={cfg.tooltip}>
       <span
-        className={`inline-flex shrink-0 items-center rounded-sm border px-1 py-0.5 text-2xs font-semibold uppercase tracking-wide cursor-help ${cfg.tone}`}
+        className={`inline-flex shrink-0 items-center rounded-sm px-1 py-px text-2xs font-semibold cursor-help ${cfg.tone}`}
       >
         {cfg.label}
       </span>
@@ -158,17 +162,29 @@ export function ReportRowMeta({ row }: Props) {
             ·
           </span>
           <Tooltip portal content={[fullTitle, sdkDetail].filter(Boolean).join(' · ') || path}>
-            <span className="min-w-0 max-w-56 cursor-help">
-              <ReportCodeText title={fullTitle ?? path} className="max-w-full">
-                {path}
-              </ReportCodeText>
-            </span>
+            {path === rowPagePath(row) ? (
+              <Link
+                to={`/activity?route=${encodeURIComponent(path)}`}
+                onClick={(e) => e.stopPropagation()}
+                className="min-w-0 max-w-56 hover:underline"
+              >
+                <ReportCodeText title={fullTitle ?? path} className="max-w-full">
+                  {path}
+                </ReportCodeText>
+              </Link>
+            ) : (
+              <span className="min-w-0 max-w-56 cursor-help">
+                <ReportCodeText title={fullTitle ?? path} className="max-w-full">
+                  {path}
+                </ReportCodeText>
+              </span>
+            )}
           </Tooltip>
         </>
       )}
       {traceShort && (
         <Tooltip portal content={`Sentry trace: ${row.sentry_trace_id}`}>
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm border border-info/30 bg-info-muted/40 px-1 py-0.5 text-2xs font-mono text-info-foreground cursor-help">
+          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-info-muted/40 px-1 py-px text-2xs font-mono text-info-foreground cursor-help">
             <IconBolt className="size-2.5" />
             {traceShort}
           </span>
@@ -190,7 +206,7 @@ function MetaChip({
   return (
     <Tooltip portal content={tooltip}>
       <span
-        className={`inline-flex max-w-full min-w-0 shrink-0 items-center truncate rounded-sm border px-1 py-0.5 text-2xs font-medium cursor-help ${tone}`}
+        className={`inline-flex max-w-full min-w-0 shrink-0 items-center truncate rounded-sm px-1 py-px text-2xs font-medium cursor-help ${tone}`}
       >
         {children}
       </span>

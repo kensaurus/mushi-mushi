@@ -48,7 +48,7 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
                 active ? 'border-brand bg-brand/8' : s.stuck > 0 ? 'border-danger/40 bg-danger-muted/30 hover:border-danger/60' : 'border-edge-subtle bg-surface-raised hover:border-edge'
               }`}
             >
-              <span className="flex items-center justify-between gap-1 text-2xs font-medium uppercase tracking-wide text-fg-muted">
+              <span className="flex items-center justify-between gap-1 text-2xs font-semibold text-fg-secondary">
                 <span className="truncate">
                   <span className="tabular-nums text-fg-faint">{i + 1}</span> {s.label}
                 </span>

@@ -128,11 +128,11 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="min-w-0">
-              <h4 className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-muted">Net per repo, last {bill.window.days} days</h4>
+              <h4 className="mb-1.5 text-2xs font-semibold text-fg-secondary">Net per repo, last {bill.window.days} days</h4>
               <RepoBars bill={bill} />
             </div>
             <div className="min-w-0">
-              <h4 className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-fg-muted">Net per day</h4>
+              <h4 className="mb-1.5 text-2xs font-semibold text-fg-secondary">Net per day</h4>
               <BarSparkline
                 values={bill.byDay.map((d) => d.netUsd)}
                 timestamps={bill.byDay.map((d) => `${d.day}T00:00:00Z`)}

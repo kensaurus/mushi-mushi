@@ -835,7 +835,7 @@ export function CompliancePage() {
               ) : (
                 <ResponsiveTable>
                   <table className="w-full text-xs" data-dav-anchor="compliance:decide">
-                    <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+                    <thead className="text-fg-secondary text-3xs font-semibold">
                       <tr className="border-b border-edge-subtle">
                         <th className="py-1.5 text-left">Control</th>
                         <th className="text-left">Label</th>
@@ -1179,7 +1179,7 @@ export function CompliancePage() {
               ) : (
                 <ResponsiveTable>
                   <table className="w-full text-xs" data-dav-anchor="compliance:verify">
-                    <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+                    <thead className="text-fg-secondary text-3xs font-semibold">
                       <tr className="border-b border-edge-subtle">
                         <th className="py-1.5 text-left">Type</th>
                         <th className="text-left">Subject</th>
@@ -1231,7 +1231,7 @@ export function CompliancePage() {
                             </td>
                             <td>
                               <span
-                                className={`inline-flex rounded px-2 py-0.5 text-3xs uppercase tracking-wider font-medium ${dsarStatusChipTone(d.status)}`}
+                                className={`inline-flex rounded px-2 py-0.5 text-3xs font-semibold ${dsarStatusChipTone(d.status)}`}
                               >
                                 {d.status.replace('_', ' ')}
                               </span>

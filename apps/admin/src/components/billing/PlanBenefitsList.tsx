@@ -91,7 +91,7 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
       aria-label={`Entitlements on ${planName}`}
       className="border-t border-edge-subtle pt-2"
     >
-      <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider text-3xs">
+      <SignalChip tone="neutral" className="mb-1.5 text-3xs font-semibold">
         What you get on {planName}
       </SignalChip>
       <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">

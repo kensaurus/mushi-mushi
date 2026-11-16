@@ -174,7 +174,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
       ? {
           label: 'Branch',
           value: (
-            <code className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-2xs text-fg-secondary">
+            <code className="rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-2xs text-fg-secondary">
               {fix.branch}
             </code>
           ),
@@ -199,7 +199,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
       ? {
           label: 'Commit',
           value: (
-            <code className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-2xs tabular-nums text-fg">
+            <code className="rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-2xs tabular-nums text-fg">
               {fix.commit_sha.slice(0, 7)}
             </code>
           ),
@@ -265,7 +265,7 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
             </SignalChip>
           )}
         </span>
-        <span className="shrink-0 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 font-mono text-2xs text-fg-faint" aria-hidden>
+        <span className="shrink-0 rounded-sm bg-surface-overlay/40 px-1.5 py-px font-mono text-2xs text-fg-faint" aria-hidden>
           {open ? '▾' : '▸'}
         </span>
       </button>

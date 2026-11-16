@@ -157,7 +157,7 @@ export function Callout({ children, tone = 'neutral', label, icon, action, class
       {(label || action) && (
         <div className="mb-1.5 flex items-center justify-between gap-2">
           {label && (
-            <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-muted min-w-0">
+            <div className="flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary min-w-0">
               {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
               <span className="truncate">{label}</span>
             </div>
@@ -211,7 +211,7 @@ export function DefinitionChips({ items, className = '', columns = 2, dense }: D
   // tight tracking reads as a compact inline caption instead of a header.
   const labelCls = dense
     ? 'text-3xs font-medium tracking-normal text-fg-faint'
-    : 'text-3xs font-medium uppercase tracking-wider text-fg-faint'
+    : 'text-3xs font-semibold text-fg-secondary'
   const valueCls = dense ? 'mt-0.5 text-xs' : 'mt-0.5 text-sm'
   return (
     <ul
@@ -319,7 +319,7 @@ export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
             className={`${padCls} ${item.wrap ? 'flex flex-col gap-0.5' : 'flex items-start justify-between gap-3'}`}
           >
             <dt
-              className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0"
+              className="text-3xs font-semibold text-fg-secondary shrink-0"
               title={item.hint}
             >
               {item.label}
@@ -619,7 +619,7 @@ export function LogBlock({
       {(label || action || copyable) && (
         <div className="mb-1 flex items-center justify-between gap-2">
           {label ? (
-            <span className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">{label}</span>
+            <span className="text-3xs font-semibold text-fg-secondary">{label}</span>
           ) : (
             <span />
           )}

@@ -140,7 +140,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
   return (
     <div className={`space-y-3 ${className}`}>
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">
+        <h3 className="text-xs font-semibold text-fg-secondary">
           {cloud ? 'Mushi Mushi Cloud' : 'Connection Health'}
         </h3>
         <Btn variant="ghost" size="sm" onClick={runChecks} disabled={running} loading={running}>

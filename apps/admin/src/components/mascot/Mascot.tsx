@@ -126,7 +126,7 @@ export function Mascot({
           className={`min-w-0 ${stack ? 'max-w-xs' : `max-w-prose border-l-2 pl-3 ${paper ? 'border-editorial-vermillion' : 'border-brand/50'}`} ${stack ? '' : 'pb-1'}`}
         >
           <p
-            className={`text-2xs font-semibold uppercase tracking-wider ${paper ? 'text-editorial-ink-faint' : 'text-fg-faint'}`}
+            className={`text-2xs font-semibold ${paper ? 'text-editorial-ink-faint' : 'text-fg-faint'}`}
           >
             Kenji
           </p>

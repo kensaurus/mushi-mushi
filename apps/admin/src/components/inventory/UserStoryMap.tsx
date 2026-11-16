@@ -218,7 +218,7 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
             <header className="mb-3 space-y-2">
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
-                  <p className="text-2xs uppercase tracking-wider text-fg-faint">User story</p>
+                  <p className="text-2xs text-fg-secondary font-semibold">User story</p>
                   <h3 className="text-base font-semibold text-fg leading-snug">{title}</h3>
                   {goal && (
                     <p className="text-xs text-fg-secondary mt-0.5">

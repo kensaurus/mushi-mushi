@@ -80,7 +80,7 @@ function FixFirst({ section }: { section: HomeSection<FixFirstItem[]> | undefine
   if (items.length === 0) return null
   return (
     <div className="mb-3 rounded-md border border-edge-subtle p-2" data-testid="home-fix-first">
-      <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-secondary">Fix these first</p>
+      <p className="mb-1 text-2xs font-semibold text-fg-secondary">Fix these first</p>
       <ol className="divide-y divide-edge-subtle">
         {items.slice(0, 3).map((item) => (
           <FixFirstRow key={item.key} item={item} />

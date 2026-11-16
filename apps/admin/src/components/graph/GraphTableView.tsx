@@ -46,7 +46,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2" role="region" aria-label="Knowledge graph table view">
       <Card className="p-2">
-        <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
+        <h3 className="text-2xs text-fg-secondary mb-2 px-1 font-semibold">
           Nodes ({nodes.length}
           {nodeOverflow > 0 ? ` · showing ${visibleNodes.length}` : ''})
         </h3>
@@ -115,7 +115,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
       </Card>
 
       <Card className="p-2">
-        <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
+        <h3 className="text-2xs text-fg-secondary mb-2 px-1 font-semibold">
           Edges ({edges.length}
           {edgeOverflow > 0 ? ` · showing ${visibleEdges.length}` : ''})
         </h3>

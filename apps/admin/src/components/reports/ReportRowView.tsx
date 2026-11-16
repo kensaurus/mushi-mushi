@@ -260,14 +260,14 @@ function ReportRowViewInner({
               )}
               {reporterReplied && (
                 <Tooltip portal content="Reporter replied — open thread">
-                  <span className="shrink-0 rounded-full border border-accent/35 bg-accent-muted/70 px-1.5 py-0.5 text-2xs font-medium text-accent-foreground cursor-help">
+                  <span className="shrink-0 rounded-sm bg-accent-muted/70 px-1.5 py-px text-2xs font-medium text-accent-foreground cursor-help">
                     reply
                   </span>
                 </Tooltip>
               )}
               {variantCount && variantCount > 1 && !isVariant && (
                 <Tooltip portal content={`${variantCount - 1} sibling reports share this fingerprint`}>
-                  <span className="shrink-0 rounded-full border border-edge-subtle px-1.5 py-0.5 text-2xs font-mono text-fg-muted cursor-help">
+                  <span className="shrink-0 rounded-sm px-1.5 py-px text-2xs font-mono text-fg-muted cursor-help">
                     +{variantCount - 1}
                   </span>
                 </Tooltip>

@@ -33,7 +33,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
   return (
     <Card elevated className="p-3">
       <div className="flex items-baseline justify-between mb-1.5">
-        <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
+        <h3 className="text-2xs text-fg-secondary font-semibold">
           Backlog by stage
         </h3>
         <ChartActionsMenu

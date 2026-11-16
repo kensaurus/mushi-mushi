@@ -156,7 +156,7 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
           </span>
           <abbr
             title="PDCA — Plan · Do · Check · Act. The four-stage loop each autofix follows from planning through review."
-            className="text-2xs text-fg-faint uppercase tracking-wide underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help"
+            className="text-2xs text-fg-secondary underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help font-semibold"
           >
             PDCA loop
           </abbr>
@@ -189,7 +189,7 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
 
       {latest?.rationale && (stage === 'completed' || latest.status === 'completed' || latest.status === 'failed') && (
         <details className="mt-1.5 rounded-md border border-edge-subtle/60 bg-surface-overlay/20 px-2.5 py-2 text-xs text-fg-muted">
-          <summary className="cursor-pointer text-3xs font-medium uppercase tracking-wider text-fg-faint hover:text-fg-secondary">
+          <summary className="cursor-pointer text-3xs font-semibold text-fg-secondary hover:text-fg-secondary">
             Agent rationale
           </summary>
           <p className="mt-1.5 whitespace-pre-wrap text-fg-secondary leading-relaxed">{latest.rationale}</p>
@@ -198,19 +198,19 @@ export function FixProgressStream({ reportId, dispatchState, hasFixHistory = tru
 
       {latest?.files_changed && latest.files_changed.length > 0 && (
         <div className="mt-1.5">
-          <div className="mb-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">Files touched</div>
+          <div className="mb-1 text-3xs font-semibold text-fg-secondary">Files touched</div>
           <div className="flex flex-wrap gap-1">
             {latest.files_changed.slice(0, 6).map((file) => (
               <code
                 key={file}
-                className="inline-flex max-w-full truncate rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-3xs text-fg-secondary"
+                className="inline-flex max-w-full truncate rounded-sm bg-surface-overlay/45 px-1.5 py-px font-mono text-3xs text-fg-secondary"
                 title={file}
               >
                 {file}
               </code>
             ))}
             {latest.files_changed.length > 6 && (
-              <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/30 px-1.5 py-0.5 text-3xs text-fg-faint">
+              <span className="inline-flex items-center rounded-sm bg-surface-overlay/30 px-1.5 py-px text-3xs text-fg-faint">
                 +{latest.files_changed.length - 6} more
               </span>
             )}

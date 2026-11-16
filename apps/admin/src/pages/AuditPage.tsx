@@ -788,7 +788,7 @@ export function AuditPage() {
           {/* 24h, not 7-day: every card below renders a *Count24h value, and
               this tab's own description says "24h actor mix". The heading was
               the outlier and made a week of activity read ~7x under-reported. */}
-          <div className="text-xs font-medium uppercase tracking-wider">24h actor mix</div>
+          <div className="text-xs font-semibold">24h actor mix</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <StatCard
               label="Human actors"

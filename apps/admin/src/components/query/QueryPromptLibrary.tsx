@@ -144,7 +144,7 @@ export function QueryPromptLibrary({
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
+        <h3 className="text-xs font-semibold text-fg-secondary">
           Prompt library
         </h3>
         <span className="text-2xs text-fg-faint hidden sm:inline">

@@ -555,7 +555,7 @@ export function FeatureBoardPage() {
             />
 
             <label className="inline-flex flex-col gap-0.5">
-              <span className="text-3xs uppercase tracking-wider text-fg-faint">Sort</span>
+              <span className="text-3xs text-fg-secondary font-semibold">Sort</span>
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}

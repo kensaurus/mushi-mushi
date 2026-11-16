@@ -20,7 +20,7 @@ export function WeekCard({ section }: { section: HomeSection<WeekRow[]> }) {
         {(rows) => (
           <table className="w-full text-sm" data-testid="home-week">
             <thead>
-              <tr className="text-left text-2xs uppercase tracking-wider text-fg-muted">
+              <tr className="text-left text-2xs text-fg-secondary font-semibold">
                 <th scope="col" className="pb-1 font-medium">What</th>
                 <th scope="col" className="pb-1 text-right font-medium">This week</th>
                 <th scope="col" className="pb-1 text-right font-medium">Last week</th>

@@ -59,7 +59,7 @@ function HeaderPdcaChip({ chip }: { chip: string }) {
     // full wording.
     <Tooltip content={copy.hint} className="min-w-0 max-w-full">
       <span
-        className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
+        className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm px-1.5 py-px text-3xs cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
         aria-label={copy.ariaLabel}
       >
         <span

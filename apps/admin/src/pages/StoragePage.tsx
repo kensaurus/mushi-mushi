@@ -348,7 +348,7 @@ export function StoragePage() {
 
   const usageTable = (
     <Card className="p-3">
-      <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">
+      <div className="text-xs font-semibold mb-2" data-dav-anchor="storage:verify">
         Per-project usage
       </div>
       <ContainedBlock tone="muted" className="mb-2">
@@ -362,7 +362,7 @@ export function StoragePage() {
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+            <thead className="text-fg-secondary text-3xs font-semibold">
               <tr className="border-b border-edge-subtle">
                 <th className="py-1.5 text-left">Project</th>
                 <th className="text-right">Objects</th>
@@ -431,7 +431,7 @@ export function StoragePage() {
                   </span>
                 ) : (
                   <>
-                    <span className={`inline-flex rounded px-2 py-0.5 text-3xs border ${HEALTH_CHIP[s.health_status]}`}>
+                    <span className={`inline-flex rounded px-2 py-px text-3xs ${HEALTH_CHIP[s.health_status]}`}>
                       {s.health_status.toUpperCase()}
                     </span>
                     {s.last_health_check_at ? (
@@ -591,7 +591,7 @@ export function StoragePage() {
                 {isDebugOpen && (
                   <div className="mt-1 overflow-x-auto rounded border border-edge-subtle bg-surface-overlay">
                     <table className="w-full text-2xs font-mono">
-                      <thead className="text-fg-muted uppercase tracking-wider text-3xs border-b border-edge-subtle">
+                      <thead className="text-fg-secondary text-3xs border-b border-edge-subtle font-semibold">
                         <tr>
                           <th className="py-1 px-2 text-left">Step</th>
                           <th className="px-2">Result</th>

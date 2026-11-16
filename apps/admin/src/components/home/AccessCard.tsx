@@ -120,7 +120,7 @@ export function AccessCard({ section, auditLog }: Props) {
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-4 sm:gap-3">
-      <dt className="text-2xs font-medium uppercase tracking-wider text-fg-muted sm:pt-0.5">{term}</dt>
+      <dt className="text-2xs font-semibold text-fg-secondary sm:pt-0.5">{term}</dt>
       <dd className="min-w-0 sm:col-span-3">{children}</dd>
     </div>
   )

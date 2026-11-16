@@ -22,7 +22,7 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <p className="text-2xs uppercase tracking-wider text-fg-muted">Today (UTC)</p>
+          <p className="text-2xs text-fg-secondary font-semibold">Today (UTC)</p>
           <p className="mt-0.5 text-2xl font-semibold tabular-nums text-brand">
             {fmtSpend(series.todayUsd)}
           </p>
@@ -46,7 +46,7 @@ export function DailySpendChart({ series, barTitles, fmtSpend }: Props) {
         </div>
 
         <div className="min-w-0 sm:max-w-[55%]">
-          <p className="mb-1.5 text-3xs uppercase tracking-wider text-fg-faint">
+          <p className="mb-1.5 text-3xs text-fg-secondary font-semibold">
             Activity · last {series.days.length} days
           </p>
           <div

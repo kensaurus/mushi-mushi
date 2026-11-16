@@ -152,7 +152,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
                 const isConfident = Boolean(summaryText) && (conf == null || conf >= LOW_CONFIDENCE)
                 return (
                   <>
-                    <p className="mt-2 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+                    <p className="mt-2 text-3xs font-semibold text-fg-secondary">
                       {isConfident ? "Here's why it broke" : 'Not sure yet — check these first'}
                     </p>
                     <h2 className="mt-0.5 text-base font-semibold leading-snug text-balance text-fg">
@@ -175,7 +175,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
                 )}
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 rounded-sm border border-edge-subtle/60 bg-surface-overlay/25 px-2 py-1.5">
-                <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Confidence</span>
+                <span className="text-3xs font-semibold text-fg-secondary">Confidence</span>
                 <ConfidenceMeter confidence={report.confidence} />
               </div>
             </div>

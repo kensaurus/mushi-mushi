@@ -238,7 +238,7 @@ export function SsoPage() {
       {ssoUnlocked && (
         <>
           <Card className="p-3 space-y-3">
-            <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-fg-secondary">
               Add Identity Provider
             </h3>
             <div className="grid grid-cols-2 gap-2">
@@ -315,7 +315,7 @@ export function SsoPage() {
 
           {lastRegister?.status === 'registered' && (
             <Card className="p-3 border border-ok/30 bg-ok-muted/20 space-y-2">
-              <h3 className="text-xs font-medium text-ok uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-ok">
                 Provider registered — finish IdP setup
               </h3>
               <p className="text-2xs text-fg-secondary">
@@ -325,7 +325,7 @@ export function SsoPage() {
               <div className="grid grid-cols-1 gap-2">
                 {lastRegister.acsUrl && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       ACS URL (Reply URL)
                     </div>
                     <CodeValue value={lastRegister.acsUrl} tone="url" />
@@ -333,7 +333,7 @@ export function SsoPage() {
                 )}
                 {lastRegister.entityId && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       Audience / Entity ID
                     </div>
                     <CodeValue value={lastRegister.entityId} tone="hash" />
@@ -341,7 +341,7 @@ export function SsoPage() {
                 )}
                 {lastRegister.providerId && (
                   <div className="space-y-1">
-                    <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">
+                    <div className="text-3xs font-semibold text-fg-secondary">
                       Supabase provider id
                     </div>
                     <CodeValue value={lastRegister.providerId} tone="id" />

@@ -7,7 +7,7 @@
 
 import { Link } from 'react-router-dom'
 import type { CSSProperties, ReactNode } from 'react'
-import { Card, Tooltip, PANEL_HEADER_SEPARATOR } from './ui'
+import { Card, Tooltip } from './ui'
 import { InlineProof, SignalChip } from './report-detail/ReportSurface'
 import { useBrushSelection } from '../lib/useBrushSelection'
 import { ChartFrame } from './charts/ChartFrame'
@@ -153,14 +153,14 @@ export function KpiTile({
   const sparkAria = seriesAriaLabel ?? `${label} trend`
   const summaryRows = showSpark ? sparklineSummaryRows(seriesDays, series!) : []
   const inner = (
-    <div className="px-3 py-2.5">
+    <div className="px-3 py-2">
       {/* Primary marks emphasis with the ring and a larger numeral only: the box
           (padding, numeral line, sparkline) is the default's, so a tile that
           turns primary when its data lands does not move the page (the Bugs
           Critical tile, layout shift 2026-10-24). */}
-      <div className={`pb-1.5 ${PANEL_HEADER_SEPARATOR}`}>
+      <div>
         <div className="flex items-center gap-1 truncate">
-          <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
+          <div className="text-2xs text-fg-secondary truncate font-semibold">{label}</div>
           {meaning && (
             <Tooltip content={meaning} side="auto" portal nowrap={false}>
               {/* A bare span is generic, and axe aria-prohibited-attr rejects
@@ -178,7 +178,7 @@ export function KpiTile({
           )}
         </div>
       </div>
-      <div className="flex items-center gap-1.5 mt-1 min-w-0">
+      <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
         {/* Display numerals stay in the sans face with plain tabular figures:
             the system monospace (Consolas, SF Mono) and the compact density's
             `slashed-zero` both draw 0 as a struck-through glyph that reads as

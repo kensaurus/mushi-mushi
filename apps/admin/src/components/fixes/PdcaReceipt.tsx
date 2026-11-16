@@ -48,7 +48,7 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
             className={`relative px-2.5 py-2 rounded-md border ${v.shell}`}
             data-stamp={r.stamp}
           >
-            <div className="flex items-center gap-1.5 text-2xs uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-2xs font-semibold">
               <span className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}>
                 {meta.letter}
               </span>

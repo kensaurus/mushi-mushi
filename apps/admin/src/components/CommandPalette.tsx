@@ -607,7 +607,7 @@ export function CommandPalette() {
               }
             }}
           />
-          <kbd className="text-3xs text-fg-faint border border-edge-subtle px-1 py-0.5 rounded-sm">Esc</kbd>
+          <kbd className="text-3xs text-fg-faint px-1 py-px rounded-sm">Esc</kbd>
         </div>
 
         {(mentionHits.length > 0 || slashHits.length > 0) && (

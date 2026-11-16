@@ -58,7 +58,7 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
 
   return (
     <div className="mt-6">
-      <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-secondary mb-2">
+      <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary mb-2">
         <IconLink /> Related
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">

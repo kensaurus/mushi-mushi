@@ -58,7 +58,7 @@ export function DriftReadout({ stats, fetchedAt, validating }: DriftReadoutProps
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Admin API base" url={RESOLVED_EXTERNAL_API_URL} />
           <div className="mt-2 rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
-            <p className="mb-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">Drift API</p>
+            <p className="mb-1 text-3xs font-semibold text-fg-secondary">Drift API</p>
             <p className="font-mono text-2xs text-fg-secondary break-all">GET /v1/admin/drift/findings</p>
             <p className="mt-1 font-mono text-2xs text-fg-secondary break-all">POST /v1/admin/drift/scan</p>
           </div>

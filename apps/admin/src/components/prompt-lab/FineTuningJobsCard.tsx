@@ -428,7 +428,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
       >
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Vendor / base model</label>
+            <label className="text-2xs font-semibold text-fg-secondary block">Vendor / base model</label>
             <select
               className="w-full rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1.5 text-xs"
               value={selectedVendor}
@@ -449,7 +449,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             Pick which stage to promote once it passes validation. Most operators use <span className="font-mono">stage2</span> (the deeper classifier).
           </p>
           <div className="space-y-1">
-            <label className="text-2xs font-medium text-fg-muted uppercase tracking-wider block">Promote to stage</label>
+            <label className="text-2xs font-semibold text-fg-secondary block">Promote to stage</label>
             <input
               ref={stageInputRef}
               type="text"

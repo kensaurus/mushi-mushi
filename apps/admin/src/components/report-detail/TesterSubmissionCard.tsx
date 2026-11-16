@@ -109,7 +109,7 @@ export function TesterSubmissionCard({ submission, onReviewed }: Props) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
+        <h3 className="text-xs font-semibold text-fg-secondary">
           🪲 Mushi Mushi Bounties Submission
         </h3>
         <SignalChip tone={config.tone}>{config.label}</SignalChip>

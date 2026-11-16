@@ -94,7 +94,7 @@ export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props)
   return (
     <>
       <div className="mb-2 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Saved views">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">Views</span>
+        <span className="text-2xs text-fg-secondary font-semibold">Views</span>
         {views.map((v) => {
           const active = activeCheck(v)
           return (

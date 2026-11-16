@@ -153,7 +153,7 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
 
       {done.length > 0 && (
         <div className="space-y-1 rounded-md border border-ok/25 px-3 py-2" data-testid="sdk-health-done">
-          <p className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Done</p>
+          <p className="text-3xs font-semibold text-fg-secondary">Done</p>
           {done.map((k) => (
             <div key={k}>
               <p className="text-xs font-medium text-fg-secondary">{DONE_LABEL[k]}</p>
@@ -165,7 +165,7 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
 
       {notes.length > 0 && (
         <div className="space-y-1">
-          <p className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Not checked</p>
+          <p className="text-3xs font-semibold text-fg-secondary">Not checked</p>
           <ul className="space-y-0.5 text-2xs text-fg-muted">
             {notes.map((n) => (
               <li key={n.check}>

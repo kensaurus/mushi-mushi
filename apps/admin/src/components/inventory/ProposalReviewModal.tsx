@@ -178,7 +178,7 @@ export function ProposalReviewModal({
   // standard position.
   const titleStrip = (
     <div className="min-w-0">
-      <p className="text-2xs uppercase tracking-wider text-fg-faint">
+      <p className="text-2xs text-fg-secondary font-semibold">
         Inventory proposal · {q.data?.status ?? '—'}
       </p>
       <span className="block text-base font-semibold text-fg truncate">
@@ -382,7 +382,7 @@ function SummaryStat({
   const c = colors[tone]
   return (
     <div className="flex flex-col items-start">
-      <p className={`text-2xs uppercase tracking-wider ${c.label}`}>{label}</p>
+      <p className={`text-2xs ${c.label} font-semibold`}>{label}</p>
       <p className={`text-xl font-semibold tabular-nums leading-none ${c.value}`}>{value}</p>
       {detail && <p className={`text-2xs mt-0.5 ${c.label}`}>{detail}</p>}
     </div>
@@ -563,7 +563,7 @@ function StoryCard({
           )}
           {pages.length > 0 && (
             <div className="space-y-2">
-              <p className="text-2xs uppercase tracking-wider text-fg-faint">Pages & actions</p>
+              <p className="text-2xs text-fg-secondary font-semibold">Pages & actions</p>
               {pages.map((p) => (
                 <PageBlock key={p.id} page={p} />
               ))}
@@ -571,7 +571,7 @@ function StoryCard({
           )}
           {rationale && (
             <div className="rounded-md bg-info-muted/15 ring-1 ring-info/20 p-2">
-              <p className="text-2xs uppercase tracking-wider text-info mb-0.5">Why this story</p>
+              <p className="text-2xs text-info mb-0.5 font-semibold">Why this story</p>
               <p className="text-2xs text-fg italic">{rationale}</p>
             </div>
           )}

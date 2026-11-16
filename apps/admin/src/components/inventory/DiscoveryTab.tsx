@@ -281,7 +281,7 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
       <Card className="p-4 space-y-3">
         <header className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-2xs uppercase tracking-wider text-fg-faint">SDK Passive Discovery</p>
+            <p className="text-2xs text-fg-secondary font-semibold">SDK Passive Discovery</p>
             <h2 className="text-base font-semibold text-fg">From SDK ping to active inventory</h2>
           </div>
           <Btn type="button" size="sm" variant="ghost" onClick={() => discovery.reload()}>
@@ -393,7 +393,7 @@ function ActionCard({
             <SdkIcon />
           </div>
           <div className="min-w-0">
-            <SignalChip tone="info" className="mb-1.5 uppercase tracking-wider text-3xs">Step 1 — Install</SignalChip>
+            <SignalChip tone="info" className="mb-1.5 text-3xs font-semibold">Step 1 — Install</SignalChip>
             <h3 className="text-sm font-semibold text-fg">Add the SDK so we can observe your app</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
@@ -433,7 +433,7 @@ Mushi.init({
             <ClockIcon />
           </div>
           <div className="min-w-0 flex-1">
-            <SignalChip tone="warn" className="mb-1.5 uppercase tracking-wider text-3xs">Step 2 — Observe</SignalChip>
+            <SignalChip tone="warn" className="mb-1.5 text-3xs font-semibold">Step 2 — Observe</SignalChip>
             <h3 className="text-sm font-semibold text-fg">A bit more traffic and we can draft</h3>
             <ContainedBlock tone="muted" className="mt-2">
               <p className="text-xs text-fg-muted">
@@ -464,7 +464,7 @@ Mushi.init({
             <IconNote size={16} />
           </div>
           <div className="min-w-0">
-            <SignalChip tone="brand" className="mb-1.5 uppercase tracking-wider text-3xs">Step 3 — Propose</SignalChip>
+            <SignalChip tone="brand" className="mb-1.5 text-3xs font-semibold">Step 3 — Propose</SignalChip>
             <h3 className="text-sm font-semibold text-fg">
               {draftRow ? 'You have a draft ready to review' : 'Ready to draft your inventory'}
             </h3>
@@ -527,7 +527,7 @@ function ProposalsList({
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-2xs uppercase tracking-wider text-fg-faint">All proposals</p>
+          <p className="text-2xs text-fg-secondary font-semibold">All proposals</p>
           <h2 className="text-base font-semibold text-fg">Drafts &amp; accepted versions</h2>
         </div>
         <Btn type="button" size="sm" variant="ghost" onClick={onRefresh}>
@@ -579,7 +579,7 @@ function ProposalStatusPill({ status }: { status: 'draft' | 'accepted' | 'discar
         ? 'bg-surface-overlay text-fg-muted border-edge-subtle'
         : CHIP_TONE.warnSubtle
   return (
-    <Badge className={`${styles} border uppercase tracking-wider text-2xs`}>
+    <Badge className={`${styles} border text-2xs font-semibold`}>
       {status}
     </Badge>
   )
@@ -600,7 +600,7 @@ function ObservedRoutesSection({
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-2xs uppercase tracking-wider text-fg-faint">SDK observations</p>
+          <p className="text-2xs text-fg-secondary font-semibold">SDK observations</p>
           <h2 className="text-base font-semibold text-fg">Routes the SDK has seen</h2>
         </div>
         <span className="text-2xs text-fg-faint tabular-nums">
@@ -856,7 +856,7 @@ function LiveCrawlCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">Map from live app</span>
-            <SignalChip tone="info" className="text-3xs uppercase tracking-wider">no SDK needed</SignalChip>
+            <SignalChip tone="info" className="text-3xs font-semibold">no SDK needed</SignalChip>
           </div>
           <p className="text-2xs text-fg-muted mt-0.5">
             Crawl any live URL with Firecrawl. Claude maps the pages into user stories — no hand-written YAML required.
@@ -988,7 +988,7 @@ function LiveCrawlCard({
       {/* Recent runs list */}
       {runs.length > 0 && !isActive && (
         <div className="border-t border-edge/50 pt-3 space-y-2">
-          <p className="text-2xs text-fg-faint uppercase tracking-wider">Recent crawls</p>
+          <p className="text-2xs text-fg-secondary font-semibold">Recent crawls</p>
           {runs.slice(0, 5).map(run => (
             <div key={run.id} className="flex items-center gap-3 text-2xs">
               <span className={`shrink-0 font-mono px-1.5 py-0.5 rounded-sm ${

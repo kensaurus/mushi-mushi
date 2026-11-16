@@ -980,7 +980,7 @@ export function ExplorePage() {
 
           {stats.topLanguages?.length > 0 && (
             <Card className="p-4">
-              <p className="text-2xs font-medium text-fg-muted uppercase tracking-wider mb-2">Top languages</p>
+              <p className="text-2xs font-semibold text-fg-secondary mb-2">Top languages</p>
               <div className="flex flex-wrap gap-2">
                 {stats.topLanguages.map((lang) => (
                   <Badge key={lang} className="bg-surface-overlay text-fg-secondary">

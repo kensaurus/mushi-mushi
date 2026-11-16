@@ -903,7 +903,7 @@ export function FixesPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
-        <span className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-2 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
+        <span className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-2 py-px font-mono text-2xs tabular-nums text-fg-muted">
           {fixesTotal != null && fixesTotal > fixes.length
             ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
             : pluralizeWithCount(fixes.length, 'attempt')}

@@ -32,7 +32,7 @@ export function PdcaContextHint({ stage: stageProp, compact }: PdcaContextHintPr
   return (
     <Tooltip content={`${meta.label} stage \u2014 ${meta.hint}`}>
       <span
-        className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-2xs font-medium ${meta.tintBorder} ${meta.tintBg} ${meta.text}`}
+        className={`inline-flex items-center gap-1.5 rounded-sm px-1.5 py-px text-2xs font-medium ${meta.tintBorder} ${meta.tintBg} ${meta.text}`}
       >
         <span
           aria-hidden="true"

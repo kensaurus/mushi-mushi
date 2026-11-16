@@ -786,7 +786,7 @@ function ContributorDrawer({
           {/* ── Admin action panel ─── */}
           {canEdit && showActions && (
             <div className="rounded-xl border border-brand/20 bg-brand/5 p-3 space-y-3">
-              <div className="text-2xs font-semibold text-fg uppercase tracking-wider">Admin actions</div>
+              <div className="text-2xs font-semibold text-fg">Admin actions</div>
 
               {/* Award bonus points */}
               <div className="space-y-1.5">
@@ -1167,7 +1167,7 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-edge-subtle text-left text-fg-muted uppercase tracking-wider text-2xs">
+                    <tr className="border-b border-edge-subtle text-left text-fg-secondary text-2xs font-semibold">
                       <th className="py-2 pr-3 w-8">#</th>
                       <th className="py-2 pr-4">User</th>
                       <th className="py-2 pr-4">Tier</th>
@@ -2171,7 +2171,7 @@ export function SandboxSimulatorTab() {
           </div>
 
           <div>
-            <div className="text-xs font-semibold text-fg-secondary mb-1.5 uppercase tracking-wider">Breakdown</div>
+            <div className="text-xs font-semibold text-fg-secondary mb-1.5">Breakdown</div>
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-fg-muted border-b border-edge-subtle uppercase tracking-wider">
@@ -2203,7 +2203,7 @@ export function SandboxSimulatorTab() {
 
           {result.reached_tier?.host_credit_payload != null && (
             <div className="rounded-xl bg-surface-overlay border border-edge-subtle p-3">
-              <div className="text-2xs font-semibold text-fg-secondary mb-1.5 uppercase tracking-wider">
+              <div className="text-2xs font-semibold text-fg-secondary mb-1.5">
                 Host credit payload that would fire
               </div>
               <pre className="text-2xs text-fg-muted overflow-auto font-mono">

@@ -46,7 +46,7 @@ export function ChatTurnShell({
       className={`group/turn overflow-hidden rounded-md border shadow-card ${TURN_SHELL[role]} ${className}`}
     >
       <header
-        className={`flex items-center justify-between gap-2 border-b px-3 py-1.5 text-3xs font-medium uppercase tracking-wider ${TURN_HEADER[role]}`}
+        className={`flex items-center justify-between gap-2 border-b px-3 py-1.5 text-3xs font-semibold ${TURN_HEADER[role]}`}
       >
         <span>{label ?? (isUser ? 'You' : 'Answer')}{streaming ? ' …' : ''}</span>
         {actions}

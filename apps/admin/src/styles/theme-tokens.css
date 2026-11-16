@@ -37,9 +37,9 @@
      fg 0.93 > secondary 0.72 > muted 0.67 > faint 0.63, all ≥ 4.5:1 on
      surface, raised and overlay. */
   --color-fg: oklch(0.93 0.005 285);
-  --color-fg-secondary: oklch(0.72 0.005 285);
-  --color-fg-muted: oklch(0.67 0.005 285);
-  --color-fg-faint: oklch(0.63 0.005 285);
+  --color-fg-secondary: oklch(0.80 0.005 285);
+  --color-fg-muted: oklch(0.75 0.005 285);
+  --color-fg-faint: oklch(0.70 0.005 285);
 
   /* ── Brand (amber / beetle-chitin) ─────────────────────────────────── */
   --color-brand: oklch(0.80 0.16 80);
@@ -197,7 +197,9 @@
      Reserve text-3xs (11px) for non-interactive micro-meta (freshness pills,
      kbd labels, timestamps); text-2xs (12px) for all label/badge copy. */
   --text-2xs: 0.75rem;
-  --text-3xs: 0.6875rem;
+  /* 2026-11-16: 11px → 12px. The owner could not read the 11px micro-meta;
+     12px is the floor, and nothing else grows. */
+  --text-3xs: 0.75rem;
   /* Above 2xs, use Tailwind's own scale (text-xs … text-2xl). A Jul 2026
      label/body/title/heading/display ramp duplicated it and had no users;
      check:design-tokens now rejects those names. */

@@ -292,7 +292,7 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
           <div className="flex items-center gap-2">
             <span aria-hidden="true" className={`inline-block w-1.5 h-1.5 rounded-full ${tone.dot}`} />
             <span className="text-sm font-medium text-fg">{item.title}</span>
-            <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm border ${tone.pill}`}>
+            <span className={`text-2xs font-mono px-1.5 py-px rounded-sm ${tone.pill}`}>
               {tone.label}
             </span>
           </div>

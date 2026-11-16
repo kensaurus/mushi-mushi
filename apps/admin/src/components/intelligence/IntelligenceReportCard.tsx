@@ -40,7 +40,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         <Stat label="Reports" value={report.stats?.reports?.total?.toLocaleString() ?? '—'} />
         <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toLocaleString() ?? '—'} />
         <div title="Share of fix attempts that finished without errors this week.">
-          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Completion</div>
+          <div className="text-3xs font-semibold text-fg-secondary">Completion</div>
           <div className="mt-0.5 font-mono tabular-nums">
             <Pct value={completionPct} precision={0} direction="higher-better" />
           </div>
@@ -84,7 +84,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">{label}</div>
+      <div className="text-3xs font-semibold text-fg-secondary">{label}</div>
       <div className="mt-0.5 font-mono text-sm tabular-nums text-fg">{value}</div>
     </div>
   )

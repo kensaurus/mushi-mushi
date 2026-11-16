@@ -65,7 +65,7 @@ export function SetupCopilotReadout({
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="Ingest API" url={RESOLVED_EXTERNAL_API_URL} />
           <div className="mt-2 rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+            <div className="mb-1 flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary">
               <IconTerminal size={12} aria-hidden />
               Connect command
             </div>

@@ -128,7 +128,7 @@ export function ConfigHelp({ helpId, ariaLabel }: ConfigHelpProps) {
       >
           <header className="flex items-start justify-between gap-2 border-b border-edge-subtle px-3.5 py-2.5 shrink-0">
             <div className="min-w-0 flex-1">
-              <p className="text-2xs font-medium uppercase tracking-widest text-brand/80 leading-none mb-1">
+              <p className="text-2xs font-semibold text-brand/80 leading-none mb-1">
                 Configuration
               </p>
               <h3 id={titleId} className="text-sm font-semibold text-fg leading-snug">
@@ -238,7 +238,7 @@ function Section({
         : 'text-fg-muted'
   return (
     <div className={`pl-2.5 border-l-2 ${railClass}`}>
-      <p className={`mb-0.5 text-2xs font-semibold uppercase tracking-widest ${headingClass}`}>
+      <p className={`mb-0.5 text-2xs font-semibold ${headingClass}`}>
         {heading}
       </p>
       <div className="text-fg-secondary">{children}</div>
@@ -253,7 +253,7 @@ function Section({
 function DefaultChip({ value, range }: { value: string; range?: string }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <code className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5 text-2xs font-mono text-fg">
+      <code className="inline-flex items-center rounded-sm bg-surface-raised px-1.5 py-px text-2xs font-mono text-fg">
         {value}
       </code>
       {range && (

@@ -204,7 +204,7 @@ function NodePanel({
   const linkList = (label: string, list: DiagnosisNode[]) =>
     list.length > 0 ? (
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+        <span className="text-3xs text-fg-secondary font-semibold">{label}</span>
         {list.map((n) => (
           <button
             key={n.id}
@@ -219,7 +219,7 @@ function NodePanel({
     ) : null
   return (
     <div className="flex flex-col gap-2" aria-live="polite">
-      <div className="flex items-center gap-1.5 text-3xs uppercase tracking-wider text-fg-faint">
+      <div className="flex items-center gap-1.5 text-3xs text-fg-secondary font-semibold">
         <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[node.lane]}`} />
         {lane?.label}
       </div>
@@ -335,7 +335,7 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
                   <header className="relative z-10 flex flex-col gap-0.5 border-b border-edge-subtle pb-1" title={lane.hint}>
                     <span className="flex items-center gap-1.5">
                       <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[lane.id]}`} />
-                      <span className="text-2xs font-semibold uppercase tracking-wider text-fg-secondary">{lane.label}</span>
+                      <span className="text-2xs font-semibold text-fg-secondary">{lane.label}</span>
                     </span>
                     <span className="text-3xs text-fg-faint">{lane.hint}</span>
                   </header>

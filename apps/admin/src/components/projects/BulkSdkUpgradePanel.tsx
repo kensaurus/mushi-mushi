@@ -183,10 +183,10 @@ function FreshnessChip({
   return (
     <Tooltip content={<MetricTooltipContent data={tooltip} />} side="top" nowrap={false} portal>
       <span
-        className={`inline-flex cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium ${toneClass}`}
+        className={`inline-flex cursor-help items-center gap-1 rounded-sm px-2 py-px text-2xs font-medium ${toneClass}`}
         aria-label={`Catalog freshness: ${text}`}
       >
-        <span className="text-3xs font-semibold uppercase tracking-wide opacity-70">{prefix}</span>
+        <span className="text-3xs font-semibold opacity-70">{prefix}</span>
         {resolution.kind === 'up-to-date' && <IconCheck className="h-3 w-3" aria-hidden />}
         {resolution.kind === 'deprecated' && text === 'Deprecated' && resolution.upgradeTarget
           ? `Deprecated → v${resolution.upgradeTarget}`
@@ -247,7 +247,7 @@ function ReleaseStatusPill({
       nowrap={false}
       portal
     >
-      <span className={`inline-flex cursor-help items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium ${color}`}>
+      <span className={`inline-flex cursor-help items-center gap-1 rounded-sm px-2 py-px text-2xs font-medium ${color}`}>
         {label}
       </span>
     </Tooltip>

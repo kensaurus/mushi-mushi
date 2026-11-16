@@ -154,7 +154,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Month-end forecast</p>
+        <p className="text-xs font-semibold text-fg-secondary">Month-end forecast</p>
         {projectId && !canManage && (
           <span className="text-2xs text-fg-muted" title="Only team owners and admins can change the monthly budget.">
             {budget !== null ? `Budget: ${fmtSpend(budget)} / mo` : 'No budget set'}
@@ -273,7 +273,7 @@ interface ForecastCellProps {
 function ForecastCell({ label, value, hint, accent }: ForecastCellProps) {
   return (
     <div>
-      <p className="text-3xs text-fg-muted uppercase tracking-wider">{label}</p>
+      <p className="text-3xs text-fg-secondary font-semibold">{label}</p>
       <p className={`mt-0.5 text-sm font-semibold ${accent ?? 'text-fg'}`}>{value}</p>
       <p className="mt-0.5 text-3xs text-fg-faint">{hint}</p>
     </div>

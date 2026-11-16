@@ -86,7 +86,7 @@ function MetricChip({ label, value, tone = 'neutral' }: {
       <span className={`tabular-nums leading-none ${numeric ? 'text-lg font-bold tracking-tight' : 'text-sm font-semibold'}`}>
         {value}
       </span>
-      <span className="mt-1 text-3xs uppercase tracking-wider opacity-70">{label}</span>
+      <span className="mt-1 text-3xs opacity-70 font-semibold">{label}</span>
     </div>
   )
 }
@@ -110,7 +110,7 @@ function Section({ heading, children, tone = 'info' }: {
     : 'text-fg-muted'
   return (
     <div className={`pl-2.5 border-l-2 ${railClass}`}>
-      <p className={`mb-1 text-3xs font-semibold uppercase tracking-widest ${headingClass}`}>
+      <p className={`mb-1 text-3xs font-semibold ${headingClass}`}>
         {heading}
       </p>
       <div className="text-2xs text-fg-secondary leading-relaxed">{children}</div>

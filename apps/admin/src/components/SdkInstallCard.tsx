@@ -329,7 +329,7 @@ export function SdkInstallCard({
         <WidgetCustomizeColumn compact={compact}>
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Live preview</span>
+              <span className="text-2xs text-fg-secondary font-semibold">Live preview</span>
               {!isDefault && (
                 <button
                   type="button"

@@ -127,7 +127,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
     <div className="space-y-3" data-testid="fixes-first-view">
       {pipeline && (
         <Section title="Release train" id="fixes-release" icon={<IconReleases />} action={<Link to={pipelineHref} className="text-xs text-link">Pipeline →</Link>}>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <ReleaseStations stations={stationsFromStages(pipeline.stages)} href={pipelineHref} testId="fixes-release-stations" />
             <p className="text-xs text-fg-secondary">
               <ReleaseTrainLine train={trainNow(pipeline.trains)} href={pipelineHref} />

@@ -189,7 +189,7 @@ async function render(url: string) {
 /** The numeral on the quick-mode "In flight" card. */
 function inFlightCardValue(): string | undefined {
   const label = [...document.querySelectorAll('div')].find(
-    (el) => el.className.includes('uppercase') && el.textContent === 'In flight',
+    (el) => el.children.length === 0 && el.textContent === 'In flight',
   )
   return label?.parentElement?.parentElement?.parentElement?.querySelector('.tabular-nums')?.textContent?.trim()
 }

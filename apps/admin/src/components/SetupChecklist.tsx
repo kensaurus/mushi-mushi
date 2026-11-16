@@ -462,12 +462,12 @@ function ChecklistRow({
             {stepLabel(step)}
           </span>
           {current && (
-            <span className="rounded-sm px-1 py-0.5 text-2xs uppercase tracking-wider bg-brand/12 text-brand border border-brand/28">
+            <span className="rounded-sm px-1 py-0.5 text-2xs bg-brand/12 text-brand border border-brand/28 font-semibold">
               do this next
             </span>
           )}
           {!step.required && !current && (
-            <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
+            <span className="rounded-sm bg-surface-raised px-1 py-px text-2xs text-fg-faint">
               optional
             </span>
           )}
@@ -521,17 +521,17 @@ function ChecklistCard({
               {stepLabel(step)}
             </h4>
             {current && (
-              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs uppercase tracking-wider font-semibold">
+              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-2xs font-semibold">
                 do this next
               </span>
             )}
             {!step.required && !current && (
-              <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-2xs text-fg-faint uppercase tracking-wider">
+              <span className="rounded-sm bg-surface-raised px-1 py-px text-2xs text-fg-faint">
                 optional
               </span>
             )}
             {step.complete && (
-              <span className="rounded-sm px-1.5 py-0.5 text-2xs uppercase tracking-wider bg-ok-muted/50 text-ok-foreground border border-ok/25">
+              <span className="rounded-sm px-1.5 py-px text-2xs bg-ok-muted/50 text-ok-foreground">
                 done
               </span>
             )}

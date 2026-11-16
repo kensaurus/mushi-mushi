@@ -65,7 +65,7 @@ function TimelineRow({
           {formatTimelineTime(entry.ts)}
         </time>
         <span
-          className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold uppercase tracking-wide ${pillClass}`}
+          className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold ${pillClass}`}
         >
           {kind}
         </span>

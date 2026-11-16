@@ -386,7 +386,7 @@ export function SentryContextPanel({
 
       {hasTags && (
         <div className="mb-3">
-          <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
+          <h3 className="text-2xs font-semibold text-fg-secondary mb-1">
             Tags
           </h3>
           <div className="flex flex-wrap gap-1">
@@ -408,7 +408,7 @@ export function SentryContextPanel({
       {unified.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-2xs font-semibold uppercase tracking-wider text-fg-muted flex items-center gap-1.5">
+            <h3 className="text-2xs font-semibold text-fg-secondary flex items-center gap-1.5">
               <IconClock className="size-3" /> Breadcrumb timeline
             </h3>
             <div className="flex items-center gap-3 text-2xs text-fg-faint">

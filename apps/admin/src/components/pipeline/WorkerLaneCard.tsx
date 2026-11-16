@@ -70,7 +70,7 @@ function RunDetail({ run, testId }: { run: RunTelemetry | undefined; testId: str
         </span>
       </p>
       {run.log.length > 0 && (
-        <ol className="rounded-sm border border-edge-subtle bg-surface-overlay px-2 py-0.5 font-mono text-2xs text-fg-secondary" aria-label="Last log lines">
+        <ol className="rounded-sm bg-surface-overlay px-2 py-px font-mono text-2xs text-fg-secondary" aria-label="Last log lines">
           {run.log.map((line, i) => (
             <li key={i} className="wrap-anywhere">
               {line}

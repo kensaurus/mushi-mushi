@@ -107,7 +107,7 @@ function PerfStrip({ parent, candidate }: { parent: PromptVersion; candidate: Pr
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
       {cells.map((c) => (
         <div key={c.label} className="rounded-sm border border-edge-subtle bg-surface-overlay/40 p-2">
-          <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">{c.label}</div>
+          <div className="text-2xs text-fg-secondary mb-1 font-semibold">{c.label}</div>
           <div className="flex items-baseline gap-2 font-mono text-xs">
             <span className="text-fg-faint">parent:</span>
             <span className="text-fg-secondary">{c.parent}</span>
