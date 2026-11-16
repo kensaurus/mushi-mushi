@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { createDevLogger } from './vite.dev-logger.ts'
 import { invalidateWebWorkspaceDep } from './vite-plugin-invalidate-web-dep.ts'
+import { sentrySourcemapDeleteGlobs } from './src/lib/sentrySourcemaps.ts'
 
 // Base path is environment-driven so the same build works for:
 //   - local dev      (VITE_BASE_PATH unset → "/")
@@ -203,7 +204,7 @@ export default defineConfig({
             // Anchored to this file: the build runs with cwd apps/admin, where
             // a repo-root-relative glob matched nothing and the maps shipped.
             sourcemaps: {
-              filesToDeleteAfterUpload: [`${path.resolve(__dirname, 'dist').replace(/\\/g, '/')}/**/*.map`],
+              filesToDeleteAfterUpload: sentrySourcemapDeleteGlobs(path.resolve(__dirname, 'dist')),
             },
             telemetry: false,
           }),

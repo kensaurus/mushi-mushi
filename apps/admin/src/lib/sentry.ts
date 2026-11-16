@@ -5,7 +5,9 @@
  *          self-hosted forks that don't want to send telemetry to our org).
  *
  * PRIVACY:
- *   - sendDefaultPii: false — never auto-attach IPs, cookies, or request bodies
+ *   - dataCollection keeps the v10 sendDefaultPii: false baseline. SDK 11
+ *     removed that flag; leaving dataCollection unset collects user info,
+ *     cookies, HTTP bodies, and queue payloads.
  *   - replays disabled — org free-tier quota (errors-only capture retained)
  *   - beforeSend strips token-like query params from URLs before transport
  *
@@ -27,12 +29,12 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
-import { makeFetchTransport, createTransport } from '@sentry/react'
+import { makeFetchTransport, createTransport, type BrowserOptions } from '@sentry/react'
 
 // Sentry's transport-related types (Transport, Envelope, BrowserTransportOptions,
 // TransportMakeRequestResponse) live inside @sentry/core and are NOT re-exported
 // from @sentry/react's public surface (verified against @sentry/react@10.49.0
-// and @sentry/browser@10.49.0). Rather than reach into an internal subpath
+// and again on @sentry/react@11.11.0). Rather than reach into an internal subpath
 // that could move between minor versions, derive the few we need from the
 // public function signatures.
 type BrowserTransportOptions = Parameters<typeof makeFetchTransport>[0]
@@ -41,6 +43,30 @@ type SendArg = Parameters<Transport['send']>[0]
 type SendResult = Awaited<ReturnType<Transport['send']>>
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
+
+/**
+ * SDK 11 stand-in for `sendDefaultPii: false`. An unset `dataCollection`
+ * collects every category. This is the restrictive v10 baseline from the
+ * SDK migration guide, including `queues: false`.
+ * Same object as `packages/mcp/src/optional-sentry.ts` (`sentryDataCollection`).
+ */
+export const sentryDataCollection = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: {
+    request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+    response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  },
+  httpBodies: [],
+  urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  graphQL: { document: false, variables: false },
+  // MCP tool arguments fall back to genAI when unset; set them anyway so a
+  // later default change cannot start recording them.
+  mcp: { inputs: false, outputs: false },
+} satisfies NonNullable<BrowserOptions['dataCollection']>
 
 // ─── Self-disabling transport ───────────────────────────────────────────────
 //
@@ -98,7 +124,7 @@ export function initSentry(): void {
     dsn,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_RELEASE,
-    sendDefaultPii: false,
+    dataCollection: sentryDataCollection,
     tracesSampleRate: 0.05,
     transport: makeCircuitBreakingTransport,
     integrations: [

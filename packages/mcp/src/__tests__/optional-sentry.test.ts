@@ -9,7 +9,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { initOptionalSentry } from '../optional-sentry.js'
+import { initOptionalSentry, sentryDataCollection } from '../optional-sentry.js'
+import type { NodeOptions } from '@sentry/node'
 
 describe('initOptionalSentry', () => {
   it('never imports @sentry/node when no DSN is set', async () => {
@@ -28,10 +29,21 @@ describe('initOptionalSentry', () => {
       { importSentry: async () => ({ init }), warn: vi.fn() },
     )
     expect(status).toBe('enabled')
-    expect(init).toHaveBeenCalledWith({
+    const expected = {
       dsn: 'https://k@o1.ingest.sentry.io/1',
       environment: 'staging',
       tracesSampleRate: 0,
+      dataCollection: sentryDataCollection,
+    } satisfies NodeOptions
+    expect(init).toHaveBeenCalledWith(expected)
+    expect(expected).not.toHaveProperty('sendDefaultPii')
+    expect(sentryDataCollection).toMatchObject({
+      userInfo: false,
+      cookies: false,
+      httpBodies: [],
+      databaseQueryData: false,
+      queues: false,
+      mcp: { inputs: false, outputs: false },
     })
   })
 
@@ -62,6 +74,7 @@ describe('initOptionalSentry', () => {
 describe('@sentry/node packaging', () => {
   const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as {
     dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
     peerDependenciesMeta?: Record<string, { optional?: boolean }>
   }
@@ -70,6 +83,11 @@ describe('@sentry/node packaging', () => {
     expect(pkg.dependencies?.['@sentry/node']).toBeUndefined()
     expect(pkg.peerDependencies?.['@sentry/node']).toBeDefined()
     expect(pkg.peerDependenciesMeta?.['@sentry/node']?.optional).toBe(true)
+  })
+
+  it('still accepts an installed v10 peer and develops against v11', () => {
+    expect(pkg.peerDependencies?.['@sentry/node']).toBe('^10.57.0 || ^11.0.0')
+    expect(pkg.devDependencies?.['@sentry/node']).toBe('^11.11.0')
   })
 
   it('is not imported statically by the stdio entry point', () => {

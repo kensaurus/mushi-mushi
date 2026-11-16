@@ -7,9 +7,33 @@
  *          installs nor imports it.
  */
 
-/** The slice of `@sentry/node` this module uses. */
+import type { NodeOptions } from '@sentry/node'
+
+/**
+ * SDK 11 stand-in for an unset `sendDefaultPii` (restrictive on v10).
+ * An unset `dataCollection` collects user info, cookies, HTTP bodies, and
+ * queue payloads. Checked against `@sentry/node`'s `NodeOptions`.
+ * Same object as `apps/admin/src/lib/sentry.ts` (`sentryDataCollection`).
+ */
+export const sentryDataCollection = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: {
+    request: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+    response: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  },
+  httpBodies: [],
+  urlQueryParams: { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] },
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  graphQL: { document: false, variables: false },
+  mcp: { inputs: false, outputs: false },
+} satisfies NonNullable<NodeOptions['dataCollection']>
+
+/** The slice of `@sentry/node` this module uses. `init` takes the SDK's options. */
 interface SentryModule {
-  init(options: { dsn: string; environment: string; tracesSampleRate: number }): unknown
+  init(options: NodeOptions): unknown
 }
 
 export type OptionalSentryStatus = 'disabled' | 'enabled' | 'unavailable'
@@ -47,10 +71,12 @@ export async function initOptionalSentry(
     )
     return 'unavailable'
   }
-  sentry.init({
+  const options = {
     dsn,
     environment: env.MUSHI_SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? 'development',
     tracesSampleRate: 0,
-  })
+    dataCollection: sentryDataCollection,
+  } satisfies NodeOptions
+  sentry.init(options)
   return 'enabled'
 }
