@@ -47,6 +47,7 @@ import {
   TableConfidenceCell,
   TableSeverityCell,
 } from './ReportMetricCells'
+import { reportHeadline } from '../../lib/format'
 
 interface Props {
   row: ReportRow
@@ -234,7 +235,7 @@ function ReportRowViewInner({
                       </span>
                     </Tooltip>
                   )}
-                  {displayTitle}
+                  {typeof displayTitle === 'string' ? reportHeadline(displayTitle) : displayTitle}
                 </div>
                 {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
                 {row.title && summary && row.title !== summary && (

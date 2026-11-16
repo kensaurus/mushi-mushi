@@ -14,13 +14,13 @@ import { IconAlertTriangle } from '../icons'
 import { usePageData } from '../../lib/usePageData'
 import { fixFirstOrder, peopleHit } from '../../lib/fixFirst'
 import { severityTrafficBg, severityTrafficLabel } from '../../lib/severityTraffic'
-import { pluralize } from '../../lib/format'
+import { pluralize, reportHeadline } from '../../lib/format'
 import type { ReportRow } from './types'
 
 const OPEN_PATH = '/v1/admin/reports?status=open&sort=created_at&dir=desc&limit=200'
 
 function title(r: ReportRow): string {
-  return (r.title ?? r.summary ?? r.description ?? '').trim() || 'Untitled report'
+  return reportHeadline((r.title ?? r.summary ?? r.description ?? '').trim()) || 'Untitled report'
 }
 
 export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {

@@ -117,6 +117,10 @@ export function ReportRowLayerPill({ row }: Props) {
 export function ReportRowMeta({ row }: Props) {
   const capture = captureMode(row.proactive_trigger, row)
   const who = reporterWho(row)
+  // An anonymous reporter whose key only names the source ("anon·sentry" beside "sentry")
+  // says the same thing twice: keep the source chip, carry the reporter in its tooltip.
+  const whoRepeatsSource = !who.verified && who.label.toLowerCase().includes(capture.label.toLowerCase())
+  const captureTooltip = whoRepeatsSource ? `${capture.tooltip} · ${who.tooltip}` : capture.tooltip
   const { path, fullTitle } = resolveReportPath(row)
   const traceShort = row.sentry_trace_id ? `${row.sentry_trace_id.slice(0, 7)}…` : null
   const sdkDetail = row.sdk_package
@@ -132,13 +136,15 @@ export function ReportRowMeta({ row }: Props) {
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {app}
-        <MetaChip tone={capture.tone} tooltip={capture.tooltip}>
+        <MetaChip tone={capture.tone} tooltip={captureTooltip}>
           {capture.label}
         </MetaChip>
-        <MetaChip tooltip={who.tooltip}>
-          {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
-          {who.label}
-        </MetaChip>
+        {!whoRepeatsSource && (
+          <MetaChip tooltip={who.tooltip}>
+            {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
+            {who.label}
+          </MetaChip>
+        )}
       </div>
     )
   }
@@ -146,16 +152,20 @@ export function ReportRowMeta({ row }: Props) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
       {app}
-      <MetaChip tone={capture.tone} tooltip={capture.tooltip}>
+      <MetaChip tone={capture.tone} tooltip={captureTooltip}>
         {capture.label}
       </MetaChip>
-      <span className="text-fg-faint/60 select-none" aria-hidden="true">
-        ·
-      </span>
-      <MetaChip tooltip={who.tooltip}>
-        {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
-        <span className="max-w-36 truncate">{who.label}</span>
-      </MetaChip>
+      {!whoRepeatsSource && (
+        <>
+          <span className="text-fg-faint/60 select-none" aria-hidden="true">
+            ·
+          </span>
+          <MetaChip tooltip={who.tooltip}>
+            {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
+            <span className="max-w-36 truncate">{who.label}</span>
+          </MetaChip>
+        </>
+      )}
       {path && (
         <>
           <span className="text-fg-faint/60 select-none" aria-hidden="true">

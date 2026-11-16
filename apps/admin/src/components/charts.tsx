@@ -59,6 +59,8 @@ export interface KpiDelta {
   value: string
   direction: 'up' | 'down' | 'flat'
   tone: Tone
+  /** What the change compares, with its numbers ("4 filed in the last 7 days vs 9 the 7 days before"). */
+  title?: string
 }
 
 export interface KpiTileProps {
@@ -191,7 +193,7 @@ export function KpiTile({
           {value}
         </div>
         {delta && (
-          <span className="ml-auto shrink-0" title="vs prior period">
+          <span className="ml-auto shrink-0" title={delta.title ?? 'vs prior period'}>
             <SignalChip tone={delta.tone === 'muted' ? 'neutral' : delta.tone} className="font-mono">
               {ARROW[delta.direction]}
               {delta.value}

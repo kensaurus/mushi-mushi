@@ -218,7 +218,7 @@ export function ReportsTable({
               />
               <SortHeader
                 label="Conf."
-                fullLabel="Confidence"
+                fullLabel="Confidence: how sure the AI triage is about the severity and category"
                 field="confidence"
                 current={sort}
                 dir={dir}

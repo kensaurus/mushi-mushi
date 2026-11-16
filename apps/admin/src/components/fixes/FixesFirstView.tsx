@@ -184,7 +184,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-ready-list">
             {ready.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
-                <Link to={`/reports/${f.report_id}`} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
+                <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
                   {fixReportLabel(f)}
                 </Link>
                 <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">

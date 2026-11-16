@@ -91,6 +91,9 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
       </FilterChipRail>
       <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0" role="group" aria-label="Severity filters">
         <span aria-hidden className="mx-1 hidden h-4 w-px shrink-0 bg-edge/60 sm:inline-block" />
+        {/* These count every status, fixed ones too: "Critical 39" beside the tiles'
+            "Critical · not fixed 2" read as a contradiction without the word. */}
+        <span className="text-2xs font-medium text-fg-muted">Any status:</span>
         {SEVERITY_CHIPS.map((b) => (
           <FilterChip
             key={b.value}
@@ -99,7 +102,7 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
             active={severity === b.value}
             onClick={() => onSetFilter('severity', severity === b.value ? '' : b.value)}
             tone={b.tone}
-            hint={`Filter to ${b.value}-severity reports`}
+            hint={`Filter to ${b.value}-severity reports, open or closed`}
           />
         ))}
       </div>

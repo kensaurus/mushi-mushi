@@ -42,10 +42,12 @@ function severityDelta(values: number[]): KpiDelta | null {
   const last7 = values.slice(-7).reduce((a, n) => a + n, 0)
   const prev7 = values.slice(-14, -7).reduce((a, n) => a + n, 0)
   if (last7 === 0 && prev7 === 0) return null
-  if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn' }
+  const title = `${last7} filed in the last 7 days vs ${prev7} the 7 days before`
+  if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn', title }
   const pct = Math.round(((last7 - prev7) / prev7) * 100)
-  if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted' }
+  if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted', title }
   return {
+    title,
     value: `${Math.abs(pct)}%`,
     direction: pct > 0 ? 'up' : 'down',
     tone: pct > 0 ? 'warn' : 'ok',

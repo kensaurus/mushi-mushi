@@ -71,3 +71,15 @@ export function utcInputToIso(value: string): string | null {
   const d = new Date(`${value}${value.length === 16 ? ':00' : ''}Z`)
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
+
+/**
+ * A report's headline: the part before " — " when the classifier wrote "what — more detail"
+ * ("The GET /api/calendar request failed… — The request produced a PrismaClientKnownRequestError…"
+ * said one fact twice in every row, 2026-11-16). The whole text stays the tooltip. A short
+ * first part (under 20 characters) is not a headline, so the text is kept whole.
+ */
+export function reportHeadline(text: string): string {
+  const at = text.indexOf(' — ')
+  if (at < 20) return text
+  return text.slice(0, at).replace(/[.;:,]\s*$/, '')
+}
