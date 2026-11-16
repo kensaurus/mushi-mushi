@@ -1,0 +1,233 @@
+/**
+ * FILE: apps/admin/src/components/ci/CiStatusBoard.tsx
+ * PURPOSE: The top of the CI page in plain words (2026-11-16). It answers, from the screen
+ *          alone and in this order:
+ *            1. Is CI OK right now? (one sentence)
+ *            2. Which machine is running what? (a card per real machine, by name)
+ *            3. When will each job finish? (usual time, time left, "slower than usual")
+ *            4. What broke, and where? (one group per PR, the failing step named)
+ *            5. What slows each app down this week? (waiting / failing / slow)
+ *          The owner could not answer any of these from runner ids, a stats grid whose
+ *          "typical run time 1 min" sat beside a 12-minute job, and a 4-column graph.
+ *          Data and rules: lib/ciStatus.ts.
+ */
+import { useMemo } from 'react'
+import type { CiOverview } from '../../lib/ciTypes'
+import { buildCiStatus, durationWords, estimateLine, groupFailures, type MachineNow } from '../../lib/ciStatus'
+import { formatPercent } from '../../lib/ciView'
+import { LINK_ACCENT } from '../../lib/chipTone'
+import { useNow } from '../../lib/useNow'
+import { Badge, Card, DataTableCell, DataTableHead, RelativeTime } from '../ui'
+import { IconExternalLink } from '../icons'
+
+const TONE_BOX: Record<'ok' | 'warn' | 'bad', string> = {
+  ok: 'border-ok/35 bg-ok-muted/40',
+  warn: 'border-warn/40 bg-warn-muted/40',
+  bad: 'border-danger/40 bg-danger-muted/40',
+}
+const TONE_WORD: Record<'ok' | 'warn' | 'bad', string> = { ok: 'Healthy', warn: 'Needs a look', bad: 'Something is down' }
+
+function Meter({ label, pct }: { label: string; pct: number | null }) {
+  if (pct == null) return null
+  const tone = pct >= 90 ? 'bg-danger' : pct >= 70 ? 'bg-warn' : 'bg-ok'
+  return (
+    <div className="flex items-center gap-2 text-2xs text-fg-muted" title={`${label}: ${pct}%`}>
+      <span className="w-14 shrink-0">{label}</span>
+      <span className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-surface-overlay" role="meter" aria-label={label} aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <span className={`block h-full ${tone}`} style={{ width: `${Math.max(2, pct)}%` }} />
+      </span>
+      <span className="w-9 shrink-0 text-right tabular-nums">{pct}%</span>
+    </div>
+  )
+}
+
+/** One real machine: its name, what it runs now, how busy it is. */
+export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
+  return (
+    <li className="min-w-0" data-testid={testId ?? `ci-machine-${m.id}`}>
+      <Card className="h-full p-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="font-semibold text-fg">{m.name}</span>
+        {m.detail && <span className="text-2xs text-fg-muted">{m.detail}</span>}
+        {m.stale ? <Badge tone="danger">stopped reporting</Badge> : m.running > 0 ? <Badge tone="ok">running {m.running}</Badge> : <Badge tone="neutral">idle</Badge>}
+      </div>
+      <p className="mt-1 text-xs text-fg-secondary">
+        {m.running === 0
+          ? m.kind === 'github' ? 'Nothing running on GitHub’s machines.' : 'Nothing running right now.'
+          : `Running ${m.apps.map((a) => `${a.app} ${a.count === 1 ? '' : `×${a.count}`}`.trim()).join(', ')}.`}
+        {m.kind === 'github' && ' GitHub bills these minutes.'}
+      </p>
+      <div className="mt-2 space-y-1">
+        <Meter label="CPU busy" pct={m.busyPct} />
+        <Meter label="Memory" pct={m.memPct} />
+      </div>
+      </Card>
+    </li>
+  )
+}
+
+export function CiStatusBoard({ overview }: { overview: CiOverview }) {
+  const now = useNow(30_000)
+  const status = useMemo(() => buildCiStatus(overview, now), [overview, now])
+  const failures = useMemo(() => groupFailures(overview, now), [overview, now])
+
+  return (
+    <div className="space-y-4" data-testid="ci-status-board">
+      {/* 1. Is CI OK right now? */}
+      <div className={`rounded-md border px-4 py-3 ${TONE_BOX[status.tone]}`} data-testid="ci-status-headline" role="status">
+        <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">{TONE_WORD[status.tone]}</p>
+        <p className="mt-0.5 text-sm font-medium text-fg">{status.headline}</p>
+      </div>
+
+      {/* 2. Which machine is running what? */}
+      <section aria-labelledby="ci-machines-now">
+        <h3 id="ci-machines-now" className="mb-1.5 text-xs font-semibold text-fg">Machines right now</h3>
+        {status.machines.length > 0 ? (
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="ci-machines-now">
+            {status.machines.map((m) => (
+              <MachineCard key={m.id} m={m} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-fg-muted">No machine is running a job right now.</p>
+        )}
+        {status.idle.length > 0 && (
+          <p className="mt-1.5 text-2xs text-fg-muted" data-testid="ci-machines-idle">
+            Idle: {status.idle.join(', ')}.
+          </p>
+        )}
+      </section>
+
+      {/* 3. When will each job finish? */}
+      <section aria-labelledby="ci-running-now">
+        <h3 id="ci-running-now" className="mb-1.5 text-xs font-semibold text-fg">
+          Running now {status.running.length > 0 && <span className="font-normal text-fg-muted">({status.running.length})</span>}
+          {status.waiting > 0 && status.oldestWaitS != null && (
+            <span className="ml-2 font-normal text-fg-muted">
+              · {status.waiting} waiting for a machine, oldest {durationWords(status.oldestWaitS)}
+            </span>
+          )}
+        </h3>
+        {status.running.length === 0 ? (
+          <p className="text-xs text-fg-muted">Nothing is running.</p>
+        ) : (
+          <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid="ci-running-now">
+            {status.running.map((r) => {
+              const pct = r.usualS && r.elapsedS != null ? Math.min(100, Math.round((r.elapsedS / r.usualS) * 100)) : null
+              return (
+                <li key={r.job.id} className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:gap-3" data-testid={`ci-running-${r.job.id}`}>
+                  <div className="min-w-0 sm:flex-1">
+                    <p className="text-xs">
+                      {r.job.htmlUrl ? (
+                        <a href={r.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
+                          {r.job.jobName} <IconExternalLink size={10} className="inline" />
+                        </a>
+                      ) : (
+                        <span className="font-medium text-fg">{r.job.jobName}</span>
+                      )}
+                      <span className="text-fg-muted"> · {r.app}{r.job.prNumber ? ` · PR #${r.job.prNumber}` : ''}</span>
+                    </p>
+                    <p className="text-2xs text-fg-muted">on {r.machine?.name ?? 'a machine'}</p>
+                  </div>
+                  <div className="min-w-0 sm:w-56 sm:shrink-0">
+                    <p className={`text-2xs ${r.slow ? 'font-medium text-warn-foreground' : 'text-fg-secondary'}`}>
+                      {r.elapsedS != null ? `${durationWords(r.elapsedS)} so far · ` : ''}
+                      {estimateLine(r)}
+                    </p>
+                    {pct != null && (
+                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
+                        <span className={`block h-full ${r.slow ? 'bg-warn' : 'bg-brand'}`} style={{ width: `${Math.max(3, pct)}%` }} />
+                      </span>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* 4. What broke, and where? */}
+      <section aria-labelledby="ci-broke">
+        <h3 id="ci-broke" className="mb-1.5 text-xs font-semibold text-fg">
+          What broke in the last 2 hours {failures.length > 0 && <span className="font-normal text-fg-muted">({failures.length} {failures.length === 1 ? 'pull request' : 'pull requests'})</span>}
+        </h3>
+        {failures.length === 0 ? (
+          <p className="text-xs text-fg-muted">Nothing failed in the last 2 hours.</p>
+        ) : (
+          <ul className="space-y-2" data-testid="ci-broke">
+            {failures.slice(0, 8).map((g) => (
+              <li key={g.key} className="rounded-md border border-edge-subtle px-3 py-2" data-testid={`ci-broke-${g.key}`}>
+                <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                  <span className="font-semibold text-fg">{g.app}</span>
+                  <span className="text-fg-muted">{g.prNumber ? `PR #${g.prNumber}` : g.branch ?? ''}</span>
+                  <span className="text-2xs text-fg-faint">
+                    <RelativeTime value={new Date(g.at).toISOString()} />
+                  </span>
+                  {g.draftOnly && <Badge tone="neutral">draft: not a failure</Badge>}
+                </p>
+                {g.draftOnly ? (
+                  <p className="mt-0.5 text-2xs text-fg-muted">This pull request was a draft, and drafts skip CI on purpose. Mark it ready for review and CI runs.</p>
+                ) : (
+                  <ul className="mt-1 space-y-0.5">
+                    {g.broke.map(({ failure: f, step }) => (
+                      <li key={f.job.id} className="text-2xs text-fg-secondary">
+                        <span className="font-medium text-fg">{f.job.jobName}</span>
+                        {f.kind === 'code' ? (step ? <> failed at <span className="font-medium text-fg">“{step}”</span></> : ' failed') : <> did not finish: {f.kind === 'machine' ? 'the test machine stopped (re-run it)' : 'cancelled before a machine took it'}</>}
+                        {f.job.htmlUrl && (
+                          <a href={f.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`ml-1.5 ${LINK_ACCENT}`}>
+                            read the log
+                          </a>
+                        )}
+                      </li>
+                    ))}
+                    {g.summaries.length > 0 && (
+                      <li className="text-2xs text-fg-muted">
+                        Also red: {g.summaries.map((f) => f.job.jobName).join(', ')}, a summary check that fails whenever the job above fails.
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </li>
+            ))}
+            {failures.length > 8 && <li className="text-2xs text-fg-muted">and {failures.length - 8} more in the queue below.</li>}
+          </ul>
+        )}
+      </section>
+
+      {/* 5. What slows each app down this week? */}
+      <section aria-labelledby="ci-time">
+        <h3 id="ci-time" className="mb-1 text-xs font-semibold text-fg">Where the time goes this week</h3>
+        <p className="mb-1.5 text-2xs text-fg-muted" data-testid="ci-bottleneck">
+          {status.bottleneck ?? 'No app is held up: waits are short and most checks pass.'}
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-120 text-left text-xs" data-testid="ci-time-by-app">
+            <thead>
+              <tr>
+                <DataTableHead>App</DataTableHead>
+                <DataTableHead><span title="1 job in 20 waits this long or longer for a free machine">Waits for a machine</span></DataTableHead>
+                <DataTableHead><span title="Half the jobs finish within this">Usual run</span></DataTableHead>
+                <DataTableHead>Checks pass</DataTableHead>
+                <DataTableHead>Main delay</DataTableHead>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-edge-subtle">
+              {status.apps.map((a) => (
+                <tr key={a.repo}>
+                  <DataTableCell>{a.app}</DataTableCell>
+                  <DataTableCell>{a.waitP95S != null ? `up to ${durationWords(a.waitP95S)}` : '—'}</DataTableCell>
+                  <DataTableCell>{a.runP50S != null ? durationWords(a.runP50S) : '—'}</DataTableCell>
+                  <DataTableCell>{formatPercent(a.passRate)}</DataTableCell>
+                  <DataTableCell>
+                    {a.delay === 'waiting' ? <Badge tone="warn">waiting for a machine</Badge> : a.delay === 'failing' ? <Badge tone="danger">failing checks</Badge> : a.delay === 'slow' ? <Badge tone="warn">long runs</Badge> : <span className="text-fg-muted">none</span>}
+                  </DataTableCell>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  )
+}

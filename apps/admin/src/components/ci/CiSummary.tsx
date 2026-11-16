@@ -101,7 +101,7 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
         />
         <Tile
           Icon={IconGauge}
-          label="Typical wait for a machine"
+          label="Half the jobs wait at most"
           value={formatSeconds(stats.queueP50s)}
           detail={`1 job in 20 waits ${formatSeconds(stats.queueP95s)} or more`}
           tone={stats.queueP95s != null && stats.queueP95s >= 600 ? 'bg-warn-muted text-warn-foreground' : CI_OUTCOME_STYLE.waiting.chip}
@@ -109,9 +109,9 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
         />
         <Tile
           Icon={IconPlay}
-          label="Typical run time"
+          label="Half the jobs finish within"
           value={formatSeconds(stats.durationP50s)}
-          detail={`The slowest 1 in 20 take ${formatSeconds(stats.durationP95s)} or more`}
+          detail={`Across every job type this week; 1 in 20 take ${formatSeconds(stats.durationP95s)} or more`}
           tone={CI_OUTCOME_STYLE.waiting.chip}
           href="#ci-slow"
         />

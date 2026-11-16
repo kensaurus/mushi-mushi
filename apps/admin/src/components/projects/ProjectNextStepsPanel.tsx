@@ -15,6 +15,7 @@ const TONE_CHIP: Record<ProjectVerdictTone, { label: string; className: string }
   ok: { label: 'Healthy', className: CHIP_TONE.okSubtle },
   attention: { label: 'Needs you', className: CHIP_TONE.warnSubtle },
   inactive: { label: 'Not connected', className: CHIP_TONE.neutral },
+  sample: { label: 'Sample data', className: CHIP_TONE.neutral },
 }
 
 export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
@@ -23,8 +24,12 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
   const rows = projects
     .map((p) => ({ project: p, status: deriveProjectPlainStatus(p) }))
     // Projects that need something float to the top; healthy ones collapse to
-    // a single reassuring line at the bottom.
-    .sort((a, b) => Number(a.status.steps.length === 0) - Number(b.status.steps.length === 0))
+    // a single reassuring line at the bottom, and the demo app sits last.
+    .sort(
+      (a, b) =>
+        Number(a.status.tone === 'sample') - Number(b.status.tone === 'sample') ||
+        Number(a.status.steps.length === 0) - Number(b.status.steps.length === 0),
+    )
 
   return (
     <section

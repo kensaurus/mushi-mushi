@@ -105,6 +105,60 @@ export interface DispatcherStatus {
   problem: string | null
 }
 
+/** What each stage means, in plain words, under its name (2026-11-16: "Fix PR", "CI" and "Release train" said nothing to a non-developer). */
+export const STAGE_PLAIN: Record<PipelineStageId, string> = {
+  reported: 'New bug reports',
+  triaged: 'Understood; waiting for a fix',
+  pr: 'An agent wrote a fix',
+  review: 'An AI checked the fix',
+  ci: 'Your tests run on the fix',
+  train: 'Waiting to merge with other fixes',
+  merged: 'Merged into your code',
+  deployed: 'Live for your users',
+}
+
+function countOf(stages: readonly PipelineStage[], id: PipelineStageId): number {
+  return stages.find((s) => s.id === id)?.count ?? 0
+}
+
+/**
+ * The pace in one or two sentences: how many fixes merge a day, how long the bugs
+ * waiting for a fix take at that pace, and who started fixes in the last day.
+ * Null with no stages. The owner (2026-11-16): "I don't know what is the bottleneck
+ * or what is running well, and what I can estimate".
+ */
+export function pipelinePace(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): string | null {
+  if (stages.length === 0) return null
+  const merged7 = countOf(stages, 'merged') + countOf(stages, 'deployed')
+  const waiting = countOf(stages, 'triaged')
+  const perDay = merged7 / 7
+  const parts: string[] = []
+  const rate = merged7 === 0 ? 'no fix merged in the last 7 days' : `${merged7} ${merged7 === 1 ? 'fix' : 'fixes'} merged in the last 7 days (${perDay >= 1 ? `about ${Math.round(perDay)} a day` : `about one every ${Math.round(1 / perDay)} days`})`
+  if (waiting > 0) {
+    if (perDay > 0) {
+      const days = waiting / perDay
+      const span = days < 14 ? `${Math.max(1, Math.round(days))} days` : days < 120 ? `${Math.round(days / 7)} weeks` : `${Math.round(days / 30)} months`
+      parts.push(`Pace: ${rate}. ${waiting} ${waiting === 1 ? 'bug waits' : 'bugs wait'} for a fix, about ${span} of work at this pace.`)
+    } else {
+      parts.push(`Pace: ${rate}, while ${waiting} ${waiting === 1 ? 'bug waits' : 'bugs wait'} for a fix.`)
+    }
+  } else {
+    parts.push(`Pace: ${rate}. No bug is waiting for a fix.`)
+  }
+  if (dispatchers && dispatchers.length > 0) {
+    const local = dispatchers.reduce((n, d) => n + d.local.runs24h, 0)
+    const server = dispatchers.reduce((n, d) => n + d.server.dispatches24h, 0)
+    const none = dispatchers.filter((d) => d.autofixOn && d.server.dispatches24h === 0 && d.local.runs24h === 0).map((d) => d.name)
+    const who =
+      local + server === 0
+        ? 'No fix was started in the last 24 hours.'
+        : `Fixes started in the last 24 hours: ${local + server}${server === 0 ? ', all by your own worker' : local === 0 ? ', all by Mushi Mushi’s cloud agents' : ` (${local} by your own worker, ${server} by cloud agents)`}.`
+    const quiet = none.length ? ` None for ${none.length > 3 ? `${none.slice(0, 3).join(', ')} and ${none.length - 3} more` : none.join(none.length === 2 ? ' and ' : ', ')}.` : ''
+    parts.push(who + quiet)
+  }
+  return parts.join(' ')
+}
+
 /** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
 export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number } {
   let server = 0

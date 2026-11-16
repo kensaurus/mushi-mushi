@@ -192,6 +192,16 @@ async function readOverviewJobs(db: Db, projectIds: string[], fromIso: string): 
   return { unfinished, finished }
 }
 
+/**
+ * The first step that failed, so the console can say what "tests failed" means
+ * ("Dead code (production)", "Draft PRs run no CI") instead of only the job name
+ * (2026-11-16). Null when no step failed or the steps were not read.
+ */
+export function firstFailedStep(steps: JobRow['steps']): string | null {
+  for (const st of steps ?? []) if (st?.conclusion === 'failure' && typeof st.name === 'string' && st.name.trim()) return st.name.trim()
+  return null
+}
+
 function repoOf(url: unknown): string | null {
   if (typeof url !== 'string') return null
   const m = /^(?:https?:\/\/(?:www\.)?github\.com\/)?([^/\s]+)\/([^/\s#?]+?)(?:\.git)?\/?$/i.exec(url.trim())
@@ -448,6 +458,7 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
     completedAt: j.completed_at,
     htmlUrl: j.html_url,
     memPeakMb: j.runner_name ? peakOf.get(`${j.repo}|${j.run_id}|${j.run_attempt}|${j.runner_name}`) ?? null : null,
+    failedStep: firstFailedStep(j.steps),
   }))
 
   const finished = rows.finished

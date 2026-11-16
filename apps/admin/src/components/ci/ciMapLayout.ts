@@ -25,8 +25,8 @@
 
 import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@xyflow/react'
-import type { CiHost, CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
-import { buildCiQueue, jobOutcome, runnerDisplayName, runnerFamily, runnerKey } from '../../lib/ciView'
+import type { CiJob, CiOverview, CiPlatform, CiRunnerKind } from '../../lib/ciTypes'
+import { buildCiQueue, hostOfRunner, jobOutcome, runnerDisplayName, runnerFamily, runnerKey } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
 
 type CiMapNodeKind = 'host' | 'runner' | 'repo' | 'job'
@@ -123,14 +123,6 @@ export interface CiMap {
   edges: Edge<CiMapEdgeData>[]
   width: number
   height: number
-}
-
-function hostOfRunner(hosts: CiHost[], name: string, hostId: string | null): CiHost | null {
-  if (hostId) {
-    const byId = hosts.find((h) => h.hostId === hostId)
-    if (byId) return byId
-  }
-  return hosts.find((h) => h.runners.some((r) => runnerKey(r.name) === name)) ?? null
 }
 
 function nodeId(kind: CiMapNodeKind, key: string): string {

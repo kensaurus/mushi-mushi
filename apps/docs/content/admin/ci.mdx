@@ -28,6 +28,20 @@ Mushi Mushi's own fix pull requests run your tests only after a review says they
 
 A collector also runs every 10 minutes. It reads GitHub Actions runs updated in the last 2 hours, on every branch of each app's repositories, classifies each job, and deletes job rows and samples older than 30 days.
 
+## Right now
+
+The **Now** view opens with plain answers, in this order:
+
+| Part | What it answers |
+| --- | --- |
+| The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. |
+| **Machines right now** | Which machine runs what: one card per real machine, by name, with how busy its CPU and memory are. Jobs on GitHub's machines show as **GitHub's cloud**. Idle machines are listed on one line. |
+| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. |
+| **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A draft pull request's skipped CI is marked as not a failure. |
+| **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. |
+
+**Last 7 days** follows: the week's counts and pass rate.
+
 ## Test machine or your code
 
 A lost runner, a job still waiting for a runner, and a queue that expired are the test machine. They are never a code failure. The page labels them **Test machine stopped**. **Tests failed** means a step failed while a machine was running your code.
@@ -48,9 +62,11 @@ Above the queue: how many are waiting now, how many are running, the typical wai
 
 **Timeline** is one row per test machine. Gaps are idle time. Striped bars are jobs waiting for a machine.
 
-## Runner map
+## Machines
 
-**Runner map** is your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click a card for its health and recent jobs.
+**Machines** shows a card for every machine that runs your checks: what it runs now and how busy it is.
+
+**Runner map (advanced)** is a diagram of your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Open it from the Machines view. Click a card for its health and recent jobs.
 
 Runners that live for a single job, named as a label plus a number of seconds, are folded into that label. With **Administration: read** on the GitHub token, Mushi Mushi reads the repository runner list, including idle and offline runners. Without it, the page says it only sees runners through jobs. Without **Actions: read**, it cannot see the jobs at all.
 
