@@ -47,7 +47,7 @@ export function GraphLegend() {
       {open && (
         <div className="px-2.5 pb-2 pt-0 space-y-1.5 border-t border-edge-subtle">
           <div>
-            <div className="text-3xs uppercase tracking-wider text-fg-faint mt-1.5 mb-0.5">Nodes</div>
+            <div className="text-3xs text-fg-secondary mt-1.5 mb-0.5 font-semibold">Nodes</div>
             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
               {NODE_TYPES.map((nt) => (
                 <div key={nt} className="flex items-center gap-1.5 text-fg-muted">
@@ -62,7 +62,7 @@ export function GraphLegend() {
             </div>
           </div>
           <div>
-            <div className="text-3xs uppercase tracking-wider text-fg-faint mb-0.5">Edges</div>
+            <div className="text-3xs text-fg-secondary mb-0.5 font-semibold">Edges</div>
             <div className="space-y-0.5">
               {edgeColors.map((e) => (
                 <div key={e.key} className="flex items-center gap-1.5 text-fg-muted">

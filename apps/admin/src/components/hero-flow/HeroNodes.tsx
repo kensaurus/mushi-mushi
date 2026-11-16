@@ -149,7 +149,7 @@ function HeroMetricChips({
       {chips.map((chip) => {
         const to = chipLinkForText(chip, scope)
         const inner = (
-          <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-2xs font-mono tabular-nums leading-none whitespace-nowrap motion-safe:transition-opacity ${chipClass}`}>
+          <span className={`inline-flex items-center rounded px-1.5 py-px text-2xs font-mono tabular-nums leading-none whitespace-nowrap motion-safe:transition-opacity ${chipClass}`}>
             {chip}
           </span>
         )
@@ -268,7 +268,7 @@ function NodeShell({
 
       <div className="relative z-1 flex min-h-0 flex-1 flex-col">
         <header className="flex items-center gap-1.5 mb-1.5 shrink-0">
-          <span className="inline-flex items-center gap-1 rounded-sm border border-edge bg-surface-overlay px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wide text-fg-secondary">
+          <span className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay px-1.5 py-px text-3xs font-semibold text-fg-secondary">
             <span className="inline-flex shrink-0" style={{ color: accentHex }} aria-hidden>
               <KindIcon size={11} />
             </span>

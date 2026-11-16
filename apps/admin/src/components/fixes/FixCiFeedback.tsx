@@ -199,7 +199,7 @@ export function FixCiFeedback({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-2xs font-medium ${TONE_CLASS[reading.tone]}`}
+          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-px text-2xs font-medium ${TONE_CLASS[reading.tone]}`}
         >
           {reading.infra && <span aria-hidden="true">⚠</span>}
           {reading.label}

@@ -314,7 +314,7 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
       <section aria-labelledby="overview-needs-attention">
         <h3
           id="overview-needs-attention"
-          className="mb-3 text-2xs font-medium uppercase tracking-wider text-fg-faint"
+          className="mb-3 text-2xs font-semibold text-fg-secondary"
         >
           Needs attention ({attention.length})
         </h3>
@@ -329,7 +329,7 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
       <section aria-labelledby="overview-healthy">
         <h3
           id="overview-healthy"
-          className="mb-3 text-2xs font-medium uppercase tracking-wider text-fg-faint"
+          className="mb-3 text-2xs font-semibold text-fg-secondary"
         >
           Nothing needed ({healthy.length})
         </h3>

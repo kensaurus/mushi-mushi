@@ -169,12 +169,12 @@ export function ExploreSymbolPanel({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-              <span className="text-2xs uppercase tracking-wider text-fg-faint">
+              <span className="text-2xs text-fg-secondary font-semibold">
                 {symbol_name ? 'Symbol' : 'File'}
               </span>
               {layer && (
                 <span
-                  className="text-2xs px-1.5 py-px rounded-sm border font-medium"
+                  className="text-2xs px-1.5 py-px rounded-sm font-medium"
                   style={{
                     backgroundColor: `${layerColor}18`,
                     borderColor: `${layerColor}40`,
@@ -185,7 +185,7 @@ export function ExploreSymbolPanel({
                 </span>
               )}
               {fileExt && (
-                <span className="text-2xs px-1 py-px rounded-sm bg-surface-overlay text-fg-faint border border-edge-subtle font-mono">
+                <span className="text-2xs px-1 py-px rounded-sm bg-surface-overlay text-fg-faint font-mono">
                   .{fileExt}
                 </span>
               )}
@@ -267,7 +267,7 @@ export function ExploreSymbolPanel({
               {node.metadata.language_notes.map((note) => (
                 <span
                   key={note}
-                  className="text-2xs px-1.5 py-0.5 rounded border border-info/30 bg-info-muted/50 text-info-foreground border border-info/25"
+                  className="text-2xs px-1.5 py-px rounded bg-info-muted/50 text-info-foreground"
                 >
                   {note}
                 </span>
@@ -280,7 +280,7 @@ export function ExploreSymbolPanel({
       {/* Content preview */}
       {previewContent && (
         <div className="px-3 py-2.5 border-b border-edge-subtle/60">
-          <div className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5 flex items-center justify-between">
+          <div className="text-2xs text-fg-secondary mb-1.5 flex items-center justify-between font-semibold">
             <span>Preview</span>
             {content_preview && content_preview.length > 800 && (
               <span className="text-2xs text-fg-faint normal-case tracking-normal">truncated</span>
@@ -294,7 +294,7 @@ export function ExploreSymbolPanel({
       {projectId && (
         <div className="px-3 py-2.5 border-b border-edge-subtle/60 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-2xs uppercase tracking-wider text-fg-faint">Plain English</span>
+            <span className="text-2xs text-fg-secondary font-semibold">Plain English</span>
             {!summary && !summaryLoading && (
               <Btn size="sm" variant="ghost" onClick={() => void loadSummary()} className="h-7 text-2xs px-2">
                 Explain this file

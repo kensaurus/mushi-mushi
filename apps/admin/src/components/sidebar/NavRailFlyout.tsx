@@ -53,7 +53,7 @@ export function NavRailFlyout({
         <span className="text-xs font-semibold leading-tight text-fg">{title}</span>
         {kicker && (
           <span
-            className={`ml-auto shrink-0 rounded-xs px-1 py-px text-3xs font-bold uppercase leading-none tracking-wide ${kicker.className}`}
+            className={`ml-auto shrink-0 rounded-xs px-1 py-px text-3xs font-bold leading-none ${kicker.className}`}
           >
             {kicker.label}
           </span>

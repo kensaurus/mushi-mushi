@@ -762,7 +762,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         )}
 
         <div>
-          <p className="mb-2 text-xs font-medium text-fg-muted uppercase tracking-wide">Variants</p>
+          <p className="mb-2 text-xs font-semibold text-fg-secondary">Variants</p>
           <div className="space-y-2">
             {variants.map((v) => (
               <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
@@ -785,7 +785,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
 
         {analysis && (
           <div className="space-y-3">
-            <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
+            <p className="text-xs font-semibold text-fg-secondary">Analysis</p>
 
             <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/40 bg-surface-raised'}`}>
               <div className="font-medium text-fg">

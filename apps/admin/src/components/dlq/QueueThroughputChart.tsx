@@ -25,7 +25,7 @@ export function QueueThroughputChart({ throughput }: Props) {
           nowrap keeps the whole range together; the header wraps it under
           the title when the row is narrower than both (390px). */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mb-1">
-        <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
+        <h3 className="text-2xs text-fg-secondary font-semibold">
           Daily throughput · last 14d
         </h3>
         <div className="flex items-center gap-2">
@@ -47,7 +47,7 @@ export function QueueThroughputChart({ throughput }: Props) {
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div>
-          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-info/70" aria-hidden="true" />
             Created
           </div>
@@ -63,7 +63,7 @@ export function QueueThroughputChart({ throughput }: Props) {
           />
         </div>
         <div>
-          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok/70" aria-hidden="true" />
             Completed
           </div>
@@ -79,7 +79,7 @@ export function QueueThroughputChart({ throughput }: Props) {
           />
         </div>
         <div>
-          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+          <div className="text-3xs font-semibold text-fg-secondary mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger/70" aria-hidden="true" />
             Failed / DLQ
           </div>

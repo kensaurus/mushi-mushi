@@ -71,7 +71,7 @@ export function DailyScorecard() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="text-left text-2xs uppercase tracking-wider text-fg-faint">
+              <tr className="text-left text-2xs text-fg-secondary font-semibold">
                 <th className="py-1.5 pr-3 font-medium">Day</th>
                 <th className="py-1.5 px-2 text-right font-medium">Page views</th>
                 <th className="py-1.5 px-2 text-right font-medium">Signups</th>
@@ -97,7 +97,7 @@ export function DailyScorecard() {
           ) : (
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-2xs uppercase tracking-wider text-fg-faint">
+                <tr className="text-left text-2xs text-fg-secondary font-semibold">
                   <th className="py-1.5 pr-3 font-medium">Source (?src=)</th>
                   <th className="py-1.5 px-2 text-right font-medium">Page views</th>
                   <th className="py-1.5 px-2 text-right font-medium">Signups</th>

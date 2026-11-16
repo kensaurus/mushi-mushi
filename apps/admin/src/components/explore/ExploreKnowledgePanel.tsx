@@ -164,7 +164,7 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
 
       {sources.length > 0 && (
         <Card className="p-4 space-y-2">
-          <p className="text-3xs uppercase tracking-wider text-fg-faint">Wiki sources</p>
+          <p className="text-3xs text-fg-secondary font-semibold">Wiki sources</p>
           <ul className="space-y-2">
             {sources.map((s) => {
               const stale = isStale(s, now)
@@ -213,7 +213,7 @@ export function ExploreKnowledgePanel({ projectId }: Props) {
 
       {nodes.length > 0 ? (
         <Card className="p-4 space-y-2">
-          <p className="text-3xs uppercase tracking-wider text-fg-faint">Knowledge entities</p>
+          <p className="text-3xs text-fg-secondary font-semibold">Knowledge entities</p>
           <ul className="grid gap-2 sm:grid-cols-2">
             {nodes.map((n) => (
               <li key={n.id} className="rounded border border-edge-subtle bg-surface-overlay/30 p-2">

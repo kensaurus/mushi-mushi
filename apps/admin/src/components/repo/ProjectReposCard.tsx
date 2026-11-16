@@ -166,7 +166,7 @@ export function ProjectReposCard({ projectId }: Props) {
   return (
     <Card className="p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted flex items-center gap-1.5">
+        <h3 className="text-xs font-semibold text-fg-secondary flex items-center gap-1.5">
           <IconGit />
           Linked repos ({repos.length})
         </h3>

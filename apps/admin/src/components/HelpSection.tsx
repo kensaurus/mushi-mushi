@@ -56,7 +56,7 @@ export function HelpSection({
       { className: 'min-w-0 flex-1' },
       React.createElement(
         'p',
-        { className: `mb-1 text-3xs font-semibold uppercase tracking-wider ${TONE_TITLE[tone]}` },
+        { className: `mb-1 text-3xs font-semibold ${TONE_TITLE[tone]}` },
         title,
       ),
       children,

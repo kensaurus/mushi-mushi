@@ -275,7 +275,7 @@ function VoiceSessionResult({ session, pending, onConfirm, onCancel }: { session
     <Section title="What Mushi Mushi heard" action={<Badge tone={voiceStatusTone(status)}>{voiceStatusLabel(status)}</Badge>}>
       <div className="space-y-3" data-testid="voice-session-result">
         <Card variant="flat" className="p-3">
-          <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-fg-muted">Transcript (verbatim)</p>
+          <p className="mb-1 text-2xs font-semibold text-fg-secondary">Transcript (verbatim)</p>
           <p className="text-sm leading-relaxed text-fg whitespace-pre-wrap">{session.transcript?.trim() || '—'}</p>
         </Card>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

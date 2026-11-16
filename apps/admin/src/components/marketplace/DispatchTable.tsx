@@ -116,7 +116,7 @@ export function DispatchTable({
                     {isExpanded && hasResponse && (
                       <tr id={`delivery-response-${d.id}`} className="bg-surface-overlay/30 border-t border-edge-subtle">
                         <td colSpan={7} className="px-3 py-2">
-                          <div className="text-3xs text-fg-muted uppercase tracking-wider mb-1">
+                          <div className="text-3xs text-fg-secondary mb-1 font-semibold">
                             Full response · delivery {d.delivery_id.slice(0, 8)}…
                           </div>
                           <pre className="mushi-code-block mushi-code-body text-3xs font-mono overflow-auto whitespace-pre-wrap wrap-anywhere rounded-sm p-2 max-h-64">

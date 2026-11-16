@@ -632,7 +632,7 @@ export function McpSetupPanel({
               </pre>
             </div>
             <div>
-              <p className="text-2xs text-fg-faint uppercase tracking-wide font-medium mb-1">Init snippet</p>
+              <p className="text-2xs text-fg-secondary font-semibold mb-1">Init snippet</p>
               <pre className="mushi-code-block mushi-code-body border border-code-surface-border rounded-sm px-3 py-2 text-2xs font-mono overflow-auto whitespace-pre-wrap select-all max-h-52">
                 {buildSdkInitSnippet(projectId)}
               </pre>

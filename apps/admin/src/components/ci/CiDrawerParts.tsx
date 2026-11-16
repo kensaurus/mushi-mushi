@@ -42,7 +42,7 @@ export function StatTiles({ tiles }: { tiles: Array<{ label: string; value: stri
     <dl className="grid grid-cols-2 gap-2">
       {tiles.map((t) => (
         <div key={t.label} className="min-w-0 rounded-md border border-edge-subtle bg-surface-raised px-2.5 py-2">
-          <dt className="truncate text-3xs uppercase tracking-wide text-fg-muted">{t.label}</dt>
+          <dt className="truncate text-3xs text-fg-secondary font-semibold">{t.label}</dt>
           <dd className="text-sm font-semibold text-fg tabular-nums">{t.value}</dd>
           {t.hint && <dd className="truncate text-3xs text-fg-faint">{t.hint}</dd>}
         </div>
@@ -166,7 +166,7 @@ export function ChipRow({
             <span className="truncate">{it.label}</span>
           </>
         )
-        const cls = 'inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle px-1.5 py-0.5 text-2xs'
+        const cls = 'inline-flex max-w-full items-center gap-1 rounded-sm px-1.5 py-px text-2xs'
         return (
           <li key={it.key} className="min-w-0 max-w-full">
             {it.nodeId && onSelect ? (

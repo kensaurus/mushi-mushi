@@ -165,7 +165,7 @@ function LocTrendChart({ series }: { series: BundleSeries }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline gap-2">
-        <p className="text-2xs uppercase tracking-wider text-fg-muted">{series.label}</p>
+        <p className="text-2xs text-fg-secondary font-semibold">{series.label}</p>
         <span
           className={`text-lg font-semibold tabular-nums ${overBudget ? 'text-danger' : 'text-fg'}`}
         >
@@ -222,7 +222,7 @@ function BundleTrendChart({ series }: { series: BundleSeries }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline gap-2">
-        <p className="text-2xs uppercase tracking-wider text-fg-muted">{series.label}</p>
+        <p className="text-2xs text-fg-secondary font-semibold">{series.label}</p>
         <span className={`text-lg font-semibold tabular-nums ${overTarget ? 'text-warn' : 'text-brand'}`}>
           {latestVal.toFixed(1)} KB
         </span>

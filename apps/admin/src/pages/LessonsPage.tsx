@@ -272,26 +272,26 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
               <span className="text-xs text-fg-faint">seen {selectedLesson.frequency} {selectedLesson.frequency === 1 ? 'time' : 'times'}</span>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Rule</h3>
+              <h3 className="text-xs font-semibold text-fg-secondary mb-1">Rule</h3>
               <pre className="mushi-code-block mushi-code-body text-sm p-3 rounded-lg whitespace-pre-wrap border border-edge">
                 {selectedLesson.rule_text}
               </pre>
             </div>
             {selectedLesson.anti_pattern && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">What to avoid</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">What to avoid</h3>
                 <p className="text-sm text-fg-secondary">{selectedLesson.anti_pattern}</p>
               </div>
             )}
             {selectedLesson.summary_paragraph && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Summary</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">Summary</h3>
                 <p className="text-sm text-fg-secondary">{selectedLesson.summary_paragraph}</p>
               </div>
             )}
             {selectedLesson.cluster_id && (
               <div>
-                <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-1">Learned from</h3>
+                <h3 className="text-xs font-semibold text-fg-secondary mb-1">Learned from</h3>
                 <p className="text-xs text-fg-secondary">
                   {selectedLesson.mistake_clusters?.name ?? 'A recurring pattern'}
                   {selectedLesson.mistake_clusters ? ` · ${selectedLesson.mistake_clusters.cluster_size} reports` : ''}

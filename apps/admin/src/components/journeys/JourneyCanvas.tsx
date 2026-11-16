@@ -157,7 +157,7 @@ export function JourneyCanvas({ map, hasScan, findings, selected, onSelect }: Pr
             <FlowCanvasBackground />
             {layout.mode === 'sitemap' && (
               <Panel position="top-left">
-                <span className="rounded-sm border border-edge-subtle bg-surface-raised/90 px-1.5 py-0.5 text-2xs text-fg-muted">
+                <span className="rounded-sm bg-surface-raised/90 px-1.5 py-px text-2xs text-fg-muted">
                   Site hierarchy from the scan. Real paths appear once visits are recorded.
                 </span>
               </Panel>

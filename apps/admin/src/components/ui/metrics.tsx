@@ -307,9 +307,9 @@ export function RecommendedAction({
             {meta.map((m, i) => (
               <li
                 key={`${m.label}-${i}`}
-                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-2xs ${META_CHIP_TONES[m.tone ?? 'neutral']}`}
+                className={`inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-2xs ${META_CHIP_TONES[m.tone ?? 'neutral']}`}
               >
-                <span className="font-medium uppercase tracking-wide text-2xs opacity-70">{m.label}</span>
+                <span className="font-semibold text-2xs opacity-70">{m.label}</span>
                 <span className="font-mono">{m.value}</span>
               </li>
             ))}
@@ -548,7 +548,7 @@ function MetricSectionHeader({ section }: { section: MetricTooltipSection }) {
   const { Icon, chipClass } = METRIC_SECTION_META[kind]
   return (
     <div
-      className={`mb-1.5 inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-3xs font-semibold uppercase tracking-wider ${chipClass}`}
+      className={`mb-1.5 inline-flex items-center gap-1 rounded-sm px-1.5 py-px font-mono text-3xs font-semibold ${chipClass}`}
     >
       <Icon size={11} className="shrink-0 opacity-90" />
       <span>{section.label}</span>

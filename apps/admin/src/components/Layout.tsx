@@ -625,7 +625,7 @@ export function Layout({ children }: { children: ReactNode }) {
                         <div id="nav-more-pages" className="ml-3 space-y-1.5 border-l border-edge/40 pl-2" data-testid="nav-more-pages">
                           {moreGroups.map((group) => (
                             <div key={group.sectionId} className="space-y-0.5">
-                              <p className="px-2 pt-1 text-3xs font-medium uppercase tracking-wider text-fg-faint">{group.title}</p>
+                              <p className="px-2 pt-1 text-3xs font-semibold text-fg-secondary">{group.title}</p>
                               {group.items.map((item) => renderNavLink(item, false))}
                             </div>
                           ))}
@@ -815,7 +815,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
               />
               {!sidebarCollapsed && (
-                <span className="font-mono text-2xs uppercase tracking-wider text-fg-faint">
+                <span className="font-mono text-2xs text-fg-secondary font-semibold">
                   Collapse
                 </span>
               )}

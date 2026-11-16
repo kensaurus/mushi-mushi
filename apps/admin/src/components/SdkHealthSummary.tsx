@@ -1007,7 +1007,7 @@ export function SdkConnectivityEmptyState({
 
   return (
     <Card className="p-5 space-y-4 border-dashed">
-      <div className="flex items-center gap-2 text-2xs font-mono text-fg-faint uppercase tracking-wide">
+      <div className="flex items-center gap-2 text-2xs font-mono text-fg-secondary font-semibold">
         <Badge tone="infoSubtle">Connectivity check</Badge>
         <span>{headline}</span>
       </div>

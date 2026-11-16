@@ -213,7 +213,7 @@ export function inlineMarkdown(text: string): ReactNode[] {
 function DiagnosisField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <p className="text-2xs font-medium uppercase tracking-wide text-fg-faint">{label}</p>
+      <p className="text-2xs font-semibold text-fg-secondary">{label}</p>
       <div className="mt-0.5">{children}</div>
     </div>
   )

@@ -76,7 +76,7 @@ export function FilterChip({
   const sizeClasses =
     size === 'lg'
       ? 'min-h-[44px] rounded-lg px-3 py-2 text-xs'
-      : 'min-h-6 pointer-coarse:min-h-8 rounded-full px-2.5 py-1 text-2xs'
+      : 'min-h-6 pointer-coarse:min-h-8 rounded-sm px-2 py-0.5 text-2xs'
   const ariaProps =
     selectionRole === 'radio'
       ? { role: 'radio' as const, 'aria-checked': active }
@@ -96,7 +96,7 @@ export function FilterChip({
           chip does not widen and wrap the row when the number lands (Bugs
           quick filters, layout shift 0.244, 2026-10-24). */}
       {count === null && (
-        <span aria-hidden="true" className="inline-flex min-w-4 rounded-full px-1 font-mono text-3xs font-semibold leading-tight bg-surface-raised/40">
+        <span aria-hidden="true" className="inline-flex min-w-4 rounded-xs px-1 tabular-nums text-3xs font-semibold leading-tight bg-surface-raised/40">
           {/* As wide as a two-digit count, the common case: a 16px blank was
               2px narrower per chip and the row still wrapped (measured after
               PR 672, 2026-10-24). */}
@@ -105,7 +105,7 @@ export function FilterChip({
       )}
       {typeof count === 'number' && (
         <span
-          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-3xs font-semibold leading-tight ${
+          className={`inline-flex min-w-[1rem] justify-center rounded-xs px-1 tabular-nums text-3xs font-semibold leading-tight ${
             active ? 'bg-fg/10' : 'bg-surface-raised/70'
           }`}
           role="img"
@@ -293,7 +293,7 @@ export function ResultChip({ tone, children, at, className = '' }: ResultChipPro
     <span
       role="status"
       aria-live={tone === 'error' ? 'assertive' : 'polite'}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-px text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
     >
       <span
         aria-hidden="true"
@@ -621,7 +621,7 @@ export function CodeChip({
   return (
     <code
       title={title}
-      className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
+      className={`inline-block truncate rounded-sm bg-surface-overlay/70 px-1.5 py-px font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
     >
       {children}
     </code>
@@ -644,7 +644,7 @@ export function DataTableHead({
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
   return (
     <th
-      className={`px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted ${alignClass} ${className}`}
+      className={`px-3 py-2 text-2xs font-semibold text-fg-secondary ${alignClass} ${className}`}
     >
       {children}
     </th>
@@ -749,7 +749,7 @@ export function ErrorAlert({
           {title && <h4 className="text-sm font-semibold text-danger">{title}</h4>}
           <p className="text-sm text-danger leading-relaxed">{message}</p>
           {captionParts.length > 0 && (
-            <p className="font-mono text-3xs uppercase tracking-wider text-danger/70 break-all">
+            <p className="font-mono text-3xs text-danger/70 break-all font-semibold">
               {captionParts.join(' · ')}
             </p>
           )}

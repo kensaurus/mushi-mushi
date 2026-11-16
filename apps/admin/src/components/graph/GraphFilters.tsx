@@ -41,7 +41,7 @@ export function QuickViewsRow({
 }: QuickViewsProps) {
   return (
     <div className="flex flex-wrap gap-1.5 mb-2 items-center">
-      <span className="text-2xs text-fg-faint uppercase tracking-wider mr-1">Quick views:</span>
+      <span className="text-2xs text-fg-secondary mr-1 font-semibold">Quick views:</span>
       {QUICK_VIEWS.map((v) => (
         <button
           key={v.key}
@@ -179,7 +179,7 @@ interface FilterChipGroupProps {
 function FilterChipGroup({ label, allActive, children }: FilterChipGroupProps) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-2xs uppercase tracking-wider text-fg-faint min-w-[6.5rem]">
+      <span className="text-2xs text-fg-secondary min-w-[6.5rem] font-semibold">
         {label}
         {allActive && (
           <span className="ml-1 text-2xs text-fg-faint/60 normal-case tracking-normal">

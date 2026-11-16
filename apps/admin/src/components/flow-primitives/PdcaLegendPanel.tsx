@@ -69,7 +69,7 @@ export function PdcaLegendPanel({
           </span>
         ))}
         {runningMeta && (
-          <span className="ml-auto text-3xs text-brand font-medium uppercase tracking-wider">
+          <span className="ml-auto text-3xs text-brand font-semibold">
             {runningMeta.letter} running
           </span>
         )}

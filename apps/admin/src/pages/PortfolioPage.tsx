@@ -227,7 +227,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               )}
               {healthy.length > 0 && (
                 <Card className="p-0">
-                  <p className="border-b border-edge px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
+                  <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
                     Nothing urgent ({healthy.length})
                   </p>
                   <ul className="divide-y divide-edge">

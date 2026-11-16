@@ -78,7 +78,7 @@ export function UnifiedTimelineCard({ reportId }: { reportId: string }) {
               <RelativeTime value={entry.at} />
             </time>
             <span
-              className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold uppercase tracking-wide ${LANE_PILL[entry.lane]}`}
+              className={`shrink-0 inline-flex items-center rounded-sm px-1 py-px text-3xs font-semibold ${LANE_PILL[entry.lane]}`}
             >
               {LANE_LABEL[entry.lane]}
             </span>

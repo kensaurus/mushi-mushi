@@ -154,7 +154,7 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">Watch your live site</span>
-            <SignalChip tone={stateChip(watch, state.loading && !data).tone} className="text-3xs uppercase tracking-wider">
+            <SignalChip tone={stateChip(watch, state.loading && !data).tone} className="text-3xs font-semibold">
               {stateChip(watch, state.loading && !data).label}
             </SignalChip>
           </div>

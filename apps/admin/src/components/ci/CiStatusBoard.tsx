@@ -75,7 +75,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
     <div className="space-y-4" data-testid="ci-status-board">
       {/* 1. Is CI OK right now? */}
       <div className={`rounded-md border px-4 py-3 ${TONE_BOX[status.tone]}`} data-testid="ci-status-headline" role="status">
-        <p className="text-2xs font-semibold uppercase tracking-wide text-fg-muted">{TONE_WORD[status.tone]}</p>
+        <p className="text-2xs font-semibold text-fg-secondary">{TONE_WORD[status.tone]}</p>
         <p className="mt-0.5 text-sm font-medium text-fg">{status.headline}</p>
       </div>
 

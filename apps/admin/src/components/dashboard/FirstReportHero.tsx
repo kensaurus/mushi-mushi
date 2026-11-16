@@ -72,7 +72,7 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
           P
         </span>
         <div className="min-w-0 flex-1">
-          <SignalChip tone="brand" className="uppercase tracking-wider text-3xs">
+          <SignalChip tone="brand" className="text-3xs font-semibold">
             Plan · Start here
           </SignalChip>
           <h2 id="first-report-hero-title" className="text-sm font-semibold text-fg mt-1.5">

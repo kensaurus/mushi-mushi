@@ -177,10 +177,13 @@ html[data-theme="light"] {
   --color-edge:         oklch(0.78 0.004 285);
   --color-edge-subtle:  oklch(0.84 0.003 285);
 
-  --color-fg:           oklch(0.22 0.008 285);
-  --color-fg-secondary: oklch(0.36 0.006 285);
-  --color-fg-muted:     oklch(0.44 0.005 285);
-  --color-fg-faint:     oklch(0.50 0.004 285);
+  /* 2026-11-16 readability pass (owner: "really hard to read"): every grey
+     one step darker, so secondary and muted text clear 7:1 on white and
+     faint clears 4.5:1 on the tinted surfaces. Sizes and spacing unchanged. */
+  --color-fg:           oklch(0.18 0.008 285);
+  --color-fg-secondary: oklch(0.30 0.006 285);
+  --color-fg-muted:     oklch(0.38 0.005 285);
+  --color-fg-faint:     oklch(0.45 0.004 285);
 
   /* A14 (2026-10-04): the editorial vermillion (#e03c2c) is 4.08:1 as text
      on the light page and 3.44:1 on the active nav pill (brand/12), under

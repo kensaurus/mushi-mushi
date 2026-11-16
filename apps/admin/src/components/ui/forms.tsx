@@ -146,7 +146,7 @@ export function SegmentedControl<T extends string>({
   }
   return (
     <div className={`inline-flex max-w-full items-center gap-1.5 ${scrollable ? 'overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]' : ''}`}>
-      <span className="shrink-0 text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+      <span className="shrink-0 text-3xs text-fg-secondary font-semibold">{label}</span>
       {track}
     </div>
   )

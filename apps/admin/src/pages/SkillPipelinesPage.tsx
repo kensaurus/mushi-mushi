@@ -1022,7 +1022,7 @@ function PipelinesTab({
           <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
             <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
             <Card  className="text-xs text-fg-muted text-left w-full px-4 py-3 space-y-2">
-              <p className="font-semibold text-fg text-2xs uppercase tracking-wide">How to start your first run</p>
+              <p className="font-semibold text-fg text-2xs">How to start your first run</p>
               <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
                 <li>Open a report and copy its ID from the URL</li>
                 <li>Go to <Btn type="button" variant="ghost" size="sm" onClick={onGoToCatalog} className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}>Catalog</Btn> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>

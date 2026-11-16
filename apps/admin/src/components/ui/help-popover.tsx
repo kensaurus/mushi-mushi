@@ -79,7 +79,7 @@ export function HelpPopover({
       <AnchoredPopoverPanel state={popover} className={`text-xs text-fg-secondary text-pretty ${CONFIG_HELP_POPOVER_SHELL}`}>
         <header className="flex shrink-0 items-start justify-between gap-2 border-b border-edge-subtle px-3.5 py-2.5">
           <div className="min-w-0 flex-1">
-            <p className="mb-1 text-2xs font-medium uppercase leading-none tracking-widest text-brand/80">{label}</p>
+            <p className="mb-1 text-2xs font-semibold leading-none text-brand/80">{label}</p>
             <h3 id={titleId} className="text-sm font-semibold leading-snug text-fg">
               {title}
             </h3>

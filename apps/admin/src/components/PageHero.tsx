@@ -140,7 +140,7 @@ function HeroSnapshotMeta({ metric, kicker }: { metric?: string; kicker?: string
       {chips.map((chip) => (
         <span
           key={chip}
-          className="inline-flex shrink-0 items-center rounded border border-edge-subtle bg-surface-overlay px-1.5 py-0.5 text-3xs font-mono tabular-nums leading-none text-fg-secondary"
+          className="inline-flex shrink-0 items-center rounded bg-surface-overlay px-1.5 py-px text-3xs font-mono tabular-nums leading-none text-fg-secondary"
         >
           {chip}
         </span>
@@ -244,7 +244,7 @@ export function PageHero({
       >
         <span className={`mt-1 inline-block h-2 w-2 rounded-full ${style.dot}`} aria-hidden="true" />
         <div className="min-w-0">
-          {kicker && <p className="text-2xs uppercase tracking-wider text-fg-faint mb-0.5">{kicker}</p>}
+          {kicker && <p className="text-2xs text-fg-secondary mb-0.5 font-semibold">{kicker}</p>}
           <p className="text-sm font-medium text-fg leading-tight">
             {decide.label}
             {decide.metric && (
@@ -301,7 +301,7 @@ export function PageHero({
           title="Expand page snapshot"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
-          <span className="text-3xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
+          <span className="text-3xs font-semibold text-fg-secondary shrink-0">
             Snapshot
           </span>
           <span className={`text-2xs font-medium truncate ${style.text}`}>
@@ -341,7 +341,7 @@ export function PageHero({
       <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle/25">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
           <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full shrink-0 ${style.dot}`} />
-          <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0">
+          <span className="text-3xs font-semibold text-fg-secondary shrink-0">
             Snapshot
           </span>
           <HeroSnapshotMeta metric={decide.metric} kicker={kicker} />

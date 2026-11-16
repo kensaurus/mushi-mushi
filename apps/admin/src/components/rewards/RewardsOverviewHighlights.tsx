@@ -28,7 +28,7 @@ interface QuestRow {
 const LINK = 'text-2xs text-accent-foreground underline underline-offset-2 hover:text-accent'
 
 function CardTitle({ children }: { children: string }) {
-  return <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">{children}</h3>
+  return <h3 className="text-xs font-semibold text-fg-secondary">{children}</h3>
 }
 
 export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutUsd: number }) {

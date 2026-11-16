@@ -123,15 +123,15 @@ function ModelFooter({ model, latency, showInternals }: { model: string | null; 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-edge-subtle pt-2">
       {model && (
-        <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/35 px-1.5 py-0.5 text-2xs">
-          <span className="shrink-0 text-3xs font-medium uppercase tracking-wider text-fg-faint">Model</span>
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm bg-surface-overlay/35 px-1.5 py-px text-2xs">
+          <span className="shrink-0 text-3xs font-semibold text-fg-secondary">Model</span>
           <code className="min-w-0 truncate font-mono text-fg-secondary">{model}</code>
         </span>
       )}
       {latency != null && (
         <Tooltip content="End-to-end classification latency (Stage-1 only).">
-          <span className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/35 px-1.5 py-0.5 text-2xs font-mono tabular-nums text-fg-muted cursor-help">
-            <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint not-italic font-sans">Latency</span>
+          <span className="inline-flex items-center gap-1 rounded-sm bg-surface-overlay/35 px-1.5 py-px text-2xs font-mono tabular-nums text-fg-muted cursor-help">
+            <span className="text-3xs font-semibold text-fg-secondary not-italic font-sans">Latency</span>
             {latency.toLocaleString()} ms
           </span>
         </Tooltip>

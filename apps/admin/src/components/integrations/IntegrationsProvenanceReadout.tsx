@@ -80,7 +80,7 @@ export function IntegrationsProvenanceReadout({
             </div>
           ) : null}
           <div className="mt-2 rounded-md border border-edge-subtle bg-surface-root/40 px-3 py-2">
-            <div className="mb-1 flex items-center gap-1.5 text-3xs font-medium uppercase tracking-wider text-fg-faint">
+            <div className="mb-1 flex items-center gap-1.5 text-3xs font-semibold text-fg-secondary">
               <IconGit size={12} aria-hidden />
               Probe example
             </div>

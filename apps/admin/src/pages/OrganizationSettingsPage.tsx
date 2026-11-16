@@ -1093,7 +1093,7 @@ export function OrganizationSettingsPage() {
       <>
       <OrgRoleGuideCard />
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs text-fg-secondary font-semibold">
           <span>
             {showInactiveOnly
               ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
@@ -1121,7 +1121,7 @@ export function OrganizationSettingsPage() {
             Role, Active and Actions keep a fixed share so the email wraps in
             what is left and every column stays on screen. */}
         <table className="w-full table-fixed text-sm">
-          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
+          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs text-fg-secondary font-semibold">
             <tr>
               <th className="px-2 py-2 sm:px-3">Member</th>
               <th className="w-24 px-1 py-2 sm:w-36 sm:px-3">

@@ -324,7 +324,7 @@ export function McpAuthPage() {
 
         {/* Access summary */}
         <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-raised px-5 py-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-fg-muted">
+          <p className="mb-2 text-xs font-semibold text-fg-secondary">
             This connection will be able to
           </p>
           <ul className="space-y-1.5">

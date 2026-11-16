@@ -70,7 +70,7 @@ export function ClearChip({ card }: { card: InboxCard }) {
     >
       <SignalChip tone="ok">✓</SignalChip>
       <span
-        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chipClass}`}
+        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold ${groupTone.chipClass}`}
       >
         {GROUP_LABEL[card.group]}
       </span>
@@ -104,7 +104,7 @@ export function OpenInboxCard({
       <header className="mb-2 flex flex-wrap items-center gap-1.5">
         <SignalChip tone="neutral">#{priority}</SignalChip>
         <span
-          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chipClass}`}
+          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold ${groupTone.chipClass}`}
         >
           {GROUP_LABEL[card.group]}
         </span>

@@ -69,7 +69,7 @@ export function DevianceScoreCard({ run }: { run: DevianceRun | null }) {
     <Card className="flex flex-col gap-3 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <span className="text-2xs uppercase tracking-wider text-fg-faint">Deviance score</span>
+          <span className="text-2xs text-fg-secondary font-semibold">Deviance score</span>
           {scored ? (
             <span className="flex items-baseline gap-1" data-testid="deviance-score">
               <span className="text-3xl font-semibold tabular-nums text-fg">{Math.round(score)}</span>

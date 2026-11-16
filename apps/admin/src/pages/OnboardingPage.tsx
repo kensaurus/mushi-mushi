@@ -537,7 +537,7 @@ export function OnboardingPage() {
       {!project ? (
         <div className="space-y-4">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Step 1 of 2</p>
+            <p className="text-3xs font-semibold text-fg-secondary">Step 1 of 2</p>
             <h2 className="mt-0.5 text-base font-semibold text-fg">Name your project</h2>
           </div>
           {/* The field guide says what this step does: the name is the only
@@ -758,7 +758,7 @@ export function OnboardingPage() {
               <h3 className="text-sm font-semibold text-fg">Ask about this page</h3>
               <p className="mt-0.5 text-xs leading-relaxed text-fg-muted">
                 Press{' '}
-                <kbd className="rounded-sm border border-edge/80 bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
+                <kbd className="rounded-sm bg-surface-overlay px-1 py-px font-mono text-2xs text-fg-secondary">
                   Cmd/Ctrl+J
                 </kbd>
                 {' '}or run{' '}
@@ -1099,7 +1099,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
       <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
         <div className="flex items-baseline justify-between gap-3">
           <div>
-            <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report in your queue</p>
+            <p className="text-3xs font-semibold text-fg-secondary">First report in your queue</p>
             <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
               {formatDiagnosisDuration(ms)}
             </p>
@@ -1121,7 +1121,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
   if (data?.testDiagnosisAt) {
     return (
       <Card className="p-5 border border-ok/25 bg-ok/5" data-testid="ttfd-test-only">
-        <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+        <p className="text-3xs font-semibold text-fg-secondary">First report from your app</p>
         <p className="mt-0.5 text-sm text-fg-secondary">Your test bug got its plain-English read, so Mushi Mushi works for this app.</p>
         <p className="mt-1 text-xs text-fg-muted leading-relaxed">
           The 2-minute clock starts with the first report from your app. Install the SDK, then report a bug from your
@@ -1136,7 +1136,7 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
 
   return (
     <Card className="p-5 border border-edge-subtle">
-      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">First report from your app</p>
+      <p className="text-3xs font-semibold text-fg-secondary">First report from your app</p>
       <p className="mt-0.5 text-sm text-fg-secondary">Waiting on the first report from your app.</p>
       <p className="mt-1 text-xs text-fg-muted leading-relaxed">
         Send a test bug below, then report a bug from your app. Target: a plain-English read in under 2 minutes
@@ -1151,7 +1151,7 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
     <div className="space-y-3">
       <Card  className="px-3 py-2">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
+          <span className="text-2xs text-fg-secondary font-semibold">Your API Key</span>
           <CopyButton
             onCopy={onCopy}
             copied={copied}

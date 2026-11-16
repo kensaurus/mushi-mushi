@@ -395,7 +395,7 @@ export function RepoPage() {
   const activityPanel = (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Repo activity</h3>
+        <h3 className="text-xs font-semibold text-fg-secondary">Repo activity</h3>
         {activity && (
           <span className="text-3xs text-fg-faint font-mono">
             {pluralizeWithCount(activity.length, 'event')}

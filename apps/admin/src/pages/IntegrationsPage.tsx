@@ -599,7 +599,7 @@ export function IntegrationsPage() {
 
         {activeProjectId && (
           <div id="alerts" className="border-t border-panel-border px-4 py-4 scroll-mt-chrome">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-fg-muted mb-1">
+            <h4 className="text-xs font-semibold text-fg-secondary mb-1">
               Alert events
             </h4>
             <p className="text-2xs text-fg-muted mb-3 leading-snug">

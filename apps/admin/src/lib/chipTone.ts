@@ -6,19 +6,19 @@
  */
 
 export const CHIP_TONE = {
-  accent: 'bg-accent-muted/70 text-accent-foreground border border-accent/35',
-  accentSubtle: 'bg-accent-muted/55 text-accent-foreground border border-accent/30',
-  brand: 'bg-brand-subtle/85 text-brand border border-brand/30',
-  brandSubtle: 'bg-brand/12 text-brand border border-brand/28',
-  warn: 'bg-warn-muted/70 text-warn-foreground border border-warn/30',
-  warnSubtle: 'bg-warn-muted/50 text-warn-foreground border border-warn/25',
-  danger: 'bg-danger-muted/70 text-danger-foreground border border-danger/30',
-  dangerSubtle: 'bg-danger-muted/50 text-danger-foreground border border-danger/25',
-  ok: 'bg-ok-muted/70 text-ok-foreground border border-ok/30',
-  okSubtle: 'bg-ok-muted/50 text-ok-foreground border border-ok/25',
-  info: 'bg-info-muted/70 text-info-foreground border border-info/30',
-  infoSubtle: 'bg-info-muted/50 text-info-foreground border border-info/25',
-  neutral: 'bg-surface-overlay text-fg-secondary border border-edge-subtle',
+  accent: 'bg-accent-muted text-accent-foreground',
+  accentSubtle: 'bg-accent-muted/60 text-accent-foreground',
+  brand: 'bg-brand-subtle text-brand',
+  brandSubtle: 'bg-brand/15 text-brand',
+  warn: 'bg-warn-muted text-warn-foreground',
+  warnSubtle: 'bg-warn-muted/60 text-warn-foreground',
+  danger: 'bg-danger-muted text-danger-foreground',
+  dangerSubtle: 'bg-danger-muted/60 text-danger-foreground',
+  ok: 'bg-ok-muted text-ok-foreground',
+  okSubtle: 'bg-ok-muted/60 text-ok-foreground',
+  info: 'bg-info-muted text-info-foreground',
+  infoSubtle: 'bg-info-muted/60 text-info-foreground',
+  neutral: 'bg-surface-overlay text-fg-secondary',
 } as const
 
 /**
@@ -39,8 +39,8 @@ export const SELECTED_TONE_IDLE =
  * stop inlining non-tokenized class strings in severity ternaries.
  */
 export const HEADER_BADGE_TONE = {
-  brand: 'border border-edge-subtle bg-surface-raised text-fg-secondary',
-  neutral: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  brand: 'bg-surface-overlay text-fg-secondary',
+  neutral: 'bg-surface-overlay text-fg-muted',
 } as const
 
 /** Links on plain (non-tinted) surfaces — accent hue, AA on surface bg. */

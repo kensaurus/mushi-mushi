@@ -310,7 +310,7 @@ export function CliAuthPage() {
         {codeParam && (
         <>
         <div className="mb-4 rounded-xl border border-edge-subtle bg-surface-raised px-6 py-5">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-fg-muted">
+          <p className="mb-1 text-xs font-semibold text-fg-secondary">
             Verification code — confirm it matches your terminal
           </p>
           <p className="font-mono text-3xl font-bold tracking-[0.15em] text-fg select-all">

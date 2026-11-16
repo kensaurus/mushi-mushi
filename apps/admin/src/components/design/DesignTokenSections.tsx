@@ -301,7 +301,7 @@ export function DesignTokenSections({ tokens, editable, set, queued, onQueue, lo
               {shownGroups.map((g) => (
                 <div key={g.group} className="flex flex-col gap-2">
                   {groups.length > 1 && (
-                    <h3 className="font-mono text-2xs uppercase tracking-wider text-fg-muted">{g.group}</h3>
+                    <h3 className="font-mono text-2xs text-fg-secondary font-semibold">{g.group}</h3>
                   )}
                   <Render tokens={g.tokens} editable={editable} set={set} queued={queued} onQueue={onQueue} locked={locked} />
                 </div>

@@ -376,7 +376,7 @@ export function FixGitGraph({
       </svg>
 
       <ul className="min-w-0 space-y-0 text-xs">
-        <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs uppercase tracking-wider text-fg-faint">
+        <li className="mb-1 flex h-auto min-h-5 flex-wrap items-center gap-1.5 rounded-sm border border-edge-subtle/50 bg-surface-overlay/35 px-2 py-1 text-3xs text-fg-secondary font-semibold">
           <span className="font-mono normal-case text-fg-secondary">{baseBranch || 'default branch'}</span>
           <span className="text-fg-faint">→</span>
           {branchUrl && branchName ? (
@@ -395,7 +395,7 @@ export function FixGitGraph({
             </span>
           )}
           {prState && (
-            <Badge className={`${prStateChipTone(prState)} text-3xs uppercase tracking-wider`}>
+            <Badge className={`${prStateChipTone(prState)} text-3xs font-semibold`}>
               {prState}
             </Badge>
           )}
@@ -432,7 +432,7 @@ export function FixGitGraph({
                     {e.label}
                   </span>
                   <span
-                    className="shrink-0 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1 py-0.5 font-mono text-3xs tabular-nums text-fg-faint"
+                    className="shrink-0 rounded-sm bg-surface-overlay/40 px-1 py-px font-mono text-3xs tabular-nums text-fg-faint"
                     title={new Date(e.at).toISOString()}
                   >
                     {new Date(e.at).toLocaleTimeString(undefined, {

@@ -300,7 +300,7 @@ export function GrowthPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-4xl text-xs">
                 <thead>
-                  <tr className="text-left text-2xs uppercase tracking-wider text-fg-faint">
+                  <tr className="text-left text-2xs text-fg-secondary font-semibold">
                     <th className="py-1.5 pr-3 font-medium">Week</th>
                     {STAGES.map((stage) => (
                       <th key={stage} className="py-1.5 px-2 text-right font-medium">
@@ -344,7 +344,7 @@ export function GrowthPage() {
             ) : (
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-left text-2xs uppercase tracking-wider text-fg-faint">
+                  <tr className="text-left text-2xs text-fg-secondary font-semibold">
                     <th className="py-1.5 pr-3 font-medium">Source</th>
                     <th className="py-1.5 px-2 text-right font-medium">Signups</th>
                     <th className="py-1.5 px-2 text-right font-medium">Activated</th>

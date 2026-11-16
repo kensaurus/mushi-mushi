@@ -162,7 +162,7 @@ function DraftForm({ onCreated, projectName, canEdit }: { onCreated: () => void;
 
   return (
     <Card className="p-4">
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-secondary">Generate draft with AI</h2>
+      <h2 className="mb-3 text-xs font-semibold text-fg-secondary">Generate draft with AI</h2>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
           <Input label="Version" placeholder="1.2.3" value={version} onChange={(e) => setVersion(e.target.value)} />
@@ -353,7 +353,7 @@ function ReleaseDrawer({
 
         {release.status === 'draft' && (
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-fg-secondary">
+            <label className="mb-1 block text-xs font-semibold text-fg-secondary">
               Changelog (Markdown)
             </label>
             <textarea
@@ -369,7 +369,7 @@ function ReleaseDrawer({
 
         {release.status === 'published' && (
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-secondary">Changelog</h3>
+            <h3 className="mb-2 text-xs font-semibold text-fg-secondary">Changelog</h3>
             <pre className="mushi-code-block mushi-code-body max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border border-code-surface-border p-3 text-sm">
               {detailRelease.body_md}
             </pre>
@@ -378,7 +378,7 @@ function ReleaseDrawer({
 
         {credits.length > 0 && (
           <div>
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-secondary">
+            <h3 className="mb-2 text-xs font-semibold text-fg-secondary">
               Reporter credits ({credits.length})
             </h3>
             <div className="space-y-1">

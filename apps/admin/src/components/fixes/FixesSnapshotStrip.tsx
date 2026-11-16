@@ -21,8 +21,6 @@ interface Props {
    * attempt yet.
    */
   inFlight?: number
-  statsFetchedAt: string | null
-  statsValidating?: boolean
 }
 
 function fixesSentence(stats: FixesStats, inFlight: number, ready: number): string {
@@ -38,14 +36,14 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`
 }
 
-export function FixesSnapshotStrip({ stats, ready = 0, inFlight, statsFetchedAt, statsValidating }: Props) {
+export function FixesSnapshotStrip({ stats, ready = 0, inFlight }: Props) {
   const running = inFlight ?? stats.inProgress + stats.inflightDispatches
   return (
     <PageStatus
       ariaLabel="Fixes status"
       tone={stats.failed > 0 ? 'danger' : ready > 0 ? 'warn' : running > 0 ? 'info' : 'ok'}
       sentence={fixesSentence(stats, running, ready)}
-      freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      // No freshness here: the page header shows the same "updated" time.
       metrics={[
         {
           label: 'Ready to merge',

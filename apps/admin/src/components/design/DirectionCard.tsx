@@ -26,7 +26,7 @@ export type DirectionAction = { kind: 'activate' | 'duplicate'; direction: strin
 
 function Heading({ children }: { children: ReactNode }) {
   return (
-    <h3 className="mt-5 border-t border-edge pt-2 font-mono text-2xs font-semibold uppercase tracking-wider text-fg-secondary">
+    <h3 className="mt-5 border-t border-edge pt-2 font-mono text-2xs font-semibold text-fg-secondary">
       {children}
     </h3>
   )

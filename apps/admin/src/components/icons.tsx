@@ -23,7 +23,7 @@ function wrap(props: IconProps, children: ReactNode) {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={props.className}

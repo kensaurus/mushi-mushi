@@ -54,7 +54,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-full border px-2 py-0.5 text-2xs ${active ? 'border-brand bg-brand/10 text-fg' : 'border-edge-subtle text-fg-muted hover:border-brand/40'}`}
+      className={`rounded-sm px-2 py-px text-2xs ${active ? 'border-brand bg-brand/10 text-fg' : 'border-edge-subtle text-fg-muted hover:border-brand/40'}`}
     >
       {children}
     </button>

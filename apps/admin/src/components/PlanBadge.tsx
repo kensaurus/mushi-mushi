@@ -97,12 +97,12 @@ export function PlanBadge({ density = 'header' }: PlanBadgeProps) {
         <span aria-hidden="true" className="leading-none shrink-0 text-brand/80 text-2xs">◆</span>
         <span className={sidebar ? 'truncate' : ''}>Admin</span>
         {sidebar ? (
-          <span className="text-fg-faint font-mono uppercase tracking-wider text-2xs shrink-0">
+          <span className="text-fg-secondary font-mono text-2xs shrink-0 font-semibold">
             {plan.displayName}
           </span>
         ) : (
           <span
-            className="rounded-sm bg-surface-overlay/70 font-mono uppercase tracking-wider text-fg-secondary shrink-0 px-1 py-0.5 text-2xs"
+            className="rounded-sm bg-surface-overlay/70 font-mono text-fg-secondary shrink-0 px-1 py-0.5 text-2xs font-semibold"
             aria-hidden="true"
           >
             {plan.displayName}

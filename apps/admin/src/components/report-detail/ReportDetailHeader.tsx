@@ -140,7 +140,7 @@ export function ReportDetailHeader({
             {reporter.shortId ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
-                className="text-3xs text-ok font-semibold uppercase tracking-wide"
+                className="text-3xs text-ok font-semibold"
                 title="Identity verified via signed JWT"
               >
                 ✓ verified
@@ -182,7 +182,7 @@ export function ReportDetailHeader({
               rel="noopener noreferrer"
               className="flex flex-col gap-0.5 rounded border border-edge bg-surface-overlay px-2 py-1 text-xs hover:bg-surface-raised transition-opacity"
             >
-              <span className="text-2xs font-medium uppercase tracking-wide text-fg-faint">Screenshot</span>
+              <span className="text-2xs font-semibold text-fg-secondary">Screenshot</span>
               <span className="text-fg-muted">view →</span>
             </a>
           )}

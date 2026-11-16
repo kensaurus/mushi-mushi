@@ -436,7 +436,7 @@ export function QueryPage() {
 
       {activeTab === 'schema' && (
         <Card className="p-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wider">Approved tables</div>
+          <div className="mb-2 text-xs font-semibold">Approved tables</div>
           <ContainedBlock tone="muted" className="mb-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
               Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.

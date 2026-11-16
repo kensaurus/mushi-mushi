@@ -124,7 +124,7 @@ function renderSidebarNav(compact: boolean) {
   return (
     <nav aria-label="Tester portal" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
       {!compact && (
-        <p className="px-2 pb-1.5 text-3xs font-semibold uppercase tracking-wider text-nav-section-label">
+        <p className="px-2 pb-1.5 text-3xs font-semibold text-nav-section-label">
           Earn
         </p>
       )}

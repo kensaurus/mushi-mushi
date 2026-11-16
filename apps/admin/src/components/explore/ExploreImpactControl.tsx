@@ -81,7 +81,7 @@ export function ExploreImpactControl({ projectId, onImpact, onClear, active }: P
   return (
     <div className="rounded-md border border-edge-subtle bg-surface-overlay/30 p-2 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint">Diff impact</span>
+        <span className="text-2xs text-fg-secondary font-semibold">Diff impact</span>
         {active && (
           <button
             type="button"
