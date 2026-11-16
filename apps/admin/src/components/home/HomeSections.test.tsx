@@ -181,7 +181,7 @@ describe('NeedsYouCard', () => {
 
 const release = (over: Partial<HomeRelease> = {}): HomeRelease => ({
   stations: [
-    { id: 'fix', label: 'Fix ready', count: 5, stuck: 3 },
+    { id: 'fix', label: 'Fix PRs', count: 5, stuck: 3 },
     { id: 'ci', label: 'CI', count: 1, stuck: 0 },
     { id: 'train', label: 'In train', count: 2, stuck: 0 },
     { id: 'merged', label: 'Merged', count: 4, stuck: 0 },
@@ -199,7 +199,7 @@ describe('ReleaseCard', () => {
     await render(createElement(ReleaseCard, { section: ok(release()), projectId: P }))
     const stations = byTestId('home-release-stations')!
     const labels = Array.from(stations.querySelectorAll('a')).map((a) => a.getAttribute('aria-label'))
-    expect(labels).toEqual(['Fix ready: 5, 3 need you', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
+    expect(labels).toEqual(['Fix PRs: 5, 3 need you', 'CI: 1', 'In train: 2', 'Merged: 4', 'Deployed: 0'])
     expect(stations.textContent).toContain('3 need you')
     expect(text()).toContain('Train #57 with 2 fixes is running CI')
     expect(text()).toContain('v1.103.0 seen live')

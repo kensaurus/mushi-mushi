@@ -275,7 +275,7 @@ export interface Station {
 
 /** The pipeline stages each station adds up, in the pipeline's own order. */
 const STATION_STAGES: Array<{ id: StationId; label: string; stages: string[] }> = [
-  { id: 'fix', label: 'Fix ready', stages: ['pr', 'review'] },
+  { id: 'fix', label: 'Fix PRs', stages: ['pr', 'review'] },
   { id: 'ci', label: 'CI', stages: ['ci'] },
   { id: 'train', label: 'In train', stages: ['train'] },
   { id: 'merged', label: 'Merged', stages: ['merged'] },
