@@ -63,6 +63,7 @@ import {
   type MushiPropertyValue,
   type MushiApiResponse,
 } from '@mushi-mushi/core'
+import { collectDiagnostics, type MushiDiagnosticsProvider } from '@mushi-mushi/core/diagnostics'
 import {
   reporterChannels,
   type MushiReporterNotificationPrefs,
@@ -96,6 +97,12 @@ export interface MushiRNConfig {
   endpoint?: string
   /** Canonical Mushi API base URL (e.g. https://xyz.supabase.co/functions/v1/api) */
   apiEndpoint?: string
+  /**
+   * Your app's version, stored on `reports.app_version` (e.g. `"1.22.59 (1084)"`).
+   * Without it the SDK reads the native version (expo-application, or
+   * react-native-device-info); it never uses the OS version.
+   */
+  appVersion?: string
   /** Lifecycle callbacks for host-app integration (replaces polling in HHTP etc.) */
   callbacks?: {
     onReportSubmitted?: (reportId: string) => void
@@ -252,6 +259,14 @@ export interface MushiRNInstance {
   publishPageContext(context: MushiPageContext | null): void
   /** Attach arbitrary key/value metadata to subsequent reports. */
   setMetadata(key: string, value: unknown): void
+  /**
+   * Diagnostics read when the reporter presses Send (load timings, recent
+   * errors, connection state); the keys merge into the report's metadata, and
+   * triage reads `screenLoading` / `timings` lines. Gets 300 ms, is
+   * PII-scrubbed and size-capped; a slow or throwing provider never blocks or
+   * drops the report. Keep amounts, names and other personal data out. `null` removes it.
+   */
+  setDiagnosticsProvider(provider: MushiDiagnosticsProvider | null): void
   /** Set the current screen context attached to subsequent reports. */
   setScreen(screen: { name: string; route?: string; feature?: string }): void
   /** Append a breadcrumb to the repro timeline ring buffer. */
@@ -260,6 +275,11 @@ export interface MushiRNInstance {
   // Reporter API — returns reports/comments for this device's persistent token
   /** List this device's reports ordered by most recent. Returns [] on failure. */
   listMyReports(): Promise<MushiReporterReport[]>
+  /**
+   * Like `listMyReports`, but resolves `null` when the list could not be loaded,
+   * so a UI can say so and offer Retry instead of showing "no reports".
+   */
+  loadMyReports(): Promise<MushiReporterReport[] | null>
   /** List admin + reporter comments on a specific report. Returns [] on failure. */
   listMyComments(reportId: string): Promise<MushiReporterComment[]>
   /** Like `listMyComments`, but resolves `null` when the thread could not be loaded, so a UI can offer Retry. */
@@ -648,9 +668,11 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       if (screenRef.current?.name) contextMeta.screenName = screenRef.current.name
       if (screenRef.current?.route) contextMeta.screenRoute = screenRef.current.route
       if (screenRef.current?.feature) contextMeta.screenFeature = screenRef.current.feature
-      const merged = Object.keys(metadataRef.current).length > 0
-        ? { ...contextMeta, ...metadataRef.current }
-        : Object.keys(contextMeta).length > 0 ? contextMeta : undefined
+      // The host's diagnostics, read now (setDiagnosticsProvider): fresher than
+      // anything pushed earlier with setMetadata, so they win on a shared key.
+      const hostDiagnostics = await collectDiagnostics(diagnosticsProviderRef.current)
+      const mergedAll = { ...contextMeta, ...metadataRef.current, ...(hostDiagnostics ?? {}) }
+      const merged = Object.keys(mergedAll).length > 0 ? mergedAll : undefined
 
       // Snapshot the breadcrumb ring and derive a chronological repro timeline
       // so the admin console's "Repro timeline" renders instead of nudging
@@ -697,7 +719,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         sessionId: sessionIdRef.current,
         reporterToken: reporterTokenRef.current,
         ...(fingerprintHash ? { fingerprintHash } : {}),
-        ...(deviceInfo.appVersion ? { appVersion: deviceInfo.appVersion } : {}),
+        ...((config.appVersion ?? deviceInfo.appVersion) ? { appVersion: config.appVersion ?? deviceInfo.appVersion } : {}),
         sdkPackage: MUSHI_SDK_PACKAGE,
         sdkVersion: MUSHI_SDK_VERSION,
         ...(breadcrumbs.length > 0 ? { breadcrumbs } : {}),
@@ -767,6 +789,7 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
   // v0.10.0: user identity state (was missing, causing workarounds in glot.it)
   const userRef = useRef<{ id: string; email?: string; name?: string; provider?: string } | null>(null)
   const metadataRef = useRef<Record<string, unknown>>({})
+  const diagnosticsProviderRef = useRef<MushiDiagnosticsProvider | null>(null)
   const screenRef = useRef<{ name: string; route?: string; feature?: string } | null>(null)
 
   // Rewards: activity queue
@@ -986,6 +1009,9 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
       setMetadata(key, value) {
         metadataRef.current[key] = value
       },
+      setDiagnosticsProvider(provider) {
+        diagnosticsProviderRef.current = provider
+      },
       setScreen(screen) {
         const prev = screenRef.current?.name
         screenRef.current = screen
@@ -1018,6 +1044,14 @@ export function MushiProvider({ children, config: configProp, ...barePropConfig 
         return res.ok
           ? (res.data as { reports?: MushiReporterReport[] } | undefined)?.reports ?? []
           : []
+      },
+      async loadMyReports() {
+        const client = apiClientRef.current
+        if (!client) return null
+        await reporterTokenReadyRef.current
+        const res = await client.listReporterReports(reporterTokenRef.current).catch(() => null)
+        if (!res?.ok) return null
+        return (res.data as { reports?: MushiReporterReport[] } | undefined)?.reports ?? []
       },
       async listMyComments(reportId: string) {
         const client = apiClientRef.current

@@ -525,7 +525,8 @@ Deno.serve(
 - Status buckets: ${JSON.stringify(evidence.network?.statusBuckets ?? {})}
 - Failed methods: ${(evidence.network?.topMethods ?? []).join(', ') || 'none'}
 - Performance: LCP ${evidence.perf?.lcp ?? '?'}ms · FCP ${evidence.perf?.fcp ?? '?'}ms · CLS ${evidence.perf?.cls ?? '?'} · INP ${evidence.perf?.inp ?? '?'}ms · TTFB ${evidence.perf?.ttfb ?? '?'}ms · LongTasks ${evidence.perf?.longTasks ?? 0}
-- Replay: ${evidence.replay ? `${evidence.replay.eventCount} events · ${evidence.replay.clickCount} clicks · ${evidence.replay.rageClickClusters} rage-click clusters · ${evidence.replay.deadTapCount} dead taps` : 'none'}`
+- Replay: ${evidence.replay ? `${evidence.replay.eventCount} events · ${evidence.replay.clickCount} clicks · ${evidence.replay.rageClickClusters} rage-click clusters · ${evidence.replay.deadTapCount} dead taps` : 'none'}
+- App diagnostics: ${evidence.appDiagnostics ? `${evidence.appDiagnostics.lineCount} lines · ${evidence.appDiagnostics.slowCount} at 1.5 s or more · slowest ${evidence.appDiagnostics.maxMs ?? '?'}ms` : 'none'}`
         : '\n## Sanitized Evidence: not yet computed';
 
       const prompt = `## Stage 1 Extraction (structured, trusted)

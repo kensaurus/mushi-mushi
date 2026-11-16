@@ -86,3 +86,15 @@ describe('BulkSdkUpgradePanel bulk actions', () => {
     expect(hook.createUpgradePr).not.toHaveBeenCalled()
   })
 })
+
+describe('upgradeJobSuperseded (2026-11-16: October jobs blocked the 0.24.7 upgrade)', () => {
+  it('a job that bumped this SDK to an older release is superseded', async () => {
+    const { upgradeJobSuperseded } = await import('./BulkSdkUpgradePanel')
+    const project = { sdk_package: '@mushi-mushi/react-native', sdk_latest_version: '0.24.7' }
+    expect(upgradeJobSuperseded([{ package: '@mushi-mushi/react-native', to: '0.24.4' }], project)).toBe(true)
+    expect(upgradeJobSuperseded([{ package: '@mushi-mushi/core', to: '1.33.4' }], project)).toBe(true)
+    expect(upgradeJobSuperseded([{ package: '@mushi-mushi/react-native', to: '0.24.7' }], project)).toBe(false)
+    expect(upgradeJobSuperseded(undefined, project)).toBe(false)
+    expect(upgradeJobSuperseded([{ package: '@mushi-mushi/react-native', to: '0.24.4' }], { ...project, sdk_latest_version: null })).toBe(false)
+  })
+})

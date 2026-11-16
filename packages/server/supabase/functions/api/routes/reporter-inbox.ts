@@ -37,6 +37,7 @@ import {
 } from '../../_shared/reporter-copy.ts';
 import { dbError, jsonError } from '../shared.ts';
 import type { ReporterAuth } from './reporter-auth.ts';
+import { MUSHI_USER_TOKEN_HEADER, verifyEndUserToken } from '../../_shared/end-user-identity.ts';
 
 type Db = ReturnType<typeof getServiceClient>;
 
@@ -96,17 +97,44 @@ async function signScreenshot(projectId: string, storagePath: string | null): Pr
 }
 
 /** The reporter's own reports plus, per row, the canonical report it follows. */
+const TOKEN_HASH_RE = /^[\w-]{16,128}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The PostgREST filter for "this reporter's own reports": the device's token, or
+ * (only with a signature-verified identity) the reports linked to that person.
+ * A reinstall, a new device or a lost token used to empty "Your reports" for a
+ * signed-in user (2026-11-16, yen-yen). An unverified `reporter_user_id` is never
+ * matched: anyone holding the public SDK key could claim it. Null when the token
+ * hash is not a hash (then the caller filters on the token alone).
+ * @internal Exported for tests only.
+ */
+export function ownReportsOrFilter(tokenHash: string, endUserId: string | null): string | null {
+  if (!endUserId || !UUID_RE.test(endUserId) || !TOKEN_HASH_RE.test(tokenHash)) return null;
+  return `reporter_token_hash.eq.${tokenHash},end_user_id.eq.${endUserId}`;
+}
+
+/** The person behind a valid X-Mushi-User-Token for this project, else null. */
+async function verifiedEndUserId(db: Db, c: Context, projectId: string): Promise<string | null> {
+  const raw = c.req.header(MUSHI_USER_TOKEN_HEADER);
+  if (!raw) return null;
+  const verified = await verifyEndUserToken(db as Parameters<typeof verifyEndUserToken>[0], projectId, raw).catch(() => null);
+  return verified?.endUserId ?? null;
+}
+
 async function loadInbox(
   db: Db,
   projectId: string,
   tokenHash: string,
-  opts: { reportId?: string } = {},
+  opts: { reportId?: string; endUserId?: string | null } = {},
 ): Promise<{ entries: InboxEntry[]; error: { message?: string } | null }> {
+  const either = ownReportsOrFilter(tokenHash, opts.endUserId ?? null);
   let q = db
     .from('reports')
     .select(REPORT_COLUMNS)
-    .eq('project_id', projectId)
-    .eq('reporter_token_hash', tokenHash)
+    .eq('project_id', projectId);
+  q = either ? q.or(either) : q.eq('reporter_token_hash', tokenHash);
+  q = q
     .order('created_at', { ascending: false })
     .limit(opts.reportId ? 1 : LIST_LIMIT);
   if (opts.reportId) q = q.eq('id', opts.reportId);
@@ -257,7 +285,7 @@ export function registerReporterInboxRoutes(
     const onlyOpen = c.req.query('status') === 'open';
 
     const db = getServiceClient();
-    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash);
+    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash, { endUserId: await verifiedEndUserId(db, c, projectId) });
     if (error) return dbError(c, error);
 
     const { rows: notifications, error: notifErr } = await loadNotifications(
@@ -292,7 +320,7 @@ export function registerReporterInboxRoutes(
     if (!auth.ok) return authFailure(c, auth);
 
     const db = getServiceClient();
-    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash, { reportId });
+    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash, { reportId, endUserId: await verifiedEndUserId(db, c, projectId) });
     if (error) return dbError(c, error);
     const entry = entries[0];
     if (!entry) return jsonError(c, 'NOT_FOUND', 'Report not found', 404);
@@ -342,7 +370,7 @@ export function registerReporterInboxRoutes(
     if (!auth.ok) return authFailure(c, auth);
 
     const db = getServiceClient();
-    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash, { reportId });
+    const { entries, error } = await loadInbox(db, projectId, auth.tokenHash, { reportId, endUserId: await verifiedEndUserId(db, c, projectId) });
     if (error) return dbError(c, error);
     const entry = entries[0];
     if (!entry) return jsonError(c, 'NOT_FOUND', 'Report not found', 404);

@@ -13,14 +13,33 @@ export interface DeviceInfo {
   appVersion?: string
 }
 
+/**
+ * The app's own version ("1.22.59 (1084)"), or undefined. It used to fall back to
+ * `Platform.Version`, the OS version, so Expo apps without react-native-device-info
+ * reported Android's "36" as their app version (2026-11-16, yen-yen). Order:
+ * expo-application's native module (read without importing expo), then
+ * react-native-device-info, then a BuildConfig module.
+ * @internal Exported for tests only.
+ */
+export function nativeAppVersion(): string | undefined {
+  type ExpoApplicationModule = { nativeApplicationVersion?: string | null; nativeBuildVersion?: string | null }
+  const expoApp = (globalThis as { expo?: { modules?: { ExpoApplication?: ExpoApplicationModule } } }).expo?.modules?.ExpoApplication
+  const expoVersion = expoApp?.nativeApplicationVersion || null
+  if (expoVersion) {
+    const build = expoApp?.nativeBuildVersion || null
+    return build && build !== expoVersion ? `${expoVersion} (${build})` : expoVersion
+  }
+  const deviceInfo = NativeModules.RNDeviceInfo?.appVersion as string | undefined
+  const buildConfig = NativeModules.RNBuildConfig?.VERSION_NAME as string | undefined
+  return deviceInfo || buildConfig || undefined
+}
+
 export function getDeviceInfo(): DeviceInfo {
   const { width, height } = Dimensions.get('window')
 
   // Locale: iOS exposes it via SettingsManager, Android via I18nManager.
   const locale: string =
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     (NativeModules.SettingsManager?.settings?.AppleLocale as string | undefined) ??
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     (NativeModules.I18nManager?.localeIdentifier as string | undefined) ??
     'en'
 
@@ -32,14 +51,7 @@ export function getDeviceInfo(): DeviceInfo {
     // Intl not available — keep 'UTC'
   }
 
-  // App version: use NativeModules (set by the app's build system) as the
-  // source of truth; fall back to the OS version string. Avoids a `process`
-  // global that would require @types/node in a mobile-first package.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-  const appVersion: string =
-    (NativeModules.RNDeviceInfo?.appVersion as string | undefined) ??
-    (NativeModules.RNBuildConfig?.VERSION_NAME as string | undefined) ??
-    String(Platform.Version)
+  const appVersion = nativeAppVersion()
 
   return {
     platform: Platform.OS,

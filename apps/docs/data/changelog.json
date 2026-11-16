@@ -1,5 +1,22 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "Unreleased",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "App version.",
+        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
+      },
+      {
+        "title": "`loadMyReports()`.",
+        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.36",
     "headline": null,
     "pending": false,

@@ -135,6 +135,19 @@ troubleshooting table. Maintainer deep-dive:
 
 ---
 
+## Diagnostics at send time
+
+`setDiagnosticsProvider` attaches what your app knows when the reporter presses **Send** (load timings, recent errors, feature flags). The function runs at that moment, gets 300 ms, and is never allowed to block or drop the report.
+
+```ts
+mushi.setDiagnosticsProvider(() => ({
+  timings: { feed: performance.now() - feedStart },
+  flags: currentFlags(),
+}))
+```
+
+The keys merge into the report's metadata. `screenLoading` / `timings` lines are triage evidence: a step of 1.5 s or more reads as slowness even when the description is short. Strings are scrubbed for personal data and the result is size-capped; keep personal data out anyway. Pass `null` to remove the provider.
+
 ## Capture availability & errors
 
 Screenshot and element-picker buttons hide when that capture mode is unavailable

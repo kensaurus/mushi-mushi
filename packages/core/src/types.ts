@@ -1511,6 +1511,15 @@ export interface MushiSDKInstance {
   on(event: MushiEventType, handler: MushiEventHandler): () => void;
   setUser(user: { id: string; email?: string; name?: string }): void;
   setMetadata(key: string, value: unknown): void;
+  /**
+   * Diagnostics read when the reporter presses Send (load timings, the last
+   * errors your app logged, connection state). Its keys merge into the report's
+   * metadata; triage reads `screenLoading` / `timings` lines. Gets 300 ms, is
+   * PII-scrubbed and size-capped; a slow or throwing provider never blocks or
+   * drops the report. Keep amounts, names and other personal data out.
+   * Pass `null` to remove it.
+   */
+  setDiagnosticsProvider(provider: (() => Record<string, unknown> | null | undefined | Promise<Record<string, unknown> | null | undefined>) | null): void;
   setScreen(screen: { name: string; route?: string; feature?: string }): void;
   isOpen(): boolean;
   open(): void;
