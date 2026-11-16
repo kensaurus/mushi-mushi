@@ -26,6 +26,7 @@ type AsyncStorageLike = {
 
 export type { AsyncStorageLike }
 
+/** @internal Exported for tests only. */
 export type SecureStoreLike = {
   getItemAsync: (key: string) => Promise<string | null>
   setItemAsync: (key: string, value: string) => Promise<void>
