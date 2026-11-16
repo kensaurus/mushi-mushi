@@ -49,7 +49,6 @@ import { registerAnomaliesRoutes } from './routes/anomalies.ts';
 import { registerCostsRoutes } from './routes/costs.ts';
 import { registerEvolutionRoutes } from './routes/evolution.ts';
 import { registerCommunityRoutes } from './routes/community.ts';
-import { registerPublishedAppsRoutes } from './routes/published-apps.ts';
 import { registerContentQualityRoutes } from './routes/content-quality.ts';
 import { registerFeatureBoardRoutes } from './routes/feature-board.ts';
 import { registerBackendRoutes } from './routes/backend.ts';
@@ -747,7 +746,16 @@ forwardToApiExt([
   '/v1/webhooks/tremendous',
 ]);
 registerCommunityRoutes(app);
-registerPublishedAppsRoutes(app);
+// published-apps.ts (marketplace listing, admin only): served by api-ext (api size budget, 2026-11-17).
+forwardToApiExt([
+  '/v1/admin/published-apps/:projectId',
+  '/v1/admin/published-apps/:projectId/publish',
+  '/v1/admin/published-apps/:projectId/pause',
+  '/v1/admin/published-apps/:projectId/targeting',
+  '/v1/admin/published-apps/:projectId/bounties',
+  '/v1/admin/published-apps/:projectId/marketplace-settings',
+  '/v1/admin/published-apps/:projectId/stats',
+]);
 // Database health (advisors + stats, _shared/db-health.ts): served by api-ext (api size budget).
 forwardToApiExt(['/v1/admin/projects/:id/db-advisors']);
 registerContentQualityRoutes(app);
