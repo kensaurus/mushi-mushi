@@ -12,7 +12,9 @@
  *            3. The last heartbeat: when, which key, from where.
  *
  *          It replaces the status banner, four tiles and steps guide that sat
- *          above the tabs. The model is lib/setupRail.
+ *          above the tabs. The model is lib/setupRail. The time-to-first
+ *          diagnosis read is shared with the Verify card, so a classified
+ *          test report updates both (report 9b7624e6).
  */
 
 import { useState } from 'react'
@@ -20,7 +22,8 @@ import { Link } from 'react-router-dom'
 import { CodePanel } from '../CodePanel'
 import { Btn } from '../ui'
 import { usePageData } from '../../lib/usePageData'
-import { buildSetupRail, heartbeatSentence, type SetupRail, type SetupRailStep, type TimeToFirstDiagnosis } from '../../lib/setupRail'
+import { buildSetupRail, heartbeatSentence, type SetupRail, type SetupRailStep } from '../../lib/setupRail'
+import { useTimeToFirstDiagnosis } from '../../lib/useTimeToFirstDiagnosis'
 import { DEFAULT_SDK_CONFIG, installCommand, renderSnippet } from '../../lib/sdkSnippets'
 import { detectWebBundler, resolveDefaultSdkFramework, snippetBundler } from '../../lib/sdkInstallDefaults'
 import type { SetupProject } from '../../lib/useSetupStatus'
@@ -40,10 +43,7 @@ interface SetupProgressRailProps {
 }
 
 export function SetupProgressRail({ project, apiKey, onTab, onMintKey, minting, onSendTest, testing, compact = false }: SetupProgressRailProps) {
-  const { data: ttfd } = usePageData<TimeToFirstDiagnosis>(
-    project ? '/v1/admin/onboarding/time-to-first-diagnosis' : null,
-    { deps: [project?.project_id ?? null] },
-  )
+  const { data: ttfd } = useTimeToFirstDiagnosis(project != null, project?.project_id ?? null)
   const rail = buildSetupRail({ project, ttfd: ttfd ?? null })
 
   return (
