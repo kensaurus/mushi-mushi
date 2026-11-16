@@ -137,8 +137,8 @@ export function buildQaStoryInsert(projectId: string, body: z.infer<typeof qaSto
 
 /**
  * Column patch for PATCH …/qa-stories/:sid. Turning a story on also approves
- * it: the runner only checks `enabled`, so leaving a rejected or pending
- * story's approval_status behind would contradict what the console shows.
+ * it. The scheduled runner executes only approval_status = 'approved', so a
+ * pending or rejected story that was merely enabled would stay off the schedule.
  */
 export function buildQaStoryPatch(body: z.infer<typeof qaStoryPatchSchema>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};

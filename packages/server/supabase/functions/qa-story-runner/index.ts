@@ -25,11 +25,11 @@
 // ────
 // Registered in the migration as every-minute via:
 //   SELECT cron.schedule('qa-story-runner', '* * * * *', $$...$$)
-// The function itself gates execution on whether each story's
-// schedule_cron aligns with the current time (via a simple cron-match
-// check) so we don't need one pg_cron job per story. Since 2026-11-11 the
-// job posts only when mushi.qa_story_runner_has_work() finds a story that
-// may be due this minute or a stale manual run (migration
+// The function itself gates execution on approval_status = 'approved' and
+// whether each story's schedule_cron aligns with the current time (via a
+// simple cron-match check) so we don't need one pg_cron job per story.
+// Since 2026-11-11 the job posts only when mushi.qa_story_runner_has_work()
+// finds a story that may be due this minute or a stale manual run (migration
 // 20261111091825_cron_edge_work_gates), about 340 calls a day instead of
 // 1,440; a call with nothing due returns before writing cron_runs.
 //
@@ -55,7 +55,7 @@ import { dispatchPluginEventDetached } from '../_shared/plugins.ts'
 import { safeFetch } from '../_shared/inventory-guards.ts'
 import { monitorScrapeBody } from '../_shared/monitor-url.ts'
 import { sweepAbandonedManualRuns } from './abandoned-runs.ts'
-import { cronTickTime } from './cron-tick.ts'
+import { cronTickTime, isApprovedForSchedule } from './cron-tick.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -75,6 +75,8 @@ interface QaStory {
   browser_provider: string
   schedule_cron: string
   enabled: boolean
+  /** Scheduled runs require 'approved'. Manual runs do not read this. */
+  approval_status: string
   capture_video: boolean
   byok_provider: string | null
   /** Explicit scrape target set by the user in the console. Takes precedence over prompt/env. */
@@ -703,7 +705,10 @@ Deno.serve(
     })
     if (abandoned > 0) rlog.info('abandoned manual runs', { failed: abandoned })
 
-    // Fetch all enabled stories. The previous select embedded
+    // Scheduled runs: enabled and approved. pending_review and rejected
+    // stories are not executed, even when enabled is still true
+    // (20260602000002). Manual runs go through executeManualRun and are
+    // not filtered here. The previous select embedded
     // `projects!inner(id, base_url:mushi_runtime_config!inner(config))`
     // which referenced a non-existent `projects → mushi_runtime_config`
     // foreign key (PostgREST returned PGRST200 → 500). The embedded
@@ -716,6 +721,7 @@ Deno.serve(
       .from('qa_stories')
       .select('*')
       .eq('enabled', true)
+      .eq('approval_status', 'approved')
 
     if (storiesErr) {
       // Truncate the message before logging and persisting — a transient Supabase
@@ -755,6 +761,7 @@ Deno.serve(
     // pg_net delivers a minute late must not miss it.
     const matchAt = cronTickTime(body.tick, now)
     const dueStories = (stories ?? []).filter((s: QaStory) =>
+      isApprovedForSchedule(s) &&
       cronMatches(s.schedule_cron ?? '*/15 * * * *', matchAt)
     )
 
