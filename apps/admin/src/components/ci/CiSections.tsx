@@ -259,7 +259,15 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
               <IconExternalLink size={10} />
             </a>
           )}
-          {j.infraDetail && <p className="w-full text-2xs text-fg-muted">{j.infraDetail}</p>}
+          <p className="w-full text-2xs text-fg-secondary">
+            The machine lost touch with GitHub before the job finished (it crashed, ran out of memory or lost its network), so the code was never tested. Re-run the job.
+          </p>
+          {j.infraDetail && (
+            <details className="w-full text-2xs text-fg-muted">
+              <summary className="cursor-pointer">GitHub’s message</summary>
+              <p className="mt-0.5">{j.infraDetail}</p>
+            </details>
+          )}
         </li>
       ))}
     </ul>

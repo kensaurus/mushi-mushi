@@ -8,7 +8,7 @@
  */
 
 import { IconAlertTriangle, IconChevronRight } from '../icons'
-import { ageLabel, type PipelineStage } from '../../lib/pipeline'
+import { ageLabel, STAGE_PLAIN, type PipelineStage } from '../../lib/pipeline'
 
 interface Props {
   stages: PipelineStage[]
@@ -53,6 +53,7 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
                   <span className="tabular-nums text-fg-faint">{i + 1}</span> {s.label}
                 </span>
               </span>
+              <span className="-mt-1 text-2xs text-fg-secondary normal-case" data-testid={`pipeline-stage-${s.id}-plain`}>{STAGE_PLAIN[s.id]}</span>
               <span className="text-2xl font-semibold leading-none tabular-nums text-fg" data-testid={`pipeline-stage-${s.id}-count`}>
                 {s.count}
               </span>
@@ -71,9 +72,9 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
               </span>
               {s.id === 'pr' && openers && (
                 <span className="text-2xs text-fg-muted" data-testid="pipeline-stage-pr-openers">
-                  24h: server <span className={openers.server === 0 ? 'font-medium text-danger-foreground' : 'text-fg-secondary'}>{openers.server}</span> · local{' '}
+                  Last 24 h, apps with a fix started: cloud <span className={openers.server === 0 ? 'font-medium text-danger-foreground' : 'text-fg-secondary'}>{openers.server}</span> · your worker{' '}
                   <span className="text-fg-secondary">{openers.local}</span>
-                  {openers.nobody > 0 && <> · nobody {openers.nobody}</>} apps
+                  {openers.nobody > 0 && <> · none {openers.nobody}</>}
                 </span>
               )}
               <span className="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">

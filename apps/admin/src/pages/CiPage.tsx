@@ -42,7 +42,8 @@ import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
-import { CiAttention } from '../components/ci/CiAttention'
+import { CiStatusBoard, MachineCard } from '../components/ci/CiStatusBoard'
+import { buildCiStatus } from '../lib/ciStatus'
 import { CiJobTimes } from '../components/ci/CiJobTimes'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from '../lib/activeProject'
@@ -222,6 +223,8 @@ export function CiPage() {
   const fixLinks = useMemo(() => buildFixLinks(fixes.data?.fixes ?? []), [fixes.data])
 
   const [selected, setSelected] = useState<string | null>(null)
+  // The runner map is the advanced view: it mounts only when opened.
+  const [mapOpen, setMapOpen] = useState(false)
   const onSelect = useCallback((id: string) => setSelected((cur) => (cur === id ? null : id)), [])
 
   const stats = data?.stats
@@ -238,6 +241,8 @@ export function CiPage() {
 
   const notice = data ? permissionsNotice(data.permissions) : null
   const empty = data ? isCiOverviewEmpty(data) : false
+  // Every machine, busy first, for the Machines view (same placement as the Now board).
+  const machinesAll = useMemo(() => (data ? buildCiStatus(data, Date.now()).allMachines : []), [data])
   const placementApps = useMemo(() => {
     const byId = new Map<string, string>()
     for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
@@ -347,11 +352,12 @@ export function CiPage() {
 
       {data && !empty && view === 'now' && (
         <>
-          <CiSummary overview={data} />
+          <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />}>
+            <CiStatusBoard overview={data} />
+          </Section>
 
-          <Section title="Needs attention" id="ci-attention" icon={<IconAlertTriangle />}>
-            <p className="mb-2 text-xs text-fg-muted">Jobs running longer than they usually take, what failed in the last 2 hours and why, and how long each app's queue is.</p>
-            <CiAttention jobs={data.jobs} byJob={data.stats.byJob} />
+          <Section title="Last 7 days" id="ci-week" icon={<IconGauge />}>
+            <CiSummary overview={data} />
           </Section>
 
           <Section title="Queue" id="ci-queue" icon={<IconQueue />}>
@@ -373,13 +379,30 @@ export function CiPage() {
 
       {data && !empty && view === 'machines' && (
         <>
-          <Section title="Runner map" id="ci-map" icon={<IconNetwork />}>
-            <p className="mb-2 text-xs text-fg-muted">Your machines, the runners on them, the repositories they serve, and the jobs waiting or running now. Click any card for its health and recent jobs.</p>
-            <PanelErrorBoundary label="Runner map">
-              <Suspense fallback={<Loading text="Loading the map…" />}>
-                <CiRunnerMap overview={data} selectedId={selected} onSelect={onSelect} />
-              </Suspense>
-            </PanelErrorBoundary>
+          <Section title="Machines" id="ci-machines" icon={<IconNetwork />}>
+            <p className="mb-2 text-xs text-fg-muted">Every machine that runs your checks, what it is running now and how busy it is.</p>
+            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="ci-machines-all">
+              {machinesAll.map((m) => (
+                <MachineCard key={m.id} m={m} />
+              ))}
+            </ul>
+          </Section>
+
+          <Section title="Runner map (advanced)" id="ci-map" icon={<IconNetwork />}>
+            <details onToggle={(e) => setMapOpen((e.currentTarget as HTMLDetailsElement).open)} open={mapOpen} data-testid="ci-map-disclosure">
+              <summary className="cursor-pointer text-xs text-fg-secondary">
+                Show every runner, the repositories it serves and the jobs on it, as a diagram
+              </summary>
+              {mapOpen && (
+                <div className="mt-2">
+                  <PanelErrorBoundary label="Runner map">
+                    <Suspense fallback={<Loading text="Loading the map…" />}>
+                      <CiRunnerMap overview={data} selectedId={selected} onSelect={onSelect} />
+                    </Suspense>
+                  </PanelErrorBoundary>
+                </div>
+              )}
+            </details>
           </Section>
 
           <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>

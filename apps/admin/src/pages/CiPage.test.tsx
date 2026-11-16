@@ -119,22 +119,26 @@ describe('CiPage', () => {
     const order = ['Queue', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    // The summary sits above the queue.
+    // "Which machine, what is slow, when will it finish, what broke" (2026-11-16): the plain status
+    // board opens Now, above the week's numbers, which sit above the queue.
+    const board = q('ci-status-board')!
+    expect(hasHeading('Right now')).toBe(true)
+    expect(q('ci-status-headline')!.textContent!.length).toBeGreaterThan(10)
+    for (const t of ['Machines right now', 'Running now', 'What broke in the last 2 hours', 'Where the time goes this week']) expect(hasHeading(t)).toBe(true)
     const summary = q('ci-summary')!
+    expect(board.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // "I can't debug anything from this page" (2026-11-07): what needs a person and how long each job
-    // takes sit on Now, between the summary and the timeline.
-    expect(hasHeading('Needs attention')).toBe(true)
+    expect(hasHeading('Last 7 days')).toBe(true)
     expect(hasHeading('Job times')).toBe(true)
-    for (const id of ['ci-attention-long', 'ci-attention-failed', 'ci-attention-waiting']) expect(q(id)).not.toBeNull()
-    expect(summary.compareDocumentPosition(host.querySelector('#ci-attention')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Runner ids never stand in for a machine: running jobs name the machine.
+    expect(q('ci-status-board')!.textContent).not.toMatch(/aw-[a-z.-]+-\d{6,}/)
     // One long column was 50,000 px tall (2026-11-06): the other views are not on Now.
     for (const t of ['Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine', 'Where CI runs']) expect(hasHeading(t)).toBe(false)
   })
 
   it('puts each section in its view, with a tab per view and the active one marked', async () => {
     const views: Array<[string, string[]]> = [
-      ['machines', ['Runner map', 'Stopped by the test machine']],
+      ['machines', ['Machines', 'Runner map (advanced)', 'Stopped by the test machine']],
       ['cost', ['Speed it up', 'Slow jobs', 'Cost and speed']],
       ['settings', ['Where CI runs']],
     ]
@@ -144,7 +148,7 @@ describe('CiPage', () => {
       await render(`/ci?view=${view}`)
       for (const t of titles) expect(hasHeading(t)).toBe(true)
       expect(q('ci-queue')).toBeNull()
-      expect(hasHeading('Needs attention')).toBe(false)
+      expect(hasHeading('Right now')).toBe(false)
       const active = host.querySelector('[role="tab"][aria-selected="true"]')!
       expect(active.getAttribute('href')).toContain(`view=${view}`)
     }
@@ -290,10 +294,20 @@ describe('CiPage', () => {
     expect(q('ci-advice')!.querySelector('button[aria-label="Copy the fix"]')).not.toBeNull()
   })
 
-  it('shows the map and the infra failures under Machines', async () => {
+  it('shows machine cards first, the map only on request, and the infra failures in plain words under Machines', async () => {
     await render('/ci?view=machines')
-    expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
+    expect(q('ci-machines-all')!.querySelectorAll('li').length).toBeGreaterThan(0)
+    // The map is the advanced view: it mounts only when opened.
+    expect(q('ci-map-stub')).toBeNull()
+    const details = q('ci-map-disclosure') as HTMLDetailsElement
+    await act(async () => {
+      details.open = true
+      details.dispatchEvent(new Event('toggle'))
+    })
     expect(q('ci-map-stub')!.textContent).toBe('2 hosts')
+    // GitHub's raw message stays one click away, behind a plain sentence.
+    expect(q('ci-infra-failures')!.textContent).toContain('lost touch with GitHub')
+    expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
   })
 
   it('shows one advice card per rule, with a chip per workflow and the fix once', async () => {
@@ -346,7 +360,7 @@ describe('CiPage', () => {
   })
 
   it('explains a missing runner permission where the runners are, not on top of Now', async () => {
-    const text = 'Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
+    const text = 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here.'
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
     await render('/ci?view=machines')
     expect(host.textContent).toContain(text)

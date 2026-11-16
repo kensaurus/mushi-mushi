@@ -339,7 +339,10 @@ describe('PipelinePage', () => {
 
   it('shows who opens fixes per app, red where auto-fix is on but nothing can dispatch', async () => {
     await render()
-    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('24h: server 0 · local 1 · nobody 1 apps')
+    expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Last 24 h, apps with a fix started: cloud 0 · your worker 1 · none 1')
+    // Each stage says what it means, and the pace line says how fast fixes land (2026-11-16).
+    expect(q('pipeline-stage-ci-plain')!.textContent).toBe('Your tests run on the fix')
+    expect(q('pipeline-pace')!.textContent).toMatch(/^Pace: /)
     const glot = q('pipeline-opener-p1')!
     expect(glot.textContent).toContain('Server + local')
     expect(glot.textContent).toContain('On · 0 agent keys (1 off) · 0 in 24h · last 2 d ago')

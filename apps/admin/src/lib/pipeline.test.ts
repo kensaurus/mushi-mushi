@@ -13,7 +13,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { ageLabel, openerSummary, outcomeSummary, runPipelineAction, type DispatcherStatus } from './pipeline'
+import { ageLabel, openerSummary, outcomeSummary, pipelinePace, runPipelineAction, type DispatcherStatus, type PipelineStage } from './pipeline'
 
 beforeEach(() => {
   state.posts = []
@@ -58,5 +58,22 @@ describe('pipeline helpers', () => {
     const d = (server: number, local: number) =>
       ({ server: { dispatches24h: server }, local: { runs24h: local } }) as unknown as DispatcherStatus
     expect(openerSummary([d(0, 3), d(2, 0), d(0, 0), d(1, 1)])).toEqual({ server: 2, local: 2, nobody: 1 })
+  })
+})
+
+describe('pipelinePace (2026-11-16: "what I can estimate")', () => {
+  const stage = (id: string, count: number) => ({ id, label: id, count, stuck: 0, oldestAt: null, groups: [] }) as unknown as PipelineStage
+  const disp = (name: string, local: number, server: number, autofixOn = true) =>
+    ({ name, autofixOn, local: { runs24h: local }, server: { dispatches24h: server } }) as unknown as DispatcherStatus
+  it('turns the merge rate into how long the waiting bugs take, and says who started fixes', () => {
+    const line = pipelinePace([stage('triaged', 834), stage('merged', 13), stage('deployed', 2)], [disp('glot.it', 6, 0), disp('tsumagoi', 0, 0), disp('yen-yen', 0, 0)])
+    expect(line).toBe(
+      'Pace: 15 fixes merged in the last 7 days (about 2 a day). 834 bugs wait for a fix, about 13 months of work at this pace. Fixes started in the last 24 hours: 6, all by your own worker. None for tsumagoi and yen-yen.',
+    )
+  })
+  it('says plainly when nothing merges or nothing waits', () => {
+    expect(pipelinePace([stage('triaged', 3)], [])).toBe('Pace: no fix merged in the last 7 days, while 3 bugs wait for a fix.')
+    expect(pipelinePace([stage('merged', 1)], null)).toBe('Pace: 1 fix merged in the last 7 days (about one every 7 days). No bug is waiting for a fix.')
+    expect(pipelinePace([], null)).toBeNull()
   })
 })

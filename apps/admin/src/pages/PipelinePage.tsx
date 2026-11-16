@@ -53,6 +53,7 @@ import {
   ageLabel,
   openerSummary,
   outcomeSummary,
+  pipelinePace,
   retryTrains,
   runPipelineAction,
   type ActionOutcome,
@@ -135,6 +136,8 @@ export function PipelinePage() {
   // The biggest stuck group and the first of its actions the server would take.
   const top = useMemo(() => topStuck(stages.flatMap((s) => s.groups)), [stages])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
+  // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
+  const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
   // "Nothing is stuck" was false while no agent could open a fix (audit
   // 2026-11-11: next to "Who opens fixes: nobody" and "credits idle").
   const agentCredits = useAgentCredits()
@@ -284,6 +287,11 @@ export function PipelinePage() {
             }
             data-testid="pipeline-status"
           />
+          {pace && (
+            <p className="-mt-1 px-1 text-xs text-fg-secondary" data-testid="pipeline-pace">
+              {pace}
+            </p>
+          )}
 
           <section className="space-y-2" aria-label="Stages">
             <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />

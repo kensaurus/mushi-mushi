@@ -112,6 +112,8 @@ export interface CiJob {
   completedAt: string | null
   htmlUrl: string | null
   memPeakMb: number | null
+  /** The first step that failed ("Dead code (production)"); older servers omit it. */
+  failedStep?: string | null
 }
 
 export interface CiAdvice {

@@ -7,7 +7,7 @@
  *          rule is unit-tested.
  */
 
-import type { CiJob, CiOverview } from './ciTypes'
+import type { CiHost, CiJob, CiOverview } from './ciTypes'
 
 // ── Durations ───────────────────────────────────────────────────────────────
 
@@ -250,6 +250,19 @@ export function runnerKey(name: string): string {
 }
 
 /** `owner/name` → `name`, for tables where the owner repeats on every row. */
+/**
+ * The machine a runner runs on: by its `hostId`, else the machine whose heartbeat
+ * lists it. `name` is the runner's key (`runnerKey`: a one-job runner's family).
+ * The runner map and the CI status board place jobs with this one rule.
+ */
+export function hostOfRunner(hosts: CiHost[], name: string, hostId: string | null): CiHost | null {
+  if (hostId) {
+    const byId = hosts.find((h) => h.hostId === hostId)
+    if (byId) return byId
+  }
+  return hosts.find((h) => h.runners.some((r) => runnerKey(r.name) === name)) ?? null
+}
+
 export function repoShortName(repo: string): string {
   return repo.split('/').pop() || repo
 }
@@ -550,7 +563,7 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {
-    return 'Mushi Mushi sees runners only through jobs. Give the GitHub token Administration: read to see idle and offline runners.'
+    return 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here. To see them too, give the GitHub token the “Administration: read” permission.'
   }
   return null
 }

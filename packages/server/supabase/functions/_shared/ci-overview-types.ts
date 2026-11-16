@@ -107,6 +107,8 @@ export interface CiOverview {
     completedAt: string | null
     htmlUrl: string | null
     memPeakMb: number | null
+    /** The first step that failed (`firstFailedStep`); null when none failed. */
+    failedStep: string | null
   }>
   stats: {
     jobs: number
