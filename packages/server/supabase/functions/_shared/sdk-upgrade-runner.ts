@@ -2,6 +2,9 @@
  * Shared SDK upgrade job runner — invoked inline from the api route
  * (reliable, same isolate) and from the sdk-upgrade-worker edge function
  * (HTTP fallback for retries / pg_cron sweeper).
+ *
+ * When the host has no lockfile workflow, an npm lock is updated in the same
+ * change as the package.json bump. The host workflow path is unchanged.
  */
 
 import { getServiceClient } from './db.ts'
@@ -21,7 +24,13 @@ import {
   SDK_UPGRADE_PR_TITLE,
   buildUpgradePrBody,
   hasLockfileHelper,
+  type LockfileOutcome,
 } from './sdk-upgrade-pr.ts'
+import {
+  fetchNpmPackument,
+  loadGithubFileText,
+  planNpmLockfileUpdates,
+} from './sdk-upgrade-npm-lock.ts'
 import {
   archivedDirsFrom,
   computeBumpPlan,
@@ -279,6 +288,49 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       return { ok: true, status: 'completed_no_pr' }
     }
 
+    // ADR 0019: a host lockfile workflow refreshes the lock with the package
+    // manager. Without one, an npm lock is updated from registry metadata when
+    // every new range already resolves; otherwise the PR keeps the manual note.
+    const helperPresent = await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)
+    const readRepoFile = (ref: string, path: string) => loadGithubFileText(
+      owner,
+      repo,
+      ref,
+      path,
+      baseHeaders,
+      ghFetchOptional,
+    )
+    const withNpmLocks = async (
+      ref: string,
+      bumps: BumpEntry[],
+      manifests: FileChange[],
+    ): Promise<{ files: FileChange[]; outcome: Extract<LockfileOutcome, 'npm_updated' | 'helper_missing'> }> => {
+      if (helperPresent) return { files: manifests, outcome: 'helper_missing' }
+      try {
+        const plan = await planNpmLockfileUpdates({
+          manifests,
+          bumps,
+          availableVersions: latestVersions,
+          readText: (path) => readRepoFile(ref, path),
+          fetchPackument: fetchNpmPackument,
+        })
+        if (!plan.complete) {
+          if (plan.reasons.length) {
+            log.warn('sdk-upgrade-runner: npm lockfile left unchanged', { reasons: plan.reasons })
+          }
+          return { files: manifests, outcome: 'helper_missing' }
+        }
+        log.info('sdk-upgrade-runner: updated npm lock entries', {
+          files: plan.files.map((file) => file.path),
+        })
+        return { files: [...manifests, ...plan.files], outcome: 'npm_updated' }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.warn('sdk-upgrade-runner: npm lockfile update failed', { error: message })
+        return { files: manifests, outcome: 'helper_missing' }
+      }
+    }
+
     // Dedup guard: if an upgrade PR is already open, reuse it instead of
     // stacking a duplicate. Refresh its branch only if newer versions have
     // shipped since it was opened; otherwise reuse it as-is.
@@ -286,12 +338,13 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     if (existingPr) {
       const onBranch = await scanForBumps(existingPr.headRef)
       if (onBranch.filesToCommit.length > 0) {
+        const prepared = await withNpmLocks(existingPr.headRef, onBranch.allBumps, onBranch.filesToCommit)
         const commitSha = await commitFilesToBranch(
           token,
           owner,
           repo,
           existingPr.headRef,
-          onBranch.filesToCommit,
+          prepared.files,
           { info: (msg, ctx) => log.info(msg, ctx as Record<string, unknown>), warn: (msg, ctx) => log.warn(msg, ctx as Record<string, unknown>) },
         )
         log.info('sdk-upgrade-runner: refreshed existing upgrade PR', {
@@ -329,7 +382,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
     // ADR 0019: when the host has the lockfile helper workflow, push the bump
     // as one commit and let that workflow refresh the lockfile. The PR opens
     // later (sdk-release-sync) so its CI runs on the refreshed lockfile.
-    if (await hasLockfileHelper(owner, repo, defaultBranch, baseHeaders)) {
+    if (helperPresent) {
       const base = await resolveBaseBranch(token, owner, repo, defaultBranch, ghLog)
       const commitSha = await createBranchWithSingleCommit({
         token,
@@ -357,12 +410,14 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
       return { ok: true, status: 'awaiting_lockfile', branch }
     }
 
-    const prBody = buildUpgradePrBody(allBumps, filesToCommit.map((f) => f.path), 'helper_missing')
+    const prepared = await withNpmLocks(defaultBranch, allBumps, filesToCommit)
+    const prBody = buildUpgradePrBody(allBumps, prepared.files.map((f) => f.path), prepared.outcome)
 
     log.info('sdk-upgrade-runner: opening upgrade PR', {
       projectId: job.project_id,
       bumps: allBumps.length,
-      files: filesToCommit.length,
+      files: prepared.files.length,
+      lockfile: prepared.outcome,
     })
 
     const prResult = await createPrFromFiles(
@@ -374,7 +429,7 @@ export async function runSdkUpgradeJob(jobId: string): Promise<SdkUpgradeRunResu
         branch,
         title: SDK_UPGRADE_PR_TITLE,
         body: prBody,
-        files: filesToCommit,
+        files: prepared.files,
         labels: SDK_UPGRADE_PR_LABELS,
       },
       ghLog,

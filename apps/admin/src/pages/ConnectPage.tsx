@@ -401,8 +401,8 @@ export function ConnectPage() {
           <div id="connect-update" className="scroll-mt-chrome">
             <Section title="Update center">
               <SectionDescription when={showSectionDescriptions}>
-                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps only
-                @mushi-mushi/* version strings — you review and merge.
+                Keep the Mushi Mushi SDK up to date in your connected repository. A one-click PR bumps
+                @mushi-mushi/* versions and updates npm lock entries when that is safe — you review and merge.
               </SectionDescription>
               {project ? (
                 <UpdateCenter

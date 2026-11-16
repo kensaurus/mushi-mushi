@@ -157,6 +157,70 @@ describe('runSdkUpgradeJob — lockfile helper', () => {
     expect(body).toContain('pnpm install --lockfile-only --ignore-scripts')
     expect(lastUpdate(queries).status).toBe('completed')
   })
+
+  it('helper absent with an npm lock: the PR commit updates the lock entry from the registry', async () => {
+    const integrity = `sha512-${'a'.repeat(86)}==`
+    const lock = {
+      name: 'host',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { name: 'host', dependencies: { '@mushi-mushi/web': '^1.29.0' } },
+        'node_modules/@mushi-mushi/web': {
+          version: '1.29.0',
+          resolved: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.29.0.tgz',
+          integrity: 'sha512-old',
+          bin: { mushi: 'old.js' },
+          hasInstallScript: true,
+        },
+      },
+    }
+    state.ghRoutes = [
+      ['/contents/npm-shrinkwrap.json', null],
+      ['/contents/package-lock.json', {
+        encoding: 'base64',
+        content: b64(JSON.stringify(lock)),
+        size: 100,
+        sha: 'a'.repeat(40),
+      }],
+      ...runnerRoutes(),
+    ]
+    const fetchMock = vi.fn(async (url: string) => {
+      const href = String(url)
+      if (!href.includes('registry.npmjs.org') || !href.includes('1.31.0')) throw new Error(`unexpected fetch ${href}`)
+      return new Response(JSON.stringify({
+        name: '@mushi-mushi/web',
+        version: '1.31.0',
+        bin: { mushi: 'new.js' },
+        dist: {
+          integrity,
+          tarball: 'https://registry.npmjs.org/@mushi-mushi/web/-/web-1.31.0.tgz',
+        },
+      }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const { db } = runnerDb()
+      state.db = db
+      const result = await runSdkUpgradeJob(JOB)
+      expect(result).toMatchObject({ ok: true, status: 'completed' })
+      expect(gh.createPrFromFiles).toHaveBeenCalledTimes(1)
+      const opts = (gh.createPrFromFiles.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+      const files = opts.files as Array<{ path: string; contents: string }>
+      expect(files.map((file) => file.path)).toEqual(['package.json', 'package-lock.json'])
+      const written = JSON.parse(files[1].contents) as { packages: Record<string, { version?: string; bin?: Record<string, string>; hasInstallScript?: boolean }> }
+      expect(written.packages['node_modules/@mushi-mushi/web']).toMatchObject({
+        version: '1.31.0',
+        bin: { mushi: 'new.js' },
+      })
+      expect(written.packages['node_modules/@mushi-mushi/web'].hasInstallScript).toBeUndefined()
+      const body = String(opts.body)
+      expect(body).toContain('npm ci')
+      expect(body).not.toContain('CI still installs the old versions')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('runSdkUpgradeJob — linked repo choice', () => {

@@ -4,10 +4,12 @@
  *          so the runner (PR opened at once) and sdk-release-sync (PR opened
  *          after the host's lockfile workflow pushed) write the same PR.
  *
- * ADR 0019: Mushi never writes the lockfile and never writes a workflow into a
- * host repo. A host that adds `.github/workflows/mushi-sdk-lockfile.yml` gets
+ * ADR 0019: a host that adds `.github/workflows/mushi-sdk-lockfile.yml` gets
  * the bump pushed first, its own workflow refreshes the lockfile with the
- * package manager CLI, and the PR opens after that.
+ * package manager CLI, and the PR opens after that. Mushi never writes that
+ * workflow. With no workflow, an npm lockfile can be updated from registry
+ * metadata when every new dependency range already resolves (`npm_updated`);
+ * pnpm and yarn locks stay manual.
  */
 
 import { ghFetchOptional, openPullRequestForBranch } from './github-pr.ts'
@@ -24,10 +26,12 @@ export const LOCKFILE_HELPER_DOCS_URL = 'https://kensaur.us/mushi-mushi/docs/adm
 
 /**
  * - `refreshed`: the host workflow pushed a lockfile commit before the PR opened.
- * - `helper_missing`: no workflow in the host repo; the PR opens with only the bump.
+ * - `npm_updated`: no workflow; npm lock entries for the bump were rewritten
+ *   from the registry and every new range already resolved.
+ * - `helper_missing`: no workflow, and the npm lock was left unchanged.
  * - `timeout`: the workflow exists but no lockfile commit arrived in time.
  */
-export type LockfileOutcome = 'refreshed' | 'helper_missing' | 'timeout'
+export type LockfileOutcome = 'refreshed' | 'npm_updated' | 'helper_missing' | 'timeout'
 
 type Headers = Record<string, string>
 
@@ -51,6 +55,24 @@ export function changedManifestPaths(plan: BumpEntry[]): string[] {
 }
 
 function lockfileSection(lockfile: LockfileOutcome): string {
+  if (lockfile === 'npm_updated') {
+    return `### Lockfile
+
+The npm lockfile entries for these packages were updated in this commit from
+the npm registry: version, integrity, dependency ranges, bin, engines and
+install scripts. Every production, optional and required peer range resolves
+to a version already in the lock, so \`npm ci\` should pass.
+
+pnpm and yarn lockfiles are not rewritten. If this repo has one, update it
+on this branch before merging:
+
+\`\`\`sh
+pnpm install --lockfile-only --ignore-scripts
+yarn install --mode update-lockfile
+\`\`\`
+
+> Later upgrades refresh every package manager when the host lockfile workflow is installed: ${LOCKFILE_HELPER_DOCS_URL}`
+  }
   if (lockfile === 'refreshed') {
     return `### Lockfile
 
@@ -121,7 +143,10 @@ npx pod-install    # React Native iOS
 \`\`\`
 
 ---
-${lockfile === 'helper_missing'
+${lockfile === 'npm_updated'
+    ? `*Review every change before merging. This PR updates \`@mushi-mushi/*\`
+dependency version strings and the matching npm lockfile entries.*`
+    : lockfile === 'helper_missing'
     ? `*Review every change before merging. This PR only modifies \`@mushi-mushi/*\`
 dependency version strings — no other files are touched.*`
     : `*Review every change before merging. Mushi only modifies \`@mushi-mushi/*\`
