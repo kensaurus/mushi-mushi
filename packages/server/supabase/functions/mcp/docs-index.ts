@@ -1866,7 +1866,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/react-native",
     markdown: "sdks/react-native.md",
     keywords: ["sdks", "react-native", "react", "native", "@mushi-mushi/react-native"],
-    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Theming the report sheet", "Manual breadcrumbs"],
+    headings: ["Install", "Mount the provider", "Submit a report from a screen", "Offline queue", "What gets captured (v0.19+)", "Screenshots (react-native-view-shot)", "Theming the report sheet", "Diagnostics at send time"],
     excerpt: "Reference for @mushi-mushi/react-native, Mushi Mushi for React Native and Expo. MushiProvider, hooks, shake-to-report, screenshots, identity and offline queue.",
   },
   {
@@ -1929,7 +1929,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/sdks/web",
     markdown: "sdks/web.md",
     keywords: ["sdks", "web", "javascript", "bug", "reporting", "sdk", "browser", "mushi-mushi"],
-    headings: ["Sampling & beforeSend", "Screenshot preview & consent (1.19+)", "Runtime config merge (Jul 2026+)", "Capture availability & errors", "Description draft persistence", "Identifying users & the Rewards program", "Enabling the Rewards program", "Querying points & tier"],
+    headings: ["Sampling & beforeSend", "Screenshot preview & consent (1.19+)", "Runtime config merge (Jul 2026+)", "Diagnostics at send time", "Capture availability & errors", "Description draft persistence", "Identifying users & the Rewards program", "Enabling the Rewards program"],
     excerpt: "Reference for mushi-mushi, the Mushi Mushi browser SDK. Screenshots, console and network capture, the Shadow DOM widget, sampling, beforeSend and privacy.",
   },
   {
