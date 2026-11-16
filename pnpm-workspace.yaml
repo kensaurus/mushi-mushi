@@ -100,6 +100,9 @@ overrides:
   'shell-quote@<=1.8.4': '1.10.0'
   'react-router@>=7.0.0 <7.15.0': '>=7.15.0'
   'brace-expansion': '5.0.9'
+  # GHSA-g3hv-75wg-m249 (fixed in 11.0.1) and the later holes on that same
+  # line, closed in 11.0.8. The applied floor is package.json#pnpm.overrides.
+  'minimatch@10': '>=11.0.8 <12'
 
 patchedDependencies:
   'nextra-theme-docs@4.6.1': 'patches/nextra-theme-docs@4.6.1.patch'
@@ -249,6 +252,13 @@ minimumReleaseAgeExclude:
   # in this tree (pulled via fastify in the Node SDK's framework-adapter
   # tests). Same compensating controls as above.
   - 'find-my-way'
+  # minimatch 11.0.8 (2026-11-11) is the first 11.x that closes
+  # GHSA-g3hv-75wg-m249 and the later holes on that line
+  # (GHSA-cf2h-pxjq-68xw, GHSA-hqmv-qgp3-jx75, GHSA-c859-jr93-m5j4).
+  # 11.0.1, the first fix for the report's advisory, is still inside those.
+  # Pinned to this release so the exclusion admits only 11.0.8. Drop after
+  # 2026-11-18, once the 7-day cooldown covers it on its own.
+  - 'minimatch@11.0.8'
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved via this file's allowBuilds. Without
