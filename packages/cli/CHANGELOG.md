@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.40.1
+
+### Patch Changes
+
+- e94362a: `mushi work --daemon`: lanes now take turns for agent spaces. Each tick asks the lane served longest ago first, so the first lanes in worker.json can no longer take every freed space while the rest wait.
+
 ## 0.40.0
 
 ### Minor Changes
