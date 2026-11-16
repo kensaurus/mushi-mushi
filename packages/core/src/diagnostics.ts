@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * FILE: packages/core/src/diagnostics.ts
  * PURPOSE: The host app's own diagnostics, read at the moment a report is sent
