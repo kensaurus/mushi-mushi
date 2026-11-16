@@ -45,6 +45,7 @@ function fix(over: Partial<FixAttempt>): FixAttempt {
 
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
+  projectId: 'p1',
   fixes: [] as unknown[],
   total: 0,
   dispatches: [] as unknown[],
@@ -78,7 +79,7 @@ vi.mock('../lib/pageContext', () => ({
 }))
 vi.mock('../lib/usePlatformIntegrations', () => ({ usePlatformIntegrations: () => ({ traceUrl: () => null }) }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'App' } }) }))
-vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
+vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => mocks.projectId }))
 vi.mock('../lib/copy', () => ({ usePageCopy: () => null }))
 vi.mock('../lib/track', () => ({ trackSelf: vi.fn() }))
 vi.mock('../lib/fixesModeUx', () => ({
@@ -138,6 +139,7 @@ beforeEach(() => {
     disconnect() {}
   })
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {} })) as unknown as typeof window.matchMedia
+  mocks.projectId = 'p1'
   mocks.apiFetch.mockReset()
   mocks.apiFetch.mockImplementation(async (path: string) => {
     if (path.startsWith('/v1/admin/fixes?')) {
@@ -210,6 +212,23 @@ function click(el: Element | undefined | null) {
   if (!el) throw new Error('element not found')
   act(() => el.dispatchEvent(new MouseEvent('click', { bubbles: true })))
 }
+
+describe('FixesPage — switching apps (2026-11-16, live)', () => {
+  it("drops the old app's attempts and loads the new app's", async () => {
+    mocks.fixes = [fix({ id: 'a1', report_title: 'Old app bug' })]
+    mocks.total = 1
+    await render('/fixes')
+    expect(document.body.textContent).toContain('Old app bug')
+    const loadsBefore = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/fixes?')).length
+    mocks.projectId = 'p2'
+    mocks.fixes = [fix({ id: 'b1', report_id: 'r2', report_title: 'New app bug' })]
+    await render('/fixes')
+    const loadsAfter = mocks.apiFetch.mock.calls.filter(([p]) => String(p).startsWith('/v1/admin/fixes?')).length
+    expect(loadsAfter).toBeGreaterThan(loadsBefore)
+    expect(document.body.textContent).toContain('New app bug')
+    expect(document.body.textContent).not.toContain('Old app bug')
+  })
+})
 
 describe('FixesPage', () => {
   it('QA 94: a status link opens the failed list on Attempts', async () => {

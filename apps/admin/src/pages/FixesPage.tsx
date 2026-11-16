@@ -226,10 +226,17 @@ export function FixesPage() {
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
   const cancelledRef = useRef(false)
+  // The app the list belongs to. These reads take the app from the request
+  // headers, so a load started for one app must never land on another
+  // (2026-11-16: switching glot.it → mushi-mushi kept glot.it's 629 fixes).
+  const projectRef = useRef(activeProjectId)
+  projectRef.current = activeProjectId
+  const loadedProjectRef = useRef<string | null>(null)
 
   const loadFixes = useCallback(async () => {
     if (inFlightRef.current) return
     inFlightRef.current = true
+    const forProject = projectRef.current
     setError(false)
     setIsValidating(true)
     try {
@@ -239,6 +246,9 @@ export function FixesPage() {
         apiFetch<FixSummary>('/v1/admin/fixes/summary'),
       ])
       if (cancelledRef.current) return
+      // The app changed while this load ran: drop it, the reload below follows.
+      if (projectRef.current !== forProject) return
+      loadedProjectRef.current = forProject ?? null
       if (fixRes.ok && fixRes.data) {
         setLatestFixes(fixRes.data.fixes)
         setFixesTotal(typeof fixRes.data.total === 'number' ? fixRes.data.total : null)
@@ -253,9 +263,13 @@ export function FixesPage() {
       if (!cancelledRef.current) {
         setLoading(false)
         setIsValidating(false)
+        // The app changed while this load ran: load the new one now.
+        if (projectRef.current !== forProject) void loadFixesRef.current()
       }
     }
   }, [])
+  const loadFixesRef = useRef(loadFixes)
+  loadFixesRef.current = loadFixes
 
   const loadOlderFixes = useCallback(async () => {
     setLoadingOlder(true)
@@ -302,6 +316,19 @@ export function FixesPage() {
       cancelledRef.current = true
     }
   }, [loadFixes])
+
+  // Switching apps: clear the old app's rows at once (never show them under the
+  // new app's name), then load the new app's.
+  useEffect(() => {
+    if (loadedProjectRef.current === null || loadedProjectRef.current === activeProjectId) return
+    setLatestFixes([])
+    setOlderFixes([])
+    setFixesTotal(null)
+    setDispatches([])
+    setSummary(null)
+    setLoading(true)
+    void loadFixes()
+  }, [activeProjectId, loadFixes])
 
   // Realtime replaces the 5s poll. `fix_attempts` flips when an agent
   // moves through queued → running → succeeded/failed; `fix_events` fires
