@@ -13,6 +13,8 @@
  * - DELETE /v1/admin/projects/:id/qa-stories/:sid    → delete story
  * - GET  /v1/admin/projects/:id/qa-stories/:sid/runs                → recent runs (all columns)
  * - POST /v1/admin/projects/:id/qa-stories/:sid/run               → queue a manual run
+ *   (adminOrApiKey, mcp:write — an org-scoped account key can start a run;
+ *   GET /qa-coverage stays on jwtOrApiKey)
  * - GET  /v1/admin/projects/:id/qa-stories/:sid/runs/:rid/evidence → evidence artefacts + signed URLs
  * - GET  /v1/admin/projects/:id/platform-rollup                   → platform health tile data
  *
@@ -219,9 +221,12 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
 
   // Viewers read QA coverage. Creating, editing, deleting or running a story
   // changes the project (a run also spends crawl credits). A project-bound API
-  // key has no userId and was already scoped by the middleware.
+  // key was already scoped by the middleware: jwtOrApiKey leaves userId empty,
+  // and adminOrApiKey sets the key owner, so a bound key (not an account key)
+  // is skipped the same way. An account key carries its owner's real role.
   async function qaViewerDenied(c: Context, db: ReturnType<typeof getServiceClient>, userId: string, projectId: string, action: string) {
     if (!userId) return null;
+    if (c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')) return null;
     const access = await userCanAccessProject(db, userId, projectId);
     return denyViewerWrite(c, access.role, action);
   }
@@ -618,9 +623,10 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
 
   // ── List runs for a story ─────────────────────────────────────────────────
   // Account keys (MCP account connection) are rejected by apiKeyAuth, which
-  // jwtOrApiKey uses, so this read uses adminOrApiKey. The other QA routes
-  // stay on jwtAuth / jwtOrApiKey: creating or running a story is unchanged.
-  // mcp:read (mcp:write implies it). A project key stays pinned to its project.
+  // jwtOrApiKey uses, so this read uses adminOrApiKey. Creating a story stays
+  // on jwtAuth. Starting a run is adminOrApiKey too (mcp:write). The coverage
+  // list stays on jwtOrApiKey. mcp:read (mcp:write implies it). A project key
+  // stays pinned to its project.
   app.get('/v1/admin/projects/:pid/qa-stories/:sid/runs', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
@@ -698,15 +704,27 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
   });
 
   // ── Manual run trigger ────────────────────────────────────────────────────
-  app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', jwtOrApiKey, async (c) => {
+  // MCP run_qa_story and `mushi qa run` call this. jwtOrApiKey delegates to
+  // apiKeyAuth, which rejects every org-scoped account key before the scope
+  // check (ORG_KEY_NOT_ALLOWED, "cannot be used for SDK ingest"). A manual
+  // run is an admin action, so this route uses adminOrApiKey. GET /qa-coverage
+  // keeps jwtOrApiKey: that list was not part of the bug.
+  app.post('/v1/admin/projects/:pid/qa-stories/:sid/run', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
     const userId = c.get('userId') as string;
     const pid = c.req.param('pid')!;
     const sid = c.req.param('sid')!;
     const uuidErr = assertUuid(c, sid, 'story_id') ?? assertUuid(c, pid, 'project_id');
     if (uuidErr) return uuidErr;
-    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
     const db = getServiceClient();
-    if (!(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
+    // adminOrApiKey authenticates a project key as its owner. Without this
+    // pin, resolveProject would follow that owner onto every app they can open.
+    if (boundKeyTargetsOtherProject(c.get('authMethod'), c.get('projectId'), pid)) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'API key does not belong to this project' } }, 403);
+    }
+    const contextPid = c.get('projectId' as keyof Variables) as string | undefined;
+    const pinnedKey = c.get('authMethod') === 'apiKey' && !c.get('isOrgScopedKey')
+      && typeof contextPid === 'string' && contextPid === pid;
+    if (!pinnedKey && !(await resolveProject(db, userId, pid, contextPid))) return c.json({ error: 'Not found' }, 404);
     const qaDenied = await qaViewerDenied(c, db, userId, pid, 'run QA stories');
     if (qaDenied) return qaDenied;
 
