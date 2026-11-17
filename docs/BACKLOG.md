@@ -8,6 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-11-01 (sixth run; delta against 2026-10-31 below)
+- **Delta 2026-11-16 (BL-090):** 1 closed. Spend-down and the Cursor card on Integrations pick a model from `GET /v1/admin/byok/cursor/models`. The stored value is still the spec `parseCursorModelSpec` accepts; Other and a failed list stay a typed spec.
 - **Delta 2026-11-02 (single CI, ADR 0044 amendment):** 4 new (BL-212..BL-215: an innocent PR benched by a train that fails on anything, the red-train rate to re-measure, tsumagoi's heavy bot tier, and cancelled checks reading green).
 - **Delta 2026-11-01 (local-branch and "shipped" audit):** 12 new (BL-200..BL-211) · 3 closed (BL-200, BL-202, BL-211, done the same day) · 0 newly stale. New sources this run: every local branch with commits not on GitHub (69), every dirty worktree (9) and the stash, checked by content against `origin/master` (patch-id and subject matching miss the batch squash merges). About 40 branches that look unpushed are on master through batch releases (85–100% of their added lines present; renamed migrations matched by name). Not on master: `chore/webpage-ui` (BL-201), the `chore/uiux-housekeep` worktree (BL-202), `fix/hosted-mcp-oauth-url` (BL-203). The production migration ledger and the repo's file versions diverged (BL-200, fixed the same day; see Recently closed). Claims of "shipped" in memory notes since July all verified on master except those three. OS keychain (`docs/plan-uplift-sdk-cli-mcp.md:51`) is done in code (`packages/cli/src/keychain.test.ts`); no row. Header counts corrected (perf 2, ux 1; the open count counts the table). The viz-token close (BL-079, 2026-10-31) landed on its own branch after that count, so the header below is one open tech-debt row lower.
 - **Delta 2026-10-31 (viz tokens):** 1 closed (BL-079: `@theme static` emits dark `--color-viz-*`; `readVizToken` no longer keeps a second palette).
@@ -24,7 +25,7 @@ parked work is visible in one place.
 - **Added 2026-10-27 (fresh-eyes runs, ADR 0053):** BL-142..BL-144, parts of fresh-eyes left out; BL-138 notes that fresh-eyes "Run now" shows the command until the `ux` lane exists.
 - **Added 2026-10-27 (worker modes, console ops plan P3):** BL-138 and BL-139: the `ux` lane mode left out of P3, and what the conflicts, audit and skill modes left open.
 - **Delta 2026-10-27:** 12 new (BL-123..BL-130 from the scan; BL-131..BL-134 host-repo follow-ups from the 2026-10-26 CI cost rollout) · 0 closed · 0 newly stale · 0 moved to verify-done (BL-011, BL-013, BL-040, BL-041, BL-068, BL-069, BL-071, BL-079, BL-096, BL-098, BL-099, BL-107, BL-108, BL-115, BL-121 re-checked in code: still open)
-- **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22.
+- **Added 2026-10-20 (PR #504, spend-down):** BL-087..BL-091, parked parts of ADR 0028. Closed BL-089 on 2026-10-22 and BL-090 on 2026-11-16.
 - **Added 2026-10-21 (agent PR review):** BL-095, a parked part of ADR 0030.
 - **Added 2026-10-21 (universal AI keys):** BL-096, BL-097, BL-098, parked parts of ADR 0031.
 - **Added 2026-10-21 (review follow-ups):** BL-099, BL-100, parked parts of ADR 0032.
@@ -35,7 +36,7 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 133 · **Recently closed:** 39 (BL-200, BL-202, BL-211 on 2026-11-01; BL-079, BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 132 · **Recently closed:** 40 (BL-090 on 2026-11-16; BL-200, BL-202, BL-211 on 2026-11-01; BL-079, BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
@@ -44,7 +45,7 @@ parked work is visible in one place.
 | tech-debt | 19 |
 | known-bug | 20 |
 | decision-needed | 16 |
-| unfinished-feature | 42 |
+| unfinished-feature | 41 |
 | product | 3 |
 | ux | 1 |
 | perf | 2 |
@@ -53,7 +54,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 127 |
+| relevant | 126 |
 | verify-done | 6 |
 | stale (propose removal) | 0 |
 
@@ -137,7 +138,6 @@ parked work is visible in one place.
 | BL-082 | decision-needed | yen-yen code-health ingest has been silent since 2026-07-16. yen-yen's `bundle-budget.yml` dropped its push-to-main trigger on purpose (a cost cut), and its "Push code-health metrics to Mushi" step is gated on `github.event_name == 'push'`, so the `workflow_dispatch` path its own comment offers never posts either. `/code-health` for yen-yen shows July data with no staleness signal, and AGENTS.md ("Code Health Ingest") still says it posts on every push to `main`. Decide: let the step run on `workflow_dispatch` or a weekly schedule in yen-yen, or update AGENTS.md and show staleness on the page | relevant | low | `kensaurus/yen-yen` `.github/workflows/bundle-budget.yml:24`-`:37`, `:168`; `AGENTS.md` (Code Health Ingest); BL-009 | — |
 | BL-087 | deferred-plan-phase | Spend-down UX lane: spend an expiring Cursor key on cloud UX runs as well as fixes. Parked because the cloud UX run route is session-only (ADR 0017 approval posture); needs an owner decision on who `requested_by` is for an unattended run | relevant | low | ADR 0028 (Rejected), `api/routes/ux-cloud.ts`, plan cursor-credit-spend-down §4 step 5 | — |
 | BL-088 | deferred-plan-phase | Spend-down QA lane: route `test-gen-from-report` / `test-gen-from-story` to Cursor so QA generation can use expiring Cursor credits. Today both run on Anthropic/OpenAI keys only | relevant | low | ADR 0028 (Rejected), plan cursor-credit-spend-down §4 step 6 | — |
-| BL-090 | unfinished-feature | Cursor model picker for spend-down and Integrations, fed by Cursor's `GET /v1/models` through a new `/v1/admin/byok/cursor/models`. The console takes a free-text model spec validated by `parseCursorModelSpec` | relevant | low | `apps/admin/src/components/settings/SpendDownSection.tsx`, plan §4 Console | — |
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
@@ -250,6 +250,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-090 | Cursor model picker for spend-down and Integrations | 2026-11-16 | Spend-down (`SpendDownSection`) and the Cursor Cloud card (`cursor_default_model`) use `CursorModelPicker` against `GET /v1/admin/byok/cursor/models`, the key the field would spend. A saved spec reopens on the same controls; a model the list does not have is Other; a failed or empty list is the text field. The stored value stays a spec `parseCursorModelSpec` accepts. Tests: `CursorModelPicker.test.tsx`, `SpendDownSection.test.tsx`, `PlatformIntegrationCard.test.tsx`. ADR 0028 amendment. |
 | BL-211 | Local repo clutter on the owner's PC (64 superseded or already-shipped local branches, one stash, an unreachable commit, two dead worktrees) | 2026-11-01 | archived first to `C:/Users/kensa/Documents/mushi-archive-2026-11-01/local-branches.bundle` (66 refs; `git bundle verify` OK; restore test fetched all 66 into an empty repo), patches for the two worktrees beside it, then deleted; branches under 95% on master had their absent files checked (removed later on master, renumbered, or never adopted). Kept: `chore/webpage-ui` (BL-201), `fix/hosted-mcp-oauth-url` (BL-203) and every branch checked out in a worktree |
 | BL-202 | Stale `chore/uiux-housekeep` worktree (158 uncommitted admin files from 2026-09-23) | 2026-11-01 | superseded: master's `pnpm check:design` suite (chip contrast, raw buttons in pages, hand-rolled tablists, token parity) covers its three audit scripts, and it predates the 10-04 console overhaul (3 of 240 sampled lines on master). Diff and untracked files archived (`uiux-housekeep.patch`, `uiux-housekeep-untracked.tar`) before the worktree was removed |
 | BL-200 | Production migration ledger and repo file versions disagreed (171 rows under MCP apply-time versions, 4 applied with no file, 2 files unrecorded, one of them a merged fix never applied) | 2026-11-01 | ledger backed up, then reconciled by version in one checked transaction; `20261030190000` (similar-report scan cap, BL-175) applied and verified (10 ms on the largest project); the four file-less changes replayed by `20261101024500_align_function_grants_with_hosted.sql` (no-op on prod, closes a fresh-install grant gap) and the old rows marked reverted; `pnpm check:migration-ledger` reports 546 rows / 546 files / 0 problems; DEPLOYMENT.md §5 now requires the check before `supabase db push` and names the MCP version trap |
