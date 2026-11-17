@@ -31,6 +31,8 @@ export interface JobSpread {
 /**
  * The shared scale is the longest run of ANY job, not only the rows on screen, so "Show more"
  * never rescales the rows already read. Null when the job has no finished run to draw.
+ *
+ * @internal Exported for tests only.
  */
 export function jobSpread(t: Pick<CiJobType, 'durationP50s' | 'durationP90s' | 'durationMaxS'>, scaleMaxS: number): JobSpread | null {
   if (t.durationP50s == null || scaleMaxS <= 0) return null
@@ -41,6 +43,7 @@ export function jobSpread(t: Pick<CiJobType, 'durationP50s' | 'durationP90s' | '
   return { usualPct: pct(usual), slowPct: pct(slow), longestPct: pct(longest) }
 }
 
+/** @internal Exported for tests only. */
 export function spreadScaleMax(byJob: ReadonlyArray<Pick<CiJobType, 'durationP50s' | 'durationP90s' | 'durationMaxS'>>): number {
   let max = 0
   for (const t of byJob) max = Math.max(max, t.durationMaxS ?? 0, t.durationP90s ?? 0, t.durationP50s ?? 0)

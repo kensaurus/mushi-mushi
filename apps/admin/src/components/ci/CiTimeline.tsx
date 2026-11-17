@@ -59,6 +59,7 @@ const HATCH = {
  * Each set is evenly spaced, so the labels never bunch.
  */
 const TICK_STEPS = 12
+/** @internal Exported for tests only. */
 export function tickVisibility(i: number): string {
   const four = i % 3 === 0
   const six = i % 2 === 0
