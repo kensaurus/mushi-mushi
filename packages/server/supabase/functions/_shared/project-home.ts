@@ -139,6 +139,31 @@ export interface ErrorsInput {
   everConnected: boolean
   latestAt: string | null
   sdkHref: string
+  /**
+   * Of today's reports, how many a person sent (not Sentry, an alarm, a setup
+   * task or a check). Undefined from callers that do not count it.
+   */
+  fromUsersToday?: number
+  /** The SDK has checked in at least once. */
+  sdkSeen?: boolean
+}
+
+/**
+ * Where today's reports came from, when not all were from users (owner's
+ * walkthrough, 2026-11-17: "1 new · Good" sat beside "Report button: Never
+ * checked in", which read as a contradiction). Null when it adds nothing.
+ */
+function sourceNote(input: ErrorsInput): string | null {
+  if (input.fromUsersToday == null || input.today === 0) return null
+  const other = input.today - input.fromUsersToday
+  if (other <= 0) return null
+  const users =
+    input.fromUsersToday > 0
+      ? `${input.fromUsersToday} from users`
+      : input.sdkSeen
+        ? 'none from users'
+        : 'no reports from users yet'
+  return `${other} from Sentry, alarms or Mushi Mushi checks · ${users}.`
 }
 
 export function errorsSignal(input: ErrorsInput): HealthSignal {
@@ -146,7 +171,8 @@ export function errorsSignal(input: ErrorsInput): HealthSignal {
   if (!input.everConnected) {
     return { ...base, status: 'not_connected', light: 'off', headline: 'No reports yet', detail: 'Install the SDK so your users can report bugs.', at: null, connect: { label: 'Install the SDK', to: input.sdkHref } }
   }
-  const before = `${input.yesterday} yesterday.`
+  const note = sourceNote(input)
+  const before = note ? `${note} ${input.yesterday} yesterday.` : `${input.yesterday} yesterday.`
   if (input.criticalToday > 0) {
     return { ...base, href: '/reports?days=1&severity=critical', status: 'ok', light: 'bad', headline: `${input.criticalToday} critical`, detail: `${plural(input.today, 'new report')} today; ${before}`, at: input.latestAt, connect: null }
   }

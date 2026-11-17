@@ -86,6 +86,18 @@ describe('errorsSignal', () => {
     expect(errorsSignal({ ...base, today: 6, yesterday: 2, criticalToday: 0 }).light).toBe('warn')
     expect(errorsSignal({ ...base, today: 4, yesterday: 1, criticalToday: 0 }).light).toBe('good')
   })
+  // Owner's walkthrough, 2026-11-17: "1 new · Good" beside "Report button: Never
+  // checked in" read as a contradiction. Say where the bugs came from.
+  it("says where today's reports came from when not all were from users", () => {
+    const noSdk = errorsSignal({ ...base, today: 3, yesterday: 0, criticalToday: 0, fromUsersToday: 0, sdkSeen: false })
+    expect(noSdk.detail).toBe('3 from Sentry, alarms or Mushi Mushi checks · no reports from users yet. 0 yesterday.')
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0, fromUsersToday: 1, sdkSeen: true }).detail).toBe(
+      '2 from Sentry, alarms or Mushi Mushi checks · 1 from users. 1 yesterday.',
+    )
+    // All from users, or not counted: no note.
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0, fromUsersToday: 3 }).detail).toBe('1 yesterday.')
+    expect(errorsSignal({ ...base, today: 3, yesterday: 1, criticalToday: 0 }).detail).toBe('1 yesterday.')
+  })
 })
 
 describe('sdkSignal', () => {
