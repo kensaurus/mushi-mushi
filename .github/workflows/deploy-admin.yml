@@ -255,7 +255,24 @@ jobs:
             --exclude "*.html" \
             --exclude "*.js" \
             --exclude "*.css" \
-            --exclude "version.json"
+            --exclude "version.json" \
+            --exclude "favicon.svg" \
+            --exclude "manifest.webmanifest" \
+            --exclude "icons/*"
+
+      - name: Sync app icons and manifest to S3 (short cache)
+        # favicon.svg, icons/*.png and manifest.webmanifest keep their names
+        # on every build. Marked immutable for a year, a new app icon
+        # (2026-11-17) would stay hidden behind the old one in every browser
+        # tab and in the console's app card, which reads favicon.svg. The
+        # service worker precaches them by revision, so it is not affected.
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=3600, must-revalidate" \
+            --exclude "*" \
+            --include "favicon.svg" \
+            --include "manifest.webmanifest" \
+            --include "icons/*"
 
       - name: Sync HTML to S3 (no cache)
         run: |
