@@ -122,6 +122,18 @@ describe('NeedsYouCard', () => {
     expect(row.querySelector('a')!.getAttribute('href')).toBe('/pipeline?tab=workers&project=p1')
   })
 
+  // Owner's walkthrough, 2026-11-17: the setup checklist's "do this next" and
+  // this card's first button were two primary next steps.
+  it('has no primary button while the setup step above is the next step', async () => {
+    await render(createElement(NeedsYouCard, { section: ok([need('a', 90), need('b', 80)]) }))
+    const primaryBefore = byTestId('home-needs-you')!.querySelectorAll('a')[0]!.className
+    await render(createElement(NeedsYouCard, { section: ok([need('a', 90), need('b', 80)]), primaryElsewhere: true }))
+    const links = Array.from(byTestId('home-needs-you')!.querySelectorAll('a'))
+    expect(links.every((a) => a.className === links[1]!.className)).toBe(true)
+    expect(links[0]!.className).not.toBe(primaryBefore)
+    expect(byTestId('home-needs-you-after-setup')).toBeTruthy()
+  })
+
   it('says nothing needs you, and warns when a check could not be read', async () => {
     await render(createElement(NeedsYouCard, { section: ok([]), partial: ['pipeline'] }))
     expect(byTestId('home-needs-you-clear')).toBeTruthy()
