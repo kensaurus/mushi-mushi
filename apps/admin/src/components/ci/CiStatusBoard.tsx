@@ -25,6 +25,12 @@ const TONE_BOX: Record<'ok' | 'warn' | 'bad', string> = {
   warn: 'border-warn/40 bg-warn-muted/40',
   bad: 'border-danger/40 bg-danger-muted/40',
 }
+/**
+ * Machine cards by the width they get, not the viewport: the same cards fill the Machines view,
+ * two thirds of a wide Now view, or a phone. 1 → 2 → 3 → 4 → 5 columns.
+ */
+export const MACHINE_GRID = '@xl:grid-cols-2 @4xl:grid-cols-3 @min-[88rem]:grid-cols-4 @min-[120rem]:grid-cols-5'
+const BOARD_SPAN = '@min-[72rem]:col-span-2'
 const TONE_WORD: Record<'ok' | 'warn' | 'bad', string> = { ok: 'Healthy', warn: 'Needs a look', bad: 'Something is down' }
 
 function Meter({ label, pct }: { label: string; pct: number | null }) {
@@ -76,18 +82,22 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
   const drafts = grouped.filter((g) => g.draftOnly)
 
   return (
-    <div className="space-y-4" data-testid="ci-status-board">
+    // A wide board (≥ 72rem: "Right now" beside the week on a big screen) puts "Running now" and
+    // "What broke" side by side; the headline, the machines and the weekly table span both.
+    // The wrapper is the container: a container query never matches the container element itself.
+    <div className="@container">
+    <div className="grid grid-cols-1 items-start gap-4 @min-[72rem]:grid-cols-2" data-testid="ci-status-board">
       {/* 1. Is CI OK right now? */}
-      <div className={`rounded-md border px-4 py-3 ${TONE_BOX[status.tone]}`} data-testid="ci-status-headline" role="status">
+      <div className={`rounded-md border px-4 py-3 ${BOARD_SPAN} ${TONE_BOX[status.tone]}`} data-testid="ci-status-headline" role="status">
         <p className="text-2xs font-semibold text-fg-secondary">{TONE_WORD[status.tone]}</p>
         <p className="mt-0.5 text-sm font-medium text-fg">{status.headline}</p>
       </div>
 
       {/* 2. Which machine is running what? */}
-      <section aria-labelledby="ci-machines-now">
+      <section aria-labelledby="ci-machines-now" className={BOARD_SPAN}>
         <h3 id="ci-machines-now" className="mb-1.5 text-xs font-semibold text-fg">Machines right now</h3>
         {status.machines.length > 0 ? (
-          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="ci-machines-now">
+          <ul className={`grid gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-now">
             {status.machines.map((m) => (
               <MachineCard key={m.id} m={m} />
             ))}
@@ -103,7 +113,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
       </section>
 
       {/* 3. When will each job finish? */}
-      <section aria-labelledby="ci-running-now">
+      <section aria-labelledby="ci-running-now" className="min-w-0">
         <h3 id="ci-running-now" className="mb-1.5 text-xs font-semibold text-fg">
           Running now {status.running.length > 0 && <span className="font-normal text-fg-muted">({status.running.length})</span>}
           {status.waiting > 0 && status.oldestWaitS != null && (
@@ -124,8 +134,8 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
             {status.running.map((r) => {
               const pct = r.usualS && r.elapsedS != null ? Math.min(100, Math.round((r.elapsedS / r.usualS) * 100)) : null
               return (
-                <li key={r.job.id} className="flex flex-col gap-1 px-3 py-2 sm:flex-row sm:items-center sm:gap-3" data-testid={`ci-running-${r.job.id}`}>
-                  <div className="min-w-0 sm:flex-1">
+                <li key={r.job.id} className="flex flex-col gap-1 px-3 py-2 @xl:flex-row @xl:items-center @xl:gap-3" data-testid={`ci-running-${r.job.id}`}>
+                  <div className="min-w-0 @xl:flex-1">
                     <p className="text-xs">
                       {r.job.htmlUrl ? (
                         <a href={r.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
@@ -138,7 +148,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     </p>
                     <p className="text-2xs text-fg-muted">on {r.machine?.name ?? 'a machine'}</p>
                   </div>
-                  <div className="min-w-0 sm:w-56 sm:shrink-0">
+                  <div className="min-w-0 @xl:w-56 @xl:shrink-0">
                     <p className={`text-2xs ${r.slow ? 'font-medium text-warn-foreground' : 'text-fg-secondary'}`}>
                       {r.elapsedS != null ? `${durationWords(r.elapsedS)} so far · ` : ''}
                       {estimateLine(r)}
@@ -157,7 +167,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
       </section>
 
       {/* 4. What broke, and where? */}
-      <section aria-labelledby="ci-broke">
+      <section aria-labelledby="ci-broke" className="min-w-0">
         <h3 id="ci-broke" className="mb-1.5 text-xs font-semibold text-fg">
           What broke in the last 2 hours {failures.length > 0 && <span className="font-normal text-fg-muted">({failures.length} {failures.length === 1 ? 'pull request' : 'pull requests'})</span>}
         </h3>
@@ -207,7 +217,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
       </section>
 
       {/* 5. What slows each app down this week? */}
-      <section aria-labelledby="ci-time">
+      <section aria-labelledby="ci-time" className={BOARD_SPAN}>
         <h3 id="ci-time" className="mb-1 text-xs font-semibold text-fg">Where the time goes this week</h3>
         <p className="mb-1.5 text-2xs text-fg-muted" data-testid="ci-bottleneck">
           {status.bottleneck ?? 'No app is held up: waits are short and most checks pass.'}
@@ -239,6 +249,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
           </table>
         </div>
       </section>
+    </div>
     </div>
   )
 }

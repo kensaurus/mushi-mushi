@@ -428,6 +428,29 @@ export function buildCiTimeline(jobs: CiJob[], opts: { now: number; windowMs: nu
   return { from, to, lanes: ordered }
 }
 
+/** Below this many lanes nothing is folded: the whole timeline already fits. */
+const QUIET_FOLD_MIN_LANES = 8
+/** Folding one lane behind a button saves nothing. */
+const QUIET_FOLD_MIN_QUIET = 2
+const QUIET_OUTCOMES: ReadonlySet<CiJobOutcome> = new Set(['passed', 'cancelled'])
+
+/**
+ * Splits off "quiet" machines: at most one job in the window, and that job passed or was
+ * cancelled. A lane with a failure, a stopped job, or a job running or waiting is never quiet,
+ * and neither is "No runner yet": those are the lanes the timeline is for. A GitHub-hosted lane
+ * always shows too: a job there is billed minutes, the thing an owner on their own runners
+ * wants to catch. On a busy day 9 of 17 lanes held one green bar each and pushed the busy
+ * runners apart (2026-11-17).
+ * Order is kept; nothing is folded unless it saves at least two rows on a long timeline.
+ */
+export function splitQuietLanes<L extends Pick<CiTimelineLane, 'unassigned' | 'bars' | 'kind'>>(lanes: L[]): { shown: L[]; quiet: L[] } {
+  const isQuiet = (l: L) =>
+    !l.unassigned && l.kind !== 'github' && l.bars.length <= 1 && l.bars.every((b) => QUIET_OUTCOMES.has(b.outcome))
+  const quiet = lanes.filter(isQuiet)
+  if (lanes.length < QUIET_FOLD_MIN_LANES || quiet.length < QUIET_FOLD_MIN_QUIET) return { shown: lanes, quiet: [] }
+  return { shown: lanes.filter((l) => !isQuiet(l)), quiet }
+}
+
 /** Position of `t` in the window as a 0–100 percentage. */
 export function timelinePct(t: number, timeline: Pick<CiTimeline, 'from' | 'to'>): number {
   const span = timeline.to - timeline.from

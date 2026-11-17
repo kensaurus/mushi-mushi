@@ -8,6 +8,12 @@
  *          reads by colour alone. Bars are buttons: hover or focus shows the
  *          job, repo, wait, run and memory peak in the panel below. Plain
  *          divs, no chart library; layout from `buildCiTimeline`.
+ *
+ *          Desktop (2026-11-17): the time axis gets more ticks and faint
+ *          gridlines as the timeline widens (4 → 6 → 12 steps, by container
+ *          width), the machine names stay pinned when a narrow screen scrolls
+ *          sideways, and machines with one passed job fold into one row
+ *          (`splitQuietLanes`) so the busy runners sit together.
  */
 
 import { useMemo, useState } from 'react'
@@ -16,6 +22,7 @@ import {
   CI_OUTCOME_META,
   buildCiTimeline,
   formatSeconds,
+  splitQuietLanes,
   timelinePct,
   type CiJobOutcome,
   type CiTimeline as Timeline,
@@ -45,6 +52,25 @@ const LEGEND_OUTCOMES: CiJobOutcome[] = ['passed', 'code_failure', 'infra', 'run
 const HATCH = {
   backgroundImage: 'repeating-linear-gradient(135deg, var(--color-fg-faint) 0 2px, transparent 2px 6px)',
 }
+
+/**
+ * The axis is cut into 12 steps; which ticks show depends on the timeline's width.
+ * Narrow: every 3rd (4 steps). From 56rem: every 2nd (6 steps). From 100rem: all 12.
+ * Each set is evenly spaced, so the labels never bunch.
+ */
+const TICK_STEPS = 12
+export function tickVisibility(i: number): string {
+  const four = i % 3 === 0
+  const six = i % 2 === 0
+  if (four && six) return ''
+  if (four) return '@4xl:hidden @min-[100rem]:block'
+  if (six) return 'hidden @4xl:block'
+  return 'hidden @min-[100rem]:block'
+}
+
+/** Lane label column: 8.5rem plus the 0.5rem gap = the axis inset (ml-36). */
+const LABEL_W = 'w-34'
+const AXIS_INSET = 'ml-36'
 
 function clock(t: number): string {
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -110,16 +136,20 @@ function Bar({ bar, timeline, onInspect }: { bar: CiTimelineBar; timeline: Timel
 export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const [win, setWin] = useState<WindowId>('2h')
   const [inspect, setInspect] = useState<CiTimelineBar | null>(null)
+  const [showQuiet, setShowQuiet] = useState(false)
   // Running bars grow to "now"; a 15 s tick is smooth enough at this scale.
   const now = useNow(15_000)
   const timeline = useMemo(() => buildCiTimeline(jobs, { now, windowMs: WINDOW_MS[win] }), [jobs, now, win])
-  const ticks = useMemo(() => {
-    const n = 4
-    return Array.from({ length: n + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / n)
-  }, [timeline.from, timeline.to])
+  const { quiet } = useMemo(() => splitQuietLanes(timeline.lanes), [timeline.lanes])
+  const quietIds = useMemo(() => new Set(quiet.map((l) => l.id)), [quiet])
+  const lanes = showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id))
+  const ticks = useMemo(
+    () => Array.from({ length: TICK_STEPS + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / TICK_STEPS),
+    [timeline.from, timeline.to],
+  )
 
   return (
-    <div className="flex flex-col gap-2" data-testid="ci-timeline">
+    <div className="@container flex flex-col gap-2" data-testid="ci-timeline">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary" aria-label="What the bars mean">
           <li className="inline-flex items-center gap-1.5">
@@ -146,38 +176,74 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
       ) : (
         <div className="overflow-x-auto">
           <div className="min-w-160">
-            <div className="ml-36 flex justify-between pb-1 text-3xs text-fg-faint tabular-nums" aria-hidden="true">
+            {/* Axis: labels sit centred on their tick; the first and last align to the edges. */}
+            <div className={`${AXIS_INSET} relative h-4 text-3xs text-fg-faint tabular-nums`} aria-hidden="true" data-testid="ci-timeline-axis">
               {ticks.map((t, i) => (
-                <span key={t}>{i === ticks.length - 1 ? 'now' : clock(t)}</span>
+                <span
+                  key={i}
+                  className={`absolute top-0 whitespace-nowrap ${i === 0 ? '' : i === TICK_STEPS ? '-translate-x-full' : '-translate-x-1/2'} ${tickVisibility(i)}`}
+                  style={{ left: `${(i / TICK_STEPS) * 100}%` }}
+                >
+                  {i === TICK_STEPS ? 'now' : clock(t)}
+                </span>
               ))}
             </div>
-            <ul className="flex flex-col gap-1" aria-label="Jobs per runner">
-              {timeline.lanes.map((lane) => (
-                <li key={lane.id} className="flex items-center gap-2" data-testid={`ci-timeline-lane-${lane.label}`}>
-                  <span
-                    className={`flex w-34 shrink-0 items-center gap-1.5 text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
-                    title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
-                  >
-                    {lane.unassigned ? (
-                      <IconClock size={12} className="shrink-0" />
-                    ) : lane.kind === 'github' ? (
-                      <IconCloud size={12} className="shrink-0" />
-                    ) : (
-                      <IconServer size={12} className="shrink-0" />
-                    )}
-                    <span className="truncate">{lane.label}</span>
-                  </span>
-                  <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
-                    {lane.bars.map((bar) => (
-                      <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={setInspect} />
-                    ))}
-                    <span className="absolute inset-y-0 right-0 w-px bg-brand" aria-hidden="true" />
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div className="relative">
+              {/* Gridlines behind the lanes, at the ticks that show. */}
+              <div className={`pointer-events-none absolute inset-y-0 right-0 left-36`} aria-hidden="true">
+                {ticks.slice(1, -1).map((_, j) => {
+                  const i = j + 1
+                  return (
+                    <span
+                      key={i}
+                      className={`absolute inset-y-0 w-px bg-edge-subtle/60 ${tickVisibility(i)}`}
+                      style={{ left: `${(i / TICK_STEPS) * 100}%` }}
+                    />
+                  )
+                })}
+              </div>
+              <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
+                {lanes.map((lane) => (
+                  <li key={lane.id} className="flex items-center gap-2" data-testid={`ci-timeline-lane-${lane.label}`}>
+                    <span
+                      // Pinned: on a narrow screen the lanes scroll sideways and the names stay put.
+                      className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
+                      title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
+                    >
+                      {lane.unassigned ? (
+                        <IconClock size={12} className="shrink-0" />
+                      ) : lane.kind === 'github' ? (
+                        <IconCloud size={12} className="shrink-0" />
+                      ) : (
+                        <IconServer size={12} className="shrink-0" />
+                      )}
+                      <span className="truncate">{lane.label}</span>
+                    </span>
+                    <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
+                      {lane.bars.map((bar) => (
+                        <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={setInspect} />
+                      ))}
+                      <span className="absolute inset-y-0 right-0 w-px bg-brand" aria-hidden="true" />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
+      )}
+
+      {quiet.length > 0 && (
+        <button
+          type="button"
+          className="self-start text-2xs text-fg-secondary underline decoration-dotted underline-offset-2 hover:text-fg"
+          aria-expanded={showQuiet}
+          onClick={() => setShowQuiet((v) => !v)}
+          data-testid="ci-timeline-quiet-toggle"
+          title={quiet.map((l) => l.label).join(', ')}
+        >
+          {showQuiet ? `Fold the ${quiet.length} quiet machines` : `Show ${quiet.length} quiet machines (one job each, nothing failed)`}
+        </button>
       )}
 
       <p className="min-h-5 text-2xs text-fg-secondary" aria-live="polite">
