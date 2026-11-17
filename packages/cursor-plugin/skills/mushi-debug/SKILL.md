@@ -140,7 +140,7 @@ to end (story mapping, generated tests, auto-improve), run
 - `mushi deploy check` fails on a self-hosted install: a free-tier Supabase
   project may be paused. Restore it in the Supabase dashboard, then read the
   `api` function's logs (see
-  [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md)).
+  [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md)).
   On Mushi Cloud, open an issue with the output.
 
 ### Reports are not arriving
@@ -258,13 +258,13 @@ From the editor, `test_notification_channel` sends the same test ping.
 | `All LLM keys exhausted` | Every Anthropic/OpenAI key hit quota | Add a backup key with `mushi keys add` |
 | `Story not found` in test generation | Story id not in an accepted inventory | Accept the inventory proposal first |
 | `byok_keys_provider_slug_check` | Invalid provider slug | Use one of: anthropic, openai, openrouter, firecrawl, browserbase, cursor, supabase |
-| `relation … does not exist` | A self-hosted database is missing migrations | Apply them as described in [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) |
+| `relation … does not exist` | A self-hosted database is missing migrations | Apply them as described in [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) |
 
 ## Self-hosting
 
 On your own Supabase project you also own the database, the edge functions and
 their logs. Migrations, function deploys and log access are covered in
-[`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
+[`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md).
 
 Still stuck? [Open an issue](https://github.com/kensaurus/mushi-mushi/issues/new/choose)
 with the `mushi doctor --json` output (it masks your API key; check it before

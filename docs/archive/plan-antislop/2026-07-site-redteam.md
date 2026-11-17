@@ -35,7 +35,7 @@ _Companion to [`../red-team-2026-07-02/red-team-defect-report.md`](../red-team-2
 | # | Location | Tell | Recognizability | Effort |
 |---|---|---|---|---|
 | P7 | `LANDING_QUICKSTART_INTRO` | "Classification lands in about 10 seconds today; we are chasing sub-10" — a hedge stack (qualifier + aspiration) in a single marketing sentence reads as AI-smoothed rather than a direct claim | Low | S |
-| P8 | Hero voice split | Hero uses "Your AI wrote it" (`MUSHI_TAGLINE_V2.hero`); the north-star sentence in `VISION.md` uses "Your AI shipped it." Both pass `check-positioning-consistency.mjs` since they're intentionally scoped differently (hero = build-time, north-star = ship-time), but a reader skimming both surfaces in one sitting could read it as inconsistent messaging rather than a deliberate distinction | Med | S |
+| P8 | Hero voice split | Hero uses "Your AI wrote it" (`MUSHI_TAGLINE_V2.hero`); the north-star sentence in `docs/VISION.md` uses "Your AI shipped it." Both pass `check-positioning-consistency.mjs` since they're intentionally scoped differently (hero = build-time, north-star = ship-time), but a reader skimming both surfaces in one sitting could read it as inconsistent messaging rather than a deliberate distinction | Med | S |
 | P9 | Pricing FAQ hedges | Several FAQ answers use "typical," "most teams," "usually" without a number backing the claim (e.g. "Most teams run the full loop for under $20/month in LLM costs") — fine in isolation, adds up across a page that's trying to be the most concrete, numbers-first page on the site | Low | S |
 
 ### Visual (not addressed this pass)

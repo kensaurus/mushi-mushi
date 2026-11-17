@@ -23,10 +23,10 @@ npx mushi-mushi
 [![npm](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![Server](https://img.shields.io/badge/server-AGPL--3.0-brightgreen.svg)](./packages/server/LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/kensaurus/mushi-mushi/badge)](https://scorecard.dev/viewer/?uri=github.com/kensaurus/mushi-mushi)
-[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
+[![npm provenance](https://img.shields.io/badge/npm-provenance-2ea44f?logo=npm)](./.github/SECURITY.md#verifying-a-mushi-mushi-tarball-before-installing)
 [![skills.sh](https://skills.sh/b/kensaurus/mushi-mushi)](https://skills.sh/kensaurus/mushi-mushi)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./VISION.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Docs](https://kensaur.us/mushi-mushi/docs/) · [Sample diagnosis](https://kensaur.us/mushi-mushi/docs/demo/diagnosis) · [Why not Sentry?](#why-not-just-sentry) · [Self-host](#self-host) · [Vision](./docs/VISION.md)
 
 <a href="https://kensaur.us/mushi-mushi/docs/demo/diagnosis?src=github-readme" title="See a sample diagnosis: no signup">
   <img alt="A Mushi Mushi diagnosis of the report 'Pay now does nothing on my phone': the cause in plain English, why it broke, the two lines of code at fault, the suggested fix and the steps to reproduce." src="./docs/screenshots/sample-diagnosis.png" width="100%" />
@@ -272,7 +272,7 @@ cd deploy && cp .env.example .env   # add ANTHROPIC_API_KEY and your Supabase cr
 docker compose up -d
 ```
 
-Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 
@@ -289,14 +289,14 @@ Walkthroughs: [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [Docker Compose guide](ht
 
 ## Community and contributing
 
-Questions and show-and-tell: [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs: [Issues](https://github.com/kensaurus/mushi-mushi/issues) (first reply within 24 hours on weekdays). Security: [`SECURITY.md`](./SECURITY.md). Anything else private: kensaurus@gmail.com.
+Questions and show-and-tell: [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions). Bugs: [Issues](https://github.com/kensaurus/mushi-mushi/issues) (first reply within 24 hours on weekdays). Security: [`.github/SECURITY.md`](./.github/SECURITY.md). Anything else private: kensaurus@gmail.com.
 
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
 pnpm install && pnpm dev   # Node ≥ 22, pnpm ≥ 10
 ```
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`docs/stats.md`](./docs/stats.md).
+See [`.github/CONTRIBUTING.md`](./.github/CONTRIBUTING.md) and [`docs/stats.md`](./docs/stats.md).
 
 ## License
 
@@ -305,11 +305,11 @@ Open core. Each package directory's own `LICENSE` governs that package; the [roo
 | Part | License | In short |
 | --- | --- | --- |
 | SDKs, CLI, MCP, plugins, adapters | [MIT](./LICENSE) | Use anywhere, including closed-source products |
-| Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./COMMERCIAL-LICENSE.md) |
+| Server (`server`, `agents`, `verify`) and console (`apps/admin`) | [AGPLv3](./packages/server/LICENSE) | Self-host and modify freely. Offer a modified server or console as a service: publish your changes or get a [commercial license](./docs/legal/COMMERCIAL-LICENSE.md) |
 | Enterprise features (`packages/server/ee/`) | [EE license](./packages/server/ee/LICENSE) | SSO, audit ingest, retention, region pinning. Paid for production use |
-| Name, logo, icons, mascot | [Trademark policy](./TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
+| Name, logo, icons, mascot | [Trademark policy](./docs/legal/TRADEMARK.md) | All rights reserved. Link to Mushi Mushi with the unmodified logo; forks must rename |
 
-Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./NOTICE).
+Self-hosting is free and complete: the repo has every feature and working default prompts. Mushi Mushi Cloud runs the same code and keeps its own tuning data (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. Contributions come in under a [CLA](./docs/legal/CLA.md). Why it is set up this way: [ADR 0036](./docs/adr/0036-licensing-posture.md). Third-party notices: [NOTICE](./docs/legal/NOTICE).
 
 ## More apps from the same maker
 

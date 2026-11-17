@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // FILE: sync-community-files.mjs
 // PURPOSE: Copy the canonical community files (CONTRIBUTING / CODE_OF_CONDUCT
-//          / SECURITY) from the repo root into every publishable package
+//          / SECURITY) from .github/ into every publishable package
 //          directory, so someone browsing packages/<name>/ on GitHub finds
 //          them next to the package's README.
 //
@@ -9,7 +9,7 @@
 // `files` so Snyk/Socket would score a "community" signal, which put 32 KB of
 // repository governance docs into every tarball — more than the whole of some
 // packages. npm links each package to this repository, where the root copies
-// live. `--check` fails if a publishable package lists one of them in
+// live (in .github/). `--check` fails if a publishable package lists one of them in
 // `files` again.
 //
 // Modes:
@@ -22,7 +22,7 @@
 //
 // Idempotent. Safe to run repeatedly. Skips private packages
 // (`"private": true`). Every synced file is prefixed with an AUTO-SYNCED
-// banner so humans edit only the root copy.
+// banner so humans edit only the .github/ copy.
 
 import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -32,22 +32,31 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const FILES = ['CONTRIBUTING.md', 'CODE_OF_CONDUCT.md', 'SECURITY.md']
 const SEARCH_DIRS = ['packages']
 
-const BANNER_PREFIX = '<!--\n  AUTO-SYNCED from repo root by scripts/sync-community-files.mjs.\n  Do not edit here — edit the canonical file at the repository root and\n  re-run `node scripts/sync-community-files.mjs` (pre-commit hook does this\n  automatically).\n-->\n\n'
+// The canonical copies live in .github/ (GitHub's community profile reads them there).
+const CANONICAL_DIR = join(ROOT, '.github')
+const BANNER_PREFIX = '<!--\n  AUTO-SYNCED from .github/ by scripts/sync-community-files.mjs.\n  Do not edit here — edit the canonical file in .github/ and\n  re-run `node scripts/sync-community-files.mjs` (pre-commit hook does this\n  automatically).\n-->\n\n'
 
 async function readCanonical() {
   const out = {}
   for (const name of FILES) {
-    const raw = await readFile(join(ROOT, name), 'utf8')
+    const raw = await readFile(join(CANONICAL_DIR, name), 'utf8')
     out[name] = BANNER_PREFIX + raw
   }
   return out
 }
 
-// The canonical files link repo-relative (`docs/DEPLOYMENT.md`,
-// `./COMMERCIAL-LICENSE.md`); from packages/<name>/ those resolve inside the
-// package and 404, so point them back at the repository root.
-function rebaseRelativeLinks(text, toRoot) {
-  return text.replace(/\]\((?!https?:|mailto:|#|\/)(?:\.\/)?([^)\s]+)\)/g, `](${toRoot}/$1)`)
+// The canonical files link relative to .github/ (`../docs/DEPLOYMENT.md`,
+// `../docs/legal/COMMERCIAL-LICENSE.md`); from packages/<name>/ those resolve
+// inside the package and 404, so resolve each from .github/ and re-point it
+// from the package directory.
+function rebaseRelativeLinks(text, pkgDir) {
+  return text.replace(/\]\((?!https?:|mailto:|#|\/)([^)\s]+)\)/g, (_m, target) => {
+    const hashAt = target.indexOf('#')
+    const path = hashAt === -1 ? target : target.slice(0, hashAt)
+    const hash = hashAt === -1 ? '' : target.slice(hashAt)
+    const rel = path ? relative(pkgDir, resolve(CANONICAL_DIR, path)).replaceAll('\\', '/') : ''
+    return `](${rel}${hash})`
+  })
 }
 
 async function findPackageDirs() {
@@ -90,7 +99,7 @@ async function sync({ check }) {
     }
     for (const name of FILES) {
       const dest = join(dir, name)
-      const want = rebaseRelativeLinks(canonical[name], relative(dir, ROOT).replaceAll('\\', '/'))
+      const want = rebaseRelativeLinks(canonical[name], dir)
       let current = null
       try {
         current = await readFile(dest, 'utf8')

@@ -57,7 +57,7 @@
 
 ### "Wave" strip scope
 
-Repo-wide: `apps/admin`, `packages/server`, `packages/sdk`, `apps/docs`, `docs/`, root `README.md`, `HANDOVER.md`, `scripts/`, and SQL migration comments. The codemod is line-scoped (patterns only activate on lines that contain the word "wave") so the blast radius is bounded to our own vocabulary. `apps/docs/app/layout.tsx` retains the `v0-8-0-wave-c` localStorage key on purpose — renaming it would silently re-surface the release banner for existing users.
+Repo-wide: `apps/admin`, `packages/server`, `packages/sdk`, `apps/docs`, `docs/`, root `README.md`, `docs/HANDOVER.md`, `scripts/`, and SQL migration comments. The codemod is line-scoped (patterns only activate on lines that contain the word "wave") so the blast radius is bounded to our own vocabulary. `apps/docs/app/layout.tsx` retains the `v0-8-0-wave-c` localStorage key on purpose — renaming it would silently re-surface the release banner for existing users.
 
 ---
 
@@ -89,4 +89,4 @@ Repo-wide: `apps/admin`, `packages/server`, `packages/sdk`, `apps/docs`, `docs/`
 
 - All route paths, API shapes, and local-storage keys except the ones listed here are untouched.
 - New `localStorage` keys introduced: `mushi:table-density:v1`, `mushi:palette:recent:v1`. Both are additive; deleting them returns the app to defaults.
-- Renamed `docs/HANDOVER-wave-*.md` files: old paths will 404 if someone bookmarked them. `README.md`, `HANDOVER.md`, and docs cross-links are updated to the new slugs.
+- Renamed `docs/HANDOVER-wave-*.md` files: old paths will 404 if someone bookmarked them. `README.md`, `docs/HANDOVER.md`, and docs cross-links are updated to the new slugs.

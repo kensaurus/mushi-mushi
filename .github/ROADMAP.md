@@ -60,7 +60,7 @@ Adding any of those labels to an issue/PR is mirrored to the project's
 
 ## Release plan
 
-See [`VISION.md`](../VISION.md) for the product target and the
+See [`docs/VISION.md`](../docs/VISION.md) for the product target and the
 [architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 for how the pipeline fits together. The high-level shape:
 

@@ -7,7 +7,7 @@ import { Callout } from 'nextra/components'
 
 # Edge Functions deploy
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -72,7 +72,7 @@ npx supabase functions deploy operator-digest --no-verify-jwt
 npx supabase functions deploy store-review-intake --no-verify-jwt
 ```
 
-For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
+For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md).
 
 ## Function inventory (core pipeline)
 

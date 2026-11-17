@@ -47,7 +47,7 @@ deliberate:
 | --- | --- | --- |
 | **SDKs** (`@mushi-mushi/web`, `react`, `react-native`, `node`, `cli`, `mcp`, and the rest) | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Embed in proprietary apps with no copyleft obligation |
 | **Server** (`@mushi-mushi/server`, `agents`, `verify`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Self-host free. If you offer a *modified* server as a network service, publish your changes |
-| **Enterprise edition** and hosting Mushi Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
+| **Enterprise edition** and hosting Mushi Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
 
 Using Mushi Mushi Cloud does not grant you a license to the Service's hosted
 configuration, brand, or content beyond what these terms allow.
@@ -72,7 +72,7 @@ You agree **not** to:
 - use the Service to build a competing hosted bug-diagnosis product by
   bulk-extracting diagnoses, prompts, or fix output;
 - probe, scan, or load-test the Service outside the rules in
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md#safe-harbor);
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md#safe-harbor);
 - upload malware, credentials that are not yours, or content that is illegal
   where you or we are;
 - game usage limits, bounties, or the anti-abuse controls;
@@ -232,7 +232,7 @@ If you join Bounties as a tester, this section also applies:
 - **Testing rules.** Test only apps listed on the marketplace, stay within
   the app's stated scope, never access other users' data, and report
   security findings privately through the app's channel or
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md).
 
 Full mechanics are on [How it works](https://kensaur.us/mushi-mushi/testers/how-it-works/).
 
@@ -256,4 +256,4 @@ The disclosure Japan's Act on Specified Commercial Transactions requires
 [特定商取引法に基づく表記](/legal/tokushoho) page.
 
 Related: [Privacy Policy](/legal/privacy) · [特定商取引法に基づく表記](/legal/tokushoho) · [Pricing](/pricing) ·
-[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)
+[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md)

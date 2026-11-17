@@ -75,7 +75,7 @@ npx supabase functions deploy agent-status-poll --no-verify-jwt
 npx supabase functions deploy agent-pr-review --no-verify-jwt
 ```
 
-Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.
+Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](../.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.
 
 Optional functions:
 
@@ -371,7 +371,7 @@ route `api.mushimushi.io` to the nearest regional ALB.
 
 For Postgres logical replication setup (publish on source → subscribe on
 target) and DNS configuration details, see
-[`docs/runbooks/region-routing-replication.md`](./docs/runbooks/region-routing-replication.md).
+[`docs/runbooks/region-routing-replication.md`](./runbooks/region-routing-replication.md).
 
 > **Current limitation**: Full active/active write replication is not automated.
 > `region_routing` replicates read-only; write routing relies on client-side

@@ -108,7 +108,7 @@ there.
    post a screenshot of their first diagnosis. That thread is the proof page
    the landing does not have yet.
 
-**Links that point here:** README → Community, `CONTRIBUTING.md` → Questions,
+**Links that point here:** README → Community, `.github/CONTRIBUTING.md` → Questions,
 `.github/ISSUE_TEMPLATE/config.yml` contact link, the docs roadmap page.
 Issues stay for bugs; the SLA is a first reply within 24 hours on weekdays.
 
@@ -167,7 +167,7 @@ Daily budget: **one** of these, thoughtfully. Five per week compounds.
 The fastest way to lose a potential user is an unanswered issue from six
 months ago. Even a simple *"looking at this 🐛"* within 24h is enough.
 
-**SLA we commit to (put this in CONTRIBUTING.md):**
+**SLA we commit to (put this in .github/CONTRIBUTING.md):**
 
 - First response within **24 hours** on weekdays, **48 hours** weekends.
 - Weekly triage sweep (Sunday evening, 15 minutes) — label everything

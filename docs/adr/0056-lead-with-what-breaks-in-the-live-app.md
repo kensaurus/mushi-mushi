@@ -9,7 +9,7 @@ where they conflict. Everything else in 0052 stands: the operator cockpit
 stays off the public path, the sample stays labelled "Sample", the pages for
 integrations, voice and CI cost stay in the docs.
 
-Related: [`VISION.md`](../../VISION.md) §1, `packages/brand/src/index.js`
+Related: [`docs/VISION.md`](../VISION.md) §1, `packages/brand/src/index.js`
 (`MUSHI_TAGLINE_V2`), `scripts/check-positioning-consistency.mjs`,
 `apps/docs/lib/landing-copy.ts`, `apps/docs/lib/landing-cinematic.test.ts`,
 `packages/server/supabase/functions/_shared/production-check.ts`,
@@ -102,7 +102,7 @@ Measured 2026-11-11 (queries in the GTM research note of that day):
 
 ## Consequences
 
-- `MUSHI_TAGLINE_V2.category`, `VISION.md` §1.5, the `AGENTS.md` positioning
+- `MUSHI_TAGLINE_V2.category`, `docs/VISION.md` §1.5, the `AGENTS.md` positioning
   block, the README first screen, the npm descriptions and `server.json`
   (100-character cap) change together, held by
   `scripts/check-positioning-consistency.mjs`.

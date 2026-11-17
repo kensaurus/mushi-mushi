@@ -3,7 +3,7 @@
 > Status: draft for the owner, 2026-10-02. Nothing here is live copy yet.
 > Product spec: [Plan 020](../execplans/portfolio-operator.md), built on [Plan 019](../execplans/app-recipe-control-plane.md) and [ADR 0016](../adr/0016-mushi-as-the-app-recipe-control-plane.md).
 > Voice: [VOICE.md](./VOICE.md) applies to every line. Canonical URLs: [canonical-urls.md](./canonical-urls.md).
-> **Positioning changes need the owner's ADR.** §9 proposed one; it was accepted as [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md) on 2026-10-02, and the §9.2 VISION.md / AGENTS.md diff is applied.
+> **Positioning changes need the owner's ADR.** §9 proposed one; it was accepted as [ADR 0017](../adr/0017-strike-the-plan-019-020-sequencing-gate.md) on 2026-10-02, and the §9.2 docs/VISION.md / AGENTS.md diff is applied.
 
 ## 0. The rule for this whole document
 
@@ -186,17 +186,17 @@ Format variants: a blog post, a Show HN ("I run 10 apps alone; here are 15 holes
 - **Rejected.** A portfolio-led hero or tagline ("the operating system for your apps"): it repeats the ADR 0004 drift and the recipe-led tagline ADR 0016 rejected. A Backstage-style catalog: wrong buyer (VISION §1.4).
 - **Consequences.** More surface to keep honest; mitigated by §0's "live before written" rule and the existing positioning guard, which passes unchanged.
 
-### 9.2 Proposed VISION.md / AGENTS.md diff
+### 9.2 Proposed docs/VISION.md / AGENTS.md diff
 
 This touches none of the guarded strings (north star, category, "vibe coder", the three will-nots). It builds on ADR 0016's proposed recipe diff and does not repeat it.
 
 ```diff
- VISION.md §1.4, table
+ docs/VISION.md §1.4, table
  | **Primary buyer** | The solo / indie **vibe coder** — builds fast with AI (Cursor, Claude Code, Lovable, Bolt), ships to real users, then loses whole afternoons when something breaks because they don't fully grasp the generated code. |
 +| **The same buyer, later** | The vibe coder who now runs several apps, sites and services alone — a **portfolio operator**. Same person, same editor, same diagnosis; Mushi also checks every app they connect for holes that never throw. Never a separate hero. |
  | **Secondary** | Small teams and agencies who feel the same pain at slightly larger scale. |
 
- VISION.md, "The 'is this drift?' test"
+ docs/VISION.md, "The 'is this drift?' test"
  - **Yes →** it's Bucket A or B. Can lead.
 +  A hole found before a user hits it is a bug fixed in zero minutes: a check
 +  that prevents or explains a bug in at least one app passes. Cost and CI

@@ -47,7 +47,7 @@ These files are the Mushi Mushi logo and bug mark:
 
 They are not licensed under the MIT License above or under any other license
 in this repository. You may use them only as the trademark policy allows
-(TRADEMARK.md at the repository root, https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md):
+(docs/legal/TRADEMARK.md, https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/TRADEMARK.md):
 for example, unmodified, to refer or link to Mushi Mushi. A fork or a product
 built from this code must remove them and use its own name and logo.
 

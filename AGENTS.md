@@ -10,9 +10,9 @@ can execute without additional context.
 
 ## Positioning — read this before you touch any user-facing surface
 
-> The canonical constitution is [`/VISION.md`](./VISION.md). This block is the
+> The canonical constitution is [`docs/VISION.md`](./docs/VISION.md). This block is the
 > compressed copy so on-message behavior survives even when an agent only loads
-> `AGENTS.md`. If this and `VISION.md` ever disagree, `VISION.md` wins — fix it
+> `AGENTS.md`. If this and `docs/VISION.md` ever disagree, `docs/VISION.md` wins — fix it
 > here, don't fork it. Drift is enforced against by
 > [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs).
 
@@ -907,7 +907,7 @@ Reporter opens widget (capture.screenshot on-report/auto)
 | SdkInstallCard | `apps/admin/src/components/SdkInstallCard.tsx` | Checkbox + optional custom text for screenshot privacy caption |
 | ConfigHelp | `sdk-install.screenshot_sensitive_hint` in `configDocs.ts` | Operator docs + link to deep-dive |
 
-**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.37.0** — see root `CHANGELOG.md`).
+**Introduced in:** `@mushi-mushi/core` / `@mushi-mushi/web` **1.19.0** (current: **1.37.0** — see `docs/CHANGELOG.md`).
 `@mushi-mushi/react-native` **0.19.0** (current: **0.25.0**). Full doc:
 [`docs/SDK_SCREENSHOT_PREVIEW.md`](docs/SDK_SCREENSHOT_PREVIEW.md).
 
