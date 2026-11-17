@@ -36,8 +36,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     image: 'dashboard-dark.png',
     light: 'dashboard-light.png',
     video: 'dashboard-demo',
-    alt: 'Dashboard — flow canvas with KPI tiles, severity histogram, and inbox queue',
-    caption: 'Morning check in 30 seconds — backlog, in-flight fixes, LLM cost',
+    alt: 'Home for one app: is it up, what needs you (PRs to decide, reports to look at), the release train, pages with bugs, and who can reach the repo',
+    caption: 'Coffee-length check: is it up, what broke overnight, what needs you today',
     route: '/dashboard',
   },
   onboarding: {
@@ -74,8 +74,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   lessons: {
     image: 'graph-dark.png',
-    alt: 'Lessons — vector-clustered mistake DB promoted to .mushi/lessons.json',
-    caption: 'Coherent clusters become named rules the next PR inherits',
+    alt: 'Lessons: rules learned from bugs that kept coming back, each with how often it was seen and where it came from',
+    caption: 'The same bug three times? It becomes a rule your editor reads before the next fix',
     route: '/lessons',
   },
   inventory: {
@@ -93,8 +93,8 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   },
   fixes: {
     image: 'fixes-dark.png',
-    alt: 'Fix drafts — per-attempt cards and PR links',
-    caption: 'Agent runs stream live · trace per attempt',
+    alt: 'Fixes: PRs ready to merge with their review and CI state, then every attempt with its outcome',
+    caption: 'Every fix your agent tried, which ones are ready to merge, and why the rest stopped',
     route: '/fixes',
   },
   repo: {
@@ -293,6 +293,18 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
     alt: 'Codebase Atlas — ReactFlow graph coloured by architectural layer',
     caption: 'Semantic search over vector embeddings of indexed source files',
     route: '/explore',
+  },
+  ci: {
+    image: 'ci-demo-poster.webp',
+    alt: 'CI runners on a wide screen: what needs a look, machines running now, running jobs with time left, the week, the queue, job times with a spread bar, and the per-machine timeline',
+    caption: 'Why is my fix still not merged? Who is waiting, on which machine, and for how long',
+    route: '/ci',
+  },
+  checks: {
+    image: 'checks-demo-poster.webp',
+    alt: 'Checks: every automatic check for one app in a grid, failing ones first, each with its state and last run',
+    caption: 'One grid answers "is my app OK?": red first, then what to fix, then what is not set up',
+    route: '/checks',
   },
   queue: {
     image: 'queue-dark.png',
