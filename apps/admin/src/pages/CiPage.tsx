@@ -41,7 +41,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
-import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
+import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconRefresh, IconServerOff, IconSliders } from '../components/icons'
 import { CiStatusBoard, MACHINE_GRID, MachineCard } from '../components/ci/CiStatusBoard'
 import { buildCiStatus } from '../lib/ciStatus'
 import { CiJobTimes } from '../components/ci/CiJobTimes'
@@ -53,6 +53,8 @@ import { CiTimeline } from '../components/ci/CiTimeline'
 import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
+import { CiAlertStrip } from '../components/ci/CiAlertStrip'
+import { CiHighlightProvider } from '../lib/ciHighlight'
 import { CiCostSection } from '../components/ci/CiCostSection'
 import { CiCostFixRollout } from '../components/ci/CiCostFixRollout'
 import { CiPlacementSection } from '../components/ci/CiPlacementSection'
@@ -255,6 +257,9 @@ export function CiPage() {
   const empty = data ? isCiOverviewEmpty(data) : false
   // Every machine, busy first, for the Machines view (same placement as the Now board).
   const machinesAll = useMemo(() => (data ? buildCiStatus(data, Date.now()).allMachines : []), [data])
+  // The "What's wrong" strip ranks from the same status the board shows, refreshed with the clock.
+  const now = useNow(30_000)
+  const status = useMemo(() => (data ? buildCiStatus(data, now) : null), [data, now])
   const placementApps = useMemo(() => {
     const byId = new Map<string, string>()
     for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
@@ -293,14 +298,16 @@ export function CiPage() {
         helpHowToUse="Start with the queue: a long Waiting column means too few machines. A job marked “Test machine stopped” was not a code failure; re-run it. Speed it up lists changes with the evidence behind each one."
       >
         <UpdatedAgo at={data?.refreshedAt ?? data?.generatedAt ?? null} validating={(live.syncing || page.isValidating) && !page.loading} />
+        {/* Icon buttons: the icon says what it does, the tooltip and label say it in words. */}
         <Btn
           size="sm"
           variant="ghost"
           onClick={() => void live.sync()}
-          loading={(live.syncing || page.isValidating) && !page.loading}
+          aria-label="Refresh"
+          aria-busy={((live.syncing || page.isValidating) && !page.loading) || undefined}
           title="Read the latest jobs from GitHub now"
         >
-          Refresh
+          <IconRefresh size={14} className={(live.syncing || page.isValidating) && !page.loading ? 'motion-safe:animate-spin' : ''} />
         </Btn>
         {projectId && (
           <SegmentedControl<Scope> value={scope} options={SCOPE_OPTIONS} onChange={setScopeChoice} ariaLabel="Which apps" size="sm" />
@@ -311,10 +318,11 @@ export function CiPage() {
             size="sm"
             variant="ghost"
             onClick={() => openView('settings')}
-            title="Where CI runs, checks on fix pull requests, and GitHub-hosted time limits"
+            title="CI settings: where CI runs, checks on fix pull requests, and GitHub-hosted time limits"
+            aria-label="CI settings"
             data-testid="ci-settings-jump"
           >
-            CI settings
+            <IconSliders size={14} />
           </Btn>
         )}
       </PageHeaderBar>
@@ -363,37 +371,42 @@ export function CiPage() {
       )}
 
       {data && !empty && view === 'now' && (
-        // On a wide desktop (main column ≥ 96rem) "Right now" and the week's summary sit side by
-        // side; the queue, job times and timeline stay full width, because their lanes and time
-        // axes use every pixel. Container query, not viewport: the sidebar can be open or closed.
-        // DOM order is the reading order at every width. The container is the wrapper: a container
-        // query never matches the container element itself, so the grid's own columns need it.
+        // Worst first (2026-11-17): what is wrong, then what is happening now and this week, then
+        // the queue, the timeline and the job times. Pointing at a problem, an app, a job or a
+        // machine lights the same one in every panel (lib/ciHighlight.tsx).
+        // On a wide desktop (main column ≥ 96rem) "Right now" and the week sit side by side; the
+        // rest stays full width, because their lanes and time axes use every pixel. Container
+        // query, not viewport: the sidebar can be open or closed. The container is the wrapper:
+        // a container query never matches the container element itself.
+        <CiHighlightProvider>
+        {status && <CiAlertStrip overview={data} status={status} now={now} />}
         <div className="@container">
         <div className={`grid items-start gap-4 ${NOW_GRID}`} data-testid="ci-now-grid">
-          <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={NOW_MAIN}>
+          <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={`ci-rise ${NOW_MAIN}`}>
             <CiStatusBoard overview={data} />
           </Section>
 
-          <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={NOW_SIDE}>
+          <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={`ci-rise ${NOW_SIDE}`}>
             <CiSummary overview={data} />
           </Section>
 
-          <Section title="Queue" id="ci-queue" icon={<IconQueue />} className={NOW_FULL}>
+          <Section title="Queue" id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
             <p className={HINT}>Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
             <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
           </Section>
 
-          <Section title="Job times" id="ci-job-times" icon={<IconGauge />} className={NOW_FULL}>
-            <p className={HINT}>Each job over the last {data.window.days} days, slowest first: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
-            <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
-          </Section>
-
-          <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={NOW_FULL}>
-            <p className={HINT}>One row per test machine. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
+          <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={`ci-rise ${NOW_FULL}`}>
+            <p className={HINT}>One row per test machine, machines with failures first. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
+
+          <Section title="Job times" id="ci-job-times" icon={<IconGauge />} className={`ci-rise ${NOW_FULL}`}>
+            <p className={HINT}>Each job over the last {data.window.days} days, most failing first, then slowest: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
+            <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
+          </Section>
         </div>
         </div>
+        </CiHighlightProvider>
       )}
 
       {data && !empty && view === 'machines' && (

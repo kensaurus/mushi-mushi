@@ -1,7 +1,7 @@
 # Mushi Mushi — Commercial License (dual licensing)
 
 <!--
-  FILE: COMMERCIAL-LICENSE.md
+  FILE: docs/legal/COMMERCIAL-LICENSE.md
   PURPOSE: Describe the optional commercial license alongside the AGPLv3 server.
   OVERVIEW: Mushi uses AGPL-native open-core + commercial dual licensing (Grafana
             / Mattermost pattern). The server is genuinely open source under AGPLv3;
@@ -15,7 +15,7 @@ console (`apps/admin`) and tester portal (`apps/testers`):
 
 | License | Who it's for | What you get |
 | ------- | ------------ | ------------ |
-| **[AGPLv3](./packages/server/LICENSE)** (default) | Self-hosters, tinkerers, teams running Mushi for their own org | True OSI open source. Self-host free. Modify and run. If you offer a **modified** version as a network service, publish your changes (§13). |
+| **[AGPLv3](../../packages/server/LICENSE)** (default) | Self-hosters, tinkerers, teams running Mushi for their own org | True OSI open source. Self-host free. Modify and run. If you offer a **modified** version as a network service, publish your changes (§13). |
 | **Commercial license** (this document) | Companies offering Mushi (or a derivative) as a **hosted service to third parties** without AGPL copyleft obligations | A separate license from the copyright holder that replaces AGPL terms for the licensed use case. |
 
 The **SDK packages remain MIT** — embed them in proprietary apps with zero copyleft
@@ -25,7 +25,7 @@ widget.
 The copyright holder can offer this license because outside contributions come in
 under the [Contributor License Agreement](./CLA.md). A commercial license covers
 the code only; it does not include the Mushi Mushi name or logo (see
-[TRADEMARK.md](./TRADEMARK.md)).
+[docs/legal/TRADEMARK.md](./TRADEMARK.md)).
 
 ## When you need a commercial license
 
@@ -45,7 +45,7 @@ You **may** want one if you:
 Enterprise Edition features (`packages/server/ee/` — SSO, audit export, retention
 CRUD, region pinning, SOC 2 evidence) are **separately licensed**. Production use
 requires an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. See
-[`packages/server/ee/README.md`](./packages/server/ee/README.md).
+[`packages/server/ee/README.md`](../../packages/server/ee/README.md).
 
 ## How to obtain a commercial license
 

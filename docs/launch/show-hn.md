@@ -68,7 +68,7 @@ Repo: https://github.com/kensaurus/mushi-mushi
 ## While it is up
 
 - Reply to every comment for the first two hours, then hourly. Never "we".
-- Sentry comparisons get the canonical answer from VISION.md §1.6, word for
+- Sentry comparisons get the canonical answer from docs/VISION.md §1.6, word for
   word.
 - Questions about users get the scorecard number of the day, not a feeling.
 - Do not resubmit if it falls off. The thread is the asset either way.

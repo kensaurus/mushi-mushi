@@ -1,6 +1,6 @@
 /**
  * The mediator map — where bugs come in, the one queue, where fixes go out
- * (VISION.md §1.5). Every row is a link to the page that documents it, so the
+ * (docs/VISION.md §1.5). Every row is a link to the page that documents it, so the
  * map cannot claim an integration the docs do not describe.
  */
 import Link from 'next/link'

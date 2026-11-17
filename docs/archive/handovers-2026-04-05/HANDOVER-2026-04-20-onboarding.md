@@ -100,7 +100,7 @@ MUSHI_ADMIN_JWT="<paste jwt from devtools>" pnpm --filter @mushi-mushi/server sm
 - **No mobile breakpoint pass.** Desktop-first; the layout adapts (storyboard collapses to 1 column at `sm`), but I didn't audit each page on mobile.
 - **No auth-flow rework** (sign-up, OAuth, password reset) — out of scope.
 - **No real-time / SSE refactor.** The Reports/Fixes streaming UIs were verified visually but no code changes.
-- **No demo video.** Still on the deferred list from the v1.0.0 milestone (see `HANDOVER.md` historical doc).
+- **No demo video.** Still on the deferred list from the v1.0.0 milestone (see `docs/HANDOVER.md` historical doc).
 
 ---
 

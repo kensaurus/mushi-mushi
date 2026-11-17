@@ -552,7 +552,7 @@ export const LANDING_HOW_IT_WORKS = {
 
 /**
  * "This is what a diagnosis looks like" — one real classifier output, so the
- * wedge (VISION.md Bucket A) is shown, not only described.
+ * wedge (docs/VISION.md Bucket A) is shown, not only described.
  *
  * Source: `reports.stage2_analysis` of report 4618a607 in the public demo
  * project `mushi-demo`, classified 2026-09-20. The report text is a fixture
@@ -587,7 +587,7 @@ export interface LandingMediatorLink {
 }
 
 /**
- * The mediator map (VISION.md §1.5, Bucket C): where bugs come in and where
+ * The mediator map (docs/VISION.md §1.5, Bucket C): where bugs come in and where
  * fixes and status go out. Every row links to the page that documents it —
  * a row with no docs page does not belong here. No counts: they drift.
  */

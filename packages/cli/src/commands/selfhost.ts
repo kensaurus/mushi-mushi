@@ -4,7 +4,7 @@
  * FILE: packages/cli/src/commands/selfhost.ts
  * PURPOSE: `mushi selfhost up` / `mushi selfhost doctor`
  *
- * `mushi selfhost up` wraps the supabase CLI steps from SELF_HOSTED.md into a
+ * `mushi selfhost up` wraps the supabase CLI steps from docs/SELF_HOSTED.md into a
  * single command:
  *   1. supabase link  (if a project-ref is given)
  *   2. supabase db push

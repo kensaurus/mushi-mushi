@@ -6319,7 +6319,7 @@ self-host is what we run; the hosted service adds only its own tuning data
   **TL;DR** — Mushi Mushi is **open-core** (the Supabase / Grafana model). The SDKs you
   embed in your app are **MIT** (use them anywhere, open or closed). The server and
   console you self-host are **AGPLv3** (true OSI open source — self-host and modify freely; SaaS
-  modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)).
+  modifiers publish changes or get a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md)).
   A small **enterprise-edition** boundary (`packages/server/ee/`) is source-available
   but commercial for production use. The wedge — capture, diagnosis, fix, self-host,
   BYOK — is always in the AGPL core, never behind EE.
@@ -6329,11 +6329,11 @@ self-host is what we run; the hosted service adds only its own tuning data
 | Surface | License | What you can do |
 | --- | --- | --- |
 | **SDK packages** — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `capacitor`, `flutter`, `ios`, `android`, `node`, `cli`, `mcp`, `mcp-ci`, plugins, adapters, `marketing-ui`, and the code and design tokens in `brand` | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Use, fork, sell, embed in proprietary products. No copyleft. |
-| **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
+| **Server packages** — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Use, modify, self-host, fork for your own org. Modified SaaS → publish changes (§13) or [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md). The cloud runs this exact core. |
 | **Console** — `apps/admin` (and the tester portal, `apps/testers`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/apps/admin/LICENSE) | Same terms as the server. AGPLv3 since Oct 22, 2026; copies from before that date stay MIT. |
-| **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi Mushi. Not as your own app's identity. |
+| **Logo, bug mark, app icons, mascot** | [All rights reserved](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/TRADEMARK.md) | Use the unmodified logo to refer or link to Mushi Mushi. Not as your own app's identity. |
 | **Enterprise edition**: SAML/OIDC SSO, audit export, retention-policy editing, region pinning, SOC 2 evidence and compliance exports. The boundary and license live in `packages/server/ee/`; the code itself still sits next to the core until it is moved | [Commercial](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/ee/LICENSE) | Read, audit, modify, and run for development/evaluation. Production use needs an Enterprise subscription or `MUSHI_EE_LICENSE_KEY`. |
-| **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/NOTICE) | One-stop list of upstream projects and their licenses. |
+| **Third-party attributions** | [NOTICE](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/NOTICE) | One-stop list of upstream projects and their licenses. |
 
 ### Why MIT for the SDK?
 
@@ -6350,7 +6350,7 @@ funded by managed cloud hosting and a small commercial **enterprise edition**
 (`packages/server/ee/`), not by confusing license labels.
 
 Need to run modified Mushi Mushi as multi-tenant SaaS without publishing server changes?
-See [COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md).
+See [docs/legal/COMMERCIAL-LICENSE.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md).
 
 ### Why AGPLv3 for the console?
 
@@ -6379,11 +6379,11 @@ carries its own tuning data.**
 
 ## Contributing
 
-Outside pull requests come in under a [Contributor License Agreement](https://github.com/kensaurus/mushi-mushi/blob/master/CLA.md),
+Outside pull requests come in under a [Contributor License Agreement](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/CLA.md),
 signed once by replying to the CLA bot on your pull request. You keep the copyright. The CLA
 lets the maintainer keep the licensing above coherent and offer the commercial license,
 and it promises your contribution stays available under MIT or an OSI-approved license.
-See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/CONTRIBUTING.md).
+See [.github/CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/CONTRIBUTING.md).
 
 ## No lock-in
 
@@ -6423,7 +6423,7 @@ registered yet. The logo files, app icons and mascot art are all rights reserved
 You may use the unmodified logo to refer or link to Mushi Mushi (an article, a "works with
 Mushi Mushi" note, an integrations page). Fork the code freely, but ship your fork under
 your own name and logo — don't imply it's the official Mushi Mushi. Details:
-[TRADEMARK.md](https://github.com/kensaurus/mushi-mushi/blob/master/TRADEMARK.md).
+[docs/legal/TRADEMARK.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/TRADEMARK.md).
 
 ---
 
@@ -16304,7 +16304,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -16367,7 +16367,7 @@ npx supabase functions deploy operator-digest --no-verify-jwt
 npx supabase functions deploy store-review-intake --no-verify-jwt
 ```
 
-For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/SELF_HOSTED.md).
+For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md).
 
 ## Function inventory (core pipeline)
 
@@ -16661,7 +16661,7 @@ Please do not open a public issue. Use either channel:
 Acknowledgement within 2 days, triage within 7, and a fix for critical and
 high findings within 30. The full timeline, safe-harbor terms, and what to
 include are in
-[SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+[.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md).
 
 ## What we do not claim
 
@@ -17186,7 +17186,7 @@ section 3, and the "processor" for the data described in section 4).
 - **Address:** 〒150-0043　東京都渋谷区道玄坂1丁目10番8号　渋谷道玄坂東急ビル2F-C, Japan
 - **Contact for anything in this policy:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
 - **Subject line that gets the fastest answer:** `[mushi-privacy]`
-- **Security reports:** see [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md) and the [security summary](/security).
+- **Security reports:** see [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md) and the [security summary](/security).
 
 There is no separate data-protection officer. The founder answers these
 requests personally.
@@ -17472,7 +17472,7 @@ deliberate:
 | --- | --- | --- |
 | **SDKs** (`@mushi-mushi/web`, `react`, `react-native`, `node`, `cli`, `mcp`, and the rest) | [MIT](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE) | Embed in proprietary apps with no copyleft obligation |
 | **Server** (`@mushi-mushi/server`, `agents`, `verify`) | [AGPLv3](https://github.com/kensaurus/mushi-mushi/blob/master/packages/server/LICENSE) | Self-host free. If you offer a *modified* server as a network service, publish your changes |
-| **Enterprise edition** and hosting Mushi Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
+| **Enterprise edition** and hosting Mushi Mushi for third parties | [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md) | A separate agreement that replaces AGPL terms for that use |
 
 Using Mushi Mushi Cloud does not grant you a license to the Service's hosted
 configuration, brand, or content beyond what these terms allow.
@@ -17497,7 +17497,7 @@ You agree **not** to:
 - use the Service to build a competing hosted bug-diagnosis product by
   bulk-extracting diagnoses, prompts, or fix output;
 - probe, scan, or load-test the Service outside the rules in
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md#safe-harbor);
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md#safe-harbor);
 - upload malware, credentials that are not yours, or content that is illegal
   where you or we are;
 - game usage limits, bounties, or the anti-abuse controls;
@@ -17657,7 +17657,7 @@ If you join Bounties as a tester, this section also applies:
 - **Testing rules.** Test only apps listed on the marketplace, stay within
   the app's stated scope, never access other users' data, and report
   security findings privately through the app's channel or
-  [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+  [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md).
 
 Full mechanics are on [How it works](https://kensaur.us/mushi-mushi/testers/how-it-works/).
 
@@ -17681,7 +17681,7 @@ The disclosure Japan's Act on Specified Commercial Transactions requires
 [特定商取引法に基づく表記](/legal/tokushoho) page.
 
 Related: [Privacy Policy](/legal/privacy) · [特定商取引法に基づく表記](/legal/tokushoho) · [Pricing](/pricing) ·
-[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md)
+[Security summary](/security) · [Commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md)
 
 ---
 
@@ -17758,7 +17758,7 @@ description: Where Mushi Mushi is headed. Upcoming SDK platforms, agent-fix safe
 
 # Mushi Mushi roadmap
 
-Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md) documents the full architectural target; code catches up release by release.
+Mushi Mushi is built in the open. [docs/VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/VISION.md) documents the full architectural target; code catches up release by release.
 
   **Currently shipping:** `@mushi-mushi/core` and `@mushi-mushi/web` 1.33.x (Wave D complete; Wave E in progress). See the [Changelog](/changelog) for what landed.
 
@@ -17819,7 +17819,7 @@ Mushi Mushi is built in the open. [VISION.md](https://github.com/kensaurus/mushi
 - **Drift scanner** — `drift-walker` + `contract-graph-builder` detect API contract drift against live routes
 - **QA coverage stories** — define and schedule user-story tests from the admin console
 
-See [VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/VISION.md) (positioning constitution) and [Concepts → Architecture](/concepts/architecture) for the architectural target.
+See [docs/VISION.md](https://github.com/kensaurus/mushi-mushi/blob/master/docs/VISION.md) (positioning constitution) and [Concepts → Architecture](/concepts/architecture) for the architectural target.
 
 ---
 
@@ -17876,7 +17876,7 @@ The server (`@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify`)
 - Self-hosting is and always will be free.
 - The AGPLv3 network use provision (Section 13) means if you run a modified server as a SaaS, you publish your changes. This isn't punitive — it's the copyleft that keeps the ecosystem honest.
 - The SDK packages (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) remain **MIT** — embed them in anything, open or closed.
-- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/COMMERCIAL-LICENSE.md) (dual licensing).
+- Companies that need a non-copyleft path for hosted SaaS can obtain a [commercial license](https://github.com/kensaurus/mushi-mushi/blob/master/docs/legal/COMMERCIAL-LICENSE.md) (dual licensing).
 
 **Self-hosters:** nothing changes operationally. You were already allowed to do everything you're doing. The new license just makes that legally unambiguous and removes the 2029 date anxiety.
 
@@ -18248,7 +18248,7 @@ if you read the Show HN and find one of these false, you can say so.
 - The VS Code extension is either published or marked "deferred" in the
   distribution notes, and is not mentioned on HN until it is published.
 - The privacy policy and terms of service return 200.
-- `CONTRIBUTING.md` promises a first reply on issues within 24 hours on
+- `.github/CONTRIBUTING.md` promises a first reply on issues within 24 hours on
   weekdays.
 - This page tells the truth (done 2026-09-21, updated 2026-10-29).
 - The site's structured data lists only accounts that exist.
@@ -19532,7 +19532,7 @@ opened with `?mushi_journeys=1`.
 - [Tester rewards](/admin/rewards) — points and tiers that depend on identified users
 - [Bugs](/admin/reports) — triage the bugs counted under “Open reports”
 - Session tracking shipped in `@mushi-mushi/web` / `@mushi-mushi/core` **1.25.0**
-  (see root `CHANGELOG.md`)
+  (see `docs/CHANGELOG.md`)
 
   Anonymous traffic still produces sessions and page views. Rewards and
   cross-app “My Reports” need `identify()` so users land in the identified split.

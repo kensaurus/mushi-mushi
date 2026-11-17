@@ -115,7 +115,7 @@ export async function runDoctorChecks(
       name: 'recovery_token',
       status: 'fail',
       summary: 'internal_caller_token is not configured — pipeline recovery is skipping every run.',
-      hint: 'Set mushi_runtime_config.internal_caller_token and the MUSHI_INTERNAL_CALLER_SECRET function secret (SELF_HOSTED.md → pg_cron section).',
+      hint: 'Set mushi_runtime_config.internal_caller_token and the MUSHI_INTERNAL_CALLER_SECRET function secret (docs/SELF_HOSTED.md → pg_cron section).',
     });
   } else {
     checks.push({ name: 'recovery_token', status: 'pass', summary: 'internal_caller_token configured.' });
@@ -130,7 +130,7 @@ export async function runDoctorChecks(
       name: 'recovery_cron',
       status: 'fail',
       summary: 'pipeline-recovery has never run.',
-      hint: "Register the pg_cron schedule (SELF_HOSTED.md → 'Recommended pg_cron schedules').",
+      hint: "Register the pg_cron schedule (docs/SELF_HOSTED.md → 'Recommended pg_cron schedules').",
     });
   } else {
     const ageMin = (Date.now() - new Date(run.finished_at).getTime()) / 60_000;

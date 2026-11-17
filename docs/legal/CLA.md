@@ -10,7 +10,7 @@
 
 Mushi Mushi is open core. The SDKs are MIT, the server and console are
 AGPL-3.0-only, and the same code is also offered under a commercial license
-([COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md)). The maintainer can only
+([docs/legal/COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md)). The maintainer can only
 offer that second license, and can only keep the licensing coherent over time,
 if every contribution comes in with the same rights. This agreement grants
 those rights. You keep the copyright in your contribution and can use it for
@@ -136,4 +136,4 @@ Contributions.
    respect.
 
 10. This Agreement grants no rights to the Mushi Mushi names, logos or other
-    trademarks, which are covered by [TRADEMARK.md](./TRADEMARK.md).
+    trademarks, which are covered by [docs/legal/TRADEMARK.md](./TRADEMARK.md).

@@ -131,16 +131,16 @@ The conditions are:
 
 Today's north-star count is 0 activated external projects.
 
-## VISION.md / AGENTS.md diff (applied 2026-10-02 with the acceptance)
+## docs/VISION.md / AGENTS.md diff (applied 2026-10-02 with the acceptance)
 
 This diff touches none of the strings that
 `scripts/check-positioning-consistency.mjs` guards: `northStar`, `category`,
 the "vibe coder" anchor, and the three will-nots. It only inserts text and
 splits none of them. Checked 2026-10-02: the guard exits 0 on a scratch copy of
-`VISION.md` and `AGENTS.md` with this diff applied.
+`docs/VISION.md` and `AGENTS.md` with this diff applied.
 
 ```diff
- VISION.md §1.5, after "That is the word: **understandable.**"
+ docs/VISION.md §1.5, after "That is the word: **understandable.**"
 +
 +**The recipe.** Mushi keeps each app's recipe — its schema, design tokens,
 +routes, gates, CI, deploy targets and which env vars exist — so a diagnosis
@@ -150,7 +150,7 @@ splits none of them. Checked 2026-10-02: the guard exits 0 on a scratch copy of
 +recipe is optional context: every part of it is a "connect when you want"
 +on-ramp, never a prerequisite.
 
- VISION.md §2.1, Bucket B row
+ docs/VISION.md §2.1, Bucket B row
 -| **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
 +| **B. The Depth** (earns trust, shown second) | Multi-framework SDKs, dedup via knowledge graph, the app recipe (schema, tokens, routes, gates, CI, deploy, env presence) and its drift, "where it stops" honesty table, self-host, BYOK, Sentry enrichment. | README mid-body, landing second screen, `docs/` |
 

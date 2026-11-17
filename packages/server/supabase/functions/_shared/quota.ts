@@ -16,7 +16,7 @@
  * Plans belong to the team (organization), not to one app: the plan comes
  * from `_shared/org-billing.ts` and usage is counted across every app in the
  * organization, so one Studio subscription gives the whole team 3,000
- * diagnoses a month (VISION.md §2.2).
+ * diagnoses a month (docs/VISION.md §2.2).
  *
  * The check is hot-pathed on every `POST /v1/reports`, so we cache the
  * verdict per project for `CACHE_TTL_MS` to avoid an N+1 against
@@ -387,7 +387,7 @@ export async function checkDiagnosisQuota(
   const periodResetsAt = end.toISOString()
 
   // The plan, the subscription and the count are the team's: the plan's
-  // diagnoses are shared by every app in the organization (VISION.md §2.2).
+  // diagnoses are shared by every app in the organization (docs/VISION.md §2.2).
   let billing: Awaited<ReturnType<typeof resolveProjectBilling>>
   try {
     billing = await resolveProjectBilling(db, projectId, { includeProjectIds: true })

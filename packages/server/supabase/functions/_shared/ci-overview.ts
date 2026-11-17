@@ -315,6 +315,43 @@ function aggregatePermission(values: Array<'ok' | 'missing' | 'unknown' | undefi
   return 'unknown'
 }
 
+const HOUR_MS = 3_600_000
+/** At most this many hours in `stats.hourly` (a 31-day window). */
+const HOURLY_MAX = 31 * 24
+
+type HourlyPoint = CiOverview['stats']['hourly'][number]
+
+/**
+ * Jobs started per UTC hour over the window, oldest first, one entry per hour
+ * (zeros included) so the console can draw a day × hour heatmap and a daily
+ * pass rate in the viewer's own time zone. `coveredFrom` is the first hour the
+ * read fully covers: when the finished-job read hit its limit, older hours are
+ * incomplete and the console greys them instead of drawing them as quiet.
+ */
+export function hourlySeries(
+  jobs: readonly Pick<JobRow, 'gh_created_at' | 'ci_kind' | 'infra' | 'status'>[],
+  from: Date,
+  now: Date,
+  coveredFrom: Date,
+): { hourly: HourlyPoint[]; hourlyFrom: string } {
+  const first = Math.max(Math.floor(from.getTime() / HOUR_MS), Math.floor(now.getTime() / HOUR_MS) - HOURLY_MAX + 1)
+  const last = Math.floor(now.getTime() / HOUR_MS)
+  const hourly: HourlyPoint[] = []
+  for (let h = first; h <= last; h++) hourly.push({ at: new Date(h * HOUR_MS).toISOString(), jobs: 0, passed: 0, codeFailures: 0, infraFailures: 0 })
+  for (const j of jobs) {
+    const t = Date.parse(j.gh_created_at)
+    if (!Number.isFinite(t)) continue
+    const slot = hourly[Math.floor(t / HOUR_MS) - first]
+    if (!slot) continue
+    slot.jobs++
+    if (j.ci_kind === 'passed') slot.passed++
+    else if (j.ci_kind === 'code_failure') slot.codeFailures++
+    if (j.infra && j.status === 'completed') slot.infraFailures++
+  }
+  const coveredHour = Math.max(first, Math.ceil(coveredFrom.getTime() / HOUR_MS))
+  return { hourly, hourlyFrom: new Date(coveredHour * HOUR_MS).toISOString() }
+}
+
 export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: number; from: Date; refreshedAt: string | null }): CiOverview {
   const { now } = opts
   const nowMs = now.getTime()
@@ -583,6 +620,13 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       byWorkflow,
       byJob,
       slowSteps: slowSteps(advisorJobs),
+      ...hourlySeries(
+        all,
+        opts.from,
+        now,
+        // The finished read stops at FINISHED_READ_LIMIT: hours older than its oldest job are partial.
+        rows.finished.length >= FINISHED_READ_LIMIT ? new Date(rows.finished[rows.finished.length - 1]!.gh_created_at) : opts.from,
+      ),
     },
     advice,
   }

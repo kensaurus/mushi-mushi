@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/ci/CiJobTimes.tsx
  * PURPOSE: "Job times" on the CI page's Now view: per job type over the window, how long it usually
  *          runs (median), its slow runs (1 in 10 take longer than p90), the longest, the wait for a
- *          machine and how often it fails. Slowest first, so the long-running jobs lead. The same
+ *          machine and how often it fails. Jobs failing 1 run in 5 or more lead, worst first (2026-11-17,
+ *          "show important things first"); the rest stay slowest first. The same
  *          breakdown as GitHub's Actions performance metrics (run time, queue time, failure rate).
  *
  *          When the table has room (≥ 64rem, a desktop), a "Spread" column draws each job's run
@@ -10,20 +11,32 @@
  *          column of minutes has to be read cell by cell (NN/g, "Dashboards: preattentive").
  *          The numbers stay; the bar repeats them, so it is hidden from screen readers.
  *          Neutral grey, not brand: colour on this page means an outcome (red = failed).
+ *          Fails and waits are graded cells (red = how often it fails, teal = how long it waits),
+ *          darker = worse, with the number inside. Pointing at a row lights its job across the page.
  */
 
 import { useMemo, useState } from 'react'
 import type { CiJobType } from '../../lib/ciTypes'
 import { formatSeconds, repoShortName } from '../../lib/ciView'
-import { Badge, Btn, DataTableCell, DataTableHead } from '../ui'
+import { Btn, DataTableCell, DataTableHead } from '../ui'
+import { failClass, heatClass } from '../../lib/ciWeek'
+import { ciJobKey, ciRepoKey, useCiLink } from '../../lib/ciHighlight'
 
 const SHOWN = 10
+/** A job failing this often leads the table. */
+const LEADS_AT = 0.2
+
+/** @internal Exported for tests. Jobs failing 1 in 5 or more first (worst first), the rest in the server's order (slowest first). */
+export function failingFirst(byJob: readonly CiJobType[]): CiJobType[] {
+  const rate = (t: CiJobType) => ((t.failRate ?? 0) >= LEADS_AT ? (t.failRate ?? 0) : 0)
+  return byJob.map((t, i) => ({ t, i })).sort((a, b) => rate(b.t) - rate(a.t) || a.i - b.i).map((x) => x.t)
+}
 
 /** Shown only once the table's container is desktop-wide. */
 const WIDE_ONLY = 'hidden @5xl:table-cell'
 
 /** Where a job's usual, slow and longest run sit on a 0–100 scale shared by every row. */
-export interface JobSpread {
+interface JobSpread {
   usualPct: number
   slowPct: number
   longestPct: number
@@ -72,12 +85,58 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
   )
 }
 
+/** A graded number cell: the colour says how bad, the number inside says exactly. */
+const CELL = 'inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold tabular-nums'
+
+function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; waitMax: number }) {
+  const link = useCiLink([ciJobKey(t.repo, t.job), ciRepoKey(t.repo)], ciJobKey(t.repo, t.job))
+  const failPct = t.failRate == null ? null : Math.round(t.failRate * 100)
+  const spread = jobSpread(t, scaleMax)
+  return (
+    <tr {...link} className={link.className}>
+      <DataTableCell>
+        <span className="block wrap-anywhere font-medium text-fg">{t.job}</span>
+        <span className="block text-2xs text-fg-faint" title={t.repo}>
+          {repoShortName(t.repo)} · {t.workflow}
+        </span>
+      </DataTableCell>
+      <DataTableCell align="right">{t.runs}</DataTableCell>
+      <DataTableCell align="right">{formatSeconds(t.durationP50s)}</DataTableCell>
+      <DataTableCell align="right">{formatSeconds(t.durationP90s)}</DataTableCell>
+      <DataTableCell align="right">{formatSeconds(t.durationMaxS)}</DataTableCell>
+      <DataTableCell className={WIDE_ONLY}>
+        {spread ? (
+          <SpreadBar
+            spread={spread}
+            title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}`}
+          />
+        ) : (
+          <span className="text-fg-faint">–</span>
+        )}
+      </DataTableCell>
+      <DataTableCell align="right">
+        <span className={`${CELL} ${heatClass(t.queueP50s, waitMax)}`} title="Half its runs waited this long or less for a machine">
+          {formatSeconds(t.queueP50s)}
+        </span>
+      </DataTableCell>
+      <DataTableCell align="right">
+        <span className="inline-flex flex-wrap items-center justify-end gap-1">
+          {failPct == null ? <span>–</span> : <span className={`${CELL} ${failClass(t.failRate)}`}>{failPct}%</span>}
+          {t.infraFailures > 0 && <span className="text-2xs text-fg-faint" title="Jobs the test machine stopped">+{t.infraFailures} stopped</span>}
+        </span>
+      </DataTableCell>
+    </tr>
+  )
+}
+
 export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; days: number }) {
   const [all, setAll] = useState(false)
   const scaleMax = useMemo(() => spreadScaleMax(byJob ?? []), [byJob])
+  const sorted = useMemo(() => failingFirst(byJob ?? []), [byJob])
+  const waitMax = useMemo(() => Math.max(0, ...(byJob ?? []).map((t) => t.queueP50s ?? 0)), [byJob])
   if (!byJob) return <p className="text-xs text-fg-muted">Job times appear after the next update of this page.</p>
   if (byJob.length === 0) return <p className="text-xs text-fg-muted">No finished jobs in the last {days} days.</p>
-  const rows = all ? byJob : byJob.slice(0, SHOWN)
+  const rows = all ? sorted : sorted.slice(0, SHOWN)
   return (
     <div className="@container min-w-0 overflow-x-auto">
       <table className="w-full text-xs" data-testid="ci-job-times">
@@ -99,41 +158,9 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
           </tr>
         </thead>
         <tbody className="divide-y divide-edge-subtle">
-          {rows.map((t) => {
-            const failPct = t.failRate == null ? null : Math.round(t.failRate * 100)
-            const spread = jobSpread(t, scaleMax)
-            return (
-              <tr key={`${t.repo}|${t.workflow}|${t.job}`}>
-                <DataTableCell>
-                  <span className="block wrap-anywhere font-medium text-fg">{t.job}</span>
-                  <span className="block text-2xs text-fg-faint" title={t.repo}>
-                    {repoShortName(t.repo)} · {t.workflow}
-                  </span>
-                </DataTableCell>
-                <DataTableCell align="right">{t.runs}</DataTableCell>
-                <DataTableCell align="right">{formatSeconds(t.durationP50s)}</DataTableCell>
-                <DataTableCell align="right">{formatSeconds(t.durationP90s)}</DataTableCell>
-                <DataTableCell align="right">{formatSeconds(t.durationMaxS)}</DataTableCell>
-                <DataTableCell className={WIDE_ONLY}>
-                  {spread ? (
-                    <SpreadBar
-                      spread={spread}
-                      title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}`}
-                    />
-                  ) : (
-                    <span className="text-fg-faint">–</span>
-                  )}
-                </DataTableCell>
-                <DataTableCell align="right">{formatSeconds(t.queueP50s)}</DataTableCell>
-                <DataTableCell align="right">
-                  <span className="inline-flex flex-wrap items-center justify-end gap-1">
-                    {failPct != null && failPct >= 20 ? <Badge tone="dangerSubtle">{failPct}%</Badge> : <span>{failPct == null ? '–' : `${failPct}%`}</span>}
-                    {t.infraFailures > 0 && <span className="text-2xs text-fg-faint" title="Jobs the test machine stopped">+{t.infraFailures} stopped</span>}
-                  </span>
-                </DataTableCell>
-              </tr>
-            )
-          })}
+          {rows.map((t) => (
+            <JobRow key={`${t.repo}|${t.workflow}|${t.job}`} t={t} scaleMax={scaleMax} waitMax={waitMax} />
+          ))}
         </tbody>
       </table>
       {!all && byJob.length > SHOWN && (

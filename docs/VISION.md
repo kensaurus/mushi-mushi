@@ -8,10 +8,10 @@
 >
 > This is an excerpt (Sections 1 and 2.1) of the full *Mushi Mushi — Full Liftup
 > Plan*. The anti-drift system that keeps the surfaces honest lives in
-> [`scripts/check-positioning-consistency.mjs`](./scripts/check-positioning-consistency.mjs)
+> [`scripts/check-positioning-consistency.mjs`](../scripts/check-positioning-consistency.mjs)
 > and the pre-release checklist.
 
-*Owner: Kensaurus 合同会社 · Last ratified: June 2026 · Category and north star amended 2026-11-13 by the owner ([ADR 0058](./docs/adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md))*
+*Owner: Kensaurus 合同会社 · Last ratified: June 2026 · Category and north star amended 2026-11-13 by the owner ([ADR 0058](./adr/0058-one-stop-platform-to-enhance-vibe-coded-apps.md))*
 
 ---
 
@@ -186,7 +186,7 @@ Apps watched is the headline limit; diagnoses are the one meter (plan ids in the
 database stay `free_cloud`, `indie`, `pro`). See `docs/plan-pricing.md`.
 
 A **diagnosis** = one completed Stage-2 classification. See
-[`apps/docs/content/pricing.mdx`](./apps/docs/content/pricing.mdx) for the full
+[`apps/docs/content/pricing.mdx`](../apps/docs/content/pricing.mdx) for the full
 estimator and FAQ.
 
 ---

@@ -115,7 +115,7 @@ const MIGRATE_CATALOG: readonly MigrateGuide[] = [
   // Sentry gets a bespoke entry, NOT the generic competitor template:
   // the canonical messaging is "standalone OR enrich Sentry" — Mushi adds
   // plain-English diagnosis + paste-ready fixes ALONGSIDE Sentry, never a
-  // rip-out pitch (VISION.md drift guard).
+  // rip-out pitch (docs/VISION.md drift guard).
   {
     slug: 'sentry-to-mushi',
     title: 'Sentry + Mushi (enrich or standalone)',

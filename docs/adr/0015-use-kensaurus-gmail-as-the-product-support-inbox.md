@@ -4,7 +4,7 @@ Status: Accepted            Date: 2026-09-19
 
 ## Context
 
-Store listings, SECURITY.md files, and the public status page need one
+Store listings, .github/SECURITY.md files, and the public status page need one
 reachable human inbox. Auth email templates still link
 `support@kensaur.us`, and agents keep minting `support@` aliases that
 are not monitored.
@@ -26,6 +26,6 @@ We use `kensaurus@gmail.com` as the product support inbox for Mushi
 
 ## Consequences
 
-Changing the inbox is a product decision: update listings, SECURITY.md
+Changing the inbox is a product decision: update listings, .github/SECURITY.md
 surfaces, console `CONTACT_EMAIL`, and a superseding ADR in the same
 change. Do not “improve” the address in copy only.

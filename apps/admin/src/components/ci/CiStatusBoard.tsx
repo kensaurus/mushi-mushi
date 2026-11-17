@@ -13,7 +13,9 @@
  */
 import { useMemo } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
-import { buildCiStatus, durationWords, estimateLine, groupFailures, type MachineNow } from '../../lib/ciStatus'
+import { buildCiStatus, durationWords, estimateLine, groupFailures, type CiStatus, type FailureGroup, type MachineNow, type RunningNow } from '../../lib/ciStatus'
+import { ciJobKey, ciJobKeys, ciRepoKey, useCiLink } from '../../lib/ciHighlight'
+import { divergeClass } from '../../lib/ciWeek'
 import { formatPercent } from '../../lib/ciView'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { useNow } from '../../lib/useNow'
@@ -32,7 +34,9 @@ const TONE_BOX: Record<'ok' | 'warn' | 'bad', string> = {
  */
 export const MACHINE_GRID = '@xl:grid-cols-2 @4xl:grid-cols-3 @min-[88rem]:grid-cols-4 @min-[120rem]:grid-cols-5'
 const BOARD_SPAN = '@min-[72rem]:col-span-2'
-const TONE_WORD: Record<'ok' | 'warn' | 'bad', string> = { ok: 'Healthy', warn: 'Needs a look', bad: 'Something is down' }
+// "Healthy" sat under two "keeps failing" cards (2026-11-17): this box is about the live queue only,
+// so it says that; the week's failures are the alert strip's.
+const TONE_WORD: Record<'ok' | 'warn' | 'bad', string> = { ok: 'Nothing stuck right now', warn: 'Needs a look', bad: 'Something is down' }
 
 function Meter({ label, pct }: { label: string; pct: number | null }) {
   if (pct == null) return null
@@ -70,6 +74,95 @@ export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
       </div>
       </Card>
     </li>
+  )
+}
+
+/** One running job; pointing at it lights its app, job and runner across the page. */
+function RunningRow({ r }: { r: RunningNow }) {
+  const link = useCiLink(ciJobKeys(r.job), ciJobKey(r.job.repo, r.job.jobName))
+  const pct = r.usualS && r.elapsedS != null ? Math.min(100, Math.round((r.elapsedS / r.usualS) * 100)) : null
+  return (
+    <li {...link} className={`${link.className} flex flex-col gap-1 px-3 py-2 @xl:flex-row @xl:items-center @xl:gap-3`} data-testid={`ci-running-${r.job.id}`}>
+      <div className="min-w-0 @xl:flex-1">
+        <p className="text-xs">
+          {r.job.htmlUrl ? (
+            <a href={r.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
+              {r.job.jobName} <IconExternalLink size={10} className="inline" />
+            </a>
+          ) : (
+            <span className="font-medium text-fg">{r.job.jobName}</span>
+          )}
+          <span className="text-fg-muted"> · {r.app}{r.job.prNumber ? ` · PR #${r.job.prNumber}` : ''}</span>
+        </p>
+        <p className="text-2xs text-fg-muted">on {r.machine?.name ?? 'a machine'}</p>
+      </div>
+      <div className="min-w-0 @xl:w-56 @xl:shrink-0">
+        <p className={`text-2xs ${r.slow ? 'font-medium text-warn-foreground' : 'text-fg-secondary'}`}>
+          {r.elapsedS != null ? `${durationWords(r.elapsedS)} so far · ` : ''}
+          {estimateLine(r)}
+        </p>
+        {pct != null && (
+          <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
+            {/* Running = the timeline's running colour; the brand red read as a failure in light mode. */}
+            <span className={`ci-grow-x block h-full ${r.slow ? 'bg-warn' : `${CI_OUTCOME_STYLE.running.fill} ci-stripes`}`} style={{ width: `${Math.max(3, pct)}%` }} />
+          </span>
+        )}
+      </div>
+    </li>
+  )
+}
+
+/** One pull request's failures; pointing at it lights that job and app across the page. */
+function BrokeItem({ g }: { g: FailureGroup }) {
+  const first = g.broke[0]?.failure.job
+  const keys = [ciRepoKey(g.repo), ...g.broke.flatMap(({ failure }) => ciJobKeys(failure.job))]
+  const link = useCiLink(keys, first ? ciJobKey(first.repo, first.jobName) : ciRepoKey(g.repo))
+  return (
+    <li {...link} className={`${link.className} rounded-md border border-edge-subtle px-3 py-2`} data-testid={`ci-broke-${g.key}`}>
+      <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
+        <span className="font-semibold text-fg">{g.app}</span>
+        <span className="text-fg-muted">{g.prNumber ? `PR #${g.prNumber}` : g.branch ?? ''}</span>
+        <span className="text-2xs text-fg-faint">
+          <RelativeTime value={new Date(g.at).toISOString()} />
+        </span>
+      </p>
+      <ul className="mt-1 space-y-0.5">
+          {g.broke.map(({ failure: f, step }) => (
+            <li key={f.job.id} className="text-2xs text-fg-secondary">
+              <span className="font-medium text-fg">{f.job.jobName}</span>
+              {f.kind === 'code' ? (step ? <> failed at <span className="font-medium text-fg">“{step}”</span></> : ' failed') : <> did not finish: {f.kind === 'machine' ? 'the test machine stopped (re-run it)' : 'cancelled before a machine took it'}</>}
+              {f.job.htmlUrl && (
+                <a href={f.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`ml-1.5 ${LINK_ACCENT}`}>
+                  read the log
+                </a>
+              )}
+            </li>
+          ))}
+          {g.summaries.length > 0 && (
+            <li className="text-2xs text-fg-muted">
+              Also red: {[...new Set(g.summaries.map((f) => f.job.jobName))].join(', ')}, {g.summaries.length === 1 ? 'a summary check that fails' : 'summary checks that fail'} whenever the job above fails.
+            </li>
+          )}
+      </ul>
+    </li>
+  )
+}
+
+/** One app's week; its pass rate is graded against the 80% target (red below, blue above). */
+function AppTimeRow({ a }: { a: CiStatus['apps'][number] }) {
+  const link = useCiLink([ciRepoKey(a.repo)], ciRepoKey(a.repo))
+  return (
+    <tr {...link} className={link.className}>
+      <DataTableCell>{a.app}</DataTableCell>
+      <DataTableCell>{a.waitP95S != null ? `up to ${durationWords(a.waitP95S)}` : '—'}</DataTableCell>
+      <DataTableCell>{a.runP50S != null ? durationWords(a.runP50S) : '—'}</DataTableCell>
+      <DataTableCell>
+        <span className={`inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold tabular-nums ${a.passRate == null ? '' : divergeClass(a.passRate)}`}>{formatPercent(a.passRate)}</span>
+      </DataTableCell>
+      <DataTableCell>
+        {a.delay === 'waiting' ? <Badge tone="warn">waiting for a machine</Badge> : a.delay === 'failing' ? <Badge tone="danger">failing checks</Badge> : a.delay === 'slow' ? <Badge tone="warn">long runs</Badge> : <span className="text-fg-muted">none</span>}
+      </DataTableCell>
+    </tr>
   )
 }
 
@@ -132,38 +225,9 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
           <p className="text-xs text-fg-muted">Nothing is running.</p>
         ) : (
           <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid="ci-running-now">
-            {status.running.map((r) => {
-              const pct = r.usualS && r.elapsedS != null ? Math.min(100, Math.round((r.elapsedS / r.usualS) * 100)) : null
-              return (
-                <li key={r.job.id} className="flex flex-col gap-1 px-3 py-2 @xl:flex-row @xl:items-center @xl:gap-3" data-testid={`ci-running-${r.job.id}`}>
-                  <div className="min-w-0 @xl:flex-1">
-                    <p className="text-xs">
-                      {r.job.htmlUrl ? (
-                        <a href={r.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
-                          {r.job.jobName} <IconExternalLink size={10} className="inline" />
-                        </a>
-                      ) : (
-                        <span className="font-medium text-fg">{r.job.jobName}</span>
-                      )}
-                      <span className="text-fg-muted"> · {r.app}{r.job.prNumber ? ` · PR #${r.job.prNumber}` : ''}</span>
-                    </p>
-                    <p className="text-2xs text-fg-muted">on {r.machine?.name ?? 'a machine'}</p>
-                  </div>
-                  <div className="min-w-0 @xl:w-56 @xl:shrink-0">
-                    <p className={`text-2xs ${r.slow ? 'font-medium text-warn-foreground' : 'text-fg-secondary'}`}>
-                      {r.elapsedS != null ? `${durationWords(r.elapsedS)} so far · ` : ''}
-                      {estimateLine(r)}
-                    </p>
-                    {pct != null && (
-                      <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
-                        {/* Running = the timeline's running colour; the brand red read as a failure in light mode. */}
-                        <span className={`block h-full ${r.slow ? 'bg-warn' : CI_OUTCOME_STYLE.running.fill}`} style={{ width: `${Math.max(3, pct)}%` }} />
-                      </span>
-                    )}
-                  </div>
-                </li>
-              )
-            })}
+            {status.running.map((r) => (
+              <RunningRow key={r.job.id} r={r} />
+            ))}
           </ul>
         )}
       </section>
@@ -179,33 +243,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
         {failures.length > 0 && (
           <ul className="space-y-2" data-testid="ci-broke">
             {failures.slice(0, 8).map((g) => (
-              <li key={g.key} className="rounded-md border border-edge-subtle px-3 py-2" data-testid={`ci-broke-${g.key}`}>
-                <p className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                  <span className="font-semibold text-fg">{g.app}</span>
-                  <span className="text-fg-muted">{g.prNumber ? `PR #${g.prNumber}` : g.branch ?? ''}</span>
-                  <span className="text-2xs text-fg-faint">
-                    <RelativeTime value={new Date(g.at).toISOString()} />
-                  </span>
-                </p>
-                <ul className="mt-1 space-y-0.5">
-                    {g.broke.map(({ failure: f, step }) => (
-                      <li key={f.job.id} className="text-2xs text-fg-secondary">
-                        <span className="font-medium text-fg">{f.job.jobName}</span>
-                        {f.kind === 'code' ? (step ? <> failed at <span className="font-medium text-fg">“{step}”</span></> : ' failed') : <> did not finish: {f.kind === 'machine' ? 'the test machine stopped (re-run it)' : 'cancelled before a machine took it'}</>}
-                        {f.job.htmlUrl && (
-                          <a href={f.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`ml-1.5 ${LINK_ACCENT}`}>
-                            read the log
-                          </a>
-                        )}
-                      </li>
-                    ))}
-                    {g.summaries.length > 0 && (
-                      <li className="text-2xs text-fg-muted">
-                        Also red: {[...new Set(g.summaries.map((f) => f.job.jobName))].join(', ')}, {g.summaries.length === 1 ? 'a summary check that fails' : 'summary checks that fail'} whenever the job above fails.
-                      </li>
-                    )}
-                </ul>
-              </li>
+              <BrokeItem key={g.key} g={g} />
             ))}
             {failures.length > 8 && <li className="text-2xs text-fg-muted">and {failures.length - 8} more in the queue below.</li>}
           </ul>
@@ -237,15 +275,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
             </thead>
             <tbody className="divide-y divide-edge-subtle">
               {status.apps.map((a) => (
-                <tr key={a.repo}>
-                  <DataTableCell>{a.app}</DataTableCell>
-                  <DataTableCell>{a.waitP95S != null ? `up to ${durationWords(a.waitP95S)}` : '—'}</DataTableCell>
-                  <DataTableCell>{a.runP50S != null ? durationWords(a.runP50S) : '—'}</DataTableCell>
-                  <DataTableCell>{formatPercent(a.passRate)}</DataTableCell>
-                  <DataTableCell>
-                    {a.delay === 'waiting' ? <Badge tone="warn">waiting for a machine</Badge> : a.delay === 'failing' ? <Badge tone="danger">failing checks</Badge> : a.delay === 'slow' ? <Badge tone="warn">long runs</Badge> : <span className="text-fg-muted">none</span>}
-                  </DataTableCell>
-                </tr>
+                <AppTimeRow key={a.repo} a={a} />
               ))}
             </tbody>
           </table>

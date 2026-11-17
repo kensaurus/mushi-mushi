@@ -59,7 +59,7 @@ Please do not open a public issue. Use either channel:
 Acknowledgement within 2 days, triage within 7, and a fix for critical and
 high findings within 30. The full timeline, safe-harbor terms, and what to
 include are in
-[SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md).
+[.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md).
 
 ## What we do not claim
 

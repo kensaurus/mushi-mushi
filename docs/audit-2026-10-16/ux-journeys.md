@@ -7,7 +7,7 @@
 
 Later the same day they added that the SDK widget launcher covers too much of host apps.
 
-**Method.** Each story was walked in the owner's signed-in Chrome on prod (kensaur.us/mushi-mushi/admin), at desktop width. The persona is the primary buyer from VISION.md: a solo vibe coder with several AI-built apps.
+**Method.** Each story was walked in the owner's signed-in Chrome on prod (kensaur.us/mushi-mushi/admin), at desktop width. The persona is the primary buyer from docs/VISION.md: a solo vibe coder with several AI-built apps.
 
 **Evidence.** Measurements came from the browser Performance API, Supabase edge logs and Sentry. Console funnel events exist for opening a report, copying the fix prompt and dispatching, but none were read for this audit. Findings are tagged `[observed]` (seen in a walkthrough or measured) or `[judgment]`.
 

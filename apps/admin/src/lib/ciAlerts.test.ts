@@ -1,0 +1,105 @@
+import { describe, expect, it } from 'vitest'
+import { ciOverviewFixture, FIXTURE_NOW } from '../components/ci/__fixtures__/ciOverview'
+import type { CiJobType, CiOverview } from './ciTypes'
+import { buildCiStatus } from './ciStatus'
+import { rankCiAlerts } from './ciAlerts'
+
+const jobType = (over: Partial<CiJobType>): CiJobType => ({
+  repo: 'kensaurus/mushi-mushi',
+  workflow: 'CI',
+  job: 'test',
+  runs: 5,
+  durationP50s: 300,
+  durationP90s: 400,
+  durationMaxS: 500,
+  queueP50s: 30,
+  codeFailures: 0,
+  infraFailures: 0,
+  failRate: 0,
+  lastRunAt: '2026-10-21T10:40:00Z',
+  ...over,
+})
+
+function rank(o: CiOverview) {
+  return rankCiAlerts(o, buildCiStatus(o, FIXTURE_NOW), FIXTURE_NOW)
+}
+
+describe('rankCiAlerts', () => {
+  it('puts every critical problem before every serious one', () => {
+    const alerts = rank(ciOverviewFixture())
+    const sev = alerts.map((a) => a.severity)
+    expect(sev.length).toBeGreaterThan(1)
+    expect(sev.lastIndexOf('critical')).toBeLessThan(sev.indexOf('serious') === -1 ? Infinity : sev.indexOf('serious'))
+  })
+
+  it('names a machine that stopped reporting, with how long it has been silent', () => {
+    const down = rank(ciOverviewFixture()).find((a) => a.id === 'stale:h-aw')!
+    expect(down.severity).toBe('critical')
+    expect(down.title).toBe('alienware-wsl stopped reporting')
+    // Heartbeat 09:00, now 12:00.
+    expect(down.metric).toEqual({ value: '3.0', unit: 'h' })
+    // The machine's own key goes last: rows carry runner keys, so those lead the hover.
+    expect(down.keys.at(-1)).toBe('machine:alienware-wsl')
+  })
+
+  it('flags a job that keeps failing, links its newest failing log, and lights its job and app', () => {
+    const o = ciOverviewFixture()
+    o.stats.byJob = [jobType({ job: 'test', runs: 4, codeFailures: 3, failRate: 0.75 })]
+    o.jobs = o.jobs.map((j) => (j.id === 'j7' ? { ...j, htmlUrl: 'https://github.com/kensaurus/mushi-mushi/actions/runs/7/job/7' } : j))
+    const a = rank(o).find((x) => x.id.startsWith('fails:'))!
+    expect(a.severity).toBe('critical')
+    expect(a.title).toBe('test keeps failing')
+    expect(a.detail).toContain('3 of its last 4 runs failed')
+    expect(a.metric).toEqual({ value: '75', unit: '% fail' })
+    expect(a.href).toBe('https://github.com/kensaurus/mushi-mushi/actions/runs/7/job/7')
+    expect(a.keys).toEqual(['job:kensaurus/mushi-mushi|test', 'repo:kensaurus/mushi-mushi'])
+  })
+
+  it('does not call a single failure "keeps failing"', () => {
+    const o = ciOverviewFixture()
+    o.stats.byJob = [jobType({ codeFailures: 1, failRate: 1, runs: 1 })]
+    expect(rank(o).some((a) => a.id.startsWith('fails:'))).toBe(false)
+  })
+
+  it('grades an app by pass rate: under 70% critical, under 80% serious, 80% and up nothing', () => {
+    const o = ciOverviewFixture()
+    o.repos = [
+      {
+        ...o.repos[0]!,
+        repo: 'a/low',
+        projectName: 'low',
+        passRate: 0.6,
+        jobs7d: 40,
+        queueP95s: 60,
+      },
+      {
+        ...o.repos[0]!,
+        repo: 'a/mid',
+        projectName: 'mid',
+        passRate: 0.75,
+        jobs7d: 40,
+        queueP95s: 60,
+      },
+      { ...o.repos[0]!, repo: 'a/ok', projectName: 'ok', passRate: 0.9, jobs7d: 40, queueP95s: 60 },
+    ]
+    const pass = rank(o).filter((a) => a.id.startsWith('pass:'))
+    expect(pass.map((a) => [a.app, a.severity])).toEqual([
+      ['low', 'critical'],
+      ['mid', 'serious'],
+    ])
+  })
+
+  it('counts jobs a test machine stopped as "never finished", not as failures', () => {
+    const a = rank(ciOverviewFixture()).find((x) => x.id === 'infra')!
+    expect(a.title).toBe('6 jobs never finished')
+    expect(a.detail).toContain('Not code failures')
+    expect(a.jump).toBe('?view=machines#ci-infra')
+  })
+
+  it('says nothing when nothing is wrong', () => {
+    const o = ciOverviewFixture({ hosts: [], jobs: [] })
+    o.repos = o.repos.map((r) => ({ ...r, passRate: 0.95, queueP95s: 30 }))
+    o.stats = { ...o.stats, infraFailures: 0, byJob: [] }
+    expect(rank(o)).toEqual([])
+  })
+})

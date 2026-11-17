@@ -13,7 +13,7 @@ follows:
   under the GNU Affero General Public License, version 3 only
   (AGPL-3.0-only). The full text is in LICENSES/AGPL-3.0-only.txt; each of
   those directories has its own LICENSE file. A commercial license is also
-  available; see COMMERCIAL-LICENSE.md. apps/admin/ and apps/testers/ were MIT
+  available; see docs/legal/COMMERCIAL-LICENSE.md. apps/admin/ and apps/testers/ were MIT
   up to and including commit 862e53ff (2026-10-22); copies of those earlier
   versions keep their MIT terms.
 
@@ -24,13 +24,13 @@ follows:
   apps/docs/public/brand/logo-mark.svg,
   apps/docs/public/integrations/mushi-mark-512.png, docs/mascot/,
   packages/cursor-plugin/logo.svg, the Mushi favicons and app icons under
-  apps/*/public/, and the social preview cards that show them. TRADEMARK.md
+  apps/*/public/, and the social preview cards that show them. docs/legal/TRADEMARK.md
   says how you may use them (for example, unmodified, to refer or link to
   Mushi Mushi).
 
 * No license in this repository grants rights to the Mushi Mushi names,
   logos or marks, wherever they appear, including inline in code. The
-  trademarks are covered by TRADEMARK.md.
+  trademarks are covered by docs/legal/TRADEMARK.md.
 
 * Third-party components keep their original licenses; see NOTICE.
 
@@ -40,7 +40,7 @@ follows:
 
 Where a directory contains its own LICENSE file, that file governs the contents
 of that directory. Outside contributions are accepted under the Contributor
-License Agreement in CLA.md.
+License Agreement in docs/legal/CLA.md.
 
 --------------------------------------------------------------------------------
 

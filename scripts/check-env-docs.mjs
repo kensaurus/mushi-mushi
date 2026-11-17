@@ -24,7 +24,7 @@ const REQUIRED_IN_EXAMPLES = {
   LANGFUSE_BASE_URL: ['.env.example', 'deploy/.env.example'],
 }
 
-const ONBOARDING_SCAN = ['apps/docs/content/self-hosting', 'CONTRIBUTING.md', 'SELF_HOSTED.md']
+const ONBOARDING_SCAN = ['apps/docs/content/self-hosting', '.github/CONTRIBUTING.md', 'docs/SELF_HOSTED.md']
 
 const ENV_KEY_RE = /^#?\s*([A-Z][A-Z0-9_]*)\s*=/
 

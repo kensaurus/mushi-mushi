@@ -126,6 +126,8 @@ describe('CiPage', () => {
     expect(q('ci-status-headline')!.textContent!.length).toBeGreaterThan(10)
     for (const t of ['Machines right now', 'Running now', 'What broke in the last 2 hours', 'Where the time goes this week']) expect(hasHeading(t)).toBe(true)
     const summary = q('ci-summary')!
+    // What is wrong comes first (2026-11-17): the ranked alerts sit above the board.
+    expect(q('ci-alerts')!.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(board.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(summary.compareDocumentPosition(q('ci-queue')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(hasHeading('Last 7 days')).toBe(true)
@@ -277,11 +279,16 @@ describe('CiPage', () => {
     })
   })
 
-  it('draws the timeline with the busiest runner first and "No runner yet" last', async () => {
+  it('draws the timeline with failing machines first, then the busiest, and "No runner yet" last', async () => {
     await render()
-    const lanes = Array.from(host.querySelectorAll('[data-testid^="ci-timeline-lane-"]')).map((el) => el.getAttribute('data-testid'))
+    const laneEls = Array.from(host.querySelectorAll<HTMLElement>('[data-testid^="ci-timeline-lane-"]'))
+    const lanes = laneEls.map((el) => el.getAttribute('data-testid'))
+    // nuc-glot is the busiest runner and has a stopped job (j6): it leads either way.
     expect(lanes[0]).toBe('ci-timeline-lane-nuc-glot')
     expect(lanes.at(-1)).toBe('ci-timeline-lane-No runner yet')
+    // Every lane with a failure comes before every lane without one ("show important things first").
+    const failed = laneEls.slice(0, -1).map((el) => el.dataset.failed === 'true')
+    expect(failed.indexOf(false) === -1 || failed.lastIndexOf(true) < failed.indexOf(false)).toBe(true)
     const bar = q('ci-timeline-bar-j6')!
     expect(bar.getAttribute('aria-label')).toContain('Test machine stopped')
     expect(bar.getAttribute('aria-label')).toContain('memory peak 9.9 GB')
