@@ -8,6 +8,7 @@
  * title and the copy button tooltip) beside a small copy button. Section
  * icons distinguish console logs from the two timelines.
  */
+import { roundLongDecimals } from '../lib/format'
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNow } from '../lib/useNow'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -741,7 +742,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               </div>
             </div>
           )}
-          <Field label="Description" value={report.description} longForm />
+          <Field label="Description" value={report.description ? roundLongDecimals(report.description) : report.description} longForm />
           {report.user_intent && (
             <Field
               label="User intent"

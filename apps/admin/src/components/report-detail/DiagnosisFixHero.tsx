@@ -19,6 +19,7 @@
  *          "Not sure yet — here's what I'd check first."
  */
 
+import { roundLongDecimals } from '../../lib/format'
 import type { ReactNode } from 'react'
 import { Badge } from '../ui'
 import { Card } from '../../components/ui'
@@ -51,7 +52,7 @@ export function DiagnosisFixHero({
   const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
   const reproHint = (report.stage1_classification as { reproductionHint?: string } | null)
     ?.reproductionHint
-  const summary = report.summary?.trim()
+  const summary = report.summary ? roundLongDecimals(report.summary.trim()) : undefined
   const categoryText = CATEGORY_LABELS[report.category] ?? report.category
   const severityText = report.severity ? severityLabel(report.severity) : null
 
@@ -169,10 +170,10 @@ function Stage2DiagnosisBody({
   return (
     <div className="space-y-2 text-sm leading-relaxed text-fg-secondary">
       {streaming && <p className="text-2xs text-fg-faint italic">Full diagnosis still running — fields fill in as they arrive.</p>}
-      <DiagnosisField label="Why it broke">{inlineMarkdown(diagnosis.rootCause ?? summary ?? 'No root cause yet.')}</DiagnosisField>
+      <DiagnosisField label="Why it broke">{inlineMarkdown(roundLongDecimals(diagnosis.rootCause ?? summary ?? 'No root cause yet.'))}</DiagnosisField>
       {diagnosis.suggestedFix && (
         <DiagnosisField label="Suggested fix">
-          <span className="whitespace-pre-line">{inlineMarkdown(diagnosis.suggestedFix)}</span>
+          <span className="whitespace-pre-line">{inlineMarkdown(roundLongDecimals(diagnosis.suggestedFix))}</span>
         </DiagnosisField>
       )}
       {diagnosis.reproductionSteps.length > 0 && (
