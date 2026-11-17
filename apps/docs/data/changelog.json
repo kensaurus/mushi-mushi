@@ -1,9 +1,11 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.37",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.37.0"
+    ],
     "highlights": [
       {
         "title": "App version.",
@@ -14,7 +16,20 @@
         "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.37.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.37.0"
+      },
+      {
+        "name": "mushi-mushi",
+        "version": "1.37.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.36",
@@ -1459,6 +1474,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.31.4",
       "0.31.3",
       "0.31.2",
       "0.31.1",
@@ -1472,7 +1488,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.31.3"
+        "version": "0.31.4"
       }
     ]
   },
@@ -1614,7 +1630,16 @@
     "versions": [
       "0.25.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "App version.",
+        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
+      },
+      {
+        "title": "`loadMyReports()`.",
+        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
@@ -1622,6 +1647,10 @@
       },
       {
         "name": "@mushi-mushi/mcp",
+        "version": "0.25.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
         "version": "0.25.0"
       }
     ]
