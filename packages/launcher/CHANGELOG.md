@@ -1,5 +1,14 @@
 # mushi-mushi
 
+## 1.37.0
+
+### Patch Changes
+
+- ef8ca8d: README: a page-by-page tour of the console, with a short clip of each page recorded on real apps and a line on when to open it. Lazycow Studio joins "More apps from the same maker".
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+  - @mushi-mushi/web@1.37.0
+
 ## 1.36.0
 
 ### Minor Changes
