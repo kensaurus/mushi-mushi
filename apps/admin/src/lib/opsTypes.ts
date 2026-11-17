@@ -44,7 +44,7 @@ export interface OpsFeedResponse {
   canAck: boolean
 }
 
-export interface OpsCoverageRow {
+interface OpsCoverageRow {
   project_id: string
   category: OpsCategory | 'bugs'
   last_at: string | null

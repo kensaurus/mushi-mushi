@@ -7,6 +7,7 @@
  *          connect them. Each cell carries a shape (● ◐ ○ –) as well as colour.
  */
 
+import { Card } from '../ui'
 import { docsUrl } from '../../lib/docsUrl'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { OpsApp, OpsCoverageResponse } from '../../lib/opsTypes'
@@ -28,20 +29,20 @@ export function OpsTodayStrip({ data }: { data: OpsCoverageResponse }) {
   const open = data.today.openAlerts
   return (
     <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="ops-today">
-      <div className="ci-rise rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-        <dt className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">💳 Payments today</dt>
+      <Card variant="flat" className="ci-rise px-3 py-2">
+        <dt className="text-2xs font-bold tracking-wider text-fg-secondary uppercase">💳 Payments today</dt>
         <dd className="font-mono text-lg font-extrabold text-fg tabular-nums">{paymentsToday(data.today.payments)}</dd>
-      </div>
-      <div className="ci-rise rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-        <dt className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">🚀 Releases today</dt>
+      </Card>
+      <Card variant="flat" className="ci-rise px-3 py-2">
+        <dt className="text-2xs font-bold tracking-wider text-fg-secondary uppercase">🚀 Releases today</dt>
         <dd className="font-mono text-lg font-extrabold text-fg tabular-nums">{data.today.releases}</dd>
-      </div>
-      <div className={`ci-rise rounded-md border px-3 py-2 ${open > 0 ? 'border-danger/50 bg-danger-muted/40' : 'border-edge-subtle bg-surface-raised'}`}>
-        <dt className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Open alerts</dt>
+      </Card>
+      <Card variant="flat" className="ci-rise px-3 py-2">
+        <dt className="text-2xs font-bold tracking-wider text-fg-secondary uppercase">Open alerts</dt>
         <dd className={`font-mono text-lg font-extrabold tabular-nums ${open > 0 ? 'text-danger-foreground' : 'text-fg'}`}>
           {open > 0 ? `■ ${open} need a look` : '✓ none open'}
         </dd>
-      </div>
+      </Card>
     </dl>
   )
 }
@@ -55,9 +56,9 @@ export function OpsCoverageMatrix({ data, now }: { data: OpsCoverageResponse; no
         <caption className="sr-only">When each app last sent each kind of event, and how many in 7 days</caption>
         <thead>
           <tr>
-            <th scope="col" className="px-2 py-1 text-left text-3xs font-bold tracking-wider text-fg-secondary uppercase">App</th>
+            <th scope="col" className="px-2 py-1 text-left text-2xs font-bold tracking-wider text-fg-secondary uppercase">App</th>
             {OPS_COLUMNS.map((c) => (
-              <th key={c.id} scope="col" className="px-2 py-1 text-left text-3xs font-bold tracking-wider text-fg-secondary uppercase">
+              <th key={c.id} scope="col" className="px-2 py-1 text-left text-2xs font-bold tracking-wider text-fg-secondary uppercase">
                 <span aria-hidden="true">{c.glyph}</span> {c.label}
               </th>
             ))}

@@ -27,7 +27,7 @@ const CATEGORIES: ReadonlyArray<{ id: OpsCategory; label: string; example: strin
   { id: 'alerts', label: '#alerts', example: 'what broke, and when it is fixed' },
 ]
 
-/** One status line with a shape: ● on, ▲ needs something, ○ off. */
+/** @internal Exported for tests. One status line with a shape: ● on, ▲ needs something, ○ off. */
 export function slackBotStatus(s: OpsSlackSettings): { glyph: string; label: string; tone: 'ok' | 'warn' | 'neutral' } {
   const channels = CATEGORIES.filter((c) => s.channels[c.id]).length
   if (!s.botToken && !Object.values(s.webhooks).some(Boolean)) return { glyph: '○', label: 'Not connected', tone: 'neutral' }

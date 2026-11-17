@@ -36,7 +36,7 @@ export function agoText(iso: string | null | undefined, now: number): string {
   return `${Math.floor(ms / DAY)}d ago`
 }
 
-export interface Freshness {
+interface Freshness {
   bucket: 'hour' | 'day' | 'week' | 'old' | 'never'
   /** ci-heat ramp step (darker = more recent) or the hatched "never" cell. */
   className: string
@@ -45,6 +45,7 @@ export interface Freshness {
   label: string
 }
 
+/** @internal Exported for tests. */
 export function freshness(lastAt: string | null | undefined, now: number): Freshness {
   if (!lastAt) return { bucket: 'never', className: 'ci-cell-0 ci-nodata', glyph: '–', label: 'never' }
   const ms = now - Date.parse(lastAt)
@@ -54,7 +55,7 @@ export function freshness(lastAt: string | null | undefined, now: number): Fresh
   return { bucket: 'old', className: 'ci-heat-1', glyph: '○', label: agoText(lastAt, now) }
 }
 
-export interface CoverageCell {
+interface CoverageCell {
   column: OpsColumn
   lastAt: string | null
   count7d: number

@@ -20,6 +20,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, FilterSelect, Loading, Section, Toggle } from '../components/ui'
 import { IconAlertTriangle, IconBell, IconGauge, IconRefresh } from '../components/icons'
 import { OpsCoverageMatrix, OpsTodayStrip } from '../components/ops/OpsCoverage'
@@ -154,25 +155,38 @@ export function OpsPage() {
 
       {!orgId && <EmptyState title="Pick a team" description="Ops shows one team's apps at a time. Choose a team in the switcher at the top of the sidebar." />}
 
-      {pending && (
-        <Callout tone="warn" label="Waiting for a database update">
-          Ops starts working once database update 20261117120000_ops_hub is applied.
-        </Callout>
-      )}
+      <PagePosture
+        slots={[
+          {
+            id: 'ops-migration',
+            priority: POSTURE_PRIORITY.status,
+            show: pending,
+            children: (
+              <Callout tone="warn" label="Waiting for a database update">
+                Ops starts working once database update 20261117120000_ops_hub is applied.
+              </Callout>
+            ),
+          },
+          {
+            id: 'ops-slack-off',
+            priority: POSTURE_PRIORITY.status,
+            show: Boolean(coverage.data && !coverage.data.slack.enabled),
+            children: (
+              <Callout tone="info" label="Slack bot is off">
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>Events are kept here only. Connect your team's own Slack bot to get them in #payments, #releases and #alerts, with buttons and a slash command.</span>
+                  <Link to="/settings?tab=slack-bot" className={`font-medium ${LINK_ACCENT}`}>
+                    Connect the Slack bot
+                  </Link>
+                </span>
+              </Callout>
+            ),
+          },
+        ]}
+      />
 
       {!pending && coverage.error && <PageLoadError error={coverage.error} resource="Ops" endpoint="/v1/admin/ops/coverage" onRetry={coverage.reload} />}
       {orgId && coverage.loading && !coverage.data && <Loading text="Reading your apps…" />}
-
-      {coverage.data && !coverage.data.slack.enabled && (
-        <Callout tone="info" label="Slack bot is off">
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Events are kept here only. Connect your team's own Slack bot to get them in #payments, #releases and #alerts, with buttons and a slash command.</span>
-            <Link to="/settings?tab=slack-bot" className={`font-medium ${LINK_ACCENT}`}>
-              Connect the Slack bot
-            </Link>
-          </span>
-        </Callout>
-      )}
 
       {coverage.data && (
         <>

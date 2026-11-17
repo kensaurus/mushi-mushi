@@ -584,8 +584,8 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
   },
   {
     // The Ops hub (docs/execplans/ops-hub-slack.md): every app's payments,
-    // releases and alerts, and the team's own Slack bot. A product page, not
-    // operator-only: any team can connect its bot.
+    // releases and alerts, and the team's own Slack bot. A product page for
+    // every team (each connects its own bot), not an operator page.
     id: 'nav:ops',
     path: '/ops',
     label: 'Ops',
