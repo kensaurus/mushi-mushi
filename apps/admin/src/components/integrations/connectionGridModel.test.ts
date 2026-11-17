@@ -143,3 +143,43 @@ describe('connectionGridSentence', () => {
     expect(slack.view.detail).toBe('Reading your Slack settings…')
   })
 })
+
+describe('the GitHub tile follows the app binding the GitHub card uses', () => {
+  // Owner, 2026-11-17 (kensaur.us): the App was given access and the card said
+  // "Connected", but the tile read only the token form and said "Not
+  // connected", and the page counted "1 connected and working" while GitHub
+  // and Claude Code both worked.
+  const appOnly: PlatformResponse = {
+    platform: {
+      github: { github_repo_url: 'https://github.com/kensaurus/kensaur.us', github_installation_token_ref: null },
+      claude_code_agent: { claude_api_key_ref: 'ref' },
+    },
+    sourceByField: {},
+  }
+  const github = (tiles: ReturnType<typeof buildConnectionGrid>) => tiles.find((t) => t.id === 'github')!
+
+  it('an App install with no token reads connected, and the count agrees with the tiles', () => {
+    const tiles = buildConnectionGrid(
+      input({
+        platform: appOnly,
+        history: [probe('claude_code_agent'), probe('github')],
+        github: { state: 'connected', repo: 'kensaurus/kensaur.us' },
+      }),
+    )
+    expect(github(tiles).view.state).not.toBe('not_connected')
+    const counted = tiles.filter((t) => t.view.state !== 'not_connected').map((t) => t.id)
+    expect(counted).toEqual(expect.arrayContaining(['github', 'claude_code_agent']))
+    expect(connectionGridSentence(tiles).sentence).toBe('2 connected and working.')
+  })
+
+  it('a linked repo the App cannot reach is amber with the plain reason, never "Not connected"', () => {
+    const tile = github(buildConnectionGrid(input({ platform: appOnly, github: { state: 'repo_no_access', repo: 'kensaurus/kensaur.us' } })))
+    expect(tile.view).toMatchObject({ state: 'attention', label: 'Repo linked · app access missing' })
+    expect(tile.view.detail).toBe("Mushi Mushi can't read this repo yet: give the Mushi Mushi GitHub App access to kensaurus/kensaur.us.")
+  })
+
+  it('no repo reads not connected; without the status yet it falls back to the token form', () => {
+    expect(github(buildConnectionGrid(input({ github: { state: 'not_connected', repo: null } }))).view.state).toBe('not_connected')
+    expect(github(buildConnectionGrid(input({ github: null }))).view.state).toBe('working')
+  })
+})

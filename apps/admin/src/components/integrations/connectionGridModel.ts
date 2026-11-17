@@ -20,6 +20,7 @@ import { platformRequiredOk } from '../../lib/platformIntegrationForm'
 import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import { slackCardConnection } from './slackConnection'
 import { PLATFORM_DEFS, type HealthRow, type Kind, type PlatformResponse } from './types'
+import { GITHUB_ACCESS_LABEL, githubAccessMissingSentence, type GithubAccess } from '../../lib/githubAccess'
 
 type GridToolId = 'sentry' | 'github' | 'slack' | 'discord' | 'teams' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
 
@@ -46,6 +47,12 @@ export interface ConnectionGridInput {
   discordConfigured?: boolean
   teamsConfigured?: boolean
   linearConnected: boolean
+  /**
+   * The app's GitHub status from the dispatch preflight (lib/githubAccess.ts),
+   * the one the GitHub card shows. Without it (still loading) the tile reads
+   * the token form, which misses a GitHub App install.
+   */
+  github?: GithubAccess | null
   now?: number
 }
 
@@ -75,6 +82,31 @@ function platformTile(input: ConnectionGridInput, kind: Kind, id: GridToolId, la
     lastAt: configured ? (probe?.checked_at ?? null) : null,
     lastLabel: configured && probe ? 'Checked' : null,
   }
+}
+
+/** GitHub: a linked repo the App cannot reach is amber, never "Not connected". */
+function githubTile(input: ConnectionGridInput): GridTile {
+  const fromToken = platformTile(input, 'github', 'github', 'GitHub', 'github')
+  const access = input.github
+  if (!access) return fromToken
+  if (access.state === 'connected') {
+    const probe = latestProbe(input.history, 'github')
+    return {
+      ...fromToken,
+      view: connectionFromProbe({ configured: true, probe, now: input.now }),
+      lastAt: probe?.checked_at ?? null,
+      lastLabel: probe ? 'Checked' : null,
+    }
+  }
+  if (access.state === 'repo_no_access') {
+    return {
+      ...fromToken,
+      view: { state: 'attention', label: GITHUB_ACCESS_LABEL.repo_no_access, detail: githubAccessMissingSentence(access.repo) },
+      lastAt: null,
+      lastLabel: null,
+    }
+  }
+  return { ...fromToken, view: { state: 'not_connected' }, lastAt: null, lastLabel: null }
 }
 
 export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
@@ -169,7 +201,7 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
   // Same order as the page: what a solo builder needs first, monitoring last
   // (AGENTS.md positioning; first-time user test, 2026-10-28).
   return [
-    platformTile(input, 'github', 'github', 'GitHub', 'github'),
+    githubTile(input),
     slack,
     discord,
     ...(teams.view.state === 'not_connected' ? [] : [teams]),

@@ -36,6 +36,8 @@ export interface ConnectionView {
   detail?: string
   /** The untouched probe message, for a tooltip. */
   raw?: string
+  /** Short status words that replace the state's default, e.g. "Repo linked · app access missing". */
+  label?: string
 }
 
 const HTTP_MEANING: Record<number, string> = {

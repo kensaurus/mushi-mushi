@@ -121,7 +121,7 @@ function ConnectionTile({ tile }: { tile: GridTile }) {
       <button
         type="button"
         onClick={() => jumpTo(tile.anchor)}
-        aria-label={`${tile.label}: ${STATE_WORD[state]}. Open its card.`}
+        aria-label={`${tile.label}: ${tile.view.label ?? STATE_WORD[state]}. Open its card.`}
         data-state={state}
         className="flex h-full w-full min-w-0 flex-col gap-1.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       >
@@ -130,7 +130,7 @@ function ConnectionTile({ tile }: { tile: GridTile }) {
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{tile.label}</span>
           <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${DOT[state]}`} />
         </span>
-        <span className={`text-2xs ${state === 'attention' || state === 'expiring' ? 'text-warn' : 'text-fg-muted'}`}>{STATE_WORD[state]}</span>
+        <span className={`text-2xs ${state === 'attention' || state === 'expiring' ? 'text-warn' : 'text-fg-muted'}`}>{tile.view.label ?? STATE_WORD[state]}</span>
         <span className="text-3xs text-fg-faint">
           {tile.lastAt && tile.lastLabel ? (
             <>

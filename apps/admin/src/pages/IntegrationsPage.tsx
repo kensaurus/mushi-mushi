@@ -22,6 +22,8 @@ import { useToast } from '../lib/toast'
 import { NextStep } from '../components/NextStep'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useDispatchPreflight } from '../lib/useDispatchPreflight'
+import { githubAccessFromPreflight } from '../lib/githubAccess'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
@@ -150,6 +152,11 @@ export function IntegrationsPage() {
         return src === 'org' || src === 'env'
       })
   }, [platform, sourceByField])
+
+  // One GitHub status for the tile, the GitHub card and Codebase indexing: a
+  // linked repo plus a GitHub App install or token (the preflight's check).
+  const preflight = useDispatchPreflight(activeProjectId)
+  const githubAccess = githubAccessFromPreflight(preflight)
 
   /** True when Linear OAuth or API key is configured. */
   const linearConnected = useMemo(() => {
@@ -479,6 +486,7 @@ export function IntegrationsPage() {
                 discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
                 teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
                 linearConnected={linearConnected}
+                github={githubAccess}
               />
             ),
           },
@@ -511,7 +519,7 @@ export function IntegrationsPage() {
             {/* Links to #platform-card-github land on Connect GitHub first. */}
             <div id="platform-card-github" className="scroll-mt-chrome space-y-2">
             {activeProjectId && (
-              <GitHubConnectCard projectId={activeProjectId} returnTo="integrations" />
+              <GitHubConnectCard projectId={activeProjectId} returnTo="integrations" access={githubAccess} onConnected={preflight.reload} />
             )}
             {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind === 'github')
               .map((def) => (
@@ -655,7 +663,7 @@ export function IntegrationsPage() {
 
         {activeProjectId && (
           <div id="integrations-codebase" className="p-4 scroll-mt-chrome" data-dav-anchor="integrations:verify">
-            <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} />
+            <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} githubAccess={githubAccess} />
             <DryRunPanel projectId={activeProjectId} />
           </div>
         )}
