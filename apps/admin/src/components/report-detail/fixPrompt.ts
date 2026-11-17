@@ -95,6 +95,7 @@ type PromptReport = Pick<
   | 'app_version'
   | 'sdk_package'
   | 'sdk_version'
+  | 'source'
 >
 
 /** Collapse whitespace and cut to `max` chars with an ellipsis. */
@@ -211,11 +212,14 @@ function fenced(lines: string[]): string {
 }
 
 /**
- * A setup task Mushi Mushi filed itself (component `sdk-health:*`, e.g.
- * "Add the Mushi SDK to kensaur.us"), not a bug a user hit.
+ * A setup task Mushi Mushi filed itself (e.g. "Add the Mushi SDK to
+ * kensaur.us"), not a bug a user hit. Keyed on `source = 'sdk_health'`, which
+ * only the server's task route writes. Never on `component`: the classifier
+ * and triage set that on user reports, and a matching user report would put
+ * its own text unfenced into the prompt as "the task".
  */
-function isSetupTask(report: Pick<PromptReport, 'component'>): boolean {
-  return typeof report.component === 'string' && report.component.startsWith('sdk-health:')
+function isSetupTask(report: Pick<PromptReport, 'source'>): boolean {
+  return report.source === 'sdk_health'
 }
 
 /** Files the task's own steps name, `package.json` first when the task names one. */

@@ -248,6 +248,7 @@ describe('a setup task Mushi Mushi filed (sdk-health:*)', () => {
       summary: 'Add the Mushi SDK to kensaur.us',
       description: steps,
       component: 'sdk-health:install',
+      source: 'sdk_health',
       category: 'other',
       confidence: 1,
       stage2_analysis: null,
@@ -276,6 +277,14 @@ describe('a setup task Mushi Mushi filed (sdk-health:*)', () => {
     expect(files).toContain('`src/lib/mushi.ts`')
     expect(files).toContain('`src/main.tsx`')
     expect(p).not.toContain('infra/edge/state/functions')
+  })
+
+  it('a user report whose component merely looks like a task keeps the fenced bug prompt', () => {
+    // component is set by the classifier and in triage; only the server's task route sets source.
+    const p = buildFixPrompt({ ...task(), source: 'widget' })
+    expect(p).not.toContain('## The task')
+    expect(p).toContain('What the user said')
+    expect(p).toContain('```text')
   })
 
   it('a link-carried copy is shortened only there, and says where the rest is', () => {

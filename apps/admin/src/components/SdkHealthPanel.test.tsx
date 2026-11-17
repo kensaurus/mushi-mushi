@@ -394,5 +394,14 @@ describe('SdkHealthPanel', () => {
       expect(document.querySelector('[data-testid="sdk-health-ci-manual"]')).toBeNull()
       expect(document.querySelector('[data-testid="sdk-health-ci-unverifiable"]')!.textContent).toContain("can't confirm VITE_MUSHI_API_KEY")
     })
+
+    it('never claims every name is set when the repo itself could not be read', async () => {
+      await writePartially()
+      page.data = { ...(page.data as object), problems: [], notes: [{ check: 'repo', detail: 'Could not read a/b: 403' }] }
+      act(() => button(/Check again/)!.click())
+      await flush()
+      expect(document.body.textContent).not.toContain('Every CI name is set')
+      expect(document.querySelector('[data-testid="sdk-health-ci-unverifiable"]')).toBeTruthy()
+    })
   })
 })

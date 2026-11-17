@@ -120,7 +120,7 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
   // After Check again: every CI name set, still missing, or not checkable.
   const ciCheck: CiRecheck = !recheckedCi
     ? 'not_rechecked'
-    : notes.some((n) => n.check === 'ci_secrets')
+    : notes.some((n) => n.check === 'ci_secrets' || n.check === 'repo')
       ? 'unverifiable'
       : rawProblems.some((p) => p.id === 'ci_secrets_missing')
         ? 'still_missing'

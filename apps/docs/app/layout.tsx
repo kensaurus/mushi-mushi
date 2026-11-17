@@ -25,6 +25,9 @@ import {
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 
+/** The icon set's version, a cache-buster: the old icons were cached for a year. */
+const ICON_VERSION = '20261117'
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://kensaur.us/mushi-mushi'),
   title: {
@@ -46,13 +49,14 @@ export const metadata: Metadata = {
   // Fully-absolute asset URLs: Next joins metadataBase.pathname onto
   // root-relative metadata URLs, which doubles the /mushi-mushi prefix
   // (e.g. /mushi-mushi/mushi-mushi/docs/…). Absolute URLs bypass the join.
+  // ?v= busts the year-long cache the old icon was served with (new mark, 2026-11-17).
   icons: {
     icon: [
-      { url: `${DOCS_SITE}/favicon.svg`, type: 'image/svg+xml' },
-      { url: `${DOCS_SITE}/icon-192.png`, type: 'image/png', sizes: '192x192' },
-      { url: `${DOCS_SITE}/icon-512.png`, type: 'image/png', sizes: '512x512' },
+      { url: `${DOCS_SITE}/favicon.svg?v=${ICON_VERSION}`, type: 'image/svg+xml' },
+      { url: `${DOCS_SITE}/icon-192.png?v=${ICON_VERSION}`, type: 'image/png', sizes: '192x192' },
+      { url: `${DOCS_SITE}/icon-512.png?v=${ICON_VERSION}`, type: 'image/png', sizes: '512x512' },
     ],
-    apple: `${DOCS_SITE}/apple-touch-icon.png`,
+    apple: `${DOCS_SITE}/apple-touch-icon.png?v=${ICON_VERSION}`,
   },
   // No `site`: the @mushimushi_dev handle was never registered (see the
   // sameAs note in lib/structured-data.ts), and naming an account someone

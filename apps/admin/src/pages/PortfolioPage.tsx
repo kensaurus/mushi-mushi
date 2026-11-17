@@ -130,7 +130,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const shown = useMemo(() => sortPortfolioCards(cards, sortBy), [cards, sortBy])
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
-  const appList = useMemo(() => cards.map((c) => ({ projectId: c.projectId, name: c.name })), [cards])
+  // Every app, the demo included: spend, connectors and the digest still name it.
+  const appList = useMemo(() => (page.data?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [page.data])
   // App icons: the team's project list knows each app's SDK origin and repo.
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
