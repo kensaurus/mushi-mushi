@@ -67,6 +67,10 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
   const { stats } = overview
   const tone = VERDICT_TONE[verdict.tone]
   const days = overview.window.days
+  // The server counts the whole window in the database (stats.windowJobs); the outcome counts come
+  // from the newest jobs it read, which a busy day fills in hours (1,005 of 10,954 on 2026-11-17).
+  const weekJobs = Math.max(stats.windowJobs ?? counts.total, counts.total)
+  const sampled = weekJobs > counts.total
 
   return (
     <Card className="flex flex-col gap-3 p-3" data-testid="ci-summary">
@@ -103,12 +107,17 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
       <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-xs font-semibold text-fg">
-            {counts.total} job{counts.total === 1 ? '' : 's'} in {days} days
+            {weekJobs.toLocaleString()} job{weekJobs === 1 ? '' : 's'} in {days} days
           </h3>
           <span className="text-2xs text-fg-muted">
-            Pass rate <span className="font-semibold text-fg tabular-nums">{formatPercent(stats.passRate)}</span> of jobs that finished testing
+            Pass rate <span className="font-semibold text-fg tabular-nums">{formatPercent(stats.windowPassRate ?? stats.passRate)}</span> of jobs that finished testing
           </span>
         </div>
+        {sampled && (
+          <p className="text-2xs text-fg-muted" data-testid="ci-summary-sampled">
+            The bar and the counts below are the newest {counts.total.toLocaleString()} of them.
+          </p>
+        )}
         {counts.total > 0 && (
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-overlay" role="img" aria-label={BAR_ORDER.map((b) => `${counts[b.key]} ${(b.label ?? CI_OUTCOME_STYLE[b.outcome].label).toLowerCase()}`).join(', ')}>
             {BAR_ORDER.map((b) =>

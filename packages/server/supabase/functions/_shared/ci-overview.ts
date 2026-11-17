@@ -21,7 +21,7 @@ import type { CiJobKind, CiOverview } from './ci-overview-types.ts'
 import type { RepoPermissions } from './ci-collector.ts'
 
 // deno-lint-ignore no-explicit-any
-type Db = { from: (table: string) => any }
+type Db = { from: (table: string) => any; rpc?: (fn: string, args: Record<string, unknown>) => any }
 
 export const OVERVIEW_JOB_LIMIT = 200
 /**
@@ -120,6 +120,20 @@ export interface OverviewRows {
   /** The newest overview live sync of these projects (ci_collector_state.last_live_sync_at). */
   lastLiveSyncAt: string | null
   workflows: Array<{ projectId: string; repo: string; path: string; text: string }>
+  /**
+   * Jobs per UTC hour over the whole window, counted in the database (`ci_jobs_hourly`); null
+   * when the function is unavailable, and the overview falls back to the capped job list.
+   */
+  hourCounts?: HourCount[] | null
+}
+
+/** One row of `ci_jobs_hourly`. */
+export interface HourCount {
+  hour: string
+  jobs: number
+  passed: number
+  code_failures: number
+  infra_failures: number
 }
 
 /** Everything the overview reads except `steps` (loaded later, by primary key). */
@@ -215,13 +229,14 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     throwIfReadFailed(what, res.error)
     return (res.data ?? []) as T[]
   }
-  const [projectsRes, reposRes, runnersRes, stateRes, snapsRes, jobs] = await Promise.all([
+  const [projectsRes, reposRes, runnersRes, stateRes, snapsRes, jobs, hourCounts] = await Promise.all([
     db.from('projects').select('id, name, organization_id').in('id', projectIds),
     db.from('project_repos').select('project_id, repo_url').in('project_id', projectIds),
     db.from('ci_runners').select('project_id, repo, runner_name, status, busy, labels, kind, first_seen_at, last_job_at').in('project_id', projectIds),
     db.from('ci_collector_state').select('project_id, permissions, last_live_sync_at').in('project_id', projectIds),
     db.from('connector_snapshots').select('project_id, snapshot').in('project_id', projectIds).eq('kind', 'github').eq('is_current', true).eq('ok', true),
     readOverviewJobs(db, projectIds, fromIso),
+    readHourCounts(db, projectIds, fromIso),
   ])
   const projects = check<OverviewRows['projects'][number]>(projectsRes, 'projects')
   const orgIds = [...new Set(projects.map((p) => p.organization_id).filter((x): x is string => !!x))]
@@ -266,6 +281,34 @@ export async function loadCiOverviewRows(db: Db, projectIds: string[], from: Dat
     permissions,
     lastLiveSyncAt,
     workflows,
+    hourCounts,
+  }
+}
+
+/**
+ * Jobs per UTC hour over the whole window (`ci_jobs_hourly`). The finished-job read stops at
+ * FINISHED_READ_LIMIT, which a busy day fills in hours (1,005 jobs in 8 hours on 2026-11-17,
+ * against 10,954 in the week), so the week's shape is counted in the database. A missing or
+ * failing function only drops back to the capped list, whose gaps the console hatches.
+ */
+async function readHourCounts(db: Db, projectIds: string[], fromIso: string): Promise<HourCount[] | null> {
+  if (typeof db.rpc !== 'function' || projectIds.length === 0) return null
+  try {
+    const res = await db.rpc('ci_jobs_hourly', { p_project_ids: projectIds, p_from: fromIso })
+    if (res?.error) {
+      console.warn('[ci-overview] ci_jobs_hourly failed; the week falls back to the capped job list', res.error.message ?? res.error)
+      return null
+    }
+    return ((res?.data ?? []) as Array<Record<string, unknown>>).map((r) => ({
+      hour: String(r.hour),
+      jobs: Number(r.jobs ?? 0),
+      passed: Number(r.passed ?? 0),
+      code_failures: Number(r.code_failures ?? 0),
+      infra_failures: Number(r.infra_failures ?? 0),
+    }))
+  } catch (err) {
+    console.warn('[ci-overview] ci_jobs_hourly threw; the week falls back to the capped job list', err instanceof Error ? err.message : err)
+    return null
   }
 }
 
@@ -350,6 +393,44 @@ export function hourlySeries(
   }
   const coveredHour = Math.max(first, Math.ceil(coveredFrom.getTime() / HOUR_MS))
   return { hourly, hourlyFrom: new Date(coveredHour * HOUR_MS).toISOString() }
+}
+
+/**
+ * `hourlySeries` from database counts (`ci_jobs_hourly`): the whole window is covered, so
+ * `hourlyFrom` is the window's first full hour. Also returns the window's true totals.
+ */
+export function hourlyFromCounts(
+  counts: readonly HourCount[],
+  from: Date,
+  now: Date,
+): { hourly: HourlyPoint[]; hourlyFrom: string; windowJobs: number; windowPassRate: number | null } {
+  const first = Math.max(Math.floor(from.getTime() / HOUR_MS), Math.floor(now.getTime() / HOUR_MS) - HOURLY_MAX + 1)
+  const last = Math.floor(now.getTime() / HOUR_MS)
+  const hourly: HourlyPoint[] = []
+  for (let h = first; h <= last; h++) hourly.push({ at: new Date(h * HOUR_MS).toISOString(), jobs: 0, passed: 0, codeFailures: 0, infraFailures: 0 })
+  let jobs = 0
+  let passed = 0
+  let failed = 0
+  for (const c of counts) {
+    const t = Date.parse(c.hour)
+    if (!Number.isFinite(t)) continue
+    jobs += c.jobs
+    passed += c.passed
+    failed += c.code_failures
+    const slot = hourly[Math.floor(t / HOUR_MS) - first]
+    if (!slot) continue
+    slot.jobs += c.jobs
+    slot.passed += c.passed
+    slot.codeFailures += c.code_failures
+    slot.infraFailures += c.infra_failures
+  }
+  const coveredHour = Math.max(first, Math.ceil(from.getTime() / HOUR_MS))
+  return {
+    hourly,
+    hourlyFrom: new Date(coveredHour * HOUR_MS).toISOString(),
+    windowJobs: jobs,
+    windowPassRate: passed + failed > 0 ? Math.round((passed / (passed + failed)) * 1000) / 1000 : null,
+  }
 }
 
 export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: number; from: Date; refreshedAt: string | null }): CiOverview {
@@ -620,13 +701,15 @@ export function buildCiOverview(rows: OverviewRows, opts: { now: Date; days: num
       byWorkflow,
       byJob,
       slowSteps: slowSteps(advisorJobs),
-      ...hourlySeries(
-        all,
-        opts.from,
-        now,
-        // The finished read stops at FINISHED_READ_LIMIT: hours older than its oldest job are partial.
-        rows.finished.length >= FINISHED_READ_LIMIT ? new Date(rows.finished[rows.finished.length - 1]!.gh_created_at) : opts.from,
-      ),
+      ...(rows.hourCounts
+        ? hourlyFromCounts(rows.hourCounts, opts.from, now)
+        : hourlySeries(
+            all,
+            opts.from,
+            now,
+            // The finished read stops at FINISHED_READ_LIMIT: hours older than its oldest job are partial.
+            rows.finished.length >= FINISHED_READ_LIMIT ? new Date(rows.finished[rows.finished.length - 1]!.gh_created_at) : opts.from,
+          )),
     },
     advice,
   }

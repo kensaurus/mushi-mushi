@@ -4,7 +4,7 @@
  * the hour they started, and hours older than a capped read are marked partial.
  */
 import { describe, expect, it } from 'vitest'
-import { hourlySeries } from '../../supabase/functions/_shared/ci-overview.ts'
+import { hourlyFromCounts, hourlySeries } from '../../supabase/functions/_shared/ci-overview.ts'
 
 const job = (at: string, ci_kind: 'passed' | 'code_failure' | 'runner_lost' | 'running', infra = false) => ({
   gh_created_at: at,
@@ -59,5 +59,31 @@ describe('hourlySeries', () => {
     const { hourly } = hourlySeries([], new Date('2026-01-01T00:00:00Z'), now, new Date('2026-01-01T00:00:00Z'))
     expect(hourly).toHaveLength(31 * 24)
     expect(hourly.at(-1)!.at).toBe('2026-11-10T03:00:00.000Z')
+  })
+})
+
+describe('hourlyFromCounts', () => {
+  const from = new Date('2026-11-10T00:00:00Z')
+  const now = new Date('2026-11-10T03:10:00Z')
+
+  it('covers the whole window and totals it, so a capped job list no longer blanks the week', () => {
+    const out = hourlyFromCounts(
+      [
+        { hour: '2026-11-10T00:00:00+00:00', jobs: 4, passed: 3, code_failures: 1, infra_failures: 0 },
+        { hour: '2026-11-10T02:00:00+00:00', jobs: 6, passed: 3, code_failures: 1, infra_failures: 2 },
+      ],
+      from,
+      now,
+    )
+    expect(out.hourlyFrom).toBe('2026-11-10T00:00:00.000Z')
+    expect(out.hourly.map((h) => h.jobs)).toEqual([4, 0, 6, 0])
+    expect(out.hourly[2]).toMatchObject({ passed: 3, codeFailures: 1, infraFailures: 2 })
+    expect(out.windowJobs).toBe(10)
+    // Passes over passes + code failures; machine stops are not code failures.
+    expect(out.windowPassRate).toBe(0.75)
+  })
+
+  it('has no pass rate when nothing finished testing', () => {
+    expect(hourlyFromCounts([], from, now)).toMatchObject({ windowJobs: 0, windowPassRate: null })
   })
 })
