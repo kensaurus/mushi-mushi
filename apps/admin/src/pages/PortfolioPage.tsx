@@ -23,7 +23,7 @@
  */
 
 import { Link, useSearchParams } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
@@ -31,6 +31,7 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section } from '../components/ui'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
+import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
@@ -98,6 +99,18 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
   const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
+  // Refresh also looks up the app icons again (a new store icon shows now,
+  // not after the daily check). One request with the flag, then the normal
+  // read, so the flag never becomes part of the cached path.
+  const [refreshingIcons, setRefreshingIcons] = useState(false)
+  const refresh = () => {
+    findings.reload()
+    setRefreshingIcons(true)
+    void apiFetch(`${path}${query ? '&' : '?'}refreshIcons=1`, { cache: 'no-store' }).finally(() => {
+      setRefreshingIcons(false)
+      page.reload()
+    })
+  }
   const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
   const status = useMemo(() => portfolioStatusSentence(cards), [cards])
@@ -130,7 +143,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         helpFlowPath="/portfolio"
       >
         <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
-        <Btn size="sm" variant="ghost" onClick={() => { page.reload(); findings.reload() }} loading={page.isValidating}>
+        <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
           Refresh
         </Btn>
       </PageHeaderBar>
