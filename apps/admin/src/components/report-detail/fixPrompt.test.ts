@@ -222,3 +222,65 @@ describe('buildMcpFixPrompt', () => {
     expect(out).toContain('submit_fix_result')
   })
 })
+
+describe('a setup task Mushi Mushi filed (sdk-health:*)', () => {
+  // Owner, 2026-11-17, report "Add the Mushi SDK to kensaur.us": the steps
+  // were cut mid-sentence, the likely files were code-search noise, "Not
+  // diagnosed yet" sat beside "Diagnosis confidence: 100%", and "Done when"
+  // was bug boilerplate.
+  const steps = [
+    'Add the Mushi bug-report SDK to kensaur.us (Vite, `package.json`).',
+    '',
+    'How to fix:',
+    '1. Install the SDK in the repo root: `mushi-mushi`.',
+    '2. Add `src/lib/mushi-env.ts` with `readMushiEnv(raw)`. Copy kensaurus/the-wanting-mind src/lib/mushi-env.ts.',
+    '3. Add `src/lib/mushi.ts` with `initMushi()`. ' + 'Leave out its i18n, Sentry and category code unless this app has them. '.repeat(120),
+    '4. Call `initMushi()` once at app start (the entry file, e.g. `src/main.tsx`).',
+    '',
+    'Done when:',
+    '- After the PR merges and the app deploys, opening it once makes Mushi show an SDK check-in.',
+    '- The diff contains no key value.',
+    'LAST-LINE-MARKER',
+  ].join('\n')
+  const task = () =>
+    report({
+      title: 'Add the Mushi SDK to kensaur.us',
+      summary: 'Add the Mushi SDK to kensaur.us',
+      description: steps,
+      component: 'sdk-health:install',
+      category: 'other',
+      confidence: 1,
+      stage2_analysis: null,
+      environment: { source: 'sdk-health', kind: 'install', packageJson: 'package.json' } as never,
+      fix_packet: '### `infra/edge/state/functions/viewer.js`\n```js\nexport {}\n```',
+      console_logs: [],
+      network_logs: [],
+    })
+
+  it('carries the whole task, never cut, with its own Done when and no bug boilerplate', () => {
+    const p = buildFixPrompt(task())
+    expect(p.length).toBeGreaterThan(FIX_PROMPT_MAX_CHARS)
+    expect(p).toContain('LAST-LINE-MARKER')
+    expect(p).toContain('- The diff contains no key value.')
+    expect(p).not.toContain('What the user said')
+    expect(p).not.toContain('Why it broke')
+    expect(p).not.toContain('Diagnosis confidence')
+    expect(p).not.toContain('You reproduced the bug')
+    expect(p).not.toContain('A test covers it')
+  })
+
+  it('lists the files the steps name, package.json first, not code-search matches', () => {
+    const p = buildFixPrompt(task())
+    const files = p.split('## Files the steps name')[1]!.split('##')[0]!
+    expect(files.trim().split('\n')[0]).toBe('- `package.json`')
+    expect(files).toContain('`src/lib/mushi.ts`')
+    expect(files).toContain('`src/main.tsx`')
+    expect(p).not.toContain('infra/edge/state/functions')
+  })
+
+  it('a link-carried copy is shortened only there, and says where the rest is', () => {
+    const p = buildUrlFixPrompt(task())
+    expect(encodeURIComponent(p).length).toBeLessThanOrEqual(FIX_PROMPT_URL_MAX_ENCODED)
+    expect(p).toContain(`The full steps are on Mushi report ${ID}`)
+  })
+})
