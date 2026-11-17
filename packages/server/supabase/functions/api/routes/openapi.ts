@@ -450,6 +450,47 @@ function buildSpec(apiBase: string): Record<string, unknown> {
           responses: { '201': { description: '{ ok, data: { id, key, prefix, scopes: ["runner:write"], label } }' }, '403': { description: 'FORBIDDEN (viewer)' }, '404': { description: 'NOT_FOUND' }, '429': { description: 'RATE_LIMITED' } },
         },
       },
+      // ── Ops hub: an app's payments, releases and alerts ───────────────────
+      '/v1/ops/events': {
+        post: {
+          summary: 'Record one operational event from an app server (payment, release, alert) and post it to the team Slack',
+          description:
+            'Body { category: payments|releases|alerts, severity?: info|warn|urgent|resolved, kind, title (≤150), body? (≤600), facts?[≤8 {label,value}], url? (https), amount_minor?, currency?, thread_key?, dedupe_key?, occurred_at? }. Requires a project key carrying ops:write (mint one with POST /v1/admin/projects/{id}/ops-key); refused from a browser. 422 PII_REJECTED when a field carries an email or phone number. 202 once stored; Slack delivery runs after the answer. A repeated dedupe_key answers 200 with the stored id. 120 a minute per app (503 if the limit cannot be checked).',
+          operationId: 'ingestOpsEvent',
+          tags: ['ops'],
+          security: [{ mushiApiKey: ['ops:write'] }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['category', 'kind', 'title'], properties: { category: { type: 'string', enum: ['payments', 'releases', 'alerts'] }, kind: { type: 'string' }, title: { type: 'string', maxLength: 150 } } } } } },
+          responses: { '202': { description: '{ ok, data: { id, status: created } }' }, '200': { description: '{ ok, data: { id, status: duplicate } }' }, '400': { description: 'VALIDATION_ERROR' }, '403': { description: 'INSUFFICIENT_SCOPE | KEY_EXPOSED_IN_BROWSER' }, '422': { description: 'PII_REJECTED' }, '429': { description: 'RATE_LIMITED' }, '503': { description: 'RATE_LIMIT_UNAVAILABLE' } },
+        },
+      },
+      '/v1/admin/projects/{id}/ops-key': {
+        post: {
+          summary: 'Mint an ops:write-only key for an app server (plaintext returned once)',
+          operationId: 'mintOpsKey',
+          tags: ['ops'],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '201': { description: '{ ok, data: { id, key, prefix, scopes: ["ops:write"], label } }' }, '403': { description: 'FORBIDDEN (viewer)' }, '404': { description: 'NOT_FOUND' }, '429': { description: 'RATE_LIMITED' } },
+        },
+      },
+      '/v1/ops/slack/commands': {
+        post: {
+          summary: "The team's Slack slash command (status, sales, releases, alerts, bugs, ci, apps, mute, unmute, help)",
+          description: "Signed with the organization's own Slack signing secret, found by team_id (v0 HMAC, 5-minute window). help answers inline; every other command answers through response_url.",
+          operationId: 'opsSlackCommand',
+          tags: ['ops'],
+          responses: { '200': { description: 'ephemeral Block Kit reply or ack' }, '401': { description: 'BAD_SIGNATURE' } },
+        },
+      },
+      '/v1/ops/slack/interactions': {
+        post: {
+          summary: 'Ops message buttons: Acknowledge, Mute 24h',
+          description: "Signed with the organization's own Slack signing secret. Acts only on an event of the organization whose secret verified the request.",
+          operationId: 'opsSlackInteraction',
+          tags: ['ops'],
+          responses: { '200': { description: 'ack' }, '401': { description: 'BAD_SIGNATURE' } },
+        },
+      },
       // ── Slack Events API + slash commands (voice inbox) ───────────────────
       '/v1/webhooks/slack/events': {
         post: {

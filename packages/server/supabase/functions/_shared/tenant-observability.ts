@@ -121,6 +121,42 @@ export async function claimTenantRateLimit(
   return { allowed: true };
 }
 
+/**
+ * {@link claimTenantRateLimit} that fails CLOSED: a database error denies the
+ * request (`unavailable: true`, answer 503) instead of allowing it. For routes
+ * whose limit protects someone else's quota, such as the Ops hub ingest that
+ * posts to a team's Slack (docs/execplans/ops-hub-slack.md: "never fail open").
+ */
+export async function claimTenantRateLimitStrict(
+  db: SupabaseClient,
+  scopeKey: string,
+  limit: number,
+  windowSec: number,
+): Promise<ScopedRateLimitResult & { unavailable?: boolean }> {
+  let error: { message?: string } | null = null;
+  try {
+    ({ error } = await db.rpc('scoped_rate_limit_claim', {
+      p_user_id: await rateLimitActorId(scopeKey),
+      p_scope: scopeKey,
+      p_max_per_window: limit,
+      p_window: `${windowSec} seconds`,
+    }));
+  } catch (err) {
+    error = { message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!error) return { allowed: true };
+  const msg = error.message ?? '';
+  if (msg.includes('rate_limit_exceeded')) {
+    const match = msg.match(/retry_after=(\d+)/);
+    return { allowed: false, retryAfterSec: match ? parseInt(match[1]!, 10) : windowSec };
+  }
+  logDbFailure(tenantLog, 'scoped_rate_limit_claim failed — denying request (strict)', error, {
+    scopeKey,
+    err: dbDiagnosticMessage(msg),
+  });
+  return { allowed: false, retryAfterSec: 30, unavailable: true };
+}
+
 export interface OrgAuditInput {
   organizationId: string;
   projectId?: string | null;

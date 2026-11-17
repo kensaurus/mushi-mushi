@@ -105,9 +105,15 @@ const BROWSER_EXPOSURE_MESSAGE: Record<'browser_request' | 'key_seen_in_browser'
     'Mint an agent key with `mushi login` (or in the console) and keep it out of browser bundles.',
 }
 
+/** The same refusal for an ops:write key, worded for an app's server. */
+const OPS_KEY_BROWSER_MESSAGE =
+  'Ops keys (ops:write) belong on your server, because anything a web page sends is public. ' +
+  'Send events from your backend or a CI job, and mint a new ops key if this one reached a browser.'
+
 function refuseBrowserExposedMcpKey(
   c: Context,
   key: { last_seen_origin?: string | null; browser_seen_at?: string | null },
+  opsKey = false,
 ): Response | null {
   const reason = mcpKeyBrowserExposure(
     {
@@ -118,7 +124,7 @@ function refuseBrowserExposedMcpKey(
     key,
   )
   if (!reason) return null
-  return authError(c, 'KEY_EXPOSED_IN_BROWSER', BROWSER_EXPOSURE_MESSAGE[reason], 403)
+  return authError(c, 'KEY_EXPOSED_IN_BROWSER', opsKey ? OPS_KEY_BROWSER_MESSAGE : BROWSER_EXPOSURE_MESSAGE[reason], 403)
 }
 
 function applyLogContext(c: Context, patch: LogContext): void {
@@ -657,7 +663,8 @@ export async function apiKeyAuth(c: Context, next: Next) {
   // "SDK heartbeat" step self-satisfy from the second poll onward. The runner
   // ingest (Plan 022) is not the SDK either: a runner key pushing heartbeats
   // must not make the project read "SDK installed".
-  if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner')) {
+  // An ops key (POST /v1/ops/events) is a server's key, not the SDK either.
+  if (!c.req.path.endsWith('/ingest-setup') && !c.req.path.endsWith('/ingest/runner') && !c.req.path.endsWith('/ops/events')) {
     const sdkPackage = c.req.header(MUSHI_SDK_PACKAGE_HEADER) ?? null
     const sdkVersion = c.req.header(MUSHI_SDK_VERSION_HEADER) ?? null
     const origin = c.req.header('Origin') ?? c.req.header('Referer') ?? null
@@ -717,11 +724,12 @@ export function requireApiKeyScope(scope: McpScope) {
         403,
       )
     }
-    if (isAgentScope(scope)) {
+    // ops:write is a server-side key too: a page that sends it has published it.
+    if (isAgentScope(scope) || scope === 'ops:write') {
       const signals = (c.get('apiKeyBrowserSignals') as
         | { last_seen_origin: string | null; browser_seen_at: string | null }
         | undefined) ?? { last_seen_origin: null, browser_seen_at: null }
-      const exposed = refuseBrowserExposedMcpKey(c, signals)
+      const exposed = refuseBrowserExposedMcpKey(c, signals, scope === 'ops:write')
       if (exposed) return exposed
     }
     await next()
@@ -874,9 +882,11 @@ export async function jwtAuth(c: Context, next: Next) {
  * a local worker (`mushi work --daemon`, ADR 0048): the /v1/worker/* routes,
  * the local follow-up routes, report filing, and recording a fix on a report
  * the worker holds an active claim on (_shared/work-claims.ts). Never merge,
- * settings or keys; mcp:write does not imply it either.
+ * settings or keys; mcp:write does not imply it either. `ops:write` is an
+ * app server's key for its operational events (POST /v1/ops/events, the Ops
+ * hub): that route only, refused from a browser, implied by nothing.
  */
-export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write' | 'runner:write' | 'worker:run'
+export type McpScope = 'mcp:read' | 'mcp:write' | 'voice:write' | 'runner:write' | 'worker:run' | 'ops:write'
 
 interface AdminOrApiKeyOptions {
   /**
