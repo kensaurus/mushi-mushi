@@ -78,7 +78,9 @@ const POLL_MS = 30_000
 // whole page sideways at 390 px).
 const NOW_GRID = 'grid-cols-1 @min-[96rem]:grid-cols-3'
 const NOW_MAIN = '@min-[96rem]:col-span-2'
-const NOW_SIDE = '@min-[96rem]:col-span-1 @min-[96rem]:sticky @min-[96rem]:top-4'
+// Not sticky: a sticky grid item is bounded by the whole grid, not its row, so the week card
+// floated over Job times and the Timeline while scrolling (2026-11-17).
+const NOW_SIDE = '@min-[96rem]:col-span-1'
 const NOW_FULL = '@min-[96rem]:col-span-3'
 // Section hints stay a readable line on a wide shell.
 const HINT = 'mb-2 max-w-[80ch] text-xs text-fg-muted'

@@ -69,9 +69,12 @@ export function tickVisibility(i: number): string {
   return 'hidden @min-[100rem]:block'
 }
 
-/** Lane label column: 8.5rem plus the 0.5rem gap = the axis inset (ml-36). */
-const LABEL_W = 'w-34'
-const AXIS_INSET = 'ml-36'
+/**
+ * Lane label column: 8.5rem plus the 0.5rem gap = the axis inset (ml-36). From 100rem it widens
+ * to 12.5rem (+ gap = ml-52): "aw-solo-boss-cloud-docu 1/2/3" all cut to the same "aw-solo-boss-clou…".
+ */
+const LABEL_W = 'w-34 @min-[100rem]:w-50'
+const AXIS_INSET = 'ml-36 @min-[100rem]:ml-52'
 
 function clock(t: number): string {
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -191,7 +194,7 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
             </div>
             <div className="relative">
               {/* Gridlines behind the lanes, at the ticks that show. */}
-              <div className={`pointer-events-none absolute inset-y-0 right-0 left-36`} aria-hidden="true">
+              <div className="pointer-events-none absolute inset-y-0 right-0 left-36 @min-[100rem]:left-52" aria-hidden="true">
                 {ticks.slice(1, -1).map((_, j) => {
                   const i = j + 1
                   return (
