@@ -29,6 +29,7 @@ import { log as rootLog } from './logger.ts';
 import { applyReportStatusTransition } from './report-transition.ts';
 import { extractFramePaths } from './sentry-frames.ts';
 import { reopenSentryLinks } from './sentry-resolve-back.ts';
+import { scheduleSentryOps } from './ops-sources.ts';
 
 const log = rootLog.child('sentry-ingest');
 
@@ -295,6 +296,18 @@ export async function ingestSentryError(
           reportId: linked.reportId,
           sentryIssueId,
         });
+        // Ops hub: a regression goes to the team's #alerts (only when its Slack bot is on).
+        scheduleSentryOps(db as never, projectId, {
+          outcome: 'reopened',
+          issueId: sentryIssueId,
+          title: event?.title ?? issue?.title ?? null,
+          culprit: event?.culprit ?? issue?.culprit ?? null,
+          level: event?.level ?? issue?.level ?? null,
+          environment: event?.environment ?? tagValue(event?.tags, 'environment'),
+          release: event?.release ?? tagValue(event?.tags, 'release'),
+          url: event?.web_url ?? issue?.permalink ?? null,
+          regressionCount: linked.regressionCount + 1,
+        });
         return { outcome: 'reopened', reportId: linked.reportId };
       }
       if (intake === 'poll') return { outcome: 'linked', reportId: linked.reportId };
@@ -407,6 +420,20 @@ export async function ingestSentryError(
   }
 
   input.triggerClassification(reportId, projectId);
+  // Ops hub: a new production error goes to the team's #alerts. A manual import is not news.
+  if (intake !== 'import') {
+    scheduleSentryOps(db as never, projectId, {
+      outcome: 'created',
+      issueId: sentryIssueId,
+      title,
+      culprit,
+      level,
+      environment,
+      release,
+      url: sentryUrl,
+      firstSeen: issue?.firstSeen ?? new Date(sentryEventTimeMs(event, issue)).toISOString(),
+    });
+  }
   return { outcome: 'created', reportId };
 }
 
@@ -432,5 +459,7 @@ export async function resolveReportFromSentry(
     log.warn('Sentry-side resolve failed', { reportId: linked.reportId, err: result.message });
     return { outcome: 'ignored', reportId: linked.reportId };
   }
+  // Ops hub: close the #alerts thread, if one is open for this issue.
+  scheduleSentryOps(db as never, projectId, { outcome: 'resolved', issueId: sentryIssueId, title: null, regressionCount: linked.regressionCount });
   return { outcome: 'resolved', reportId: linked.reportId };
 }
