@@ -213,9 +213,8 @@ function fenced(lines: string[]): string {
 /**
  * A setup task Mushi Mushi filed itself (component `sdk-health:*`, e.g.
  * "Add the Mushi SDK to kensaur.us"), not a bug a user hit.
- * @internal Exported for unit tests only.
  */
-export function isSetupTask(report: Pick<PromptReport, 'component'>): boolean {
+function isSetupTask(report: Pick<PromptReport, 'component'>): boolean {
   return typeof report.component === 'string' && report.component.startsWith('sdk-health:')
 }
 

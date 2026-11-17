@@ -22,8 +22,7 @@ export type FixReadiness =
   /** Not read yet, or could not be read. */
   | { kind: 'unknown' }
 
-/** @internal Exported for unit tests only. */
-export function fixReadinessFromChecks(checks: readonly PreflightCheck[] | null): FixReadiness {
+function fixReadinessFromChecks(checks: readonly PreflightCheck[] | null): FixReadiness {
   if (!checks || checks.length === 0) return { kind: 'unknown' }
   const github = checks.find((c) => c.key === 'github')
   const autofix = checks.find((c) => c.key === 'autofix')
