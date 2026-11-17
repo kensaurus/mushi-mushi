@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.31.4
+
+### Patch Changes
+
+- fd05f9a: The docs index the MCP `search_mushi_docs` tool reads now covers `setDiagnosticsProvider()`, the React Native app version and `loadMyReports()`.
+- Updated dependencies [fd05f9a]
+  - @mushi-mushi/core@1.37.0
+
 ## 0.31.3
 
 ### Patch Changes
