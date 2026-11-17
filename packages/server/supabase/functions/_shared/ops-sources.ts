@@ -6,8 +6,8 @@
  *          them only for organizations whose Slack bot is switched on.
  *
  *   GitHub deployment_status (webhooks-github-indexer, GitHub App only):
- *     production success → `releases` "Deployed …" (+ `resolved` in the
- *     alerts thread when the previous production deploy failed);
+ *     production success → `releases` "Deployed …" (its own message) and
+ *     a `resolved` in the alerts thread when a production deploy failed;
  *     production failure / error → `alerts` urgent. Thread
  *     `deploy:<repo>:production`; dedupe on the deployment status id.
  *   Sentry (the /v1/webhooks/sentry alert and the auto-import poll; never a
@@ -72,7 +72,8 @@ export function opsEventsFromDeploymentStatus(p: DeploymentStatusPayload): OpsEv
   const occurredAt = p.deployment_status?.created_at && Number.isFinite(Date.parse(p.deployment_status.created_at)) ? new Date(p.deployment_status.created_at).toISOString() : null
   if (state === 'success') {
     return [
-      { category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `Deployed ${version || 'to production'}`, facts, url, threadKey, dedupeKey: `gh-deploy-status:${statusId}`, occurredAt, source: 'github' },
+      // No thread: every release is its own message in #releases.
+      { category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `Deployed ${version || 'to production'}`, facts, url, threadKey: null, dedupeKey: `gh-deploy-status:${statusId}`, occurredAt, source: 'github' },
       { category: 'alerts', severity: 'resolved', kind: 'deploy.recovered', title: `Fixed by the next deploy (${version || 'production'})`, facts, url, threadKey, dedupeKey: `gh-deploy-status:${statusId}:resolved`, occurredAt, source: 'github' },
     ]
   }

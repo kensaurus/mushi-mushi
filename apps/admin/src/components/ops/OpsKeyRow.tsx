@@ -46,11 +46,14 @@ export function OpsKeyRow({ projectId, projectName }: { projectId: string; proje
     setMinted(res.data)
   }
 
+  // Collapsed like the Keys list below it: one line per card until opened.
   return (
-    <div className="mx-3 mb-3 space-y-2 rounded-md border border-edge-subtle px-3 py-2" data-testid={`ops-key-${projectId}`}>
+    <details className="mx-3 mb-3 border-t border-edge-subtle pt-2" data-testid={`ops-key-${projectId}`} open={minted != null || undefined}>
+      <summary className="cursor-pointer text-2xs font-semibold text-fg-secondary select-none hover:text-fg">Ops key</summary>
+      <div className="mt-2 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="min-w-0 text-xs text-fg-secondary">
-          <span className="font-semibold text-fg">Ops key</span> · lets {projectName}'s server send payments, releases and alerts to Ops and your team's Slack. Server only: a web page cannot use it.{' '}
+          Lets {projectName}'s server send payments, releases and alerts to Ops and your team's Slack. Server only: a web page cannot use it.{' '}
           <a href={docsUrl('/integrations/ops-hub#connect-an-app')} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
             How ↗
           </a>
@@ -80,6 +83,7 @@ export function OpsKeyRow({ projectId, projectName }: { projectId: string; proje
           </Btn>
         </div>
       )}
-    </div>
+      </div>
+    </details>
   )
 }

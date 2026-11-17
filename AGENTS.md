@@ -1177,7 +1177,7 @@ Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). 
 
 ## Ops hub (Nov 17 2026)
 
-Plan: [`docs/execplans/ops-hub-slack.md`](docs/execplans/ops-hub-slack.md). User docs: `apps/docs/content/integrations/ops-hub.mdx`. Migration `20261117120000_ops_hub.sql` (apply before deploying `api`, `api-ext`, `webhooks-github-indexer`, `site-watch-poll`).
+Plan: [`docs/execplans/ops-hub-slack.md`](docs/execplans/ops-hub-slack.md). User docs: `apps/docs/content/integrations/ops-hub.mdx`. Migration `20261117120000_ops_hub.sql` (apply before deploying `api`, `api-ext`, `webhooks-github-indexer`, `site-watch-poll`, `sentry-seer-poll`).
 
 | Object | Role |
 | --- | --- |

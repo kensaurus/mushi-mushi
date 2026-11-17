@@ -62,7 +62,7 @@ import {
   runInBackground,
   type OpsSettingsRow,
 } from '../../_shared/ops-events.ts'
-import { eph, runOpsCommand, type SlashReply } from '../../_shared/ops-commands.ts'
+import { eph, openAlerts, runOpsCommand, type SlashReply } from '../../_shared/ops-commands.ts'
 import { looksLikeBotToken, looksLikeSigningSecret, postSlackWebhook, slackApi, slackAuthTest, SLACK_WEBHOOK_HOST } from '../../_shared/ops-slack.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
@@ -394,7 +394,7 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
     orgApps(db, org.orgId),
     db.rpc('ops_coverage', { p_organization_id: org.orgId }),
     db.from('ops_events').select('category, kind, amount_minor, currency').eq('organization_id', org.orgId).gte('occurred_at', dayStart).limit(10_000),
-    db.from('ops_events').select('severity, thread_key, acked_at').eq('organization_id', org.orgId).eq('category', 'alerts').gte('occurred_at', new Date(now.getTime() - 7 * 86_400_000).toISOString()).limit(2000),
+    db.from('ops_events').select('severity, thread_key, acked_at, occurred_at').eq('organization_id', org.orgId).eq('category', 'alerts').gte('occurred_at', new Date(now.getTime() - 7 * 86_400_000).toISOString()).limit(2000),
     db.from('ops_mutes').select('project_id, until, muted_by').eq('organization_id', org.orgId),
     readOpsSettings(db as never, org.orgId),
   ])
@@ -413,15 +413,14 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
       payments[e.currency] = (payments[e.currency] ?? 0) + (refund ? -Math.abs(e.amount_minor) : Math.abs(e.amount_minor))
     }
   }
-  const alertRows = (alerts.data as Array<{ severity: string; thread_key: string | null; acked_at: string | null }> | null) ?? []
-  const resolvedThreads = new Set(alertRows.filter((a) => a.severity === 'resolved' && a.thread_key).map((a) => a.thread_key))
-  const openAlerts = alertRows.filter((a) => a.severity !== 'resolved' && !a.acked_at && !(a.thread_key && resolvedThreads.has(a.thread_key))).length
+  const alertRows = (alerts.data as Array<{ severity: OpsEventRow['severity']; thread_key: string | null; acked_at: string | null; occurred_at: string }> | null) ?? []
+  const openCount = openAlerts(alertRows).length
   return c.json({
     ok: true,
     data: {
       apps,
       coverage: ((cov.data as CoverageRpcRow[] | null) ?? []).map((r) => ({ ...r, count_7d: Number(r.count_7d) || 0 })),
-      today: { payments, releases, openAlerts, since: dayStart },
+      today: { payments, releases, openAlerts: openCount, since: dayStart },
       mutes: ((mutes.data as Array<{ project_id: string; until: string }> | null) ?? []).filter((m) => Date.parse(m.until) > now.getTime()),
       slack: { enabled: settings.ok ? Boolean(settings.row?.enabled) : false },
     },

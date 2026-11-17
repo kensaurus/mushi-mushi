@@ -102,6 +102,44 @@ describe('recordOpsEvent', () => {
   })
 })
 
+describe('threads follow the open incident, not the first one ever', () => {
+  it('fail → resolve → fail starts a second root, and the second resolve edits the second root', async () => {
+    const { db, calls, deps } = setup()
+    const at = (m: number) => new Date(Date.parse('2026-11-17T00:00:00Z') + m * 60_000).toISOString()
+    const post = async (over: Record<string, unknown>) => {
+      const r = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P1, input: event({ threadKey: 'uptime:https://a.test', ...over }) }, deps)
+      if (r.status !== 'created') throw new Error('x')
+      await deliverOpsEvent(db as never, r.event, deps)
+      return db.table('ops_events').find((e) => e.id === r.event.id)!
+    }
+    const fail1 = await post({ occurredAt: at(0) })
+    const fix1 = await post({ severity: 'resolved', title: 'Back up', occurredAt: at(10) })
+    const fail2 = await post({ occurredAt: at(60) })
+    const fix2 = await post({ severity: 'resolved', title: 'Back up again', occurredAt: at(70) })
+    expect(fix1.parent_id).toBe(fail1.id)
+    expect(fail2.parent_id).toBeNull()
+    expect(fix2.parent_id).toBe(fail2.id)
+    const updates = calls.filter((c) => c.url.endsWith('chat.update')).map((c) => c.body.ts)
+    expect(updates).toEqual([fail1.slack_ts, fail2.slack_ts])
+    expect(fail1.slack_ts).not.toBe(fail2.slack_ts)
+  })
+
+  it('a follow-up that is not a resolve replies under the open incident’s root', async () => {
+    const { db, deps } = setup()
+    const root = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P1, input: event({ threadKey: 'inv:1', occurredAt: '2026-11-17T01:00:00.000Z' }) }, deps)
+    const warn = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P1, input: event({ severity: 'warn', threadKey: 'inv:1', occurredAt: '2026-11-17T02:00:00.000Z' }) }, deps)
+    const again = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P1, input: event({ severity: 'warn', threadKey: 'inv:1', occurredAt: '2026-11-17T03:00:00.000Z' }) }, deps)
+    if (root.status !== 'created' || warn.status !== 'created' || again.status !== 'created') throw new Error('x')
+    expect(warn.event.parent_id).toBe(root.event.id)
+    expect(again.event.parent_id).toBe(root.event.id)
+  })
+
+  it('two production deploys are two release messages, not a thread', () => {
+    const one = opsEventsFromDeploymentStatus({ deployment_status: { id: 1, state: 'success', environment: 'production' }, deployment: { sha: 'a'.repeat(40), production_environment: true }, repository: { full_name: 'o/r' } })
+    expect(one[0]).toMatchObject({ category: 'releases', threadKey: null })
+  })
+})
+
 describe('deliverOpsEvent', () => {
   it('posts with the bot, keeps the ts, and threads a resolve under its parent (broadcast + parent edit)', async () => {
     const { db, calls, deps } = setup()
@@ -229,7 +267,8 @@ describe('source builders', () => {
       ['releases', 'info', 'gh-deploy-status:77'],
       ['alerts', 'resolved', 'gh-deploy-status:77:resolved'],
     ])
-    expect(ok[0]).toMatchObject({ title: 'Deployed abcdef1', threadKey: 'deploy:o/r:production', source: 'github' })
+    expect(ok[0]).toMatchObject({ title: 'Deployed abcdef1', threadKey: null, source: 'github' })
+    expect(ok[1]).toMatchObject({ threadKey: 'deploy:o/r:production' })
     const bad = opsEventsFromDeploymentStatus(dep('failure'))
     expect(bad).toHaveLength(1)
     expect(bad[0]).toMatchObject({ category: 'alerts', severity: 'urgent', kind: 'deploy.failed', threadKey: 'deploy:o/r:production' })

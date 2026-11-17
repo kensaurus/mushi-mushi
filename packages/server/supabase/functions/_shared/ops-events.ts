@@ -128,7 +128,13 @@ export type RecordResult =
   | { status: 'duplicate'; event: OpsEventRow }
   | { status: 'error'; missing: boolean; error: string }
 
-/** The first event of this thread in this org and category, if any. */
+/**
+ * The root of this thread's OPEN incident in this org and category, if any:
+ * the latest event of the thread, unless it is a resolve (then the incident
+ * is over and the next event starts a new root). So a second outage on the
+ * same URL, weeks after the first was fixed, gets its own message and its own
+ * resolve edits that message, not the first one.
+ */
 async function findThreadParent(db: Db, organizationId: string, threadKey: string, category: OpsCategory): Promise<OpsEventRow | null> {
   const { data, error } = await db
     .from('ops_events')
@@ -136,11 +142,15 @@ async function findThreadParent(db: Db, organizationId: string, threadKey: strin
     .eq('organization_id', organizationId)
     .eq('thread_key', threadKey)
     .eq('category', category)
-    .is('parent_id', null)
-    .order('occurred_at', { ascending: true })
+    .order('occurred_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
   if (error) return null
-  return ((data as OpsEventRow[] | null) ?? [])[0] ?? null
+  const latest = ((data as OpsEventRow[] | null) ?? [])[0]
+  if (!latest || latest.severity === 'resolved') return null
+  if (!latest.parent_id) return latest
+  const { data: root } = await db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('id', latest.parent_id).maybeSingle()
+  return (root as OpsEventRow | null) ?? latest
 }
 
 export async function recordOpsEvent(

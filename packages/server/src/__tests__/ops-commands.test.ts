@@ -71,6 +71,9 @@ describe('answers', () => {
       { id: '5', project_id: 'p2', category: 'alerts', severity: 'warn', kind: 'x', title: 'Seen', url: null, occurred_at: '2026-11-17T01:00:00Z', thread_key: null, acked_at: '2026-11-17T01:05:00Z' },
     ] as const
     expect(cmds.openAlerts(rows as never).map((a) => a.id)).toEqual(['1', '2'])
+    // A second incident after the thread was resolved is open again.
+    const again = [...rows, { id: '6', project_id: 'p2', category: 'alerts', severity: 'urgent', kind: 'x', title: 'Deploy failed again', url: null, occurred_at: '2026-11-17T04:30:00Z', thread_key: 'd1', acked_at: null }]
+    expect(cmds.openAlerts(again as never).map((a) => a.id)).toEqual(['1', '2', '6'])
     const body = text(cmds.answerAlerts(rows as never, apps, NOW, null))
     expect(body.indexOf('Site down')).toBeLessThan(body.indexOf('Slow API'))
     expect(body).toContain('<https://glot.it|Site down>')

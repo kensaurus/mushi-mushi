@@ -195,10 +195,23 @@ export function answerReleases(releases: FeedRow[], apps: OpsApp[], n: number, n
   return eph(`Last ${shown.length} release${shown.length === 1 ? '' : 's'}`, [header(`🚀 Last ${shown.length} release${shown.length === 1 ? '' : 's'}`), ...sections(shown.map((e) => feedLine(e, byApp.get(e.project_id ?? ''), now)))])
 }
 
-/** Alerts that still need someone: not acknowledged, not a resolve, and no resolve in their thread. */
-export function openAlerts(alerts: FeedRow[]): FeedRow[] {
-  const resolvedThreads = new Set(alerts.filter((a) => a.severity === 'resolved' && a.thread_key).map((a) => a.thread_key as string))
-  return alerts.filter((a) => a.severity !== 'resolved' && !a.acked_at && !(a.thread_key && resolvedThreads.has(a.thread_key)))
+/**
+ * Alerts that still need someone: not acknowledged, not a resolve, and not
+ * closed by a resolve in their thread at or after them. A second incident in
+ * the same thread after the first was resolved is open again.
+ */
+export function openAlerts<T extends Pick<FeedRow, 'severity' | 'thread_key' | 'acked_at' | 'occurred_at'>>(alerts: T[]): T[] {
+  const lastResolve = new Map<string, number>()
+  for (const a of alerts) {
+    if (a.severity !== 'resolved' || !a.thread_key) continue
+    const at = Date.parse(a.occurred_at)
+    if (at > (lastResolve.get(a.thread_key) ?? -Infinity)) lastResolve.set(a.thread_key, at)
+  }
+  return alerts.filter((a) => {
+    if (a.severity === 'resolved' || a.acked_at) return false
+    const closedAt = a.thread_key ? lastResolve.get(a.thread_key) : undefined
+    return closedAt === undefined || closedAt < Date.parse(a.occurred_at)
+  })
 }
 
 export function answerAlerts(alerts: FeedRow[], apps: OpsApp[], now: Date, consoleBase: string | null): SlashReply {

@@ -128,6 +128,8 @@ describe('Slack message for one event', () => {
   it('escapes Slack control characters from the sender', () => {
     const msg = buildOpsMessage(row({ title: '<!channel> & <b>', body: null, facts: [] }), ctx)
     expect(JSON.stringify(msg.blocks)).not.toContain('<!channel>')
+    expect(msg.text).toBe('glot.it · &lt;!channel&gt; &amp; &lt;b&gt;')
+    expect(buildResolvedParent(row(), { title: '<!here>', occurred_at: '2026-11-17T00:00:00Z' }, ctx).text).not.toContain('<!here>')
     expect((msg.blocks[1] as any).text.text).toBe('*💳 &lt;!channel&gt; &amp; &lt;b&gt;*')
   })
 

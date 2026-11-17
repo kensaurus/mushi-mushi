@@ -245,7 +245,9 @@ export function buildOpsMessage(e: OpsEventRow, ctx: OpsMessageContext): { text:
   if (e.url) buttons.push({ type: 'button', action_id: 'ops_open', text: { type: 'plain_text', text: 'Open' }, url: e.url })
   if (ctx.consoleUrl) buttons.push({ type: 'button', action_id: 'ops_open_console', text: { type: 'plain_text', text: 'Open in Mushi Mushi' }, url: ctx.consoleUrl })
   if (buttons.length) blocks.push({ type: 'actions', elements: buttons.slice(0, 5) })
-  return { text: `${app} · ${e.title}`, blocks }
+  // `text` is the notification and the fallback: escaped too, or a title such
+  // as "<!channel>" from a Sentry error message would ping the whole channel.
+  return { text: `${escapeMrkdwn(app)} · ${escapeMrkdwn(e.title)}`, blocks }
 }
 
 /** HH:MM UTC, short enough for a context line. */
@@ -262,7 +264,7 @@ export function buildResolvedParent(parent: OpsEventRow, resolved: Pick<OpsEvent
   const original = buildOpsMessage({ ...parent, severity: 'resolved' }, { ...ctx })
   const line = `✅ ${escapeMrkdwn(resolved.title)} · ${shortUtc(resolved.occurred_at)}`
   const blocks = original.blocks.filter((b) => (b as { type?: string }).type !== 'actions')
-  return { text: `${ctx.appName ?? 'mushi mushi'} · ✅ ${resolved.title}`, blocks: [{ type: 'context', elements: [{ type: 'mrkdwn', text: line }] }, ...blocks] }
+  return { text: `${escapeMrkdwn(ctx.appName ?? 'mushi mushi')} · ✅ ${escapeMrkdwn(resolved.title)}`, blocks: [{ type: 'context', elements: [{ type: 'mrkdwn', text: line }] }, ...blocks] }
 }
 
 // ── Threads ─────────────────────────────────────────────────────────────────

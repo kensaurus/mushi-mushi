@@ -1,8 +1,10 @@
 -- ============================================================================
 -- 20261117120000_ops_hub (docs/execplans/ops-hub-slack.md)
 --
--- ADDITIVE: apply BEFORE deploying api, api-ext, webhooks-github-indexer and
--- site-watch-poll. Until it is applied the ops routes answer 409
+-- ADDITIVE: apply BEFORE deploying api, api-ext, webhooks-github-indexer,
+-- site-watch-poll and sentry-seer-poll (each imports the Ops emitter: the
+-- routes, the GitHub deployment source, the edge canary source and the Sentry
+-- webhook / auto-import source). Until it is applied the ops routes answer 409
 -- MIGRATION_PENDING and the built-in sources skip (they read
 -- ops_slack_settings first and treat a missing table as "off").
 --
