@@ -106,6 +106,8 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
   }
 
   return (
+    // #fix-prompt: links that say "copy the fix prompt" land here.
+    <div id="fix-prompt" className="scroll-mt-chrome">
     <Card className="p-3 mb-3">
       <h2 className="text-sm font-semibold text-fg">Fix it with your coding agent</h2>
       <p className="mt-0.5 text-xs text-fg-muted">
@@ -246,5 +248,6 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         </div>
       )}
     </Card>
+    </div>
   )
 }

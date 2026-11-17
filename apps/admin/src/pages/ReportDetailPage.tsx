@@ -99,6 +99,7 @@ import { AgentCreditsOutCard } from '../components/AgentCreditsOutCard'
 import { useAgentCredits } from '../lib/agentCredits'
 import { isAgentOutOfUsageError } from '../lib/agentOutOfUsage'
 import { useDispatchPreflight, type PreflightState } from '../lib/useDispatchPreflight'
+import { useScrollToHash } from '../lib/useScrollToHash'
 import { canMergeFix, pickPrimaryFixAttempt } from '../lib/mergeFix'
 import { MergeFixPreflight } from '../components/fixes/MergeFixPreflight'
 import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
@@ -498,6 +499,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   const nowMs = useNow(1000, isInFlight)
 
   const preflight = useDispatchPreflight(report.project_id)
+  // Links such as "copy the fix prompt" (#fix-prompt) land on their card.
+  useScrollToHash(true)
   const isDispatchBusy = dispatchState.status === 'queueing' || dispatchState.status === 'queued' || dispatchState.status === 'running'
   // Every dispatch control on this page (triage bar, recommendation CTA and
   // its retries) goes through this one gate + confirm.
@@ -651,7 +654,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       {agentCredits.state?.out && latestFix?.status === 'failed' && isAgentOutOfUsageError(latestFix.error) ? (
         <AgentCreditsOutCard state={agentCredits.state} withFollowups={false} className="mb-3" />
       ) : null}
-      {isDispatchEligible ? <DispatchPreflightBanner preflight={preflight} className="mb-3" /> : null}
+      {isDispatchEligible ? <DispatchPreflightBanner preflight={preflight} projectId={report.project_id} className="mb-3" /> : null}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <GenerateTestButton report={report} />

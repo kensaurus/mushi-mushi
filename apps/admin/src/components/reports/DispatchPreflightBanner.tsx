@@ -14,14 +14,22 @@
  *          Reads from `useDispatchPreflight()` (already mounted on
  *          ReportsPage / ReportDetailPage) via a prop so we don't issue a
  *          second fetch per page load.
+ *
+ *          "Turn on" turns Autofix on here, with a toast, when GitHub access
+ *          is ready. It used to open Integrations, where the person still
+ *          had to find the toggle (owner, 2026-11-17). Without GitHub
+ *          access it says so ("Connect GitHub first") and goes there.
  */
 
 import { useNavigate } from 'react-router-dom'
-import type { PreflightState } from '../../lib/useDispatchPreflight'
+import type { PreflightCheck, PreflightState } from '../../lib/useDispatchPreflight'
+import { useTurnOnAutofix } from '../../lib/useTurnOnAutofix'
 import { Btn } from '../ui'
 
 interface Props {
   preflight: PreflightState
+  /** The report's app: "Turn on" switches its Autofix on in place. */
+  projectId?: string | null
   className?: string
 }
 
@@ -39,7 +47,6 @@ const CHECK_FIX_LABELS: Record<string, string> = {
   codebase: 'Let Mushi Mushi read your code',
   agent: 'Fix this',
   anthropic: 'Add an AI key',
-  autofix: 'Turn on',
 }
 
 /** What each line means to someone who never heard "codebase index" or "autofix". */
@@ -49,8 +56,23 @@ const CHECK_PLAIN: Record<string, string> = {
   autofix: 'You say yes to Mushi Mushi dispatching fixes for this app.',
 }
 
-export function DispatchPreflightBanner({ preflight, className = '' }: Props) {
+/**
+ * @internal Exported for unit tests only.
+ * What a step's button does: Autofix turns on in place once GitHub is ready,
+ * else it names what is missing and opens that step.
+ */
+export function stepAction(check: PreflightCheck, checks: readonly PreflightCheck[]): { label: string; kind: 'turn_on_autofix' | 'go'; href: string } {
+  if (check.key === 'autofix') {
+    const github = checks.find((c) => c.key === 'github')
+    if (github && !github.ready) return { label: 'Connect GitHub first', kind: 'go', href: github.fixHref }
+    return { label: 'Turn on', kind: 'turn_on_autofix', href: check.fixHref }
+  }
+  return { label: CHECK_FIX_LABELS[check.key] ?? 'Fix this', kind: 'go', href: check.fixHref }
+}
+
+export function DispatchPreflightBanner({ preflight, projectId = null, className = '' }: Props) {
   const navigate = useNavigate()
+  const autofix = useTurnOnAutofix(projectId, preflight.reload)
 
   // Don't render: loading, no problems, or we couldn't reach the preflight API
   if (preflight.loading) return null
@@ -77,7 +99,10 @@ export function DispatchPreflightBanner({ preflight, className = '' }: Props) {
         steps if you want Mushi Mushi to make the change and open it for your review.
       </p>
       <div className="mt-2 space-y-1.5">
-        {failing.map((check) => (
+        {failing.map((check) => {
+          const action = stepAction(check, preflight.checks)
+          const inPlace = action.kind === 'turn_on_autofix' && Boolean(projectId)
+          return (
           <div key={check.key} className="flex items-center justify-between gap-3">
             <div className="flex items-start gap-1.5 min-w-0">
               <span aria-hidden="true" className="mt-px shrink-0">
@@ -94,19 +119,25 @@ export function DispatchPreflightBanner({ preflight, className = '' }: Props) {
             <Btn
               variant="ghost"
               size="sm"
+              loading={inPlace && autofix.saving}
+              disabled={inPlace && autofix.saving}
               onClick={() => {
-                if (check.fixHref.startsWith('http')) {
-                  window.open(check.fixHref, '_blank', 'noreferrer')
+                if (inPlace) {
+                  void autofix.turnOn()
+                } else if (action.href.startsWith('http')) {
+                  window.open(action.href, '_blank', 'noreferrer')
                 } else {
-                  navigate(check.fixHref)
+                  navigate(action.href)
                 }
               }}
               className="shrink-0 text-2xs"
+              data-testid={`dispatch-step-${check.key}`}
             >
-              {CHECK_FIX_LABELS[check.key] ?? 'Fix this'}
+              {action.label}
             </Btn>
           </div>
-        ))}
+          )
+        })}
       </div>
     </details>
   )
