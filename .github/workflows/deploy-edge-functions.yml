@@ -235,3 +235,15 @@ jobs:
             | gh api "repos/$GITHUB_REPOSITORY/deployments" --input - --jq .id)
           gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" -f state=success -f environment=production > /dev/null
           echo "::notice::Recorded deployment $id for $GITHUB_SHA"
+
+      # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
+      # Never fails the deploy; a missing secret skips it.
+      - name: Tell Slack what shipped
+        if: ${{ !cancelled() && github.event_name != 'schedule' }}
+        continue-on-error: true
+        env:
+          SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
+          SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          WHAT: Edge functions
+        run: node scripts/notify-slack-release.mjs
