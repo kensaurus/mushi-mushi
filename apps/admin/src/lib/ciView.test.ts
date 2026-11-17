@@ -385,6 +385,19 @@ describe('summary: outcome counts and verdict', () => {
     expect(ciVerdict({ ...noQueue, stats: { ...o.stats, infraFailures: 0, codeFailures: 0, passRate: 1 } }).tone).toBe('ok')
   })
 
+  it('counts the whole window when the server counted it, not just the newest jobs read', () => {
+    const o = ciOverviewFixture()
+    // The newest jobs read show 2 code failures; the database counted 61 across the week.
+    const hourly = [
+      { at: '2026-10-20T10:00:00.000Z', jobs: 900, passed: 800, codeFailures: 60, infraFailures: 1 },
+      { at: '2026-10-21T11:00:00.000Z', jobs: 100, passed: 90, codeFailures: 1, infraFailures: 0 },
+    ]
+    const v = ciVerdict({ ...o, stats: { ...o.stats, codeFailures: 2, infraFailures: 0, hourly, windowJobs: 1000 } })
+    expect(v.headline).toBe('61 jobs failed on the code in 7 days.')
+    // Without windowJobs (an older server) it stays on the jobs read.
+    expect(ciVerdict({ ...o, stats: { ...o.stats, codeFailures: 2, infraFailures: 0, hourly } }).headline).toContain('2 jobs failed on the code')
+  })
+
   it('links a CI job to its report and fix attempt', () => {
     const links = buildFixLinks([{ id: 'f1', report_id: 'r1', pr_url: 'https://github.com/Owner/Repo/pull/7', pr_number: 7 }])
     expect(links.get('owner/repo#7')).toEqual({ reportId: 'r1', fixId: 'f1' })

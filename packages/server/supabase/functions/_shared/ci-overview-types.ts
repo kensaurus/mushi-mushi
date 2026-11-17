@@ -132,6 +132,13 @@ export interface CiOverview {
     hourly: Array<{ at: string; jobs: number; passed: number; codeFailures: number; infraFailures: number }>
     /** The first hour `hourly` fully covers; earlier hours are partial (the finished-job read hit its limit). */
     hourlyFrom: string
+    /**
+     * Every job in the window and its pass rate, counted in the database (`ci_jobs_hourly`).
+     * `jobs` and `passRate` above come from the newest jobs read (at most 1,000 finished), which
+     * a busy day fills in hours. Absent when the counts could not be read.
+     */
+    windowJobs?: number
+    windowPassRate?: number | null
     /** Per job (repo + workflow + job name), slowest p90 first, up to 60. Skipped runs left out. */
     byJob: Array<{
       repo: string
