@@ -35,7 +35,7 @@ import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
 import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards } from '../components/portfolio/portfolioView'
-import { setActiveProjectIdSnapshot } from '../lib/activeProject'
+import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { MonetizationCard } from '../components/portfolio/MonetizationCard'
@@ -152,7 +152,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 ]}
                 action={
                   status.first && firstNext ? (
-                    <Btn size="sm" variant="primary" to={firstNext.to} onClick={() => setActiveProjectIdSnapshot(status.first!.projectId)}>
+                    <Btn size="sm" variant="primary" to={appLink(firstNext.to, status.first.projectId)} onClick={() => openApp(status.first!.projectId)}>
                       Fix {status.first.name}
                     </Btn>
                   ) : undefined
