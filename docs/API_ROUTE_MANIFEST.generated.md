@@ -8,10 +8,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 221 |
+| `adminOrApiKey` | 222 |
 | `apiKeyAuth` | 59 |
 | `jwtAuth` | 412 |
-| `jwtOrApiKey` | 2 |
+| `jwtOrApiKey` | 1 |
 | `public` | 66 |
 | `unknown` | 51 |
 
@@ -482,7 +482,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | PATCH | `/v1/admin/projects/:pid/qa-stories/:sid` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
-| POST | `/v1/admin/projects/:pid/qa-stories/:sid/run` | `jwtOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
+| POST | `/v1/admin/projects/:pid/qa-stories/:sid/run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | GET | `/v1/admin/projects/:pid/qa-stories/:sid/runs/:rid/evidence` | `jwtAuth` | `packages/server/supabase/functions/api/routes/qa-coverage.ts` |
 | POST | `/v1/admin/projects/:pid/sdk-upgrade` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sdk-upgrade.ts` |
