@@ -25,9 +25,7 @@ import { Badge } from '../ui'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
 import {
-  SEVERITY,
   CATEGORY_LABELS,
-  severityLabel,
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
@@ -54,7 +52,6 @@ export function DiagnosisFixHero({
     ?.reproductionHint
   const summary = report.summary ? roundLongDecimals(report.summary.trim()) : undefined
   const categoryText = CATEGORY_LABELS[report.category] ?? report.category
-  const severityText = report.severity ? severityLabel(report.severity) : null
 
   // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
   const view = reportDiagnosisView(report)
@@ -84,11 +81,7 @@ export function DiagnosisFixHero({
               : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {severityText && (
-              <Badge className={SEVERITY[report.severity!] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>
-                {severityText}
-              </Badge>
-            )}
+            {/* Severity shows once, in the page header (owner's walkthrough, 2026-11-17). */}
             <Badge className="border border-edge-subtle bg-surface-overlay text-fg-secondary">
               {categoryText}
             </Badge>
