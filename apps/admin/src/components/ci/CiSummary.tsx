@@ -13,6 +13,7 @@ import { ciOutcomeCounts, ciVerdict, formatPercent, formatSeconds, type CiJobOut
 import { IconAlertTriangle, IconCheck, IconGauge, IconInfo, IconPlay } from '../icons'
 import { Card } from '../ui'
 import { CI_OUTCOME_STYLE, CiOutcomeLegend } from './ciOutcome'
+import { CiWeekHeat } from './CiWeekHeat'
 
 const VERDICT_TONE = {
   ok: { Icon: IconCheck, ring: 'border-ok/30 bg-ok-muted/40', icon: 'text-ok' },
@@ -138,6 +139,9 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
           </p>
         )}
       </div>
+
+      {/* Real per-hour counts (stats.hourly); older servers do not send them and this stays out. */}
+      <CiWeekHeat hourly={stats.hourly} hourlyFrom={stats.hourlyFrom} now={Date.parse(overview.generatedAt)} />
 
       <details className="group rounded-md border border-edge-subtle px-3 py-2">
         <summary className="cursor-pointer text-2xs font-medium text-fg-secondary">What the colours and icons mean</summary>

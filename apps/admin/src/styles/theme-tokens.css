@@ -387,4 +387,29 @@
   --color-viz-minimap-bg-dark: oklch(0.14 0 0 / 0.90);
   --color-viz-minimap-bg-light: oklch(0.98 0 0 / 0.90);
   --color-viz-minimap-border: oklch(0.5 0 0 / 0.18);
+  /* CI page data ramps (2026-11-17, checked with the dataviz validator:
+     ordinal, light end at least 2:1 on white; cell text black on the light
+     steps, white on the dark ones, every pair at least 4.5:1). Teal = how
+     much (jobs, wait); red = how often it fails; divr/divb = below/above a
+     target, with a grey middle. Used through the `.ci-heat-*` classes. */
+  --color-viz-heat-1: oklch(0.747 0.092 183.7);
+  --color-viz-heat-2: oklch(0.685 0.106 182.2);
+  --color-viz-heat-3: oklch(0.599 0.100 187.0);
+  --color-viz-heat-4: oklch(0.507 0.086 185.3);
+  --color-viz-heat-5: oklch(0.416 0.070 186.6);
+  --color-viz-heat-6: oklch(0.326 0.054 187.3);
+  --color-viz-fail-1: oklch(0.730 0.130 24.2);
+  --color-viz-fail-2: oklch(0.640 0.169 25.6);
+  --color-viz-fail-3: oklch(0.557 0.185 27.1);
+  --color-viz-fail-4: oklch(0.465 0.166 27.5);
+  --color-viz-fail-5: oklch(0.365 0.131 27.9);
+  --color-viz-divr-1: oklch(0.730 0.130 24.2);
+  --color-viz-divr-2: oklch(0.573 0.188 26.9);
+  --color-viz-divr-3: oklch(0.423 0.153 27.7);
+  --color-viz-divr-4: oklch(0.315 0.112 27.5);
+  --color-viz-divb-1: oklch(0.764 0.097 253.2);
+  --color-viz-divb-2: oklch(0.622 0.161 255.1);
+  --color-viz-divb-3: oklch(0.480 0.142 256.1);
+  --color-viz-divb-4: oklch(0.338 0.103 256.9);
+  --color-viz-mid: oklch(0.928 0.006 84.6);
 }

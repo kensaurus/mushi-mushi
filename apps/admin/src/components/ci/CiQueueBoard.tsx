@@ -11,6 +11,7 @@
  *          times tick every second while anything is live.
  */
 
+import { ciJobKey, ciJobKeys, useCiLink } from '../../lib/ciHighlight'
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { LayoutGroup, motion } from 'framer-motion'
@@ -115,6 +116,7 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
   const s = CI_OUTCOME_STYLE[outcome]
   const runner = runnerDisplayName(job)
   const RunnerIcon = job.runnerKind === 'github_hosted' ? IconCloud : IconServer
+  const link = useCiLink(ciJobKeys(job), ciJobKey(job.repo, job.jobName))
 
   return (
     <motion.li
@@ -124,9 +126,12 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
       transition={transition}
       data-testid={`ci-queue-job-${job.id}`}
       data-focused={focused || undefined}
+      data-hl={link['data-hl']}
+      onMouseEnter={link.onMouseEnter}
+      onMouseLeave={link.onMouseLeave}
       // One chrome: a neutral border. The outcome is the icon chip and its name, not a second
       // coloured stripe on top of the border (owner, 2026-11-14: "double chrome").
-      className={`flex flex-col gap-1 rounded-md border bg-surface-raised px-2.5 py-2 text-xs ${
+      className={`${link.className} flex flex-col gap-1 rounded-md border bg-surface-raised px-2.5 py-2 text-xs ${
         focused ? 'border-brand ring-2 ring-brand/40' : 'border-edge-subtle'
       }`}
     >

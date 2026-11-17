@@ -157,8 +157,21 @@ interface CiStats {
   byRunner: Array<{ runner: string; jobs: number; busySeconds: number; infraFailures: number; queueP95s: number | null }>
   byWorkflow: Array<{ repo: string; workflow: string; jobs: number; durationP50s: number | null; durationP95s: number | null; failRate: number | null }>
   slowSteps: Array<{ repo: string; job: string; step: string; p50s: number; runs: number }>
+  /** Jobs started per UTC hour over the window, oldest first, zeros included. Optional: older servers do not send it. */
+  hourly?: CiHourly[]
+  /** The first hour `hourly` fully covers; earlier hours are partial. */
+  hourlyFrom?: string
   /** Per job type, slowest p90 first. Optional: older servers do not send it. */
   byJob?: CiJobType[]
+}
+
+/** Jobs started in one UTC hour (`stats.hourly`). */
+export interface CiHourly {
+  at: string
+  jobs: number
+  passed: number
+  codeFailures: number
+  infraFailures: number
 }
 
 /** One job type (repo + workflow + job name) over the window. Skipped runs are left out. */

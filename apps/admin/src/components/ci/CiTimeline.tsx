@@ -29,6 +29,7 @@ import {
   type CiTimelineBar,
 } from '../../lib/ciView'
 import { useNow } from '../../lib/useNow'
+import { ciJobKey, ciRepoKey, ciRunnerKey, useCiLink } from '../../lib/ciHighlight'
 import { IconClock, IconCloud, IconServer } from '../icons'
 import { SegmentedControl } from '../ui'
 import { CI_OUTCOME_STYLE } from './ciOutcome'
@@ -106,7 +107,7 @@ function Bar({ bar, timeline, onInspect }: { bar: CiTimelineBar; timeline: Timel
   const inner = (
     <>
       {bar.queue && <span className="absolute inset-y-1 rounded-sm opacity-70" style={{ ...seg(bar.queue), ...HATCH }} aria-hidden="true" />}
-      {bar.run && <span className={`absolute inset-y-0.5 rounded-sm ${RUN_CLASS[bar.outcome]}`} style={seg(bar.run)} aria-hidden="true" />}
+      {bar.run && <span className={`ci-grow-x absolute inset-y-0.5 rounded-sm ${RUN_CLASS[bar.outcome]}${bar.outcome === 'running' ? ' ci-stripes' : ''}`} style={seg(bar.run)} aria-hidden="true" />}
       {/* The outcome mark sits inside the bar, and only where it fits. */}
       {width >= 2 && (
         <span className="pointer-events-none absolute inset-y-0 left-1 flex items-center text-3xs font-bold leading-none text-surface-root" aria-hidden="true">
@@ -137,6 +138,50 @@ function Bar({ bar, timeline, onInspect }: { bar: CiTimelineBar; timeline: Timel
   )
 }
 
+/** One machine's row; pointing at it lights the machine, its apps and its jobs across the page. */
+function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; timeline: Timeline; onInspect: (b: CiTimelineBar | null) => void }) {
+  const keys = useMemo(
+    () => [ciRunnerKey(lane.label), ...new Set(lane.bars.flatMap((b) => [ciRepoKey(b.repo), ciJobKey(b.repo, b.jobName)]))],
+    [lane],
+  )
+  const link = useCiLink(keys, ciRunnerKey(lane.label))
+  return (
+    <li {...link} className={`${link.className} flex items-center gap-2 rounded-sm`} data-testid={`ci-timeline-lane-${lane.label}`} data-failed={laneFailed(lane) || undefined}>
+      <span
+        // Pinned: on a narrow screen the lanes scroll sideways and the names stay put.
+        className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
+        title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
+      >
+        {lane.unassigned ? (
+          <IconClock size={12} className="shrink-0" />
+        ) : lane.kind === 'github' ? (
+          <IconCloud size={12} className="shrink-0" />
+        ) : (
+          <IconServer size={12} className="shrink-0" />
+        )}
+        <span className="truncate">{lane.label}</span>
+      </span>
+      <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
+        {lane.bars.map((bar) => (
+          <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={onInspect} />
+        ))}
+        <span className="absolute inset-y-0 right-0 w-px bg-brand" aria-hidden="true" />
+      </div>
+    </li>
+  )
+}
+
+const laneFailed = (l: { bars: ReadonlyArray<{ outcome: string }> }) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
+
+/**
+ * @internal Exported for tests. Lanes with a failed job (a code failure or a stopped machine)
+ * first, "No runner yet" always last, otherwise the given order (busiest first).
+ */
+export function failingLanesFirst<L extends { unassigned: boolean; bars: ReadonlyArray<{ outcome: string }> }>(lanes: readonly L[]): L[] {
+  const rank = (l: L) => (l.unassigned ? 2 : laneFailed(l) ? 0 : 1)
+  return lanes.map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l)
+}
+
 export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const [win, setWin] = useState<WindowId>('2h')
   const [inspect, setInspect] = useState<CiTimelineBar | null>(null)
@@ -146,7 +191,8 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const timeline = useMemo(() => buildCiTimeline(jobs, { now, windowMs: WINDOW_MS[win] }), [jobs, now, win])
   const { quiet } = useMemo(() => splitQuietLanes(timeline.lanes), [timeline.lanes])
   const quietIds = useMemo(() => new Set(quiet.map((l) => l.id)), [quiet])
-  const lanes = showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id))
+  // Machines with a failed job first: what went wrong reads before what went fine.
+  const lanes = failingLanesFirst(showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id)))
   const ticks = useMemo(
     () => Array.from({ length: TICK_STEPS + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / TICK_STEPS),
     [timeline.from, timeline.to],
@@ -208,28 +254,7 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
               </div>
               <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
                 {lanes.map((lane) => (
-                  <li key={lane.id} className="flex items-center gap-2" data-testid={`ci-timeline-lane-${lane.label}`}>
-                    <span
-                      // Pinned: on a narrow screen the lanes scroll sideways and the names stay put.
-                      className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs ${lane.unassigned ? 'italic text-fg-muted' : 'font-medium text-fg-secondary'}`}
-                      title={lane.kind === 'family' ? `${lane.label}: jobs of one-job runners, packed so bars never overlap` : lane.label}
-                    >
-                      {lane.unassigned ? (
-                        <IconClock size={12} className="shrink-0" />
-                      ) : lane.kind === 'github' ? (
-                        <IconCloud size={12} className="shrink-0" />
-                      ) : (
-                        <IconServer size={12} className="shrink-0" />
-                      )}
-                      <span className="truncate">{lane.label}</span>
-                    </span>
-                    <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
-                      {lane.bars.map((bar) => (
-                        <Bar key={bar.jobId} bar={bar} timeline={timeline} onInspect={setInspect} />
-                      ))}
-                      <span className="absolute inset-y-0 right-0 w-px bg-brand" aria-hidden="true" />
-                    </div>
-                  </li>
+                  <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
                 ))}
               </ul>
             </div>
