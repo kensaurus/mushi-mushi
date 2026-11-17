@@ -4212,7 +4212,7 @@ finding names a file and line, what is wrong, and the smallest fix. The review
 also lists any behaviour the change removes, and any decision it took that you
 should make yourself.
 
-When the verdict is **merge** or **fix first**, Mushi Mushi also marks the pull request ready for review. Repos that skip CI on drafts then run their checks; a **hold** stays a draft.
+Only a **merge** verdict marks the pull request ready for review. Repos that skip CI on drafts then run their checks; a **fix first** or a **hold** stays a draft.
 
 A pull request with no review merges as it always has. The dialog says
 **Not reviewed** so you know to read the diff yourself.
@@ -17933,6 +17933,10 @@ description: How Mushi Mushi turns a one-sentence user complaint into a diagnosi
   gate has moved since this was written: see the update at the end of "Why we
   kept the human in the loop".
 
+  **Correction, 2026-11-17.** The review step said a "fix first" verdict also
+  marks the draft ready. Only "merge" does; "fix first" and "hold" leave the PR
+  a draft.
+
 > Sentry sees what your code throws. Mushi Mushi sees what your users *feel*.
 
 This is the post I would have wanted to read a year ago, when I was staring at a Sentry dashboard that was perfectly green while three people in a row told me the login button on iPad Safari "did nothing." No exception. No 5xx. No console error. Just a user, frustrated.
@@ -17952,7 +17956,7 @@ What happens next, in order:
 3. **Group.** Right after that first pass, the report is embedded and compared with earlier ones by cosine similarity in pgvector. Above 0.82 (the default; each project can change it in Settings), it joins the existing group instead of becoming a new row. Once the group has a diagnosis, a new report in it reuses that diagnosis, so it costs no new model call and does not count toward the monthly diagnosis allowance. The report list shows each group's blast radius: how many reports, distinct reporters and sessions it has. Until October 2026 the per-project threshold was saved but never read, so every project got 0.82.
 4. **Diagnose.** Reports that pass go to a second model: Claude Sonnet 5.5 by default, with GPT-6.1 Sol as the fallback when there is no usable Claude key, or Claude refuses or returns unusable output. It writes a category, a severity, the likely component, a plain-English summary and a confidence score. If the repo is indexed, it reads code retrieved from it while it does this, so it is more likely to name a file it actually saw than to guess one. An organization can also switch its AI to OpenAI only. Mine has run that way since 31 October 2026, when my Claude credits ran low, so my own reports are diagnosed by GPT-6.1 Sol.
 5. **Fix.** Auto-fix is off for each app until someone turns it on. Then **Dispatch fix** on the report starts the fix worker. It reads whole files from the repo at the commit the PR will branch from, and asks the model (Sonnet 5.5 by default, GPT-6.1 Sol as the fallback) for find-and-replace edits through a typed schema. The model gets no tools and no shell. If the edits don't apply, the worker retries once with the exact error, then stops. If any one file's diff would pass 200 changed lines (a per-project setting), the run aborts. Otherwise it opens a **draft** PR. The model calls are traced in Langfuse. Instead of the built-in worker, the fix can also go to a cloud coding agent (Cursor's, or GitHub's), which opens the PR itself.
-6. **Review.** If the app has an AI key of its own, a second model reviews the PR: Claude Opus 5.5 on a Claude key, otherwise GPT-6.1 Sol on an OpenAI key. It never runs on Mushi Mushi's platform key; without the app's own key the review is skipped. The verdict is merge, fix first or hold. On merge or fix first the draft is marked ready, so a repo that skips CI on drafts runs its checks then. A hold stays a draft.
+6. **Review.** If the app has an AI key of its own, a second model reviews the PR: Claude Opus 5.5 on a Claude key, otherwise GPT-6.1 Sol on an OpenAI key. It never runs on Mushi Mushi's platform key; without the app's own key the review is skipped. The verdict is merge, fix first or hold. On merge the draft is marked ready, so a repo that skips CI on drafts runs its checks then. A fix first or a hold stays a draft.
 7. **Merge.** A person merges from the console, or adds the PR to the merge queue, which updates the branch and waits for CI. By default the queue batches an app's approved PRs into a release train and merges them together; an app can switch to one PR at a time. On merge, the report is marked fixed, a linked Sentry issue is resolved when the report came from Sentry, and the person who reported the bug gets a "fixed" notice when their report can receive one.
 
 Separately, an LLM-as-Judge job re-reads classified reports in batches. It scores category accuracy, severity calibration, component tagging and repro quality from 0 to 1, and records whether it agrees overall. The scores are stored on the report and decide which candidate classifier prompt gets promoted. They never change a report's status.
