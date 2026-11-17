@@ -583,6 +583,20 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Act',
   },
   {
+    // The Ops hub (docs/execplans/ops-hub-slack.md): every app's payments,
+    // releases and alerts, and the team's own Slack bot. A product page for
+    // every team (each connects its own bot), not an operator page.
+    id: 'nav:ops',
+    path: '/ops',
+    label: 'Ops',
+    sectionId: 'act',
+    pdcaStage: 'act',
+    iconKey: 'bell',
+    paletteDescription: "Payments, releases and alerts from every app in one feed, which app is not reporting, and your team's Slack bot.",
+    paletteKeywords: ['ops', 'ops hub', 'payments', 'sales', 'revenue', 'releases', 'deploys', 'alerts', 'incidents', 'slack bot', 'slash command', 'uptime', 'is everything connected'],
+    paletteGroup: 'Act',
+  },
+  {
     id: 'nav:notifications',
     path: '/notifications',
     label: 'Reporter updates',

@@ -26,6 +26,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { firecrawlMapOwnSite, resolveFirecrawl } from '../_shared/firecrawl.ts'
 import { queueReportClassification } from '../_shared/report-classification.ts'
 import { runEdgeCanaries } from '../_shared/edge-canary.ts'
+import { scheduleCanaryOps } from '../_shared/ops-sources.ts'
 import {
   allocateConfirms,
   checkPages,
@@ -248,6 +249,8 @@ Deno.serve(
           now: () => new Date(),
           sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
           classify: deps.classify,
+          // Ops hub: down / back up goes to the team's #alerts when its Slack bot is on.
+          onTransition: (t) => scheduleCanaryOps(db as never, t),
         })) }
       } catch (err) {
         plog.warn('edge canaries failed', { err: String(err).slice(0, 300) })

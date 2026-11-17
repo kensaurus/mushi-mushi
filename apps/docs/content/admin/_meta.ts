@@ -59,6 +59,7 @@ export default {
   activity: 'User activity',
   intelligence: 'Weekly insights',
   releases: 'Releases',
+  ops: 'Ops',
   notifications: 'Reporter updates',
   experiments: 'Experiments',
   research: 'Research',
