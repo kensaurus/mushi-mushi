@@ -19,6 +19,7 @@ import { LINK_ACCENT } from '../../lib/chipTone'
 import { useNow } from '../../lib/useNow'
 import { Badge, Card, DataTableCell, DataTableHead, RelativeTime } from '../ui'
 import { IconExternalLink } from '../icons'
+import { CI_OUTCOME_STYLE } from './ciOutcome'
 
 const TONE_BOX: Record<'ok' | 'warn' | 'bad', string> = {
   ok: 'border-ok/35 bg-ok-muted/40',
@@ -155,7 +156,8 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     </p>
                     {pct != null && (
                       <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
-                        <span className={`block h-full ${r.slow ? 'bg-warn' : 'bg-brand'}`} style={{ width: `${Math.max(3, pct)}%` }} />
+                        {/* Running = the timeline's running colour; the brand red read as a failure in light mode. */}
+                        <span className={`block h-full ${r.slow ? 'bg-warn' : CI_OUTCOME_STYLE.running.fill}`} style={{ width: `${Math.max(3, pct)}%` }} />
                       </span>
                     )}
                   </div>

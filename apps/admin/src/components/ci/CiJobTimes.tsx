@@ -9,6 +9,7 @@
  *          times on one shared scale: usual, slow runs, longest. Length reads at a glance where a
  *          column of minutes has to be read cell by cell (NN/g, "Dashboards: preattentive").
  *          The numbers stay; the bar repeats them, so it is hidden from screen readers.
+ *          Neutral grey, not brand: colour on this page means an outcome (red = failed).
  */
 
 import { useMemo, useState } from 'react'
@@ -62,9 +63,9 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
       />
       <span className="absolute top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${spread.longestPct}%` }} />
       {/* Usual run: solid; usual to slow runs: the lighter box. */}
-      <span className="absolute inset-y-0.5 left-0 rounded-l-sm bg-brand" style={{ width: `${spread.usualPct}%` }} />
+      <span className="absolute inset-y-0.5 left-0 rounded-l-sm bg-fg-secondary" style={{ width: `${spread.usualPct}%` }} />
       <span
-        className="absolute inset-y-0.5 rounded-r-sm bg-brand/35"
+        className="absolute inset-y-0.5 rounded-r-sm bg-fg-faint/40"
         style={{ left: `${spread.usualPct}%`, width: `${Math.max(0, spread.slowPct - spread.usualPct)}%` }}
       />
     </span>
@@ -142,8 +143,8 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
       )}
       {/* The bar's key, only where the bar shows. */}
       <p className="mt-1.5 hidden items-center gap-3 text-2xs text-fg-muted @5xl:flex" aria-hidden="true">
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-brand" /> usual run</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-brand/35" /> up to the slow runs (1 in 10)</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-secondary" /> usual run</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-faint/40" /> up to the slow runs (1 in 10)</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-4 bg-fg-muted" /> to the longest</span>
       </p>
     </div>
