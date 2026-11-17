@@ -9,6 +9,7 @@ import {
   ciVerdict,
   buildFixLinks,
   runnerDisplayName,
+  splitQuietLanes,
   formatSeconds,
   isCiOverviewEmpty,
   jobElapsedSeconds,
@@ -387,5 +388,47 @@ describe('summary: outcome counts and verdict', () => {
   it('links a CI job to its report and fix attempt', () => {
     const links = buildFixLinks([{ id: 'f1', report_id: 'r1', pr_url: 'https://github.com/Owner/Repo/pull/7', pr_number: 7 }])
     expect(links.get('owner/repo#7')).toEqual({ reportId: 'r1', fixId: 'f1' })
+  })
+})
+
+describe('splitQuietLanes', () => {
+  type Outcome = Parameters<typeof splitQuietLanes>[0][number]['bars'][number]['outcome']
+  const lane = (label: string, outcomes: Outcome[], unassigned = false, kind: 'runner' | 'family' | 'github' | 'none' = 'family') => ({
+    label,
+    unassigned,
+    kind,
+    bars: outcomes.map((outcome, i) => ({ jobId: `${label}-${i}`, outcome })) as unknown as Parameters<typeof splitQuietLanes>[0][number]['bars'],
+  })
+  const busy = ['a', 'b', 'c', 'd', 'e'].map((l) => lane(l, ['passed', 'passed', 'code_failure']))
+
+  it('folds machines with one passed or cancelled job on a long timeline, keeping order', () => {
+    const lanes = [...busy, lane('q1', ['passed']), lane('q2', ['cancelled']), lane('q3', []), lane('none', ['waiting'], true)]
+    const { shown, quiet } = splitQuietLanes(lanes)
+    expect(quiet.map((l) => l.label)).toEqual(['q1', 'q2', 'q3'])
+    expect(shown.map((l) => l.label)).toEqual(['a', 'b', 'c', 'd', 'e', 'none'])
+  })
+
+  it('never folds a failure, a stopped job, a live job or "No runner yet"', () => {
+    const lanes = [
+      ...busy,
+      lane('failed', ['code_failure']),
+      lane('stopped', ['infra']),
+      lane('running', ['running']),
+      lane('waiting', ['waiting']),
+      lane('none', ['passed'], true),
+    ]
+    expect(splitQuietLanes(lanes).quiet).toEqual([])
+  })
+
+  it('never folds a GitHub-hosted lane: a job there is billed minutes', () => {
+    const lanes = [...busy, lane('GitHub-hosted', ['passed'], false, 'github'), lane('q1', ['passed']), lane('q2', ['passed'])]
+    const { shown, quiet } = splitQuietLanes(lanes)
+    expect(quiet.map((l) => l.label)).toEqual(['q1', 'q2'])
+    expect(shown.map((l) => l.label)).toContain('GitHub-hosted')
+  })
+
+  it('folds nothing on a short timeline or to save a single row', () => {
+    expect(splitQuietLanes([busy[0], lane('q1', ['passed']), lane('q2', ['passed'])]).quiet).toEqual([])
+    expect(splitQuietLanes([...busy, busy[0], busy[1], lane('q1', ['passed'])]).quiet).toEqual([])
   })
 })

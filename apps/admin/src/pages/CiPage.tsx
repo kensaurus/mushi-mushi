@@ -42,7 +42,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconServerOff, IconSliders } from '../components/icons'
-import { CiStatusBoard, MachineCard } from '../components/ci/CiStatusBoard'
+import { CiStatusBoard, MACHINE_GRID, MachineCard } from '../components/ci/CiStatusBoard'
 import { buildCiStatus } from '../lib/ciStatus'
 import { CiJobTimes } from '../components/ci/CiJobTimes'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -72,6 +72,16 @@ import { useScrollToHash } from '../lib/useScrollToHash'
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
 
 const POLL_MS = 30_000
+
+// Now view on a wide main column: three tracks, "Right now" takes two, the week's summary one.
+// grid-cols-1 below: an implicit column grows to its widest child (a 480 px table scrolled the
+// whole page sideways at 390 px).
+const NOW_GRID = 'grid-cols-1 @min-[96rem]:grid-cols-3'
+const NOW_MAIN = '@min-[96rem]:col-span-2'
+const NOW_SIDE = '@min-[96rem]:col-span-1 @min-[96rem]:sticky @min-[96rem]:top-4'
+const NOW_FULL = '@min-[96rem]:col-span-3'
+// Section hints stay a readable line on a wide shell.
+const HINT = 'mb-2 max-w-[80ch] text-xs text-fg-muted'
 
 type Scope = 'project' | 'all'
 const SCOPE_OPTIONS = [
@@ -351,41 +361,50 @@ export function CiPage() {
       )}
 
       {data && !empty && view === 'now' && (
-        <>
-          <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />}>
+        // On a wide desktop (main column ≥ 96rem) "Right now" and the week's summary sit side by
+        // side; the queue, job times and timeline stay full width, because their lanes and time
+        // axes use every pixel. Container query, not viewport: the sidebar can be open or closed.
+        // DOM order is the reading order at every width. The container is the wrapper: a container
+        // query never matches the container element itself, so the grid's own columns need it.
+        <div className="@container">
+        <div className={`grid items-start gap-4 ${NOW_GRID}`} data-testid="ci-now-grid">
+          <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={NOW_MAIN}>
             <CiStatusBoard overview={data} />
           </Section>
 
-          <Section title="Last 7 days" id="ci-week" icon={<IconGauge />}>
+          <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={NOW_SIDE}>
             <CiSummary overview={data} />
           </Section>
 
-          <Section title="Queue" id="ci-queue" icon={<IconQueue />}>
-            <p className="mb-2 text-xs text-fg-muted">Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
+          <Section title="Queue" id="ci-queue" icon={<IconQueue />} className={NOW_FULL}>
+            <p className={HINT}>Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
             <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
           </Section>
 
-          <Section title="Job times" id="ci-job-times" icon={<IconGauge />}>
-            <p className="mb-2 text-xs text-fg-muted">Each job over the last {data.window.days} days, slowest first: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
+          <Section title="Job times" id="ci-job-times" icon={<IconGauge />} className={NOW_FULL}>
+            <p className={HINT}>Each job over the last {data.window.days} days, slowest first: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
             <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
           </Section>
 
-          <Section title="Timeline" id="ci-timeline" icon={<IconClock />}>
-            <p className="mb-2 text-xs text-fg-muted">One row per test machine. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
+          <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={NOW_FULL}>
+            <p className={HINT}>One row per test machine. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
-        </>
+        </div>
+        </div>
       )}
 
       {data && !empty && view === 'machines' && (
         <>
           <Section title="Machines" id="ci-machines" icon={<IconNetwork />}>
-            <p className="mb-2 text-xs text-fg-muted">Every machine that runs your checks, what it is running now and how busy it is.</p>
-            <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="ci-machines-all">
-              {machinesAll.map((m) => (
-                <MachineCard key={m.id} m={m} />
-              ))}
-            </ul>
+            <p className={HINT}>Every machine that runs your checks, what it is running now and how busy it is.</p>
+            <div className="@container">
+              <ul className={`grid gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-all">
+                {machinesAll.map((m) => (
+                  <MachineCard key={m.id} m={m} />
+                ))}
+              </ul>
+            </div>
           </Section>
 
           <Section title="Runner map (advanced)" id="ci-map" icon={<IconNetwork />}>
@@ -406,7 +425,7 @@ export function CiPage() {
           </Section>
 
           <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
-            <p className="mb-2 text-xs text-fg-muted">These jobs never finished testing. They are not code failures: re-run them.</p>
+            <p className={HINT}>These jobs never finished testing. They are not code failures: re-run them.</p>
             <CiInfraFailures jobs={data.jobs} />
           </Section>
         </>
@@ -420,7 +439,7 @@ export function CiPage() {
             icon={<IconBolt />}
             action={<CiCostFixRollout />}
           >
-            <p className="mb-2 text-xs text-fg-muted">Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
+            <p className={HINT}>Changes that would land your fixes sooner, each with the evidence and a copy-ready fix.</p>
             <CiAdviceList advice={data.advice} />
           </Section>
 
@@ -438,7 +457,7 @@ export function CiPage() {
 
       {data && !empty && view === 'settings' && (
         <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
-          <p className="mb-2 text-xs text-fg-muted">Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
+          <p className={HINT}>Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
           <PanelErrorBoundary label="Where CI runs">
             <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} />
           </PanelErrorBoundary>

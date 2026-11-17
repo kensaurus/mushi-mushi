@@ -10,6 +10,8 @@ robots:
 
 **Route:** `/ci` (sidebar: Checks › CI runners. CI runners is a Lab: switch it on under **Settings → Display & sidebar → Labs** to keep it in the sidebar and on the Checks grid)
 
+<AdminDocHero page="ci" />
+
 Every fix Mushi Mushi opens is tested by your CI before it can merge. This page shows the machines that run those tests, the jobs waiting for one, and why a fix takes as long as it does to land. **This app** follows the app you have open. **All apps** reads every project you can see.
 
 The page reloads every 30 seconds while the tab is visible, and **Refresh** does the same. Each reload asks GitHub for queued and running jobs. The server does that live read at most once a minute per app.
