@@ -251,6 +251,30 @@ function publish(next: NavCounts): void {
   for (const l of listeners) l()
 }
 
+/** The team and app a context key is for (`org|project|…`), without the slice list. */
+function scopeOf(key: string | null): string | null {
+  return key ? key.split('|').slice(0, 2).join('|') : null
+}
+
+/**
+ * @internal Exported for unit tests only.
+ * A load for the same team and app that comes back without a slice (one
+ * server read failed or ran late) keeps that slice's last value. The Settings
+ * badge "1 key failing" used to appear, vanish on the next load and come
+ * back on the one after (owner's walkthrough, 2026-11-17). Another app or
+ * team never inherits a slice.
+ */
+export function keepMissingSlices(prev: NavCounts, next: NavCounts, sameScope: boolean): NavCounts {
+  if (!sameScope || !prev.ready) return next
+  const merged: Record<string, unknown> = { ...(next.slices as Record<string, unknown>) }
+  for (const [name, value] of Object.entries(prev.slices as Record<string, unknown>)) {
+    if (value != null && merged[name] == null) merged[name] = value
+  }
+  return { ...next, slices: merged as NavStatSlices }
+}
+
+let publishedKey: string | null = null
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => {
@@ -273,7 +297,8 @@ async function runLoad(ctx: LoadContext, fresh: boolean): Promise<void> {
     )
     if (seq !== loadSeq) return
     if (res.ok && res.data) {
-      publish(navCountsFromNavMeta(res.data))
+      publish(keepMissingSlices(snapshot, navCountsFromNavMeta(res.data), scopeOf(publishedKey) === scopeOf(ctx.key)))
+      publishedKey = ctx.key
     } else if (isRouteMissing(res.error)) {
       // Only an API build without nav-meta takes the per-slice fallback; on
       // a 5xx that fan-out would multiply the load on a struggling API.
