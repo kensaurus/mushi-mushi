@@ -4,7 +4,7 @@
 #
 # Registration: mushi_ and mush_pk_ prefixes are registered with the GitHub
 # Secret Scanning partner program — any leaked key matching these patterns
-# will trigger an automated revocation callback. See SECURITY.md.
+# will trigger an automated revocation callback. See .github/SECURITY.md.
 
 [extend]
 useDefault = true

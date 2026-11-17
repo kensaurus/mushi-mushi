@@ -9,7 +9,7 @@ MCP server, plugins, adapters and the code and tokens in `packages/brand`;
 AGPL-3.0-only for the server (`packages/server`, `packages/agents`,
 `packages/verify`) and the console (`apps/admin`); a source-available
 Enterprise Edition license for `packages/server/ee/`. The root
-[`LICENSE`](./LICENSE) states the split. The **brand** is not open source:
+[`LICENSE`](../../LICENSE) states the split. The **brand** is not open source:
 no license in this repository covers the Mushi Mushi name, logo or marks.
 
 If you fork this project, build a derivative product, or run a public
@@ -73,7 +73,7 @@ You may, without separate permission:
 
 ## Using the logo
 
-The logo files live in [`packages/brand/src/`](./packages/brand/src/)
+The logo files live in [`packages/brand/src/`](../../packages/brand/src/)
 (`logo.svg`, `logo-dark.svg`, `logo-wide.svg`, `logo-mark.svg`,
 `logo-mark-512.png`). You may use them without asking when all of these hold:
 

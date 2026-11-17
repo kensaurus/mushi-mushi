@@ -104,7 +104,7 @@ export function registerBillingRoutes(app: Hono<{ Variables: Variables }>): void
 
     // The plan, the subscription, the customer and the quota are the team's
     // (the active app's organization): one Studio plan covers every app in
-    // the team and its diagnoses are pooled (VISION.md §2.2).
+    // the team and its diagnoses are pooled (docs/VISION.md §2.2).
     let billing: Awaited<ReturnType<typeof resolveProjectBilling>> | null = null;
     let cust: Awaited<ReturnType<typeof orgCustomer>> = null;
     try {

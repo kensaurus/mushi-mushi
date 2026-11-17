@@ -30,7 +30,7 @@ LICENSE SUMMARY
                                  freely; network SaaS use of modified versions
                                  requires publishing changes (§13) or a
                                  commercial license — see packages/server/LICENSE
-                                 and COMMERCIAL-LICENSE.md.
+                                 and docs/legal/COMMERCIAL-LICENSE.md.
 
   Commercial (Enterprise         The code under packages/server/ee/. Source-
   Edition)                       available — read, audit, modify, and run for
@@ -42,7 +42,7 @@ LICENSE SUMMARY
   All rights reserved            Brand assets: the logo and bug mark files
                                  (packages/brand/src/logo*), favicons and app
                                  icons, mascot art (docs/mascot/). Use them
-                                 only as TRADEMARK.md allows.
+                                 only as docs/legal/TRADEMARK.md allows.
 
 ================================================================================
 TRADEMARKS
@@ -52,7 +52,7 @@ TRADEMARKS
 kensaurus LLC. They are not registered yet. The
 licenses listed above grant rights to the SOFTWARE only and DO NOT grant any
 rights to the trademarks. See
-TRADEMARK.md for the full policy. Forks, derivative works, and competing
+docs/legal/TRADEMARK.md for the full policy. Forks, derivative works, and competing
 products MUST be renamed to a non-confusing identifier; redistributing
 under the Mushi Mushi brand is not permitted.
 

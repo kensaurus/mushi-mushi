@@ -95,7 +95,7 @@ apps/docs/content/**  linguist-documentation=true
 .gitignore            export-ignore
 .editorconfig         export-ignore
 CHANGELOG.md          export-ignore
-HANDOVER.md           export-ignore
+docs/HANDOVER.md           export-ignore
 docs/                 export-ignore
 scripts/              export-ignore
 audit-*/              export-ignore

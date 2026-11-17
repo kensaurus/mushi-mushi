@@ -16,5 +16,5 @@ the original disclosure thread (or open a follow-up) with:
 
 We will not list anyone without explicit, opt-in consent.
 
-See [`SECURITY.md`](../SECURITY.md) for the full reporting policy and
+See [`.github/SECURITY.md`](../.github/SECURITY.md) for the full reporting policy and
 safe-harbor terms.

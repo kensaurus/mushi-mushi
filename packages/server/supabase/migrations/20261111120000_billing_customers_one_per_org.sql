@@ -1,7 +1,7 @@
 -- ============================================================================
 -- One Stripe customer per team (2026-11-11).
 --
--- A paid plan belongs to the organization, not to one app (VISION.md §2.2:
+-- A paid plan belongs to the organization, not to one app (docs/VISION.md §2.2:
 -- apps, seats, diagnoses, overage and the spend cap are limits per team).
 -- Checkout now reuses the team's customer, stripe-webhooks and the usage
 -- aggregator look it up by organization_id, and Stripe's graduated overage

@@ -66,4 +66,4 @@ The [verify-fix workflow](../../.github/workflows/verify-fix.yml) runs this auto
 
 ## License
 
-[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../COMMERCIAL-LICENSE.md)).
+[AGPLv3](../server/LICENSE), copyleft. Part of the open-core server (self-host and fork freely; modified SaaS publishes changes or takes a [commercial license](../../docs/legal/COMMERCIAL-LICENSE.md)).

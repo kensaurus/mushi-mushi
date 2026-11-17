@@ -147,7 +147,7 @@ jobs:
               '',
               '---',
               '*This comment was posted by the [PR guard workflow](.github/workflows/pr-guard.yml). ' +
-              'See [CONTRIBUTING.md](CONTRIBUTING.md) §"What we don\'t accept" for the full policy.*',
+              'See [CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/CONTRIBUTING.md) §"What we don\'t accept" for the full policy.*',
             ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {

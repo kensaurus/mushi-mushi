@@ -215,7 +215,7 @@ Add Helm chart region awareness and operator documentation for multi-region depl
 ### Deliverables
 - [x] `deploy/helm/values.yaml` — `global.region` and `global.peerRegions` values added.
 - [x] `deploy/helm/templates/deployment-api.yaml` — `MUSHI_CLUSTER_REGION` and `MUSHI_PEER_REGIONS` env vars injected from global values.
-- [x] `SELF_HOSTED.md` — "Running multi-region" section added with architecture overview, per-region chart deployment steps, DNS pattern, and logical replication instructions.
+- [x] `docs/SELF_HOSTED.md` — "Running multi-region" section added with architecture overview, per-region chart deployment steps, DNS pattern, and logical replication instructions.
 - [x] `docs/runbooks/region-routing-replication.md` — Created with full SQL `CREATE PUBLICATION` / `CREATE SUBSCRIPTION` snippets and verification steps.
 - [x] `deploy/helm/README.md` — Multi-region "What is NOT in the chart" note replaced with active setup instructions.
 
@@ -266,7 +266,7 @@ multi-region operator deliverables that Plan 011 marked complete prematurely.
 ### Deliverables
 - [x] `deploy/helm/values.yaml` — `global.region` + `global.peerRegions` stub values with comments.
 - [x] `deploy/helm/templates/deployment-api.yaml` — `MUSHI_CLUSTER_REGION` + `MUSHI_PEER_REGIONS` env vars injected from Helm values (conditional on non-empty).
-- [x] `SELF_HOSTED.md` — "Running multi-region" section added (architecture, per-region `helm install` examples, DNS pattern, link to runbook).
+- [x] `docs/SELF_HOSTED.md` — "Running multi-region" section added (architecture, per-region `helm install` examples, DNS pattern, link to runbook).
 - [x] `docs/runbooks/region-routing-replication.md` — Created with full `CREATE PUBLICATION` / `CREATE SUBSCRIPTION` SQL, replication lag query, Helm example, open-work callout for active/active write limitations.
 - [x] `deploy/helm/README.md` — "What is NOT in the chart" note for multi-region replaced with "Multi-region deployment" instructions.
 - [x] Apache AGE auto-detect: already implemented in `20260418001200_age_parallel_write.sql` via conditional `DO $$` block; no code change needed — documented in `deploy/helm/README.md` and confirmed via `grep`.

@@ -10,7 +10,7 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
    and the full API reference live there — including the
    [orchestrator-interop](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop)
    recipes (Cursor, Claude Code, MCP, A2A).
-3. **Skim the [README](./README.md).** The "Where it stops" table is honest about
+3. **Skim the [README](../README.md).** The "Where it stops" table is honest about
    what's still partial, and the "Framework coverage" section has copy-paste
    snippets for every framework.
 
@@ -23,16 +23,16 @@ Thanks for using Mushi Mushi. Here's the fastest way to get the help you need.
 | Ask a question or share what you built | [GitHub Discussions](https://github.com/kensaurus/mushi-mushi/discussions) |
 | Ask something privately | Email kensaurus@gmail.com |
 | Follow releases | [GitHub Discussions → Announcements](https://github.com/kensaurus/mushi-mushi/discussions) or [Bluesky @kensaur.us](https://bsky.app/profile/kensaur.us) |
-| Self-host / run in production | [`SELF_HOSTED.md`](./SELF_HOSTED.md) and [`deploy/helm/`](./deploy/helm/README.md) |
-| Report a security issue | **Privately** — see [`SECURITY.md`](./SECURITY.md). Never open a public issue. |
-| Contribute code | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
+| Self-host / run in production | [`docs/SELF_HOSTED.md`](../docs/SELF_HOSTED.md) and [`deploy/helm/`](../deploy/helm/README.md) |
+| Report a security issue | **Privately** — see [`.github/SECURITY.md`](./SECURITY.md). Never open a public issue. |
+| Contribute code | [`.github/CONTRIBUTING.md`](./CONTRIBUTING.md) |
 
 ## What makes a good bug report
 
 A report we can act on within minutes includes:
 
 - The **package + version** (e.g. `@mushi-mushi/react@<version>` — run `npm ls @mushi-mushi/react`).
-- A **minimal reproduction** — ideally a fork of [`examples/react-demo`](./examples/react-demo).
+- A **minimal reproduction** — ideally a fork of [`examples/react-demo`](../examples/react-demo).
 - What you **expected** vs. what **happened**.
 - Your **environment** (Node version, framework version, browser/OS).
 
@@ -44,4 +44,4 @@ walks you through each of these.
 The hosted tier and its SLA are described at
 [kensaur.us/mushi-mushi](https://kensaur.us/mushi-mushi/). For partnership,
 enterprise or commercial-license questions, email **kensaurus@gmail.com** (see
-also [`COMMERCIAL-LICENSE.md`](./COMMERCIAL-LICENSE.md)).
+also [`docs/legal/COMMERCIAL-LICENSE.md`](../docs/legal/COMMERCIAL-LICENSE.md)).

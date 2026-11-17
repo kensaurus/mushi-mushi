@@ -412,10 +412,10 @@ jobs:
       - name: Commit aggregated changelog
         if: ${{ !cancelled() && steps.changesets.outcome == 'success' && (steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true') }}
         run: |
-          if ! git diff --quiet -- CHANGELOG.md apps/docs/data/changelog.json; then
+          if ! git diff --quiet -- docs/CHANGELOG.md apps/docs/data/changelog.json; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add CHANGELOG.md apps/docs/data/changelog.json
+            git add docs/CHANGELOG.md apps/docs/data/changelog.json
             # No "[skip ci]" here: this push uses GITHUB_TOKEN, so GitHub's
             # anti-loop protection already prevents it from triggering
             # workflows. Worse, when this commit lands on the

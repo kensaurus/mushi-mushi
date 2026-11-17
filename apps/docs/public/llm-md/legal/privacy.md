@@ -32,7 +32,7 @@ section 3, and the "processor" for the data described in section 4).
 - **Address:** 〒150-0043　東京都渋谷区道玄坂1丁目10番8号　渋谷道玄坂東急ビル2F-C, Japan
 - **Contact for anything in this policy:** [kensaurus@gmail.com](mailto:kensaurus@gmail.com)
 - **Subject line that gets the fastest answer:** `[mushi-privacy]`
-- **Security reports:** see [SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/SECURITY.md) and the [security summary](/security).
+- **Security reports:** see [.github/SECURITY.md](https://github.com/kensaurus/mushi-mushi/blob/master/.github/SECURITY.md) and the [security summary](/security).
 
 There is no separate data-protection officer. The founder answers these
 requests personally.

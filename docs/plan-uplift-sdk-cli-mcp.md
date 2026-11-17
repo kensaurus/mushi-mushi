@@ -33,7 +33,7 @@ via list_migrations / get_logs / curl before the checkbox closes).
 ## Phase 1 — Hygiene + zero-risk security wins (all S; one [DEPLOY])
 
 - [x] **(SEC, S)** Stop inlining raw API key into editor `mcp.json`. Default `${MUSHI_API_KEY}` placeholder + `--inline-key` escape hatch (`packages/cli/src/mcp-config.ts` + tests).
-- [x] **(SEC, S)** Secret-scanning for `mushi_` / `mush_pk_` prefixes in `.gitleaks.toml` (GitHub partner registration still tracked in `SECURITY.md` if not yet filed).
+- [x] **(SEC, S)** Secret-scanning for `mushi_` / `mush_pk_` prefixes in `.gitleaks.toml` (GitHub partner registration still tracked in `.github/SECURITY.md` if not yet filed).
 - [x] **(SEC, S)** Dedicated `queue-crypto.test.ts` for `packages/core/src/queue-crypto.ts`.
 - [x] **(SEC, S)** `replay.test.ts` locking rrweb masking defaults.
 - [x] **(PERF/DX, S)** Dedupe ingest URL: `region.ts` now imports `DEFAULT_API_ENDPOINT` from `api-client.ts` (was hardcoded 3×); node/middleware already imports it. Single source of truth.
@@ -79,7 +79,7 @@ via list_migrations / get_logs / curl before the checkbox closes).
 
 ## Phase 5 — MCP platform: context cost, injection story, published limits, docs parity
 
-- [x] **(SEC, M)** `wrapUntrusted()` / `wrapUntrustedJson()` in `packages/mcp/src/wrap-untrusted.ts`; wired in `server.ts` for `get_report_detail`, `get_fix_context`, `search_reports`, `get_similar_bugs`, `run_nl_query`, `query_lessons`, `list_lessons`. Documented in `SECURITY.md`. 11 unit tests in `wrap-untrusted.test.ts`. **Still open:** hosted HTTP MCP edge function (`functions/mcp/index.ts`) doesn't share the wrapper — it's a separate code path.
+- [x] **(SEC, M)** `wrapUntrusted()` / `wrapUntrustedJson()` in `packages/mcp/src/wrap-untrusted.ts`; wired in `server.ts` for `get_report_detail`, `get_fix_context`, `search_reports`, `get_similar_bugs`, `run_nl_query`, `query_lessons`, `list_lessons`. Documented in `.github/SECURITY.md`. 11 unit tests in `wrap-untrusted.test.ts`. **Still open:** hosted HTTP MCP edge function (`functions/mcp/index.ts`) doesn't share the wrapper — it's a separate code path.
 - [~] **(PERF, L) [DEPLOY]** Context cost: `use_mushi` meta-tool **shipped** in `server.ts` + `catalog.ts` (intent → curated 6–12 tool subset, orientation text, recommended first tool). `USE_MUSHI_INTENTS` map with 6 clusters. **Still open:** curated default-30-tool hosted mode via `?features=` filter in `functions/mcp/index.ts` ([DEPLOY]).
 - [x] **(SEC/DX, M)** `X-RateLimit-*` headers: `buildRateLimitHeaders()` in `_shared/mcp-rate-limit.ts` + wired into `functions/mcp/index.ts` POST tool-call path (`extraHeaders` on every `tools/call` response; `Retry-After` on rate-limit miss). **[DEPLOYED]** mcp v113→114 on prod (2026-07-20); verified 200 in logs, no errors.
 - [x] **(DX, M)** Docs LLM parity: `scripts/generate-llms-full.mjs` → `apps/docs/public/llms-full.txt` (655 KB, 188 pages inlined) + `apps/docs/public/llm-md/<path>.md` plain-markdown twins. Wired into docs prebuild. 16 parity tests in `apps/docs/lib/llms-parity.test.ts`.

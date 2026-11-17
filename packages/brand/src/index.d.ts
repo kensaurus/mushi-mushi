@@ -29,7 +29,7 @@ export declare const MUSHI_TAGLINE_LEGACY: {
 }
 
 export declare const MUSHI_TAGLINE_V2: {
-  /** Full north-star sentence (VISION.md §1.3). */
+  /** Full north-star sentence (docs/VISION.md §1.3). */
   readonly northStar: string
   /** Compressed north-star for fixed-width fields (GitHub/npm description, og). */
   readonly oneLiner: string

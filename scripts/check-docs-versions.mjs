@@ -195,7 +195,7 @@ for (const file of files) {
     }
   }
 
-  const visionPath = path.join(ROOT, "VISION.md")
+  const visionPath = path.join(ROOT, "docs/VISION.md")
   if (existsSync(visionPath)) {
     const vision = readFileSync(visionPath, "utf8")
     const pluginPkgs = Object.keys(npmVersions).filter(
@@ -205,7 +205,7 @@ for (const file of files) {
     const vm = vision.match(/(\d+)\s+plugins/)
     if (vm && expectedPlugins > 0 && Number(vm[1]) !== expectedPlugins) {
       findings.push(
-        `VISION.md: claims ${vm[1]} plugins but workspace has ${expectedPlugins} outbound plugins`
+        `docs/VISION.md: claims ${vm[1]} plugins but workspace has ${expectedPlugins} outbound plugins`
       )
     }
   }
