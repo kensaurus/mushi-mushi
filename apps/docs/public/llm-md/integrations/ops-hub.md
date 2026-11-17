@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/integrations/ops-hub
 
 ---
 title: Ops hub (payments, releases and alerts in your team's Slack)
-description: Every app sends its payments, releases and alerts to Mushi Mushi with one server key. Mushi Mushi keeps them, shows them on the Ops page and posts them to your team's Slack with your own bot, which threads follow-ups, takes button clicks and answers a slash command.
+description: Every app sends payments, releases and alerts to Mushi Mushi with one server key; your team's own Slack bot posts them, threads follow-ups and answers commands.
 ---
 
 # Ops hub
