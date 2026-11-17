@@ -387,3 +387,16 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: node scripts/verify-auth-providers.mjs
+
+      # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
+      # Never fails the deploy; a missing secret skips it.
+      - name: Tell Slack what shipped
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
+          SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          WHAT: Admin console
+          VERSION: ${{ steps.version.outputs.app_version }}
+        run: node scripts/notify-slack-release.mjs

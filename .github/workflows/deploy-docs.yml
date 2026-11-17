@@ -418,3 +418,16 @@ jobs:
             fi
           done
           exit "$failed"
+
+      # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
+      # Never fails the deploy; a missing secret skips it.
+      - name: Tell Slack what shipped
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
+          SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+          WHAT: Docs site
+          VERSION: ${{ steps.version.outputs.docs_version }}
+        run: node scripts/notify-slack-release.mjs

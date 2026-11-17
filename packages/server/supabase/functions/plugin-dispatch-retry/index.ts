@@ -334,8 +334,9 @@ async function handler(req: Request): Promise<Response> {
       for (const pair of exhaustedPairs.values()) {
         try {
           await notifyOperator({
-            title: `Plugin delivery exhausted: ${pair.pluginSlug}`,
-            body: `Mushi gave up after ${MAX_ATTEMPTS} attempts (30s + 2m + 10m + 1h + 6h backoff). The plugin's *last_delivery_status* is now \`error\` and downstream events for this project will be dropped until the webhook is reachable again.`,
+            category: 'alerts',
+            title: `${pair.pluginSlug} stopped receiving events`,
+            body: `Mushi Mushi tried ${MAX_ATTEMPTS} times over about 7 hours and could not reach it, so new events for this project are not reaching ${pair.pluginSlug}. Check its webhook URL or token in Integrations, then send a test.`,
             level: 'urgent',
             fields: [
               { label: 'Project', value: pair.projectId.slice(0, 8) },

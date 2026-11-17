@@ -459,6 +459,19 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Tell the Kensaurus Slack #releases which packages went out (2026-11-17). Never fails the release.
+      - name: Tell Slack what was published
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
+        continue-on-error: true
+        env:
+          SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+          JOB_STATUS: success
+          WHAT: npm packages
+        run: |
+          DETAIL=$(echo "$PUBLISHED" | jq -r 'map("\(.name) \(.version)") | join(", ")')
+          DETAIL="$DETAIL" node scripts/notify-slack-release.mjs
+
       # Terminal gate: the signature audit runs non-blocking so the
       # post-publish steps above always execute, but a genuine audit failure
       # still has to turn the release red. Runs last so nothing is skipped by

@@ -2071,6 +2071,15 @@ export function registerAdminOpsRoutes(app: Hono<{ Variables: Variables }>): voi
         { label: 'Plan', value: planId ?? 'free' },
       ],
       footer: `ticket: ${ticket.id}`,
+      // Slack gets no sender and no ticket text (a shared workspace keeps 90 days); Discord keeps both.
+      category: 'alerts',
+      slack: {
+        body: `${planId ? 'A paying customer' : 'Someone'} opened a support ticket about *${category}*. Read and answer it in the console.`,
+        fields: [
+          { label: 'Plan', value: planId ?? 'free' },
+          { label: 'Project', value: projectName ?? (body.project_id ? body.project_id.slice(0, 8) : 'no project') },
+        ],
+      },
     });
     if (sentCount > 0) {
       await db

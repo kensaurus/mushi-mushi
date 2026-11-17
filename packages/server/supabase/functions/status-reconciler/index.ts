@@ -566,13 +566,14 @@ async function alertOnRegressions(
       // Always page on regression — even when we deduped the report,
       // the operator wants to know "this thing is still broken at tick N".
       await notifyOperator({
-        title: `Action regressed: ${action.label}`,
-        body: `An inventory action that was previously *verified* just flipped to *regressed*. ${existing ? 'A triage report already exists in the last 6h — investigate the open report.' : 'A triage report has been auto-created so plugin bridges can open a tracker ticket.'}`,
+        category: 'alerts',
+        title: `"${action.label}" stopped working`,
+        body: `It passed its checks before and fails now. ${existing ? 'A bug report for it is already open from the last 6 hours: start there.' : 'Mushi Mushi opened a bug report for it, so your tracker gets a ticket.'}`,
         level: 'urgent',
         fields: [
           { label: 'Project', value: projectId.slice(0, 8) },
-          { label: 'Synthetic', value: String(action.evidence.latest_synthetic ?? 'unknown') },
-          { label: 'Tests', value: String(action.evidence.test_count ?? 0) },
+          { label: 'Latest check', value: String(action.evidence.latest_synthetic ?? 'not run yet') },
+          { label: 'Tests covering it', value: String(action.evidence.test_count ?? 0) },
         ],
         url: `${ADMIN_BASE}/inventory?action=${action.id}`,
         footer: 'mushi-mushi · status-reconciler',

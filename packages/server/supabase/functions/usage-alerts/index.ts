@@ -141,6 +141,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
     },
     operator: async (a, text) => {
       await notifyOperator({
+        category: 'alerts',
         title: a.tier === 100 ? 'AI budget reached' : `AI budget ${a.tier}% alert`,
         body: text,
         level: a.tier === 100 ? 'urgent' : 'warn',
@@ -316,6 +317,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
 
     // Also ping the operator via Slack (informational — no PII, just the team name).
     await notifyOperator({
+      category: 'alerts',
       title:
         alertTier === 100
           ? 'Diagnosis quota reached'

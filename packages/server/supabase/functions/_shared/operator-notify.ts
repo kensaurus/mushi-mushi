@@ -9,7 +9,10 @@
  *   - A paid customer opened a support ticket
  *
  * TRANSPORTS:
- *   - Slack incoming webhook  (Block Kit, https://hooks.slack.com/...)
+ *   - Slack incoming webhook  (Block Kit, https://hooks.slack.com/...). Routed by `category`
+ *     to the Kensaurus Bot channels (2026-11-17): SLACK_PAYMENTS_WEBHOOK_URL (#payments) or
+ *     SLACK_ALERTS_WEBHOOK_URL (#alerts); OPERATOR_SLACK_WEBHOOK_URL stays as the fallback.
+ *     Every Slack message starts with the app name, then one plain line, then the facts.
  *   - Discord incoming webhook (rich embeds, https://discord.com/api/webhooks/...)
  *   - Both auto-detected by URL host. Ship to whichever (or both) are set.
  *
@@ -40,6 +43,11 @@ const SLACK_HOST = 'hooks.slack.com'
 const DISCORD_HOSTS = new Set(['discord.com', 'ptb.discord.com', 'canary.discord.com', 'discordapp.com'])
 
 export type NotifyLevel = 'info' | 'warn' | 'urgent'
+/** Which Slack channel: money in or out (#payments), or something broken (#alerts). */
+export type NotifyCategory = 'payments' | 'alerts'
+
+/** The app name every Slack message starts with. */
+const APP_NAME = 'Mushi Mushi'
 
 export interface NotifyField {
   label: string
@@ -61,6 +69,14 @@ export interface NotifyArgs {
   url?: string
   /** Free-form footer (e.g. environment, region). */
   footer?: string
+  /** Slack channel. Without it, only OPERATOR_SLACK_WEBHOOK_URL is used. */
+  category?: NotifyCategory
+  /**
+   * What Slack shows instead of `body` / `fields`, when those carry personal data (a support
+   * ticket's text and sender). Slack keeps 90 days of history in a shared workspace; Discord
+   * keeps the full version.
+   */
+  slack?: { body: string; fields?: NotifyField[] }
 }
 
 const COLORS: Record<NotifyLevel, { slackBar: string; discordInt: number }> = {
@@ -75,7 +91,7 @@ const COLORS: Record<NotifyLevel, { slackBar: string; discordInt: number }> = {
  * forget is fine for webhook-driven notifications.
  */
 export async function notifyOperator(args: NotifyArgs): Promise<number> {
-  const slackUrl = (Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL') ?? '').trim()
+  const slackUrl = slackUrlFor(args.category)
   const discordUrl = (Deno.env.get('OPERATOR_DISCORD_WEBHOOK_URL') ?? '').trim()
 
   if (!slackUrl && !discordUrl) return 0
@@ -88,6 +104,39 @@ export async function notifyOperator(args: NotifyArgs): Promise<number> {
   return results.filter((r) => r.status === 'fulfilled' && r.value).length
 }
 
+/** The channel's webhook, else the single operator webhook from before 2026-11-17. */
+function slackUrlFor(category: NotifyCategory | undefined): string {
+  const byCategory = category === 'payments' ? 'SLACK_PAYMENTS_WEBHOOK_URL' : category === 'alerts' ? 'SLACK_ALERTS_WEBHOOK_URL' : null
+  const specific = byCategory ? (Deno.env.get(byCategory) ?? '').trim() : ''
+  return specific || (Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL') ?? '').trim()
+}
+
+/** A glanceable mark: money (💳), needs a look (⚠️), broken (🔴), fine again (✅). */
+function emojiFor(args: Pick<NotifyArgs, 'level' | 'category'>): string {
+  if (args.level === 'urgent') return '🔴'
+  if (args.level === 'warn') return '⚠️'
+  return args.category === 'payments' ? '💳' : '✅'
+}
+
+/** @internal Exported for tests. The Slack payload: app name and headline, one plain paragraph, the facts on one line, one button. */
+export function slackPayload(args: NotifyArgs): Record<string, unknown> {
+  const body = args.slack?.body ?? args.body
+  const fields = args.slack ? args.slack.fields ?? [] : args.fields ?? []
+  const headline = `${APP_NAME} · ${emojiFor(args)} ${args.title}`
+  const blocks: unknown[] = [{ type: 'section', text: { type: 'mrkdwn', text: `*${headline}*
+${body}` } }]
+  const facts = fields.map((f) => `*${f.label}:* ${f.value}`)
+  if (args.footer) facts.push(args.footer)
+  if (facts.length) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: facts.join('  ·  ').slice(0, 2900) }] })
+  if (args.url) {
+    blocks.push({
+      type: 'actions',
+      elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open' }, url: args.url, ...(args.level === 'urgent' ? { style: 'danger' } : {}) }],
+    })
+  }
+  return { text: headline, attachments: [{ color: COLORS[args.level].slackBar, blocks }] }
+}
+
 async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
   // Compare the parsed host, not a substring (js/incomplete-url-substring-
   // sanitization): `url.includes('hooks.slack.com')` also matches hostile
@@ -98,52 +147,7 @@ async function postSlack(url: string, args: NotifyArgs): Promise<boolean> {
     return false
   }
 
-  const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: { type: 'plain_text', text: prefixForLevel(args.level) + args.title, emoji: true },
-    },
-    {
-      type: 'section',
-      text: { type: 'mrkdwn', text: args.body },
-    },
-  ]
-
-  if (args.fields?.length) {
-    blocks.push({
-      type: 'section',
-      fields: args.fields.map((f) => ({
-        type: 'mrkdwn',
-        text: `*${f.label}*\n${f.value}`,
-      })),
-    })
-  }
-
-  if (args.url) {
-    blocks.push({
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: 'Open' },
-          url: args.url,
-          style: args.level === 'urgent' ? 'danger' : 'primary',
-        },
-      ],
-    })
-  }
-
-  if (args.footer) {
-    blocks.push({
-      type: 'context',
-      elements: [{ type: 'mrkdwn', text: args.footer }],
-    })
-  }
-
-  const payload = {
-    text: prefixForLevel(args.level) + args.title,
-    attachments: [{ color: COLORS[args.level].slackBar, blocks }],
-  }
+  const payload = slackPayload(args)
 
   return await post(url, payload, 'slack')
 }
@@ -187,6 +191,8 @@ async function post(url: string, payload: unknown, transport: 'slack' | 'discord
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      // A slow chat service must never hold up a Stripe webhook or a cron.
+      signal: AbortSignal.timeout(5_000),
     })
     // Slack returns "ok" plain text on success (200). Discord returns 204.
     if (!res.ok) {
