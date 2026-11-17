@@ -246,7 +246,7 @@ export function CiPage() {
     route: '/ci',
     title: 'CI runners',
     summary: stats
-      ? `${stats.jobs} jobs in ${data.window.days} days · wait p95 ${formatSeconds(stats.queueP95s)} · ${stats.infraFailures} test machine failures`
+      ? `${(stats.windowJobs ?? stats.jobs).toLocaleString()} jobs in ${data.window.days} days · wait p95 ${formatSeconds(stats.queueP95s)} · ${stats.windowJobs != null && stats.hourly ? stats.hourly.reduce((n, h) => n + h.infraFailures, 0) : stats.infraFailures} test machine failures`
       : page.error
         ? "CI runners couldn't load"
         : 'Loading CI runners',

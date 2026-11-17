@@ -632,7 +632,18 @@ export interface CiVerdict {
  * "3 jobs are waiting" here said the same thing twice (2026-11-16).
  */
 export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
-  const c = ciOutcomeCounts(o.stats)
+  const sampled = ciOutcomeCounts(o.stats)
+  // The whole window when the server counted it in the database (stats.windowJobs, stats.hourly);
+  // the newest jobs read otherwise, which a busy day fills in hours.
+  const hours = o.stats.windowJobs != null ? o.stats.hourly : undefined
+  const c = hours
+    ? {
+        ...sampled,
+        total: o.stats.windowJobs ?? sampled.total,
+        codeFailures: hours.reduce((n, h) => n + h.codeFailures, 0),
+        infra: hours.reduce((n, h) => n + h.infraFailures, 0),
+      }
+    : sampled
   const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
 
   if (c.infra > 0 && c.infra >= c.codeFailures) {

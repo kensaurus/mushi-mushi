@@ -161,6 +161,10 @@ interface CiStats {
   hourly?: CiHourly[]
   /** The first hour `hourly` fully covers; earlier hours are partial. */
   hourlyFrom?: string
+  /** Every job in the window, counted in the database; `jobs` above is the newest jobs read (at most 1,000 finished). */
+  windowJobs?: number
+  /** The window's pass rate over every job (passed ÷ passed + code failures). */
+  windowPassRate?: number | null
   /** Per job type, slowest p90 first. Optional: older servers do not send it. */
   byJob?: CiJobType[]
 }
