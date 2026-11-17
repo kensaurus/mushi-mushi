@@ -28,14 +28,14 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section } from '../components/ui'
+import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section, SegmentedControl } from '../components/ui'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards, splitPublicDemo } from '../components/portfolio/portfolioView'
+import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
 import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
@@ -119,8 +119,17 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
   const firstNext = status.first ? appUrgency(status.first).next : null
   // Apps that need a look get a full card; the rest collapse to one row each.
-  const attention = useMemo(() => cards.filter(needsALook), [cards])
-  const healthy = useMemo(() => cards.filter((c) => !needsALook(c)), [cards])
+  // The status sentence always names the worst app; the cards follow the toggle.
+  const sortBy: PortfolioSort = searchParams.get('sort') === 'name' ? 'name' : 'worst'
+  const setSortBy = (next: PortfolioSort) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'name') params.set('sort', 'name')
+    else params.delete('sort')
+    setSearchParams(params, { replace: true })
+  }
+  const shown = useMemo(() => sortPortfolioCards(cards, sortBy), [cards, sortBy])
+  const attention = useMemo(() => shown.filter(needsALook), [shown])
+  const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   const appList = useMemo(() => cards.map((c) => ({ projectId: c.projectId, name: c.name })), [cards])
   // App icons: the team's project list knows each app's SDK origin and repo.
   const setup = useSetupStatus()
@@ -232,7 +241,19 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         <>
           <PortfolioSectionNav />
           <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+              <SegmentedControl
+                value={sortBy}
+                onChange={setSortBy}
+                size="sm"
+                ariaLabel="Order the apps"
+                options={[
+                  { id: 'worst', label: 'Worst first' },
+                  { id: 'name', label: 'A to Z' },
+                ]}
+              />
+            </div>
             <PanelErrorBoundary label="Portfolio cards">
               {attention.length > 0 && (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

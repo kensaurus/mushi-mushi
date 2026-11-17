@@ -326,8 +326,15 @@ export function splitPublicDemo(cards: readonly PortfolioCard[]): { apps: Portfo
   return { apps, demo }
 }
 
-/** Most urgent first, then the most open bugs, then by name. */
-export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCard[] {
+export type PortfolioSort = 'worst' | 'name'
+
+/**
+ * Worst first (the default): broken, then the most open bugs, then a part to
+ * fix, then chores; ties by name. Or by name (the Apps page toggle, owner's
+ * walkthrough 2026-11-17: "which app is worst" needed one look).
+ */
+export function sortPortfolioCards(cards: readonly PortfolioCard[], by: PortfolioSort = 'worst'): PortfolioCard[] {
+  if (by === 'name') return [...cards].sort((a, b) => a.name.localeCompare(b.name))
   const rank = new Map(cards.map((c) => [c, URGENCY_RANK[appUrgency(c).level]]))
   return [...cards].sort(
     (a, b) => (rank.get(a) ?? 5) - (rank.get(b) ?? 5) || b.openReports - a.openReports || a.name.localeCompare(b.name),

@@ -256,3 +256,18 @@ describe('splitPublicDemo', () => {
     expect(splitPublicDemo([card({ name: 'Mushi demo (sample data)', slug: 'renamed' })]).demo).toHaveLength(1)
   })
 })
+
+describe('sortPortfolioCards order toggle', () => {
+  // Owner's walkthrough, 2026-11-17: "which app is worst" needed one look.
+  const apps = [
+    card({ projectId: 'b', name: 'beta', openReports: 0, needsLook: [] }),
+    card({ projectId: 'a', name: 'alpha', openReports: 3, needsLook: [] }),
+    card({ projectId: 'c', name: 'gamma', openReports: 40, needsLook: [] }),
+  ]
+  it('worst first by default: the most open bugs lead', () => {
+    expect(sortPortfolioCards(apps).map((c) => c.name)).toEqual(['gamma', 'alpha', 'beta'])
+  })
+  it('or by name', () => {
+    expect(sortPortfolioCards(apps, 'name').map((c) => c.name)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+})
