@@ -266,11 +266,12 @@ function scopeOf(key: string | null): string | null {
  */
 export function keepMissingSlices(prev: NavCounts, next: NavCounts, sameScope: boolean): NavCounts {
   if (!sameScope || !prev.ready) return next
-  const merged: Record<string, unknown> = { ...(next.slices as Record<string, unknown>) }
-  for (const [name, value] of Object.entries(prev.slices as Record<string, unknown>)) {
-    if (value != null && merged[name] == null) merged[name] = value
+  const merged: NavStatSlices = { ...next.slices }
+  const keep = <K extends keyof NavStatSlices>(name: K) => {
+    if (prev.slices[name] != null && merged[name] == null) merged[name] = prev.slices[name]
   }
-  return { ...next, slices: merged as NavStatSlices }
+  for (const name of Object.keys(prev.slices) as Array<keyof NavStatSlices>) keep(name)
+  return { ...next, slices: merged }
 }
 
 let publishedKey: string | null = null
