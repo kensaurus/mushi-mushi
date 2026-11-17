@@ -1,5 +1,11 @@
 # @mushi-mushi/cli
 
+## 0.40.2
+
+### Patch Changes
+
+- 0a9359f: Source comments now point at `docs/SELF_HOSTED.md` and `docs/VISION.md`, where those files moved when the repository root was tidied. No behaviour change.
+
 ## 0.40.1
 
 ### Patch Changes
