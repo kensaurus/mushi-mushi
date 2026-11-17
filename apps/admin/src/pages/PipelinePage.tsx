@@ -31,6 +31,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Btn, Callout, Loading, PageStatus, Section, SegmentedControl } from '../components/ui'
+import { StackedShareBar } from '../components/charts/StackedShareBar'
 import { IconAlertTriangle, IconBolt, IconNetwork, IconReleases, IconShieldCheck } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useProjectScope, useSetProjectScopeMode } from '../lib/projectScope'
@@ -51,6 +52,7 @@ import {
   ACTION_META,
   actionableIds,
   ageLabel,
+  openerSplit,
   openerSummary,
   outcomeSummary,
   pipelinePace,
@@ -142,6 +144,7 @@ export function PipelinePage() {
   // The biggest stuck group and the first of its actions the server would take.
   const top = useMemo(() => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)), [stages])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
+  const openerParts = useMemo(() => (data?.dispatchers ? openerSplit(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
   const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
   // "Nothing is stuck" was false while no agent could open a fix (audit
@@ -369,6 +372,18 @@ export function PipelinePage() {
                 )}
               </summary>
               <div className="border-t border-edge-subtle px-3 py-2">
+                {openerParts && (
+                  <StackedShareBar
+                    className="mb-2 max-w-md"
+                    ariaLabel="Apps by who opened a fix in the last 24 hours"
+                    segments={[
+                      { key: 'server', label: 'Server', value: openerParts.serverOnly, barClass: 'bg-brand', textClass: 'text-brand', glyph: '●' },
+                      { key: 'local', label: 'Local', value: openerParts.localOnly, barClass: 'bg-info', textClass: 'text-info', glyph: '■' },
+                      { key: 'both', label: 'Both', value: openerParts.both, barClass: 'bg-ok', textClass: 'text-ok', glyph: '◆' },
+                      { key: 'nobody', label: 'Nobody', value: openerParts.nobody, barClass: 'bg-danger', textClass: 'text-danger', glyph: '▲' },
+                    ]}
+                  />
+                )}
                 <p className="mb-2 text-xs text-fg-muted">
                   The server opens fixes on its own only with an active Cursor key that has spend-down on. Local lanes are your own <code>mushi work</code> runs; set them up on the{' '}
                   <Link to="/pipeline?tab=workers" className="text-brand hover:underline">
