@@ -8,6 +8,7 @@ regenerating it.** Plans stay the source of truth for their own detail
 parked work is visible in one place.
 
 - **Last regenerated:** 2026-11-01 (sixth run; delta against 2026-10-31 below)
+- **Delta 2026-11-16:** 1 closed (BL-098: removing a legacy AI key no longer deletes a Vault secret a pooled key still references).
 - **Delta 2026-11-02 (single CI, ADR 0044 amendment):** 4 new (BL-212..BL-215: an innocent PR benched by a train that fails on anything, the red-train rate to re-measure, tsumagoi's heavy bot tier, and cancelled checks reading green).
 - **Delta 2026-11-01 (local-branch and "shipped" audit):** 12 new (BL-200..BL-211) · 3 closed (BL-200, BL-202, BL-211, done the same day) · 0 newly stale. New sources this run: every local branch with commits not on GitHub (69), every dirty worktree (9) and the stash, checked by content against `origin/master` (patch-id and subject matching miss the batch squash merges). About 40 branches that look unpushed are on master through batch releases (85–100% of their added lines present; renamed migrations matched by name). Not on master: `chore/webpage-ui` (BL-201), the `chore/uiux-housekeep` worktree (BL-202), `fix/hosted-mcp-oauth-url` (BL-203). The production migration ledger and the repo's file versions diverged (BL-200, fixed the same day; see Recently closed). Claims of "shipped" in memory notes since July all verified on master except those three. OS keychain (`docs/plan-uplift-sdk-cli-mcp.md:51`) is done in code (`packages/cli/src/keychain.test.ts`); no row. Header counts corrected (perf 2, ux 1; the open count counts the table). The viz-token close (BL-079, 2026-10-31) landed on its own branch after that count, so the header below is one open tech-debt row lower.
 - **Delta 2026-10-31 (viz tokens):** 1 closed (BL-079: `@theme static` emits dark `--color-viz-*`; `readVizToken` no longer keeps a second palette).
@@ -35,14 +36,14 @@ parked work is visible in one place.
 - **Added 2026-10-23 (site audit, ADR 0040):** BL-116, a parked part of the site audit. Closed BL-117 on 2026-10-23.
 - **Added 2026-10-24 (local fix worker, `mushi work`):** BL-118..BL-119, parked parts of the local worker.
 - **Delta 2026-10-17:** 7 new (BL-080, BL-081, BL-082, BL-083; BL-084..BL-086 from the dead-code pass) · 3 closed (BL-018 by owner decision, BL-075, BL-078) · 0 newly stale · 1 row moved to verify-done (BL-003) · 6 rows re-scoped with new evidence (BL-004, BL-006, BL-009, BL-067, BL-068, BL-074)
-- **Open items:** 133 · **Recently closed:** 39 (BL-200, BL-202, BL-211 on 2026-11-01; BL-079, BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
+- **Open items:** 132 · **Recently closed:** 40 (BL-098 on 2026-11-16; BL-200, BL-202, BL-211 on 2026-11-01; BL-079, BL-105 on 2026-10-31; BL-192, BL-195, BL-197, BL-193, BL-194, BL-196, BL-173 on 2026-10-30; BL-011, BL-154 on 2026-10-29; BL-117, BL-083 on 2026-10-23; BL-089, BL-008 on 2026-10-22; BL-065, BL-010, BL-007, BL-084, BL-014, BL-021, BL-022, BL-076, BL-086, BL-091, BL-064, BL-019, BL-085 on 2026-10-20; BL-018, BL-075, BL-078 on 2026-10-17; BL-020, BL-035, BL-060, BL-061, BL-062 on 2026-10-16)
 
 | Class | Open |
 |---|---|
 | deferred-plan-phase | 20 |
 | test-gap | 7 |
 | tech-debt | 19 |
-| known-bug | 20 |
+| known-bug | 19 |
 | decision-needed | 16 |
 | unfinished-feature | 42 |
 | product | 3 |
@@ -53,7 +54,7 @@ parked work is visible in one place.
 
 | Status | Open |
 |---|---|
-| relevant | 127 |
+| relevant | 126 |
 | verify-done | 6 |
 | stale (propose removal) | 0 |
 
@@ -141,7 +142,6 @@ parked work is visible in one place.
 | BL-095 | unfinished-feature | Per-project review model for the agent PR review (`project_settings.agent_pr_review_model`, the `judge_model` pattern with `resolveClaudeModel`). Deferred: Opus 5.5 is the point of the gate | relevant | low | ADR 0030 (Rejected), `_shared/models.ts` `AGENT_PR_REVIEW_MODEL` | — |
 | BL-096 | decision-needed | Universal AI keys (ADR 0031) serve apps through their organization's owners, so an app with no organization (only the legacy `projects.owner_id`) gets none. Decide: fall back to `projects.owner_id` in `keyOwnerForProject`, or move such apps into a personal organization | relevant | low | ADR 0031, `_shared/byok-scope.ts` `keyOwnerForProject` | — |
 | BL-097 | unfinished-feature | Add or move an organization or universal key from the CLI (`mushi keys add --scope`, `mushi keys scope`) through a device-auth console session instead of the project API key, which may not change shared keys (ADR 0023, ADR 0031). Today only the console does | relevant | low | ADR 0031, `packages/cli/src/commands/keys.ts`, `PATCH /v1/admin/byok/keys/:keyId/scope` | — |
-| BL-098 | known-bug | The legacy single-key routes (`DELETE /v1/admin/byok/:provider`, the Firecrawl and Browserbase panels, and retiring a legacy key after its pooled copy validates) delete the Vault secret by name with `vault_delete_secret`, without asking `private.vault_secret_in_use`. On live data a pool row can share that secret (yen-yen's Anthropic key, 2026-10-21), so removing the legacy credential would break the pool row. Look the secret's id up and call `vault_delete_secret_if_unused` instead | relevant | med | ADR 0031, `api/routes/settings-research.ts` (`clearLegacyByokCredential`, firecrawl/browserbase deletes), migration `20261021051628` | — |
 | BL-099 | unfinished-feature | Send a "hold" agent PR back with its findings once a person approves it in the console (a "Send back with these findings" action that queues a review follow-up). Follow-ups run on fix_first only; a hold needs a person | relevant | low | ADR 0032 (Rejected), `_shared/review-followup.ts` `followupTrigger` | — |
 | BL-100 | unfinished-feature | Per-app review follow-up settings (on/off, key, model) overriding the organization's, plus CLI/MCP to read and change them; today they are per organization and console-only | relevant | low | ADR 0032 (Rejected), `api/routes/byok-review-followups.ts` | — |
 | BL-101 | unfinished-feature | Nightly mutation-testing sample of merged agent PRs (StrykerJS on the changed files) to measure whether fail-to-pass tests assert behaviour; too slow for the merge path | relevant | low | ADR 0035 (Rejected), Plan 024 | — |
@@ -250,6 +250,7 @@ parked work is visible in one place.
 
 | ID | Title | Closed | Evidence |
 |---|---|---|---|
+| BL-098 | Legacy single-key removal deleted a Vault secret by name even when a pooled key still referenced it | 2026-11-16 | `vault_delete_secret_by_name_if_unused` (migration `20261116090000`) resolves the name or `vault://<uuid>` and calls `vault_delete_secret_if_unused`. `clearLegacyByokCredential` and the Firecrawl and Browserbase deletes clear the legacy columns first, then call that RPC, and do not fall back to `vault_delete_secret`. Tests: `byok-legacy-routes.test.ts`, `oauth-start-and-byok-delete.test.ts`. |
 | BL-211 | Local repo clutter on the owner's PC (64 superseded or already-shipped local branches, one stash, an unreachable commit, two dead worktrees) | 2026-11-01 | archived first to `C:/Users/kensa/Documents/mushi-archive-2026-11-01/local-branches.bundle` (66 refs; `git bundle verify` OK; restore test fetched all 66 into an empty repo), patches for the two worktrees beside it, then deleted; branches under 95% on master had their absent files checked (removed later on master, renumbered, or never adopted). Kept: `chore/webpage-ui` (BL-201), `fix/hosted-mcp-oauth-url` (BL-203) and every branch checked out in a worktree |
 | BL-202 | Stale `chore/uiux-housekeep` worktree (158 uncommitted admin files from 2026-09-23) | 2026-11-01 | superseded: master's `pnpm check:design` suite (chip contrast, raw buttons in pages, hand-rolled tablists, token parity) covers its three audit scripts, and it predates the 10-04 console overhaul (3 of 240 sampled lines on master). Diff and untracked files archived (`uiux-housekeep.patch`, `uiux-housekeep-untracked.tar`) before the worktree was removed |
 | BL-200 | Production migration ledger and repo file versions disagreed (171 rows under MCP apply-time versions, 4 applied with no file, 2 files unrecorded, one of them a merged fix never applied) | 2026-11-01 | ledger backed up, then reconciled by version in one checked transaction; `20261030190000` (similar-report scan cap, BL-175) applied and verified (10 ms on the largest project); the four file-less changes replayed by `20261101024500_align_function_grants_with_hosted.sql` (no-op on prod, closes a fresh-install grant gap) and the old rows marked reverted; `pnpm check:migration-ledger` reports 546 rows / 546 files / 0 problems; DEPLOYMENT.md §5 now requires the check before `supabase db push` and names the MCP version trap |
