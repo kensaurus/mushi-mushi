@@ -106,7 +106,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const refresh = () => {
     findings.reload()
     setRefreshingIcons(true)
-    void apiFetch(`${path}${query ? '&' : '?'}refreshIcons=1`, { cache: 'no-store' }).finally(() => {
+    const groupParam = group ? `&group=${encodeURIComponent(group)}` : ''
+    void apiFetch(`${base}?refreshIcons=1${groupParam}`, { cache: 'no-store' }).finally(() => {
       setRefreshingIcons(false)
       page.reload()
     })
