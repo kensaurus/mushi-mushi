@@ -880,6 +880,8 @@ forwardToApiExt([
   '/v1/admin/ops/slack-settings',
   '/v1/admin/ops/slack-settings/test',
   '/v1/admin/projects/:id/ops-key',
+  // Service role only; sentry-ingest posts straight to api-ext, this keeps the paths aligned.
+  '/v1/internal/ops/sentry',
 ]);
 // Known holes in dependencies and the runtime (ADR 0038).
 forwardToApiExt(['/v1/admin/projects/:id/vulnerabilities', '/v1/admin/projects/:id/vulnerabilities/*']);

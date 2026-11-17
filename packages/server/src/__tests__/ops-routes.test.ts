@@ -35,6 +35,8 @@ vi.mock('../../supabase/functions/_shared/auth.ts', () => ({
   requireApiKeyScope: () => async (_c: unknown, next: () => Promise<void>) => next(),
   jwtAuth: async (_c: unknown, next: () => Promise<void>) => next(),
   getOrgIdFromContext: () => null,
+  requireServiceRoleAuth: (req: Request) =>
+    req.headers.get('authorization') === 'Bearer service-role' ? null : new Response(JSON.stringify({ ok: false }), { status: 401 }),
 }))
 vi.mock('../../supabase/functions/_shared/audit.ts', () => ({ logAudit: async () => {} }))
 vi.mock('../../supabase/functions/_shared/tenant-observability.ts', () => ({
@@ -395,6 +397,14 @@ describe('Slack endpoints', () => {
     await Promise.all(h.background)
     expect(h.db.table('ops_mutes')[0]).toMatchObject({ organization_id: ORG, project_id: P2, until: '2026-11-18T05:00:00.000Z', muted_by: 'slack:U42' })
     expect(h.slack.some((c) => String(c.body.text).startsWith('🔕 Muted here for 24 hours'))).toBe(true)
+  })
+
+  it('the internal Sentry hop takes the service role only, and records for an org whose bot is on', async () => {
+    const h = harness()
+    const body = JSON.stringify({ projectId: P1, sentry: { outcome: 'created', issueId: '42', title: 'TypeError: x', level: 'error', environment: 'production', firstSeen: '2026-11-17T00:00:00Z' } })
+    expect((await h.app.request('/v1/internal/ops/sentry', { method: 'POST', headers: { 'content-type': 'application/json' }, body })).status).toBe(401)
+    const ok = await h.app.request('/v1/internal/ops/sentry', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer service-role' }, body })
+    expect(ok.status).toBe(202)
   })
 
   it('reads the team before verifying, from the form or from payload.team.id', () => {

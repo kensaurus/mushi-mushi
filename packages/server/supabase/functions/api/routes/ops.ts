@@ -21,11 +21,13 @@
  *        signing secret (found by team_id). help answers inline; everything that reads data acks
  *        at once and answers through response_url (Slack's 3 s limit).
  *   POST /v1/ops/slack/interactions             Slack buttons: Acknowledge, Mute 24h.
+ *   POST /v1/internal/ops/sentry                service role only: a Sentry outcome forwarded
+ *        by `api` (_shared/ops-forward.ts), so `api` never bundles the Ops emitter.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
-import { apiKeyAuth, getOrgIdFromContext, jwtAuth, requireApiKeyScope } from '../../_shared/auth.ts'
+import { apiKeyAuth, getOrgIdFromContext, jwtAuth, requireApiKeyScope, requireServiceRoleAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
 import { mintProjectApiKey } from '../../_shared/api-key-mint.ts'
@@ -63,6 +65,7 @@ import {
   type OpsSettingsRow,
 } from '../../_shared/ops-events.ts'
 import { eph, openAlerts, runOpsCommand, type SlashReply } from '../../_shared/ops-commands.ts'
+import { scheduleSentryOps, type SentryOpsInput } from '../../_shared/ops-sources.ts'
 import { looksLikeBotToken, looksLikeSigningSecret, postSlackWebhook, slackApi, slackAuthTest, SLACK_WEBHOOK_HOST } from '../../_shared/ops-slack.ts'
 import { callerCanAccessProject, jsonError } from '../shared.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
@@ -198,6 +201,34 @@ export function registerOpsRoutes(app: Hono<{ Variables: Variables }>, deps: Ops
   app.post('/v1/admin/projects/:id/ops-key', deps.jwtAuth, (c) => mintOpsKey(c as Ctx, deps))
   app.post('/v1/ops/slack/commands', (c) => slackCommand(c as Ctx, deps))
   app.post('/v1/ops/slack/interactions', (c) => slackInteraction(c as Ctx, deps))
+  // Sentry outcomes forwarded by `api` (_shared/ops-forward.ts): service role only.
+  // The literal path (route manifest and api-ext parity read it); equals OPS_SENTRY_PATH (ops-forward.test.ts).
+  app.post('/v1/internal/ops/sentry', (c) => internalSentry(c as Ctx, deps))
+}
+
+async function internalSentry(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
+  const denied = requireServiceRoleAuth(c.req.raw)
+  if (denied) return denied
+  const body = (await c.req.json().catch(() => null)) as { projectId?: unknown; sentry?: SentryOpsInput } | null
+  const projectId = typeof body?.projectId === 'string' ? body.projectId : ''
+  if (!UUID_RE.test(projectId) || !body?.sentry || typeof body.sentry !== 'object') return jsonError(c, 'VALIDATION_ERROR', 'projectId and sentry are required', 400)
+  const s = body.sentry
+  const outcome = s.outcome === 'created' || s.outcome === 'reopened' || s.outcome === 'resolved' ? s.outcome : null
+  if (!outcome) return jsonError(c, 'VALIDATION_ERROR', 'sentry.outcome is created, reopened or resolved', 400)
+  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : null)
+  scheduleSentryOps(deps.getServiceClient() as never, projectId, {
+    outcome,
+    issueId: str(s.issueId, 40),
+    title: str(s.title, 300),
+    culprit: str(s.culprit, 300),
+    level: str(s.level, 20),
+    environment: str(s.environment, 60),
+    release: str(s.release, 100),
+    url: str(s.url, 2000),
+    firstSeen: str(s.firstSeen, 40),
+    regressionCount: typeof s.regressionCount === 'number' && Number.isFinite(s.regressionCount) ? s.regressionCount : undefined,
+  })
+  return c.json({ ok: true }, 202)
 }
 
 // ── ingest ──────────────────────────────────────────────────────────────────

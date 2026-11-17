@@ -18,7 +18,7 @@ import { docsUrl } from '../../lib/docsUrl'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { OpsKeyMinted } from '../../lib/opsTypes'
 
-/** The lines to run once, with the key filled in. */
+/** @internal Exported for tests. The lines to run once, with the key filled in. */
 export function opsKeySnippets(key: string, apiUrl: string): Array<{ label: string; text: string }> {
   return [
     { label: 'Supabase Edge Function secrets', text: `supabase secrets set MUSHI_OPS_KEY=${key} MUSHI_API_URL=${apiUrl}` },

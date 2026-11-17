@@ -11,7 +11,8 @@
  *     production failure / error → `alerts` urgent. Thread
  *     `deploy:<repo>:production`; dedupe on the deployment status id.
  *   Sentry (the /v1/webhooks/sentry alert and the auto-import poll; never a
- *     manual import): a new issue of level error or fatal, or a regression,
+ *     manual import), forwarded by `api` through _shared/ops-forward.ts to
+ *     api-ext's /v1/internal/ops/sentry: a new issue of level error or fatal, or a regression,
  *     → `alerts`; Sentry's own resolve → `resolved` in the same thread.
  *     Thread `sentry:<issue>`; dedupe on issue id + first seen. An event
  *     with no environment counts as production (many SDKs leave it unset in

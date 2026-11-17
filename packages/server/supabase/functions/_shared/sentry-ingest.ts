@@ -29,7 +29,8 @@ import { log as rootLog } from './logger.ts';
 import { applyReportStatusTransition } from './report-transition.ts';
 import { extractFramePaths } from './sentry-frames.ts';
 import { reopenSentryLinks } from './sentry-resolve-back.ts';
-import { scheduleSentryOps } from './ops-sources.ts';
+// Ops hub: forwarded to api-ext, so `api` (deploy size limit) never bundles the emitter.
+import { forwardSentryOps } from './ops-forward.ts';
 
 const log = rootLog.child('sentry-ingest');
 
@@ -297,7 +298,7 @@ export async function ingestSentryError(
           sentryIssueId,
         });
         // Ops hub: a regression goes to the team's #alerts (only when its Slack bot is on).
-        scheduleSentryOps(db as never, projectId, {
+        forwardSentryOps(projectId, {
           outcome: 'reopened',
           issueId: sentryIssueId,
           title: event?.title ?? issue?.title ?? null,
@@ -422,7 +423,7 @@ export async function ingestSentryError(
   input.triggerClassification(reportId, projectId);
   // Ops hub: a new production error goes to the team's #alerts. A manual import is not news.
   if (intake !== 'import') {
-    scheduleSentryOps(db as never, projectId, {
+    forwardSentryOps(projectId, {
       outcome: 'created',
       issueId: sentryIssueId,
       title,
@@ -460,6 +461,6 @@ export async function resolveReportFromSentry(
     return { outcome: 'ignored', reportId: linked.reportId };
   }
   // Ops hub: close the #alerts thread, if one is open for this issue.
-  scheduleSentryOps(db as never, projectId, { outcome: 'resolved', issueId: sentryIssueId, title: null, regressionCount: linked.regressionCount });
+  forwardSentryOps(projectId, { outcome: 'resolved', issueId: sentryIssueId, title: null, regressionCount: linked.regressionCount });
   return { outcome: 'resolved', reportId: linked.reportId };
 }

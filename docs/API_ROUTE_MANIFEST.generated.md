@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-17 · **821** routes.
+> Generated: 2026-11-17 · **822** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -12,7 +12,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | `apiKeyAuth` | 60 |
 | `jwtAuth` | 419 |
 | `jwtOrApiKey` | 1 |
-| `public` | 68 |
+| `public` | 69 |
 | `unknown` | 51 |
 
 ## Routes by path
@@ -697,6 +697,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/intake/voice/:id/confirm` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | GET | `/v1/intake/voice/sessions` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
 | POST | `/v1/intake/voice/upload-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/intake-voice.ts` |
+| POST | `/v1/internal/ops/sentry` | `public` | `packages/server/supabase/functions/api/routes/ops.ts` |
 | POST | `/v1/invitations/accept` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/invitations/preview` | `public` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | GET | `/v1/marketplace/plugins` | `public` | `packages/server/supabase/functions/api/routes/plugins-marketplace.ts` |
