@@ -25,6 +25,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar';
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture';
 import { GeneralPanel } from '../components/settings/GeneralPanel';
 import { SpendLimitsPanel } from '../components/settings/SpendLimitsPanel';
+import { SlackBotCard } from '../components/ops/SlackBotCard';
 import { AgentPrReviewCard } from '../components/settings/AgentPrReviewCard';
 import { VerifiedMergeCard } from '../components/settings/VerifiedMergeCard';
 import { CiCostSettingsCard } from '../components/settings/CiCostSettingsCard';
@@ -358,6 +359,8 @@ function SettingsPageBody({
             {generalLoaded && (
               <>
                 <SpendLimitsPanel />
+                {/* The team's own Slack bot for the Ops hub (/ops); one per team, not per app. */}
+                <SlackBotCard id={SETTINGS_SECTION_IDS.opsSlackBot} />
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-edge-subtle px-4 py-3">
                   <p className="min-w-0 text-sm text-fg-secondary">
                     Fixes and CI: pull request review, verified merge, CI cost and CI policy.

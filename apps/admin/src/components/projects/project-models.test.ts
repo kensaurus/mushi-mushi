@@ -42,3 +42,12 @@ describe('runner health key template', () => {
     expect(scopeBadgeTone('runner:write')).toBe(scopeBadgeTone('voice:write'))
   })
 })
+
+describe('ops events key template', () => {
+  it('mints an ops:write key, shown with the narrow-key chip tone', () => {
+    const ops = SCOPE_PRESETS.find((p) => p.id === 'ops')!
+    expect(ops).toMatchObject({ label: 'Ops events', scopes: ['ops:write'] })
+    expect(isScopePresetId('ops')).toBe(true)
+    expect(scopeBadgeTone('ops:write')).toBe(scopeBadgeTone('runner:write'))
+  })
+})
