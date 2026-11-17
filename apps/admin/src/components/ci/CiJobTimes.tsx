@@ -36,7 +36,7 @@ export function failingFirst(byJob: readonly CiJobType[]): CiJobType[] {
 const WIDE_ONLY = 'hidden @5xl:table-cell'
 
 /** Where a job's usual, slow and longest run sit on a 0–100 scale shared by every row. */
-export interface JobSpread {
+interface JobSpread {
   usualPct: number
   slowPct: number
   longestPct: number

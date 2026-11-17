@@ -14,7 +14,7 @@ const HOUR_MS = 3_600_000
 /** Below this the day's pass rate is flagged (ciStatus's "failing" uses the same 80%). */
 export const PASS_TARGET = 0.8
 
-export interface WeekDay {
+interface WeekDay {
   /** "Mon" */
   label: string
   /** Local midnight, ms. */

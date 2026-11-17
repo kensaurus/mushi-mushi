@@ -18,7 +18,7 @@ import type { CiStatus } from './ciStatus'
 import { ciJobKey, ciJobKeys, ciRepoKey, ciRunnerKey, type CiKey } from './ciHighlight'
 import { jobOutcome, repoShortName } from './ciView'
 
-export type CiAlertSeverity = 'critical' | 'serious'
+type CiAlertSeverity = 'critical' | 'serious'
 
 export interface CiAlert {
   id: string
