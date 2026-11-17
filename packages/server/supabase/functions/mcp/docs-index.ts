@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 237 pages, generated from llms.txt. */
+/** 239 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -410,6 +410,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "onboarding"],
     headings: ["First run: two screens", "Name your project", "See your first diagnosis", "Full checklist", "After you create a project", "Generate an API key", "Test the connection", "Install the SDK"],
     excerpt: "Get your first bug report into Mushi Mushi with the console's Set up page, from naming your project to a report with a plain-English diagnosis.",
+  },
+  {
+    title: "Ops",
+    url: docUrl("/admin/ops"),
+    route: "/admin/ops",
+    markdown: "admin/ops.md",
+    keywords: ["admin", "ops"],
+    headings: [],
+    excerpt: "The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.",
   },
   {
     title: "Overview (Home view)",
@@ -1040,6 +1049,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["integrations", "cursor", "integration"],
     headings: ["Step-by-step", "Wire Cursor", "(Optional) Add the evolution-loop coding rules", "Restart Cursor", "Verify", "Available tools in Cursor", "Keep lessons current", "Connecting GitHub for auto-PR"],
     excerpt: "Wire Mushi Mushi into Cursor with one command. Get fix context, lessons and fix dispatch right from the editor.",
+  },
+  {
+    title: "Ops hub (payments, releases and alerts in your team's Slack)",
+    url: docUrl("/integrations/ops-hub"),
+    route: "/integrations/ops-hub",
+    markdown: "integrations/ops-hub.md",
+    keywords: ["integrations", "ops-hub", "ops", "hub", "payments", "releases", "alerts", "team", "slack"],
+    headings: ["What you get", "Slack bot", "Create a Slack app", "Point Slack at Mushi Mushi", "Save the token and the signing secret", "Pick the channels", "Connect an app", "Create the app's ops key"],
+    excerpt: "Every app sends payments, releases and alerts to Mushi Mushi with one server key; your team's own Slack bot posts them, threads follow-ups and answers commands.",
   },
   {
     title: "Voice intake",

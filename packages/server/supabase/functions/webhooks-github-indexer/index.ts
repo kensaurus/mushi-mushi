@@ -96,6 +96,7 @@ import {
   parseCloudAgentBranchRef,
 } from '../_shared/agent-adapters.ts';
 import { routeGithubShipEvent, type GithubShipPayload } from '../_shared/auto-release.ts';
+import { routeGithubDeployOps } from '../_shared/ops-sources.ts';
 import { pgSafeSlice, pgSafeText } from '../_shared/pg-text.ts';
 import { dbDiagnosticMessage, isTransientDbConnectionError, logDbFailure } from '../_shared/error-codes.ts';
 import { projectIdsForRepo, RepoLookupError } from './repo-projects.ts';
@@ -2312,6 +2313,9 @@ app.post('/webhooks-github-indexer', async (c) => {
   // and published, which tells reporters their fix is live. The work runs
   // after the 202 (waitUntil); runAutoRelease re-checks the opt-in.
   if (event === 'release' || event === 'deployment_status') {
+    // The Ops hub (docs/execplans/ops-hub-slack.md §4): a production deploy, or a failed one, becomes
+    // a releases / alerts event for teams whose Slack bot is on. Runs after the answer; never throws.
+    if (event === 'deployment_status') runInBackground(routeGithubDeployOps(getDb() as never, JSON.parse(raw)), 'ops-deploy');
     const routed = await routeGithubShipEvent(getDb(), event, JSON.parse(raw) as GithubShipPayload);
     if (routed.projectIds[0]) await auditRow.setProject(routed.projectIds[0]);
     return c.json(routed.body, routed.status);

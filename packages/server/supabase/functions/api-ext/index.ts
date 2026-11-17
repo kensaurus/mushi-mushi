@@ -26,6 +26,8 @@
  *          cookieless landing page-view count with the daily GTM scorecard
  *          (landing-visits.ts), the design CI push and recipe drift
  *          (recipe-ingest.ts) and the org's bill imports (spend-ledger.ts),
+ *          the Ops hub (ops.ts: app events, the Ops feed, the team's Slack
+ *          bot commands and buttons, added 2026-11-17),
  *          moved 2026-11-11 to make room in `api` for the runner push and the
  *          worker heartbeat, which `api` now serves itself (one invocation
  *          each instead of two). api-ext still registers those two routes for
@@ -82,6 +84,7 @@ import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
 import { registerBillingChangePlanRoutes } from '../api/routes/billing-change-plan.ts'
 import { registerRecipeIngestRoutes } from '../api/routes/recipe-ingest.ts'
 import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
+import { registerOpsRoutes } from '../api/routes/ops.ts'
 
 ensureSentry('api-ext')
 
@@ -137,6 +140,8 @@ registerLandingVisitRoutes(app)
 registerBillingChangePlanRoutes(app)
 registerRecipeIngestRoutes(app)
 registerSpendLedgerRoutes(app)
+// The Ops hub: app events, the console feed, the team's Slack bot (docs/execplans/ops-hub-slack.md).
+registerOpsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

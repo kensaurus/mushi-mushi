@@ -72,6 +72,7 @@ import {
   type Project,
   type ScopePresetId,
 } from './project-models'
+import { OpsKeyRow } from '../ops/OpsKeyRow'
 
 export interface ProjectsListPanelProps {
   projects: Project[]
@@ -461,6 +462,9 @@ export function ProjectsListPanel({
               />
             </div>
           )}
+
+          {/* The app server's key for the Ops hub (/ops): payments, releases and alerts. */}
+          {canManageProject(project) && <OpsKeyRow projectId={project.id} projectName={project.name} />}
 
           {project.api_keys.length > 0 && (() => {
             // Hide keys that are mid-revoke (in their undo window) so
