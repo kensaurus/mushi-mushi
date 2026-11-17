@@ -2,17 +2,17 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-16 · **811** routes.
+> Generated: 2026-11-17 · **821** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
 | `adminOrApiKey` | 222 |
-| `apiKeyAuth` | 59 |
-| `jwtAuth` | 412 |
+| `apiKeyAuth` | 60 |
+| `jwtAuth` | 419 |
 | `jwtOrApiKey` | 1 |
-| `public` | 66 |
+| `public` | 68 |
 | `unknown` | 51 |
 
 ## Routes by path
@@ -284,6 +284,12 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/onboarding/time-to-first-diagnosis` | `jwtAuth` | `packages/server/supabase/functions/api/routes/onboarding-setup.ts` |
 | GET | `/v1/admin/ontology` | `jwtAuth` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
 | POST | `/v1/admin/ontology` | `jwtAuth` | `packages/server/supabase/functions/api/routes/graph-query.ts` |
+| GET | `/v1/admin/ops/coverage` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| GET | `/v1/admin/ops/events` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| POST | `/v1/admin/ops/events/:id/ack` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| GET | `/v1/admin/ops/slack-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| PUT | `/v1/admin/ops/slack-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| POST | `/v1/admin/ops/slack-settings/test` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
 | GET | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | PUT | `/v1/admin/org/integrations/platform/:kind` | `jwtAuth` | `packages/server/supabase/functions/api/routes/integrations.ts` |
 | GET | `/v1/admin/orgs/:orgId/accounts` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/accounts-register.ts` |
@@ -400,6 +406,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/projects/:id/keys/:keyId` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | POST | `/v1/admin/projects/:id/keys/rotate` | `jwtAuth` | `packages/server/supabase/functions/api/routes/project-keys.ts` |
 | GET | `/v1/admin/projects/:id/local-followups` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/local-followups.ts` |
+| POST | `/v1/admin/projects/:id/ops-key` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
 | GET | `/v1/admin/projects/:id/preflight` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/project-integrations.ts` |
 | GET | `/v1/admin/projects/:id/privacy-status` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/evolution.ts` |
 | GET | `/v1/admin/projects/:id/radar` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/radar.ts` |
@@ -704,6 +711,9 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/notifications` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | POST | `/v1/notifications/:id/read` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/public.ts` |
 | GET | `/v1/openapi.json` | `public` | `packages/server/supabase/functions/api/routes/openapi.ts` |
+| POST | `/v1/ops/events` | `apiKeyAuth` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| POST | `/v1/ops/slack/commands` | `public` | `packages/server/supabase/functions/api/routes/ops.ts` |
+| POST | `/v1/ops/slack/interactions` | `public` | `packages/server/supabase/functions/api/routes/ops.ts` |
 | GET | `/v1/org` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | POST | `/v1/org` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |
 | PATCH | `/v1/org/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/organizations.ts` |

@@ -1175,6 +1175,20 @@ ADR 0053 (amended 2026-10-28). In the console it is the **First-time user test**
 
 Operator guide: [`docs/operators/fresh-eyes.md`](docs/operators/fresh-eyes.md). A charter-driven `ux` lane mode for other UX runs is still BL-138.
 
+## Ops hub (Nov 17 2026)
+
+Plan: [`docs/execplans/ops-hub-slack.md`](docs/execplans/ops-hub-slack.md). User docs: `apps/docs/content/integrations/ops-hub.mdx`. Migration `20261117120000_ops_hub.sql` (apply before deploying `api`, `api-ext`, `webhooks-github-indexer`, `site-watch-poll`).
+
+| Object | Role |
+| --- | --- |
+| `POST /v1/ops/events` | An app server's payment / release / alert. Key scope `ops:write` only (refused from a browser, implied by nothing), 422 `PII_REJECTED`, dedupe, 120/min per app (fails closed). Served by `api-ext`; `api` forwards. |
+| `POST /v1/ops/slack/commands`, `/v1/ops/slack/interactions` | The team's own Slack bot: slash command (`status`, `sales`, `releases`, `alerts`, `bugs`, `ci`, `apps`, `mute`, `unmute`, `help`) and the Acknowledge / Mute 24h buttons. Verified with the org's signing secret, found by `team_id`. |
+| `/v1/admin/ops/*`, `POST /v1/admin/projects/:id/ops-key` | Console (`jwtAuth`): feed, ack, coverage, Slack settings (secrets in Vault, never returned), the ops key. |
+| `_shared/ops-format.ts` / `ops-events.ts` / `ops-slack.ts` / `ops-commands.ts` | Pure payload + PII guard + threads; record + deliver (`chat.postMessage`, `chat.update`, `reactions.add`, webhook fallback, mutes); command answers. |
+| `_shared/ops-sources.ts` | Mushi Mushi's own sources for orgs with the bot on: GitHub production `deployment_status`, Sentry new errors / regressions / resolves, edge canary down / up. |
+| `ops_events`, `ops_slack_settings`, `ops_mutes`, `ops_coverage(uuid)` | RLS on all: members read events and mutes; settings and the function are service role only. |
+| Console `/ops` | `OpsPage` + `components/ops/*`; Settings → Slack bot (`SlackBotCard`); Projects → Ops key (`OpsKeyRow`). |
+
 ## ExecPlans
 
 Detailed, phase-by-phase implementation plans live in

@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 237
+Pages: 239
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -15859,6 +15859,184 @@ dispatch fixes. Make one with the **MCP read + write** preset on **Manage apps**
 
 ---
 
+## Ops hub (payments, releases and alerts in your team's Slack)
+
+Source: https://kensaur.us/mushi-mushi/docs/integrations/ops-hub
+
+---
+title: Ops hub (payments, releases and alerts in your team's Slack)
+description: Every app sends its payments, releases and alerts to Mushi Mushi with one server key. Mushi Mushi keeps them, shows them on the Ops page and posts them to your team's Slack with your own bot, which threads follow-ups, takes button clicks and answers a slash command.
+---
+
+# Ops hub
+
+Each app sends one event to Mushi Mushi. Mushi Mushi stores it, shows it on the console's
+**Ops** page and posts it to your team's Slack with your team's own bot.
+
+```
+your app's server ──POST /v1/ops/events (ops:write key)──▶ Mushi Mushi ──▶ Ops page (the record)
+GitHub production deploys ─┐                                      └──▶ your Slack bot ──▶ #payments
+Sentry production errors ──┼──▶ (Mushi Mushi's own sources) ──────────────────────────▶ #releases
+edge canaries (down / up) ─┘                                                          ▶ #alerts
+```
+
+Why a bot and not an incoming webhook: a webhook cannot thread, edit its own message,
+take a button click or answer a command, because Slack returns no message id for it.
+The bot can. A failed deploy and the next good one sit in one thread, and the fix edits
+the original message to say "✅ fixed by the next deploy".
+
+Slack is the alert; Mushi Mushi is the record. Slack's free plan shows 90 days of history,
+and the Ops page keeps everything.
+
+## What you get
+
+- **Ops page** (`/ops`): today's payments per currency, releases and open alerts; a matrix
+  of when each app last sent each kind of event (a hatched row has never sent one); and the
+  feed, with follow-ups nested under the event that opened their thread.
+- **Slack messages**: the app's icon and name, an emoji headline (💳 payment, ↩️ refund,
+  🚀 release, ⚠️ warning, 🔴 urgent, ✅ resolved), the facts on one line, and buttons:
+  **Acknowledge**, **Mute 24h**, **Open** and **Open in Mushi Mushi**.
+- **A slash command** with the name you pick (the example below uses `/kensaurus`).
+
+| Command | Answers |
+| --- | --- |
+| `/kensaurus status` | Each app: last release, open alerts, open bug reports, today's CI failures. Worst first. |
+| `/kensaurus sales [today\|week\|month]` | Payments by app and currency, refunds taken off. Today is since 00:00 UTC. |
+| `/kensaurus releases [n]` | The last n releases (5 by default, at most 20). |
+| `/kensaurus alerts` | Alerts nobody acknowledged and no resolve has closed. |
+| `/kensaurus bugs` | The newest open bug reports per app, linked to the console. |
+| `/kensaurus ci` | Today's CI jobs per app: passed, failed, stopped by the test machine. |
+| `/kensaurus apps` | Every app and when it last sent each kind of event. |
+| `/kensaurus mute  <2h\|1d>` / `unmute ` | Pause an app's messages in Slack (at most 7 days). Its events are still kept. |
+| `/kensaurus help` | This list. |
+
+Every answer is visible only to the person who typed the command.
+
+## Slack bot
+
+### Create a Slack app
+
+At [api.slack.com/apps](https://api.slack.com/apps), create an app in your workspace. Give
+the bot a name and icon your team will recognise.
+
+Bot token scopes: `chat:write`, `chat:write.public`, `commands`, `reactions:write`.
+
+### Point Slack at Mushi Mushi
+
+In the console, open **Settings → General → Slack bot**. It shows two Request URLs with
+copy buttons:
+
+- **Slash Commands** → create your command (for example `/kensaurus`) with the first URL.
+- **Interactivity & Shortcuts** → turn it on with the second URL.
+
+### Save the token and the signing secret
+
+Install the app to your workspace, then paste the **Bot User OAuth Token** (`xoxb-…`) and
+the **Signing Secret** (Basic Information) into the Slack bot card. Both go into Vault; the
+console only ever shows "saved". Mushi Mushi checks the token with Slack and remembers
+which workspace it belongs to, so each command is verified with your team's own secret.
+
+### Pick the channels
+
+Paste the channel ids for `#payments`, `#releases` and `#alerts` (right-click a channel →
+Copy link; the id starts with `C`). Press **Post a test** on each, then switch on
+**Post to Slack**.
+
+Only team owners and admins can change the bot. Without a bot token, a channel can fall
+back to an incoming webhook (no threads or buttons). With neither, events are stored only.
+
+## Connect an app
+
+### Create the app's ops key
+
+Console → **Projects** → the app → **Create ops key**. The key carries one scope,
+`ops:write`, and is shown once. It can send Ops events and nothing else: it cannot read
+reports, change settings or call MCP.
+
+### Put it on your server
+
+The card gives copy-ready lines, for example:
+
+```bash
+supabase secrets set MUSHI_OPS_KEY=mushi_… MUSHI_API_URL=https://<project>.supabase.co/functions/v1/api
+gh secret set MUSHI_OPS_KEY --body "mushi_…"
+```
+
+The ops key is a server key. A request that comes from a web page (it carries an `Origin`,
+`Referer` or `Sec-Fetch-Site` header) is refused with `403 KEY_EXPOSED_IN_BROWSER`, and so
+is a key that was ever used from one. Never ship it in a browser bundle or a mobile app.
+
+### Send events
+
+```bash
+curl -X POST "$MUSHI_API_URL/v1/ops/events" \
+  -H "X-Mushi-Api-Key: $MUSHI_OPS_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "payments",
+    "severity": "info",
+    "kind": "payment.succeeded",
+    "title": "New subscription",
+    "body": "Pro plan, monthly",
+    "facts": [{ "label": "Plan", "value": "Pro" }],
+    "amount_minor": 1200,
+    "currency": "JPY",
+    "url": "https://dashboard.stripe.com/payments/pi_123",
+    "dedupe_key": "stripe:evt_123"
+  }'
+```
+
+### The event
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `category` | yes | `payments`, `releases` or `alerts`: picks the channel |
+| `severity` | no | `info` (default), `warn`, `urgent` or `resolved` |
+| `kind` | yes | A short machine name such as `payment.succeeded`, `deploy.failed`, `refund.failed` |
+| `title` | yes | The plain headline, without the app name; at most 150 characters |
+| `body` | no | At most 600 characters |
+| `facts` | no | Up to 8 `{ label, value }` pairs |
+| `url` | no | `https://` only: the **Open** button |
+| `amount_minor`, `currency` | together | The amount in the currency's smallest unit (yen, cents) and its ISO code. A `kind` with `refund` in it counts as money out. |
+| `thread_key` | no | Groups an incident with its follow-ups, for example `invoice:in_123` or `deploy::production` |
+| `dedupe_key` | no | A retried request with the same key stores and posts once (answers `200` with `status: duplicate`) |
+| `occurred_at` | no | ISO time, within the last 30 days |
+
+Answers: `202` once stored (the Slack post happens right after), `400 VALIDATION_ERROR`,
+`422 PII_REJECTED` when a field holds an email address or a phone number (send the
+email's domain or a customer id instead), `429 RATE_LIMITED` above 120 events a minute
+per app, `503` when the limit cannot be checked (retry).
+
+### Threads
+
+Events with the same `thread_key` in the same category share one Slack thread: the first
+one is the message, the rest reply under it. A `resolved` event is also shown in the
+channel and edits the first message, so a failed payment followed by a recovered one, or a
+failed deploy followed by a good one, reads as one story.
+
+## Mushi Mushi's own sources
+
+For teams with the Slack bot on, Mushi Mushi adds these with no app code:
+
+| Source | Becomes | Needs |
+| --- | --- | --- |
+| A GitHub production deployment (`deployment_status`) | `releases` "Deployed …"; a failure is an urgent `alerts` event, resolved by the next good deploy | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
+| A new Sentry issue at level error or fatal, or a regression | `alerts`, threaded per issue; resolving it in Sentry posts the resolve | Sentry connected (webhook or auto-import). Events from another environment than production are skipped; an event with no environment counts as production. |
+| An edge canary going down (second failed run in a row) and back up | urgent `alerts`, then `resolved` in the same thread | Edge canaries set up for the app |
+
+Names and email addresses in these are cut down to the email's domain before they are
+stored or posted.
+
+## Privacy
+
+- Events from an app must not carry personal data: an email address or a phone number in
+  any text field is refused with `422 PII_REJECTED`.
+- Secrets (bot token, signing secret, webhook URLs) live in Supabase Vault. The API never
+  returns them.
+- Acknowledge records a Slack user id (`slack:U…`) or `console`, never a name.
+
+---
+
 ## Voice intake
 
 Source: https://kensaur.us/mushi-mushi/docs/integrations/voice-intake
@@ -24169,6 +24347,42 @@ GET  /v1/admin/setup-gaps?projectId=                → { projects: [{ gaps: [{ 
 - [Connect](/admin/connect): SDK heartbeat and copy-ready CLI commands
 - [Settings](/admin/settings): your own AI keys and SDK settings after setup
 - [Home](/admin/dashboard): the summary page for one app
+
+---
+
+## Ops
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/ops
+
+---
+title: Ops
+description: The Ops page in Mushi Mushi shows every app's payments, releases and alerts in one feed, which app is not reporting, and what is still open.
+---
+
+# Ops
+
+**Route:** `/ops` (sidebar: **Ops**, under Ship & watch; add it to the sidebar from Settings → Display & sidebar)
+
+One team's operational events, from every app, worst first:
+
+1. **Today**: payments per currency, releases, and how many alerts are still open.
+2. **Is every app reporting?** One row per app, one cell per kind of event (payments,
+   releases, alerts, bug reports). Darker and ● means it reported recently; ◐ this week;
+   ○ longer ago; a hatched cell has never reported. Apps that never sent an event come
+   first, with a link to connect them.
+3. **Feed**: newest first. Each row shows the app, the headline, facts, time, the
+   severity (■ urgent, ▲ warning, ● info, ✓ resolved) and whether it reached Slack
+   (✓ in Slack, ✕ not posted with the reason on hover, – stored only or muted). Follow-ups
+   sit under the event that opened their thread. Filter by app, kind, severity, or only
+   what nobody acknowledged.
+
+**Acknowledge** marks an event as seen here and in Slack (a ✅ reaction and a "Seen by"
+reply in its thread). Viewers can read the page but not acknowledge.
+
+A link from Slack's **Open in Mushi Mushi** button opens the page with that event outlined.
+
+Setup (the team's Slack bot, the per-app ops key, the event format) is in
+[Ops hub](/integrations/ops-hub).
 
 ---
 
