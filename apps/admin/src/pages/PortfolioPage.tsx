@@ -35,7 +35,7 @@ import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards } from '../components/portfolio/portfolioView'
+import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards, splitPublicDemo } from '../components/portfolio/portfolioView'
 import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
@@ -111,7 +111,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       page.reload()
     })
   }
-  const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
+  // The public demo stays out of the cards and every count ("All 10 apps need you").
+  const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(page.data?.cards ?? []), [page.data])
+  const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
   const status = useMemo(() => portfolioStatusSentence(cards), [cards])
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
@@ -152,7 +154,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         slots={[
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(page.data && page.data.cards.length > 0),
+            show: cards.length > 0,
             children: page.data ? (
               <PageStatus
                 sentence={status.sentence}
@@ -213,7 +215,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}
       {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
-      {page.data && page.data.cards.length === 0 && (
+      {page.data && cards.length === 0 && (
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
           <p className="mt-1 text-xs">
@@ -225,6 +227,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           </p>
         </Card>
       )}
+      {page.data && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
       {cards.length > 0 && page.data && (
         <>
           <PortfolioSectionNav />
@@ -250,6 +253,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                   </ul>
                 </Card>
               )}
+              {demo.length > 0 && <PublicDemoLine demo={demo} />}
             </PanelErrorBoundary>
             <PanelErrorBoundary label="Fix once">
               <FindingsSections findings={findings} names={names} />
@@ -301,6 +305,15 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         </>
       )}
     </div>
+  )
+}
+
+/** The public demo: one muted line, not a card that "needs you". */
+function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
+  return (
+    <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">
+      {demo.length === 1 ? "Mushi Mushi's public demo" : `Mushi Mushi's public demos (${demo.length})`} (sample data) · powers the docs try-it page
+    </p>
   )
 }
 

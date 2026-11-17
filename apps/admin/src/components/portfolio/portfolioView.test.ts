@@ -17,6 +17,7 @@ import {
   sdkLabel,
   sortPortfolioCards,
   spendText,
+  splitPublicDemo,
 } from './portfolioView'
 
 const card = (over: Partial<PortfolioCard>): PortfolioCard => ({
@@ -236,5 +237,22 @@ describe('portfolioStatusSentence', () => {
     const out = portfolioStatusSentence([card({ name: 'a', needsLook: [SETUP_CHORE] }), card({ name: 'b', needsLook: [] })])
     expect(out.first).toBeNull()
     expect(out.sentence).toMatch(/^No app needs you right now\./)
+  })
+})
+
+describe('splitPublicDemo', () => {
+  // Owner, 2026-11-17: "All 10 apps need you" counted the docs demo.
+  it('keeps the public demo out of the cards and the "need you" count', () => {
+    const demo = card({ projectId: 'demo', name: 'Mushi demo (sample data)', slug: 'mushi-demo', openReports: 6, needsLook: [] })
+    const mine = card({ projectId: 'mine', name: 'yen-yen', slug: 'yen-yen', openReports: 29, needsLook: [] })
+    const lookalike = card({ projectId: 'demo-app', name: 'demo-app', slug: 'demo-app', openReports: 1, needsLook: [] })
+    const { apps, demo: demos } = splitPublicDemo([demo, mine, lookalike])
+    expect(demos.map((c) => c.projectId)).toEqual(['demo'])
+    expect(apps.map((c) => c.projectId)).toEqual(['mine', 'demo-app'])
+    expect(portfolioStatusSentence(sortPortfolioCards(apps)).sentence).toMatch(/^All 2 apps need you/)
+  })
+
+  it('matches the demo by its "(sample data)" name when the slug differs', () => {
+    expect(splitPublicDemo([card({ name: 'Mushi demo (sample data)', slug: 'renamed' })]).demo).toHaveLength(1)
   })
 })
