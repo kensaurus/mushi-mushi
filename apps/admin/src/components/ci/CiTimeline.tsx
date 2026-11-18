@@ -45,7 +45,7 @@ const WINDOW_OPTIONS = [
 
 const RUN_CLASS: Record<CiJobOutcome, string> = {
   ...(Object.fromEntries(Object.entries(CI_OUTCOME_STYLE).map(([k, v]) => [k, v.fill])) as Record<CiJobOutcome, string>),
-  running: `${CI_OUTCOME_STYLE.running.fill} motion-safe:animate-pulse`,
+  running: `${CI_OUTCOME_STYLE.running.fill} ci-stripes`,
 }
 
 const LEGEND_OUTCOMES: CiJobOutcome[] = ['passed', 'code_failure', 'infra', 'running', 'cancelled']
