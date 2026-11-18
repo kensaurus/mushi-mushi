@@ -37,6 +37,9 @@
 - [Local workers](./local-workers.md) — `mushi work --daemon` as a systemd
   user unit or a Windows scheduled task, its guards and key, and moving the
   hand-made lane services onto it (ADR 0048).
+- [Providers & AI routes](./providers-ai-routes.md) — the operator page for
+  the shared AI provider accounts, spend and model routes (kensaurus-ops), its
+  secrets and guards.
 
 ## BYOK validation migration gate
 
