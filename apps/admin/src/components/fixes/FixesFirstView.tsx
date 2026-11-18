@@ -16,7 +16,10 @@
 
 import { AGENT_OUT_OF_USAGE_BUCKET } from '../../lib/agentOutOfUsage'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Section } from '../ui'
+import { Btn, Section } from '../ui'
+import { BarCell } from '../signal/BarCell'
+import { StatusPill } from '../signal/StatusMark'
+import { VitalText } from '../signal/VitalText'
 import { IconAlertTriangle, IconCheck, IconReleases } from '../icons'
 import { ReleaseStations, ReleaseTrainLine } from '../release/ReleaseStations'
 import { stationsFromStages, trainNow } from '../../lib/releaseStations'
@@ -149,6 +152,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
   // The reasons come from the attempts loaded below (the newest 200), so they
   // can cover fewer reports than the status line's "Stopped 48" (it read 47).
   const stopped = Math.max(listed, stoppedTotal ?? 0)
+  const maxStopped = Math.max(1, ...reasons.map((r) => r.fixes.length))
 
   return (
     <div className="space-y-3" data-testid="fixes-first-view">
@@ -185,15 +189,17 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
             {ready.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-ready-${f.id}`}>
                 <Link to={`/reports/${f.report_id}`} title={f.report_title ?? undefined} className="min-w-0 flex-1 basis-48 wrap-break-word text-xs font-medium text-fg hover:underline">
-                  {fixReportLabel(f)}
+                  <VitalText text={fixReportLabel(f)} />
                 </Link>
                 <a href={f.pr_url} target="_blank" rel="noreferrer" className="font-mono text-2xs text-fg-secondary hover:underline">
                   #{f.pr_number ?? '?'}
                 </a>
-                <Badge tone="ok">Opus: merge</Badge>
-                <Badge tone="ok">CI passed</Badge>
+                <StatusPill status="passed" label="Opus: merge" />
+                <StatusPill status="passed" label="CI passed" />
                 {queued.has(f.id) ? (
-                  <span className="text-2xs text-fg-muted" data-testid={`fixes-ready-${f.id}-queued`}>In the merge queue</span>
+                  <span data-testid={`fixes-ready-${f.id}-queued`}>
+                    <StatusPill status="waiting" label="In the merge queue" />
+                  </span>
                 ) : (
                   <Btn size="sm" variant="ghost" disabled={busy} onClick={() => onQueue([f])} data-testid={`fixes-ready-${f.id}-queue`}>
                     Merge when ready
@@ -214,7 +220,8 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
             {reasons.map((r) => (
               <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>
-                <span className="w-8 shrink-0 text-right font-mono text-sm font-semibold tabular-nums text-danger-foreground">{r.fixes.length}</span>
+                {/* How many stopped on this reason, as a bar against the biggest reason. */}
+                <BarCell value={r.fixes.length} max={maxStopped} tone="danger" text={r.fixes.length} widthClass="w-12" className="shrink-0" />
                 <button
                   type="button"
                   onClick={() => onShowCause(r.cause)}
@@ -235,7 +242,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
                     Retry {r.retryable.length}
                   </Btn>
                 ) : (
-                  <span className="basis-full pl-11 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
+                  <span className="basis-full pl-24 text-2xs text-fg-muted sm:basis-auto sm:pl-0" data-testid={`fixes-stopped-${r.cause}-no-retry`}>
                     {r.noRetry}
                     {r.fix && (
                       <Link to={r.fix.to} className="ml-1.5 font-medium text-brand hover:underline">

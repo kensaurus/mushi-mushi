@@ -5,15 +5,18 @@
 
 import { memo, useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, RelativeTime, Tooltip, PipelineStrip, Btn } from '../ui'
-import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
+import { RelativeTime, Tooltip, PipelineStrip, Btn } from '../ui'
+import { pipelineStatusLabel } from '../../lib/tokens'
+import { StatusPill } from '../signal/StatusMark'
+import { VitalText } from '../signal/VitalText'
+import { ciRunStatus, fixRunStatus } from './fixRunStatus'
 import { isGithubUrl } from '../../lib/githubUrl'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { CursorAgentBadge } from './CursorAgentBadge'
 import { ClaudeAgentBadge } from './ClaudeAgentBadge'
 import { buildFixPipelineStages, fixStatusStripeClass } from './fixPipelineStages'
-import { ciBadge, type FixAttempt } from './types'
+import type { FixAttempt } from './types'
 import { credentialAdvice, failureHeadline, fixReportLabel, isSuperseded, needsAttention, supersededLabel } from '../../lib/fixReportTruth'
 import { IconChevronDown, IconChevronUp } from '../icons'
 import { FIXES_TABLE_COL, TABLE_CELL } from './fixesTableLayout'
@@ -61,7 +64,7 @@ function FixRowViewInner({
   selectionDisabled = false,
   actionLabels,
 }: Props) {
-  const ci = ciBadge(fix)
+  const ci = ciRunStatus(fix)
   const stages = buildFixPipelineStages(fix)
   const stripe = fixStatusStripeClass(fix)
   const agentShort = AGENT_LABEL[fix.agent] ?? fix.agent
@@ -140,13 +143,13 @@ function FixRowViewInner({
               </label>
             ) : null}
             {superseded ? (
-              <Badge className="w-fit max-w-full min-w-0 truncate text-2xs bg-surface-overlay text-fg-muted">
-                Superseded
-              </Badge>
+              <StatusPill status="idle" label="Superseded" className="w-fit max-w-full min-w-0 truncate" />
             ) : (
-              <Badge className={`w-fit max-w-full min-w-0 truncate text-2xs ${PIPELINE_STATUS[fix.status] ?? 'bg-surface-overlay text-fg-muted'}`}>
-                {pipelineStatusLabel(fix.status)}
-              </Badge>
+              <StatusPill
+                status={fixRunStatus(fix.status)}
+                label={pipelineStatusLabel(fix.status)}
+                className="w-fit max-w-full min-w-0 truncate"
+              />
             )}
             <span className="text-2xs text-fg-faint font-mono truncate">{agentShort}</span>
           </div>
@@ -172,7 +175,7 @@ function FixRowViewInner({
                   title={headline.title}
                   data-testid="fix-row-reason"
                 >
-                  {keyAdvice?.message ?? headline.title}
+                  <VitalText text={keyAdvice?.message ?? headline.title} />
                 </p>
                 <div className="flex flex-wrap items-center gap-x-2">
                   {keyAdvice?.to && keyAdvice.linkLabel ? (
@@ -199,7 +202,7 @@ function FixRowViewInner({
               </div>
             ) : fix.summary ? (
               <p className="text-2xs text-fg-muted truncate" title={fix.summary}>
-                {fix.summary}
+                <VitalText text={fix.summary} />
               </p>
             ) : null}
           </div>
@@ -222,7 +225,7 @@ function FixRowViewInner({
                 />
               )}
               {ci ? (
-                <Badge className={ci.className}>{ci.label}</Badge>
+                <StatusPill status={ci.status} label={ci.label} />
               ) : (
                 <span className="text-3xs text-fg-faint">—</span>
               )}

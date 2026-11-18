@@ -159,11 +159,14 @@ describe('MergeQueuePanel as a picture (2026-11-18)', () => {
     expect(chip.textContent).toBe('key used up')
     expect(chip.getAttribute('title')).toContain('(key_used_up)')
     expect(host.querySelector('[data-testid="merge-queue-row-d"]')!.textContent).not.toContain('key_used_up')
+    // A held row is a failed mark: it waits on you.
+    expect(host.querySelector('[data-testid="merge-queue-row-d"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('failed')
   })
 
   it('a queued row has no reason chip', async () => {
     await render()
     await answer([row({ id: 'a' })])
     expect(host.querySelector('[data-testid="merge-queue-row-a-why"]')).toBeNull()
+    expect(host.querySelector('[data-testid="merge-queue-row-a"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('waiting')
   })
 })

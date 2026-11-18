@@ -9,9 +9,11 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Card, Badge, RelativeTime } from '../ui'
+import { Card, RelativeTime } from '../ui'
 import { statusGlowClass } from '../../lib/tokens'
-import { DISPATCH_STATUS, DISPATCH_STATUS_LABEL, type DispatchJob } from './types'
+import { DISPATCH_STATUS_LABEL, type DispatchJob } from './types'
+import { StatusPill } from '../signal/StatusMark'
+import { fixRunStatus } from './fixRunStatus'
 
 interface Props {
   dispatches: DispatchJob[]
@@ -23,7 +25,7 @@ function DispatchCard({ d, showReason }: { d: DispatchJob; showReason?: boolean 
   return (
     <Card className={`p-3 space-y-1 ${statusGlowClass(d.status)}`}>
       <div className="flex justify-between items-center">
-        <Badge className={DISPATCH_STATUS[d.status]}>{DISPATCH_STATUS_LABEL[d.status]}</Badge>
+        <StatusPill status={fixRunStatus(d.status)} label={DISPATCH_STATUS_LABEL[d.status]} />
         <Link
           to={`/reports/${d.report_id}`}
           className="text-2xs font-mono text-fg-muted hover:text-fg-secondary"

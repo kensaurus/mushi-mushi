@@ -33,6 +33,8 @@ import type { FixTimelineEvent } from '../components/FixGitGraph'
 import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
+import { StatusMark } from '../components/signal/StatusMark'
+import { VitalText } from '../components/signal/VitalText'
 import { FixesTable } from '../components/fixes/FixesTable'
 import { FixBulkActionBar } from '../components/fixes/FixBulkActionBar'
 import { canMergeFix, isFixMerged, mergeFixAttempt } from '../lib/mergeFix'
@@ -1029,11 +1031,14 @@ export function FixesPage() {
           </div>
           <ul className="space-y-1">
             {mergeFailures.map(({ fix, reason }) => (
-              <li key={fix.id} className="text-2xs text-fg-secondary">
+              <li key={fix.id} className="flex items-baseline gap-1.5 text-2xs text-fg-secondary" data-testid="fixes-merge-failure">
+                <StatusMark status="failed" label="Did not merge" className="self-center" />
                 <a href={fix.pr_url} target="_blank" rel="noreferrer" className="font-mono hover:underline">
                   #{fix.pr_number ?? '?'}
-                </a>{' '}
-                {fixReportLabel(fix)}: <span className="text-fg-muted">{reason}</span>
+                </a>
+                <span className="min-w-0">
+                  <VitalText text={fixReportLabel(fix)} />: <span className="text-fg-muted">{reason}</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -1224,7 +1229,7 @@ export function FixesPage() {
             <ul className="max-h-40 overflow-y-auto space-y-0.5">
               {selectedMergeable.map((f) => (
                 <li key={f.id} className="truncate">
-                  <span className="font-mono">#{f.pr_number ?? '?'}</span> {fixReportLabel(f)}
+                  <span className="font-mono">#{f.pr_number ?? '?'}</span> <VitalText text={fixReportLabel(f)} />
                 </li>
               ))}
             </ul>

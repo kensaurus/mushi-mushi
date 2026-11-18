@@ -23,14 +23,14 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
+import { Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
 import { useToast } from '../../lib/toast'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import { StageTrain, type TrainStage } from '../signal/StageTrain'
 import { StatusGlyph } from '../signal/StatusGlyph'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import {
   MERGE_QUEUE_STATE_LABEL,
-  MERGE_QUEUE_STATE_TONE,
   TRAIN_INTERVAL_OPTIONS,
   intervalLabel,
   isActiveQueueRow,
@@ -45,6 +45,16 @@ import {
   type ReleaseSettings,
   type ReleaseTrain,
 } from '../../lib/mergeQueue'
+
+/** A queue row's state as a mark: moving rows run, held rows fail until someone acts. */
+const QUEUE_ROW_STATUS: Record<MergeQueueRow['state'], RunStatus> = {
+  queued: 'waiting',
+  waiting: 'waiting',
+  resolving: 'running',
+  blocked: 'failed',
+  merged: 'passed',
+  removed: 'cancelled',
+}
 
 const MODE_OPTIONS = [
   { id: 'train', label: 'Batch' },
@@ -280,7 +290,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
         <ul className="space-y-0.5">
           {trainLines.map((l) => (
             <li key={l.repo} className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted">
-              <Badge tone={l.moving ? 'accent' : 'neutral'}>{l.moving ? 'Train' : 'Next train'}</Badge>
+              <StatusPill status={l.moving ? 'running' : 'waiting'} label={l.moving ? 'Train' : 'Next train'} />
               {l.moving?.pr_number ? (
                 <a href={prLink({ repo: l.repo, pr_number: l.moving.pr_number })} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere font-mono text-fg-secondary hover:text-fg hover:underline">
                   {l.repo}#{l.moving.pr_number}
@@ -301,7 +311,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
             const why = r.state === 'blocked' ? heldReasonOf(r.detail) : null
             return (
             <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5" data-testid={`merge-queue-row-${r.id}`}>
-              <Badge tone={MERGE_QUEUE_STATE_TONE[r.state]} className="shrink-0">{MERGE_QUEUE_STATE_LABEL[r.state]}</Badge>
+              <StatusPill status={QUEUE_ROW_STATUS[r.state]} label={MERGE_QUEUE_STATE_LABEL[r.state]} className="shrink-0" />
               {why && (
                 <span
                   className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-warn/55 bg-warn-muted px-1 text-3xs font-bold text-warn-foreground"

@@ -39,15 +39,6 @@ export const MERGE_QUEUE_STATE_LABEL: Record<MergeQueueState, string> = {
   removed: 'Removed',
 }
 
-export const MERGE_QUEUE_STATE_TONE: Record<MergeQueueState, 'info' | 'accent' | 'warn' | 'ok' | 'neutral'> = {
-  queued: 'info',
-  waiting: 'info',
-  resolving: 'accent',
-  blocked: 'warn',
-  merged: 'ok',
-  removed: 'neutral',
-}
-
 export function isActiveQueueRow(row: Pick<MergeQueueRow, 'state'>): boolean {
   return row.state === 'queued' || row.state === 'waiting' || row.state === 'resolving' || row.state === 'blocked'
 }
