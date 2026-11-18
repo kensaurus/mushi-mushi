@@ -13,10 +13,59 @@
 import { useMemo } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
 import type { CiStatus } from '../../lib/ciStatus'
-import { ALERTS_SHOWN, rankCiAlerts } from '../../lib/ciAlerts'
-import type { CiKey } from '../../lib/ciHighlight'
+import { ALERTS_SHOWN, rankCiAlerts, type CiAlert, type CiAlertBar } from '../../lib/ciAlerts'
+import { useCiLink, type CiKey } from '../../lib/ciHighlight'
 import { repoShortName } from '../../lib/ciView'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
+import { barPct } from '../signal/BarCell'
+
+/** One app's bar in a grouped card; pointing at it lights that app across the page. */
+function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
+  const link = useCiLink([bar.key], bar.key)
+  const fill = bar.severity === 'critical' ? 'bg-st-failed' : 'bg-st-waiting'
+  return (
+    <li {...link} className={`${link.className} grid grid-cols-subgrid col-span-3 items-center`} data-testid="ci-alert-bar">
+      <span className="truncate text-2xs font-semibold text-fg">{bar.label}</span>
+      <span className="relative block h-2 overflow-hidden rounded-xs bg-surface-overlay" aria-hidden="true">
+        <span className={`ci-grow-x absolute inset-y-0 left-0 ${fill}`} style={{ width: `${Math.max(4, barPct(bar.value, max))}%` }} />
+      </span>
+      <span className="text-right font-mono text-2xs font-bold text-fg tabular-nums">{bar.display}</span>
+    </li>
+  )
+}
+
+/** The card's picture: a bar per app for a grouped cause, or one rate bar. */
+function AlertDetail({ alert }: { alert: CiAlert }) {
+  if (alert.bars && alert.bars.length > 0) {
+    const max = Math.max(...alert.bars.map((b) => b.value))
+    return (
+      <span className="flex flex-col gap-1">
+        <ul
+          // mushi-mushi-allowlist: app name / bar / value columns shared by every row (subgrid)
+          className="grid grid-cols-[minmax(0,6rem)_minmax(0,1fr)_auto] gap-x-1.5 gap-y-0.5"
+          aria-label={alert.bars.map((b) => `${b.label} ${b.display}`).join(', ')}
+        >
+          {alert.bars.slice(0, 6).map((b) => (
+            <AlertBarRow key={b.key} bar={b} max={max} />
+          ))}
+        </ul>
+        {alert.bars.length > 6 && <span className="text-3xs text-fg-secondary">+{alert.bars.length - 6} more</span>}
+      </span>
+    )
+  }
+  if (alert.rate != null) {
+    const pct = Math.round(alert.rate * 100)
+    return (
+      <span className="flex flex-col gap-1">
+        <span>{alert.detail}</span>
+        <span className="relative block h-2 overflow-hidden rounded-xs bg-st-passed-soft" role="img" aria-label={`${pct}% of runs fail`} data-testid="ci-alert-rate">
+          <span className="ci-grow-x absolute inset-y-0 left-0 bg-st-failed" style={{ width: `${Math.max(3, pct)}%` }} />
+        </span>
+      </span>
+    )
+  }
+  return <>{alert.detail}</>
+}
 
 /** A readable name for a highlight key. */
 function keyLabel(overview: Pick<CiOverview, 'repos'>, key: CiKey): string {
@@ -35,6 +84,7 @@ export function CiAlertStrip({ overview, status, now }: { overview: CiOverview; 
     () =>
       rankCiAlerts(overview, status, now).map((a) => ({
         ...a,
+        detail: <AlertDetail alert={a} />,
         hrefLabel: 'Open the log on GitHub',
         jumpLabel: 'Show the evidence',
       })),

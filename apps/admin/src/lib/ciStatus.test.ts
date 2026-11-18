@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ciOverviewFixture, FIXTURE_NOW } from '../components/ci/__fixtures__/ciOverview'
 import type { CiJob, CiJobType, CiOverview } from './ciTypes'
-import { buildCiStatus, estimateLine, groupFailures, machineOfJob } from './ciStatus'
+import { buildCiStatus, estimateLine, groupFailureCauses, groupFailures, machineOfJob, specificLabels } from './ciStatus'
 
 const GLOT = 'kensaurus/glot.it'
 
@@ -158,5 +158,57 @@ describe('the week table', () => {
     const r0 = base.repos[0]!
     const o = { ...base, repos: [{ ...r0, repo: 'kensaurus/solo-boss-cloud', projectName: 'solo-boss-cloud', jobs7d: 5 }, { ...r0, repo: 'kensaurus/solo-boss-cloud-documentation', projectName: 'solo-boss-cloud', jobs7d: 4 }] }
     expect(buildCiStatus(o, FIXTURE_NOW).apps.map((a) => a.app).sort()).toEqual(['solo-boss-cloud (solo-boss-cloud)', 'solo-boss-cloud (solo-boss-cloud-documentation)'])
+  })
+})
+
+describe('the label gap (2026-11-18)', () => {
+  it('drops the labels every runner has', () => {
+    expect(specificLabels(['self-hosted', 'Linux', 'X64', 'kensaurus-local', 'ubuntu-latest'])).toEqual(['kensaurus-local'])
+  })
+
+  it('marks idle machines missing a waiting label, and the waiting jobs that need it', () => {
+    const s = buildCiStatus(waitingForLocal(), FIXTURE_NOW)
+    const by = (name: string) => s.allMachines.find((m) => m.name === name)!
+    expect(by('alienware-ci').missingLabels).toEqual(['kensaurus-local'])
+    expect(by('alienwarex16').missingLabels).toEqual(['kensaurus-local'])
+    // The machine that has the label (and is busy) is never flagged.
+    expect(by('overseas-ci').missingLabels).toEqual([])
+    expect(by('overseas-ci').labels).toEqual(['kensaurus-local'])
+    expect(s.waitingJobs.map((w) => [w.job.id, w.needs, w.mismatch])).toEqual([
+      ['w1', ['kensaurus-local'], true],
+      ['w2', ['kensaurus-local'], true],
+      ['w3', ['kensaurus-local'], true],
+    ])
+  })
+
+  it('never flags a job waiting for GitHub cloud', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.map((j) => (j.id.startsWith('w') ? { ...j, labels: ['ubuntu-latest'] } : j))
+    const s = buildCiStatus(o, FIXTURE_NOW)
+    expect(s.waitingJobs.every((w) => w.needs.length === 0 && !w.mismatch)).toBe(true)
+    expect(s.allMachines.every((m) => (m.missingLabels ?? []).length === 0)).toBe(true)
+  })
+})
+
+describe('groupFailureCauses: same cause, one card', () => {
+  it('puts one failing step across five PRs in three apps into one cause, and keeps the rest single', () => {
+    const repos = ['kensaurus/glot.it', 'kensaurus/glot.it', 'kensaurus/twm', 'kensaurus/yen-yen', 'kensaurus/yen-yen']
+    const o = withJobs([
+      ...repos.map((repo, i) => failed({ id: `d${i}`, repo, jobName: 'Security', runId: 50 + i, prNumber: 600 + i, failedStep: 'Dependency audit', completedAt: `2026-10-21T11:4${i}:00Z` })),
+      failed({ id: 'e1', jobName: 'Lint & Build', runId: 70, prNumber: 700, failedStep: 'Dead code (production)' }),
+    ])
+    const { causes, singles } = groupFailureCauses(groupFailures(o, FIXTURE_NOW))
+    expect(causes).toHaveLength(1)
+    expect(causes[0]!.step).toBe('Dependency audit')
+    expect(causes[0]!.hits).toHaveLength(5)
+    expect(causes[0]!.apps.map((a) => a.repo).sort()).toEqual(['kensaurus/glot.it', 'kensaurus/twm', 'kensaurus/yen-yen'])
+    expect(singles.some((x) => x.failure.job.id === 'e1')).toBe(true)
+    expect(singles.some((x) => x.failure.job.id.startsWith('d'))).toBe(false)
+  })
+
+  it('does not group one step that broke a single PR', () => {
+    const o = withJobs([failed({ id: 'f1', jobName: 'Security', runId: 80, prNumber: 801, failedStep: 'Dependency audit' })])
+    const { causes } = groupFailureCauses(groupFailures(o, FIXTURE_NOW))
+    expect(causes.find((c) => c.step === 'Dependency audit')).toBeUndefined()
   })
 })

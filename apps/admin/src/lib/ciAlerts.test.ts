@@ -89,6 +89,42 @@ describe('rankCiAlerts', () => {
     ])
   })
 
+  it('puts every app that waits long for a machine into ONE "Queue wait" card, a bar per app', () => {
+    const o = ciOverviewFixture()
+    const r0 = o.repos[0]!
+    o.repos = [
+      { ...r0, repo: 'a/one', projectName: 'one', passRate: 0.95, queueP95s: 20 * 60 },
+      { ...r0, repo: 'a/two', projectName: 'two', passRate: 0.95, queueP95s: 40 * 60 },
+      { ...r0, repo: 'a/three', projectName: 'three', passRate: 0.95, queueP95s: 12 * 60 },
+      { ...r0, repo: 'a/four', projectName: 'four', passRate: 0.95, queueP95s: 15 * 60 },
+      { ...r0, repo: 'a/fine', projectName: 'fine', passRate: 0.95, queueP95s: 60 },
+    ]
+    const waits = rank(o).filter((a) => a.label === 'Queue wait')
+    expect(waits).toHaveLength(1)
+    expect(waits[0]!.bars!.map((b) => [b.label, b.display, b.severity])).toEqual([
+      ['two', '40 min', 'critical'],
+      ['one', '20 min', 'serious'],
+      ['four', '15 min', 'serious'],
+      ['three', '12 min', 'serious'],
+    ])
+    expect(waits[0]!.metric).toEqual({ value: '40', unit: 'min' })
+    expect(waits[0]!.keys).toHaveLength(4)
+  })
+
+  it('groups apps failing often per severity, but keeps a job that keeps failing as its own card with its rate', () => {
+    const o = ciOverviewFixture()
+    const r0 = o.repos[0]!
+    o.repos = ['x', 'y', 'z'].map((n) => ({ ...r0, repo: `a/${n}`, projectName: n, passRate: 0.75, jobs7d: 40, queueP95s: 60 }))
+    o.stats.byJob = [jobType({ job: 'Build & Test', codeFailures: 8, failRate: 0.53, runs: 15 })]
+    const alerts = rank(o)
+    const failing = alerts.filter((a) => a.label === 'Failing often')
+    expect(failing).toHaveLength(1)
+    expect(failing[0]!.bars).toHaveLength(3)
+    const keeps = alerts.find((a) => a.id.startsWith('fails:'))!
+    expect(keeps.rate).toBeCloseTo(0.53)
+    expect(keeps.metric).toEqual({ value: '53', unit: '% fail' })
+  })
+
   it('counts jobs a test machine stopped as "never finished", not as failures', () => {
     const a = rank(ciOverviewFixture()).find((x) => x.id === 'infra')!
     expect(a.title).toBe('6 jobs never finished')

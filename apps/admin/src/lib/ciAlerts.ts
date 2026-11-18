@@ -11,6 +11,11 @@
  * Critical: a machine stopped reporting, a job type that keeps failing, an app under 70%.
  * Serious: an app under 80%, a job running past its usual time, jobs waiting over 5 minutes,
  * jobs a test machine stopped, an app whose 1-in-20 wait is over 10 minutes.
+ *
+ * One cause, one card (2026-11-18; the owner: "you expect us to read a bunch of text wall?").
+ * Four "Slow to start · 1 job in 20 waits N min" cards were the same sentence four times: every
+ * app that waits long now shares ONE "Queue wait" card, drawn as a bar per app. Apps failing
+ * often share one card per severity the same way. A different cause keeps its own card.
  */
 
 import type { CiJob, CiOverview } from './ciTypes'
@@ -36,12 +41,26 @@ export interface CiAlert {
   href: string | null
   /** Where the evidence is: `#ci-…` on this view, or another view's href. */
   jump: string
+  /** A small bar chart in the card: one bar per app (the grouped "Queue wait" / "Failing often"). */
+  bars?: CiAlertBar[]
+  /** A rate to draw as a bar beside the detail (0–1), e.g. a job type's fail rate. */
+  rate?: number
   /**
    * Larger is worse, within a severity. Each kind has its own band so the order is deliberate:
    * machine down > keeps failing > app under 70%; running long > waiting > app under 80% >
    * machine stopped jobs > slow to start. The magnitude orders cards inside a band.
    */
   score: number
+}
+
+export interface CiAlertBar {
+  key: CiKey
+  label: string
+  /** The bar's value on the card's own scale (seconds, or a 0–1 rate). */
+  value: number
+  /** The number printed beside the bar ("17 min", "43%"). */
+  display: string
+  severity: CiAlertSeverity
 }
 
 const LONG_WAIT_S = 5 * 60
@@ -114,25 +133,45 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       keys: [ciJobKey(t.repo, t.job), ciRepoKey(t.repo)],
       href: newestLog(overview.jobs, (j) => j.repo === t.repo && j.jobName === t.job && jobOutcome(j) === 'code_failure'),
       jump: '#ci-job-times',
+      rate: t.failRate ?? 0,
       score: 2 + Math.min(1, (t.codeFailures * (t.failRate ?? 0)) / 10),
     })
   }
 
-  // Apps whose checks fail too often.
-  for (const r of overview.repos) {
-    if (r.passRate == null || r.passRate >= LOW_PASS || r.jobs7d < 5) continue
+  // Apps whose checks fail too often: one card per severity, a bar per app.
+  const failing = overview.repos
+    .filter((r) => r.passRate != null && r.passRate < LOW_PASS && r.jobs7d >= 5)
+    .map((r) => ({ r, passRate: r.passRate!, severity: (r.passRate! < CRITICAL_PASS ? 'critical' : 'serious') as CiAlertSeverity }))
+    .sort((x, y) => x.passRate - y.passRate)
+  for (const severity of ['critical', 'serious'] as const) {
+    const group = failing.filter((f) => f.severity === severity)
+    if (group.length === 0) continue
+    const worst = group[0]!
+    const one = group.length === 1
     out.push({
-      id: `pass:${r.repo}`,
-      severity: r.passRate < CRITICAL_PASS ? 'critical' : 'serious',
+      id: one ? `pass:${worst.r.repo}` : `pass:${severity}`,
+      severity,
       label: 'Failing often',
-      app: appOf(overview, r.repo),
-      title: `Pass rate ${Math.round(r.passRate * 100)}%`,
-      detail: `${Math.round((1 - r.passRate) * 100)}% of its finished jobs fail · ${r.jobs7d} jobs in ${overview.window.days} days.`,
-      metric: { value: String(Math.round(r.passRate * 100)), unit: '% pass' },
-      keys: [ciRepoKey(r.repo)],
-      href: newestLog(overview.jobs, (j) => j.repo === r.repo && jobOutcome(j) === 'code_failure'),
+      app: one ? appOf(overview, worst.r.repo) : null,
+      title: one ? `Pass rate ${Math.round(worst.passRate * 100)}%` : `${group.length} apps fail ${severity === 'critical' ? 'over 30%' : 'over 20%'} of checks`,
+      detail: one
+        ? `${Math.round((1 - worst.passRate) * 100)}% of its finished jobs fail · ${worst.r.jobs7d} jobs in ${overview.window.days} days.`
+        : `Share of finished jobs that fail, last ${overview.window.days} days.`,
+      metric: { value: String(Math.round(worst.passRate * 100)), unit: '% pass' },
+      keys: group.map((f) => ciRepoKey(f.r.repo)),
+      href: one ? newestLog(overview.jobs, (j) => j.repo === worst.r.repo && jobOutcome(j) === 'code_failure') : null,
       jump: '#ci-week',
-      score: (r.passRate < CRITICAL_PASS ? 1 : 1.5) + (1 - r.passRate) / 2,
+      bars: one
+        ? undefined
+        : group.map((f) => ({
+            key: ciRepoKey(f.r.repo),
+            label: appOf(overview, f.r.repo),
+            value: 1 - f.passRate,
+            display: `${Math.round((1 - f.passRate) * 100)}%`,
+            severity: f.severity,
+          })),
+      rate: one ? 1 - worst.passRate : undefined,
+      score: (severity === 'critical' ? 1 : 1.5) + (1 - worst.passRate) / 2,
     })
   }
 
@@ -194,21 +233,32 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
     })
   }
 
-  // Apps that wait long for a machine over the week.
-  for (const r of overview.repos) {
-    if (r.queueP95s == null || r.queueP95s <= APP_WAIT_P95_S) continue
+  // Apps that wait long for a machine over the week: ONE "Queue wait" card, a bar per app.
+  const slowStart = overview.repos
+    .filter((r) => r.queueP95s != null && r.queueP95s > APP_WAIT_P95_S)
+    .sort((x, y) => (y.queueP95s ?? 0) - (x.queueP95s ?? 0))
+  if (slowStart.length > 0) {
+    const worstS = slowStart[0]!.queueP95s!
     out.push({
-      id: `wait:${r.repo}`,
+      id: 'queue-wait',
       severity: 'serious',
-      label: 'Slow to start',
-      app: appOf(overview, r.repo),
-      title: `1 job in 20 waits ${minWords(r.queueP95s)}`,
-      detail: 'Too few machines take its jobs at busy times.',
-      metric: mins(r.queueP95s),
-      keys: [ciRepoKey(r.repo)],
+      label: 'Queue wait',
+      app: slowStart.length === 1 ? appOf(overview, slowStart[0]!.repo) : null,
+      title: slowStart.length === 1 ? `1 job in 20 waits ${minWords(worstS)}` : `${slowStart.length} apps wait for a machine`,
+      detail: 'Too few machines take their jobs at busy times (1 job in 20 waits this long).',
+      metric: mins(worstS),
+      keys: slowStart.map((r) => ciRepoKey(r.repo)),
       href: null,
       jump: '#ci-timeline',
-      score: Math.min(1, r.queueP95s / 3600),
+      bars: slowStart.map((r) => ({
+        key: ciRepoKey(r.repo),
+        label: appOf(overview, r.repo),
+        value: r.queueP95s!,
+        display: minWords(r.queueP95s!),
+        // Half an hour or more for 1 job in 20 is as bad as a failing check.
+        severity: r.queueP95s! >= 1800 ? 'critical' : 'serious',
+      })),
+      score: Math.min(1, worstS / 3600),
     })
   }
 
