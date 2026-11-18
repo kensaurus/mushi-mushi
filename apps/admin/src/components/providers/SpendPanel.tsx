@@ -44,7 +44,7 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
         <SegmentedControl<Window> value={win} options={WINDOWS} onChange={setWin} ariaLabel="Spend window" size="sm" />
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Kpi label="Cost" value={formatMicroUsd(t.cost)} tone={t.cost > t.sell && t.sell > 0 ? 'bad' : 'plain'} />
+        <Kpi label="Cost" value={formatMicroUsd(t.cost)} tone={t.cost > t.sell ? 'bad' : 'plain'} />
         <Kpi label="Sold" value={formatMicroUsd(t.sell)} />
         <div className="flex min-w-0 flex-col gap-0.5 rounded-md border border-edge bg-surface px-2.5 py-1.5">
           <span className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Margin</span>

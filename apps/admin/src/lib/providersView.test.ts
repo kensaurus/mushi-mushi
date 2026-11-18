@@ -197,6 +197,13 @@ describe('buildSpendGrid', () => {
     expect(grid.maxCost).toBe(9_000_000)
   })
 
+  it('counts any cost with nothing sold as a loss, with no margin', () => {
+    const grid = buildSpendGrid({ since: AT, liability_micro: 0, rows: [{ app: 'a', provider: 'p', calls: 1, errors: 0, cost_micro: 500, sell_micro: 0 }] })
+    expect(grid.cells.get(cellKey('a', 'p'))).toMatchObject({ loss: true, margin: null })
+    const s = snap({ spend: { last_24h: { since: AT, liability_micro: 0, rows: [{ app: 'a', provider: 'p', calls: 1, errors: 0, cost_micro: 2_000_000, sell_micro: 0 }] }, last_30d: { since: AT, rows: [], liability_micro: 0 } } })
+    expect(buildAlerts(s, NOW)[0]).toMatchObject({ id: 'apps-loss', metric: { value: '$2.00' } })
+  })
+
   it('treats null cost and sell as zero', () => {
     const grid = buildSpendGrid({ since: '', liability_micro: 0, rows: [{ app: 'a', provider: 'p', calls: 1, errors: 0, cost_micro: null, sell_micro: null }] })
     expect(grid.cells.get(cellKey('a', 'p'))).toMatchObject({ cost: 0, sell: 0, loss: false, margin: null })

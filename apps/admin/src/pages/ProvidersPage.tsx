@@ -220,8 +220,8 @@ export function ProvidersPage() {
       {ops.loading && !snapshot && <Loading text="Loading providers…" />}
       {notConfigured && (
         <EmptyState
-          title="Not connected on this install"
-          description="Set KENSAURUS_OPS_URL and KENSAURUS_OPS_CONSOLE_TOKEN on the server to read the provider watch."
+          title="Not connected"
+          description="The server route is not deployed here yet, or its KENSAURUS_OPS_URL / KENSAURUS_OPS_CONSOLE_TOKEN secrets are unset."
         />
       )}
       {ops.error && !snapshot && !notConfigured && (

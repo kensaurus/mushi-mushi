@@ -204,7 +204,7 @@ export function buildAlerts(snapshot: OpsSnapshot, now: number): ProvidersAlert[
       tab: 'providers',
     })
   }
-  const losing = appTotals(snapshot.spend.last_24h).filter((a) => a.cost > a.sell && a.sell > 0)
+  const losing = appTotals(snapshot.spend.last_24h).filter((a) => a.cost > a.sell)
   if (losing.length > 0) {
     const worst = [...losing].sort((a, b) => b.cost - b.sell - (a.cost - a.sell))[0]!
     out.push({
@@ -230,7 +230,7 @@ interface SpendCell {
   errors: number
   cost: number
   sell: number
-  /** Cost over sell, only when something was sold. */
+  /** Cost over what was sold (nothing sold and any cost is a loss). */
   loss: boolean
   margin: number | null
 }
@@ -261,7 +261,7 @@ export function buildSpendGrid(digest: SpendDigest | null | undefined): SpendGri
     const c = prev
       ? { ...prev, calls: prev.calls + r.calls, errors: prev.errors + r.errors, cost: prev.cost + cost, sell: prev.sell + sell }
       : { app: r.app, provider: r.provider, calls: r.calls, errors: r.errors, cost, sell, loss: false, margin: null }
-    c.loss = c.sell > 0 && c.cost > c.sell
+    c.loss = c.cost > c.sell
     c.margin = marginOf(c.cost, c.sell)
     cells.set(key, c)
     const a = byApp.get(r.app) ?? { cost: 0, sell: 0 }

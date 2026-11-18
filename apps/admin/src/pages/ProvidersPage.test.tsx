@@ -437,7 +437,7 @@ describe('ProvidersPage providers', () => {
   it('says the page is not connected when the server has no ops URL', async () => {
     state.readError = { code: 'NOT_FOUND', message: 'No such route.' }
     await render()
-    expect(container.textContent).toContain('Not connected on this install')
+    expect(container.textContent).toContain('Not connected')
     expect(q('[data-testid="providers-rows"]')).toBeNull()
   })
 })
