@@ -9,6 +9,7 @@
  */
 
 import type { CiHourly } from './ciTypes'
+import { divergeClass as divergeScale } from '../components/signal/scale'
 
 const HOUR_MS = 3_600_000
 /** Below this the day's pass rate is flagged (ciStatus's "failing" uses the same 80%). */
@@ -91,25 +92,10 @@ export function buildWeekGrid(hourly: CiHourly[] | undefined, hourlyFrom: string
   return { days, max }
 }
 
-/** The heat class for a count on a 0..max scale: `ci-cell-0` for none, `ci-heat-1..6` above. */
-export function heatClass(value: number | null, max: number, steps = 6, prefix = 'ci-heat'): string {
-  if (value == null) return 'ci-nodata'
-  if (value <= 0 || max <= 0) return 'ci-cell-0'
-  return `${prefix}-${Math.min(steps, Math.max(1, Math.ceil((value / max) * steps)))}`
-}
+/** The colour scales moved to the shared signal kit (2026-11-18); re-exported for the CI page. */
+export { heatClass, failClass } from '../components/signal/scale'
 
-/** The diverging class for a rate against `target`: grey within 1.5 points, then 5-point steps. */
+/** The diverging class for a pass rate against the CI target. */
 export function divergeClass(rate: number | null, target = PASS_TARGET): string {
-  if (rate == null) return 'ci-nodata'
-  const d = (rate - target) * 100
-  if (Math.abs(d) < 1.5) return 'ci-mid'
-  const step = Math.min(4, Math.floor(Math.abs(d) / 5) + 1)
-  return `${d > 0 ? 'ci-divb' : 'ci-divr'}-${step}`
-}
-
-/** The failure-rate class: none for 0, then five steps up to `top` (default 40%). */
-export function failClass(rate: number | null, top = 0.4): string {
-  if (rate == null) return ''
-  if (rate <= 0) return 'ci-cell-0'
-  return `ci-fail-${Math.min(5, Math.max(1, Math.ceil((rate / top) * 5)))}`
+  return divergeScale(rate, target)
 }
