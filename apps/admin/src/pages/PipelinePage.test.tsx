@@ -604,6 +604,9 @@ describe('PipelinePage signals (2026-11-18)', () => {
     expect(q('pipeline-age-waiting-unlisted')!.textContent).toContain('665')
     expect(q('pipeline-age-waiting-unaged')).toBeNull()
     expect(q('pipeline-age-waiting')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('30 d+ 100')
+    // The listed 100 fill 100 / 765 of the bar; the newer rest is empty track, not painted 30 d+.
+    const old = q('pipeline-age-waiting')!.querySelector('[data-bucket="3"]') as HTMLElement
+    expect(parseFloat(old.style.width)).toBeCloseTo((100 / 765) * 100, 1)
   })
 
   it('reads a reason code in a held PR as a plain-word chip', async () => {

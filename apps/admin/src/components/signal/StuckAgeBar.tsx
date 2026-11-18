@@ -20,6 +20,9 @@ const TEAL = ['ci-heat-2', 'ci-heat-3', 'ci-heat-5', 'ci-heat-6'] as const
 function Row({ label, buckets, unaged, unlisted, ramp, testId }: { label: string; buckets: AgeBuckets; unaged: number; unlisted: number; ramp: readonly string[]; testId: string }) {
   const aged = buckets.reduce((a, b) => a + b, 0)
   const total = aged + unaged + unlisted
+  // Unlisted items are part of the bar's scale, as empty track: their age is unknown, and
+  // stretching the listed oldest over the whole bar would paint the backlog older than it is.
+  const scale = aged + unlisted
   const extra =
     (unlisted > 0 ? `; ${unlisted} newer ones not listed, so not split by age` : '') +
     (unaged > 0 ? `; ${unaged} more with no time in a stage, such as reports rejected at intake` : '')
@@ -40,10 +43,10 @@ function Row({ label, buckets, unaged, unlisted, ramp, testId }: { label: string
                 <span
                   key={i}
                   className={`${ramp[i]} ci-grow-x flex h-full items-center justify-center font-mono text-3xs font-bold tabular-nums`}
-                  style={{ width: `${(n / aged) * 100}%`, animationDelay: `${i * 60}ms` }}
+                  style={{ width: `${(n / scale) * 100}%`, animationDelay: `${i * 60}ms` }}
                   data-bucket={i}
                 >
-                  {n / aged >= 0.08 ? n : null}
+                  {n / scale >= 0.08 ? n : null}
                 </span>
               ) : null,
             )}
