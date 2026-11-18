@@ -182,7 +182,7 @@ export function ConnectorsCard({ orgId, projects, iconFor }: { orgId: string; pr
                             label={i.display_name}
                             testId={`connector-more-${i.id}`}
                             actions={[
-                              { key: 'check', label: 'Check', busy, onSelect: () => void act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.') },
+                              { key: 'check', label: 'Check', disabled: busy, onSelect: () => void act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.') },
                               ...(FORM[i.kind] ? [{ key: 'bind', label: 'Bind another app…', disabled: busy, onSelect: () => setOpen({ id: i.id, what: 'bind' }) }] : []),
                               ...(canAct ? [{ key: 'act', label: `${copy.name} (${actOn ? 'on' : 'off'})…`, disabled: busy, onSelect: () => setOpen({ id: i.id, what: 'act' }) }] : []),
                               { key: 'remove', label: 'Remove', danger: true, disabled: busy, onSelect: () => setConfirmRemove({ id: i.id, name: i.display_name }) },
