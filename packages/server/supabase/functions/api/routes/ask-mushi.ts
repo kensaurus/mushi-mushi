@@ -441,59 +441,13 @@ async function runAskMushiLlmTurn(args: {
 
   try {
     if (!effectiveProjectId) {
-      // No active project — env-key fallback (same as pre-BYOK behaviour).
-      const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-      if (anthropicKey) {
-        try {
-          keySource = 'env';
-          const result = await claudeGenerateObject({
-            apiKey: anthropicKey,
-            model: primaryModel,
-            schema: AskMushiReplyLlmSchema,
-            effort: ASSIST_EFFORT,
-            messages: [
-              {
-                role: 'system',
-                content: systemPrompt,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              },
-              ...messages.map((m) => ({ role: m.role, content: m.content })),
-            ],
-            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
-          });
-          const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata);
-          llmSpan.end({
-            model: primaryModel,
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-          });
-          await trace.end();
-          let reply = validateNavReply(
-            normalizeAskMushiReply(result.object as z.infer<typeof AskMushiReplyLlmSchema>),
-          ) as AskMushiReply;
-          return {
-            reply,
-            usedModel: primaryModel,
-            fallbackUsed: false,
-            fallbackReason: null,
-            inputTokens: result.usage?.promptTokens,
-            outputTokens: result.usage?.completionTokens,
-            cacheCreate: cache.cacheCreationInputTokens,
-            cacheRead: cache.cacheReadInputTokens,
-            langfuseTraceId: trace.id,
-            keySource,
-          };
-        } catch (err) {
-          fallbackUsed = true;
-          fallbackReason = err instanceof Error ? err.message : String(err);
-        }
-      }
+      // No active project, so no organization whose AI provider says Claude
+      // may run (ADR 0039 amendment): the platform OpenAI key answers.
       const openaiKey = Deno.env.get('OPENAI_API_KEY');
       if (!openaiKey) throw new Error('No LLM provider configured');
       usedModel = ASSIST_FALLBACK;
       fallbackUsed = true;
+      fallbackReason = 'no active project to check the AI provider for';
       keySource = 'env';
       const { openAiProvider } = await import('../../_shared/openai-compat.ts');
       const openai = openAiProvider({ apiKey: openaiKey });
@@ -1034,8 +988,10 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
       await stream.write(toSseEvent({ threadId, model: primaryModel }, { event: 'start' }));
 
       try {
-        // An organization that runs AI on OpenAI never gets the platform Claude key (ADR 0039 amendment).
-        const anthropicKey = activeProject?.id ? await platformAnthropicKey(db, activeProject.id) : Deno.env.get('ANTHROPIC_API_KEY');
+        // An organization that runs AI on OpenAI never gets the platform Claude key
+        // (ADR 0039 amendment); with no active project there is no organization
+        // to check, so no Claude key either.
+        const anthropicKey = activeProject?.id ? await platformAnthropicKey(db, activeProject.id) : undefined;
         let primaryFailed = false;
         if (anthropicKey) {
           try {
@@ -1074,7 +1030,7 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         } else {
           primaryFailed = true;
           fallbackUsed = true;
-          fallbackReason = 'ANTHROPIC_API_KEY not set';
+          fallbackReason = activeProject?.id ? 'ANTHROPIC_API_KEY not set' : 'no active project to check the AI provider for';
         }
 
         if (primaryFailed) {

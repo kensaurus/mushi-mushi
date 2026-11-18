@@ -272,7 +272,7 @@ export const costSettingsSchema = z
 async function callerOrgs(c: Context, deps: CiRouteDeps, db: Db, userId: string): Promise<Array<{ id: string; name: string | null }>> {
   const projectIds = await deps.callerProjectIds(c, db, userId)
   if (projectIds.length === 0) return []
-  const { data, error } = await db.from('projects').select('organization_id, organizations(name)').in('id', projectIds)
+  const { data, error } = await db.from('projects').select('organization_id, organizations!projects_organization_id_fkey(name)').in('id', projectIds)
   if (error) throw new Error(`projects read failed: ${error.message}`)
   const out = new Map<string, string | null>()
   for (const p of (data ?? []) as Array<{ organization_id: string | null; organizations?: { name?: string | null } | null }>) {
