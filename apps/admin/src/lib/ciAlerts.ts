@@ -46,11 +46,42 @@ export interface CiAlert {
   /** A rate to draw as a bar beside the detail (0–1), e.g. a job type's fail rate. */
   rate?: number
   /**
+   * The waiting card's label gap, drawn as chips (2026-11-18): the labels the biggest group of
+   * waiting jobs needs, the machines that have them all, and the idle ones missing one.
+   * Absent when the jobs need no specific label (GitHub's cloud).
+   */
+  labels?: WaitLabels
+  /**
    * Larger is worse, within a severity. Each kind has its own band so the order is deliberate:
    * machine down > keeps failing > app under 70%; running long > waiting > app under 80% >
    * machine stopped jobs > slow to start. The magnitude orders cards inside a band.
    */
   score: number
+}
+
+interface WaitLabels {
+  needs: string[]
+  /** Machine names that have every needed label. */
+  has: string[]
+  /** Idle machine names that lack one of them. */
+  missing: string[]
+}
+
+/**
+ * @internal Exported for tests. The label gap behind the biggest group of waiting jobs, read
+ * from the same machines and groups the board draws (`buildCiStatus`), so the chips and tiles agree.
+ */
+export function waitLabels(status: Pick<CiStatus, 'waitingGroups' | 'allMachines'>): WaitLabels | null {
+  const needs = status.waitingGroups[0]?.needs ?? []
+  if (needs.length === 0) return null
+  const wanted = needs.map((l) => l.toLowerCase())
+  const mine = status.allMachines.filter((m) => m.kind === 'self' && !m.stale)
+  const lower = (ls: readonly string[] | undefined) => new Set((ls ?? []).map((l) => l.toLowerCase()))
+  return {
+    needs,
+    has: mine.filter((m) => wanted.every((l) => lower(m.labels).has(l))).map((m) => m.name),
+    missing: mine.filter((m) => wanted.some((l) => lower(m.missingLabels).has(l))).map((m) => m.name),
+  }
 }
 
 export interface CiAlertBar {
@@ -196,6 +227,7 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
   // Jobs waiting for a machine.
   if (status.waiting > 0 && status.oldestWaitS != null && status.oldestWaitS > LONG_WAIT_S) {
     const waitingRepos = [...new Set(overview.jobs.filter((j) => jobOutcome(j) === 'waiting').map((j) => j.repo))]
+    const labels = waitLabels(status)
     out.push({
       id: 'waiting',
       severity: 'serious',
@@ -204,9 +236,11 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       title: `${status.waiting} job${status.waiting === 1 ? '' : 's'} waiting for a machine`,
       detail: status.waitWhy ?? `The oldest has waited ${minWords(status.oldestWaitS)}.`,
       metric: mins(status.oldestWaitS),
-      keys: waitingRepos.map(ciRepoKey),
+      // A needed label lights the machine tiles that have (or lack) it.
+      keys: [...waitingRepos.map(ciRepoKey), ...(labels?.needs ?? []).map((l): CiKey => `label:${l.toLowerCase()}`)],
       href: null,
       jump: '#ci-queue',
+      ...(labels ? { labels } : {}),
       score: 2.5 + Math.min(1, status.oldestWaitS / 3600) / 2,
     })
   }

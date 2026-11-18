@@ -11,10 +11,11 @@
  *    Every other stage prints its stuck number in neutral ink.
  *  - stuckAges: the age bar for stuck work, [0–3 d, 3–7 d, 7–30 d, 30 d+], from the server's
  *    per-group `ages` (counted before the item list is cut) or, on an older server or a group
- *    built without them, from the listed items when they are all listed. A group with neither
- *    (intake rejections: one item per app, counting reports) has no time in a stage, so its
- *    count is reported apart as `unaged` instead of being bucketed wrong. "Need you" leaves
- *    the backlog out, so buckets + unaged match the status line's "Need you".
+ *    built without them, from the listed items. A cut list's rest (the 765-report backlog on a
+ *    server without `ages`, preview of #1166) is counted apart as `unlisted`, never as "no time
+ *    in a stage". Intake rejections (one item per app, counting reports) have no time in a
+ *    stage: their count is `unaged` instead of being bucketed wrong. "Need you" leaves the
+ *    backlog out, so buckets + unaged + unlisted match the status line's "Need you".
  *  - primaryAction: each group or item gets ONE button; the rest go in a "More" menu. The
  *    primary is the first action the server would take for at least one item that does not
  *    close or remove anything; closing is never the one-click default.
@@ -50,27 +51,43 @@ export interface StuckAges {
   waiting: AgeBuckets
   /** Stuck items with no time in a stage (intake rejections), counted apart. */
   unaged: { needYou: number; waiting: number }
+  /**
+   * Items past a cut list (the server lists the oldest 100) from a server that sent no `ages`:
+   * each is no older than the newest listed one, but its bucket is unknown, so it is counted
+   * apart instead of as "no time in a stage". Zero once the server sends `ages`.
+   */
+  unlisted: { needYou: number; waiting: number }
 }
+
+/** The intake group lists one item per app while it counts reports: its items carry no time in a stage. */
+const NO_TIME_IN_STAGE = new Set(['intake_rejected'])
 
 /** Stuck work by age: what needs a person, and the backlog waiting for a fix. */
 export function stuckAges(stages: readonly PipelineStage[], now: number): StuckAges {
   let needYou: AgeBuckets = [0, 0, 0, 0]
   let waiting: AgeBuckets = [0, 0, 0, 0]
   const unaged = { needYou: 0, waiting: 0 }
+  const unlisted = { needYou: 0, waiting: 0 }
   for (const s of stages) {
     const side = s.id === 'triaged' ? 'waiting' : 'needYou'
     for (const g of s.groups) {
       if (g.tone !== 'stuck') continue
-      const buckets = Array.isArray(g.ages) && g.ages.length === 4 ? g.ages : g.items.length === g.count ? bucketItems(g.items, now) : null
-      if (!buckets) {
+      let buckets: readonly number[]
+      if (Array.isArray(g.ages) && g.ages.length === 4) {
+        buckets = g.ages
+      } else if (NO_TIME_IN_STAGE.has(g.id) || g.items.length === 0) {
         unaged[side] += g.count
         continue
+      } else {
+        // Listed items oldest first (the server sorts before it cuts): bucket them, count the rest apart.
+        buckets = bucketItems(g.items, now)
+        unlisted[side] += Math.max(0, g.count - g.items.length)
       }
       if (side === 'waiting') waiting = add(waiting, buckets)
       else needYou = add(needYou, buckets)
     }
   }
-  return { needYou, waiting, unaged }
+  return { needYou, waiting, unaged, unlisted }
 }
 
 /** The colour each stage earns: the bottleneck danger, a near-equal second warn, the rest none. */

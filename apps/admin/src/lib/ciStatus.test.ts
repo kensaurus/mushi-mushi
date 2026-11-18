@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ciOverviewFixture, FIXTURE_NOW } from '../components/ci/__fixtures__/ciOverview'
 import type { CiJob, CiJobType, CiOverview } from './ciTypes'
-import { buildCiStatus, estimateLine, groupFailureCauses, groupFailures, machineOfJob, specificLabels } from './ciStatus'
+import { buildCiStatus, estimateLine, groupFailureCauses, groupFailures, groupWaiting, machineOfJob, specificLabels } from './ciStatus'
 
 const GLOT = 'kensaurus/glot.it'
 
@@ -187,6 +187,36 @@ describe('the label gap (2026-11-18)', () => {
     const s = buildCiStatus(o, FIXTURE_NOW)
     expect(s.waitingJobs.every((w) => w.needs.length === 0 && !w.mismatch)).toBe(true)
     expect(s.allMachines.every((m) => (m.missingLabels ?? []).length === 0)).toBe(true)
+  })
+})
+
+describe('waiting jobs by the labels they need (2026-11-18)', () => {
+  it('puts eight jobs that need kensaurus-local under one group, and a cloud job in its own', () => {
+    const o = waitingForLocal()
+    const tmpl = o.jobs.find((j) => j.id === 'w1')!
+    o.jobs = [
+      ...o.jobs.filter((j) => !j.id.startsWith('w')),
+      // Generic labels and case never split a group: they need the same machine.
+      ...Array.from({ length: 8 }, (_, i) => ({ ...tmpl, id: `w${i}`, labels: i % 2 ? ['self-hosted', 'Linux', 'kensaurus-local'] : ['Kensaurus-Local'], createdAt: `2026-10-21T11:4${i}:00Z` })),
+      { ...tmpl, id: 'cloud', labels: ['ubuntu-latest'], createdAt: '2026-10-21T11:30:00Z' },
+    ]
+    const s = buildCiStatus(o, FIXTURE_NOW)
+    expect(s.waitingJobs).toHaveLength(9)
+    expect(s.waitingGroups.map((g) => [g.key, g.jobs.length, g.mismatch])).toEqual([
+      ['kensaurus-local', 8, true],
+      ['', 1, false],
+    ])
+    const local = s.waitingGroups[0]!
+    expect(local.needs.map((l) => l.toLowerCase())).toEqual(['kensaurus-local'])
+    // Oldest first inside the group.
+    expect(local.jobs.map((w) => w.job.id)).toEqual(['w0', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'])
+    expect(s.waitingGroups[1]!.needs).toEqual([])
+  })
+
+  it('orders groups by size, then by the longest wait', () => {
+    const w = (id: string, needs: string[], waitS: number) => ({ job: { id } as never, app: 'a', waitS, needs, mismatch: false })
+    expect(groupWaiting([w('a', ['x'], 10), w('b', ['y'], 99), w('c', ['y'], 5), w('d', ['z'], 50)]).map((g) => g.key)).toEqual(['y', 'z', 'x'])
+    expect(groupWaiting([])).toEqual([])
   })
 })
 

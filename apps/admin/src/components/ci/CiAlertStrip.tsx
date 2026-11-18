@@ -18,6 +18,7 @@ import { useCiLink, type CiKey } from '../../lib/ciHighlight'
 import { repoShortName } from '../../lib/ciView'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
 import { barPct } from '../signal/BarCell'
+import { StatusPill } from '../signal/StatusMark'
 
 /** One app's bar in a grouped card; pointing at it lights that app across the page. */
 function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
@@ -34,8 +35,41 @@ function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
   )
 }
 
-/** The card's picture: a bar per app for a grouped cause, or one rate bar. */
+const LABEL_CHIP = 'rounded-sm border border-edge-subtle bg-surface-overlay px-1.5 py-px font-mono text-2xs font-bold text-fg'
+
+/**
+ * The waiting card's label gap as chips: "needs kensaurus-local · has it: overseas-ci ·
+ * missing: alienware-ci, alienwarex16". The sentence stays for screen readers only.
+ */
+function WaitLabelChips({ alert, labels }: { alert: CiAlert; labels: NonNullable<CiAlert['labels']> }) {
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="sr-only">{alert.detail}</span>
+      <span className="flex flex-wrap items-center gap-1 text-2xs" aria-hidden="true" data-testid="ci-alert-wait-labels">
+        needs
+        {labels.needs.map((l) => (
+          <span key={l} className={LABEL_CHIP} data-testid="ci-alert-needs">
+            {l}
+          </span>
+        ))}
+        <span className="ml-1">has it:</span>
+        {labels.has.map((m) => (
+          <StatusPill key={m} status="passed" label={m} className="font-mono" />
+        ))}
+        {/* No machine has the label: the most actionable case, so it is said, not left blank. */}
+        {labels.has.length === 0 && <StatusPill status="failed" label="none" />}
+        {labels.missing.length > 0 && <span className="ml-1">missing:</span>}
+        {labels.missing.map((m) => (
+          <StatusPill key={m} status="failed" label={m} className="font-mono" />
+        ))}
+      </span>
+    </span>
+  )
+}
+
+/** The card's picture: a bar per app for a grouped cause, one rate bar, or the waiting card's label chips. */
 function AlertDetail({ alert }: { alert: CiAlert }) {
+  if (alert.labels) return <WaitLabelChips alert={alert} labels={alert.labels} />
   if (alert.bars && alert.bars.length > 0) {
     const max = Math.max(...alert.bars.map((b) => b.value))
     return (

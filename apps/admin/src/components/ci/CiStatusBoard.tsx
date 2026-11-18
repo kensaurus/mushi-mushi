@@ -10,14 +10,15 @@
  *               while jobs wait for a label it lacks.
  *            2. When will each job finish? A running bar (stripes) filled to elapsed ÷ usual, a
  *               tick at the usual time, the overrun orange then red, "18 / 16 min". Waiting jobs
- *               are a row each with the label they need, lit together with the machines.
+ *               sit under one header per label set ("8 waiting for kensaurus-local"), lit together
+ *               with the machines that have or lack it.
  *            3. What broke? One red card per cause seen in two or more PRs ("Dependency audit ·
  *               5 PRs · 3 apps"), single failures as compact ✕ rows.
  *            4. Where does each app's time go? Bars for wait and run, a pass-rate bar, and the
  *               main delay as a status pill.
  *          The one-sentence status stays for screen readers (role=status). Data: lib/ciStatus.ts.
  */
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
 import {
   buildCiStatus,
@@ -29,6 +30,7 @@ import {
   type FailureGroup,
   type MachineNow,
   type RunningNow,
+  type WaitingGroup,
   type WaitingNow,
 } from '../../lib/ciStatus'
 import type { RecentFailure } from '../../lib/ciAttention'
@@ -172,30 +174,73 @@ function RunningRow({ r }: { r: RunningNow }) {
   )
 }
 
-/** One job waiting for a machine, with the label it needs; that chip lights the machines that have (or lack) it. */
+/** One job waiting for a machine, under its group's header: mark, job, app, PR, wait. */
 function WaitingRow({ w }: { w: WaitingNow }) {
-  const need = w.needs[0]
-  const keys = [...ciJobKeys(w.job), ...w.needs.map(labelKey)]
-  const link = useCiLink(keys, need && w.mismatch ? labelKey(need) : ciJobKey(w.job.repo, w.job.jobName))
+  const link = useCiLink([...ciJobKeys(w.job), ...w.needs.map(labelKey)], ciJobKey(w.job.repo, w.job.jobName))
   return (
-    <li {...link} className={`${link.className} flex min-w-0 flex-wrap items-center gap-1.5 px-2.5 py-1.5`} data-testid={`ci-waiting-${w.job.id}`} data-status="waiting">
+    <li {...link} className={`${link.className} flex min-w-0 flex-wrap items-center gap-1.5 py-1.5 pr-2.5 pl-6`} data-testid={`ci-waiting-${w.job.id}`} data-status="waiting">
       <StatusMark status="waiting" label="Waiting for a machine" />
       <JobName name={w.job.jobName} url={w.job.htmlUrl} />
       <span className={CHIP}>{w.app}</span>
       {w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
-      {w.needs.map((l) => (
-        <span
-          key={l}
-          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${w.mismatch ? 'border-st-failed/55 bg-st-failed-soft text-st-failed-ink' : 'border-st-waiting/55 bg-st-waiting-soft text-st-waiting-ink'}`}
-          title={w.mismatch ? `Needs “${l}”: an idle machine is not set up for it` : `Needs a “${l}” machine`}
-          data-testid="ci-waiting-label"
-        >
-          {w.mismatch && <StatusMark status="failed" size={9} />}
-          needs {l}
-        </span>
-      ))}
       <span className="ml-auto font-mono text-2xs font-bold text-st-waiting-ink tabular-nums">{durationWords(w.waitS)}</span>
     </li>
+  )
+}
+
+/**
+ * "◷ 8 waiting for kensaurus-local": one header per label set instead of the same chip on every
+ * row (2026-11-18). It carries the `label:` key, so pointing at it lights the machine tiles that
+ * have (or lack) the label; red when an idle machine is not set up for it.
+ */
+function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
+  const keys = g.needs.length > 0 ? g.needs.map(labelKey) : [...new Set(g.jobs.map((w) => ciRepoKey(w.job.repo)))]
+  const link = useCiLink(keys, keys[0] ?? `waiting:${g.key}`)
+  const n = g.jobs.length
+  return (
+    <li {...link} className={`${link.className} flex min-w-0 flex-wrap items-center gap-1.5 px-2.5 py-1`} data-testid={`ci-waiting-group-${g.key || 'cloud'}`} data-status="waiting">
+      <StatusMark status="waiting" />
+      <span className="text-xs font-bold text-st-waiting-ink tabular-nums">
+        {n} waiting for{g.needs.length === 0 ? ' a machine' : ''}
+      </span>{' '}
+      {g.needs.map((l) => (
+        <span
+          key={l}
+          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${g.mismatch ? STATUS_SOFT.failed + ' text-st-failed-ink' : STATUS_SOFT.waiting + ' text-st-waiting-ink'}`}
+          title={g.mismatch ? `Needs “${l}”: an idle machine is not set up for it` : `Needs a “${l}” machine`}
+          data-testid="ci-waiting-label"
+        >
+          {g.mismatch && <StatusMark status="failed" size={9} />}
+          {l}
+        </span>
+      ))}
+    </li>
+  )
+}
+
+/** Waiting jobs shown under their headers before "+N more"; every group's header always shows. */
+const WAITING_ROWS = 8
+
+function WaitingGroups({ groups, total }: { groups: WaitingGroup[]; total: number }) {
+  let left = WAITING_ROWS
+  const shown = groups.map((g) => {
+    const jobs = g.jobs.slice(0, Math.max(0, left))
+    left -= jobs.length
+    return { g, jobs }
+  })
+  const hidden = total - shown.reduce((n, s) => n + s.jobs.length, 0)
+  return (
+    <>
+      {shown.map(({ g, jobs }) => (
+        <Fragment key={g.key}>
+          <WaitingGroupHeader g={g} />
+          {jobs.map((w) => (
+            <WaitingRow key={w.job.id} w={w} />
+          ))}
+        </Fragment>
+      ))}
+      {hidden > 0 && <li className="px-2.5 py-1 text-2xs text-fg-secondary">+{hidden} more waiting in the queue below</li>}
+    </>
   )
 }
 
@@ -366,10 +411,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
               {status.running.map((r) => (
                 <RunningRow key={r.job.id} r={r} />
               ))}
-              {status.waitingJobs.slice(0, 8).map((w) => (
-                <WaitingRow key={w.job.id} w={w} />
-              ))}
-              {status.waitingJobs.length > 8 && <li className="px-2.5 py-1 text-2xs text-fg-secondary">+{status.waitingJobs.length - 8} more waiting in the queue below</li>}
+              <WaitingGroups groups={status.waitingGroups} total={status.waitingJobs.length} />
             </ul>
           )}
         </section>

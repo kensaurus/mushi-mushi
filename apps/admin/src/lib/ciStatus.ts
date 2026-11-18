@@ -77,6 +77,34 @@ export interface WaitingNow {
   mismatch: boolean
 }
 
+/**
+ * Waiting jobs that need the same machine labels, under one header (2026-11-18): "needs
+ * kensaurus-local" printed on eight rows in a row was the same fact eight times.
+ */
+export interface WaitingGroup {
+  /** The needed labels, lower-cased and sorted ('' for jobs that need no specific label). */
+  key: string
+  /** The specific labels these jobs need, as the first job spells them; empty for GitHub's cloud. */
+  needs: string[]
+  /** Oldest first. */
+  jobs: WaitingNow[]
+  /** An idle machine lacks one of these labels. */
+  mismatch: boolean
+}
+
+/** @internal Exported for tests. Waiting jobs by the labels they need: the biggest group first, then the longest wait. */
+export function groupWaiting(jobs: readonly WaitingNow[]): WaitingGroup[] {
+  const groups = new Map<string, WaitingGroup>()
+  for (const w of jobs) {
+    const key = w.needs.map((l) => l.toLowerCase()).sort().join(',')
+    const g = groups.get(key) ?? { key, needs: w.needs, jobs: [], mismatch: false }
+    g.jobs.push(w)
+    g.mismatch ||= w.mismatch
+    groups.set(key, g)
+  }
+  return [...groups.values()].sort((a, b) => b.jobs.length - a.jobs.length || (b.jobs[0]?.waitS ?? 0) - (a.jobs[0]?.waitS ?? 0))
+}
+
 export interface RunningNow {
   job: CiJob
   app: string
@@ -121,6 +149,8 @@ export interface CiStatus {
   waitWhy: string | null
   /** Every waiting job, oldest first, with the labels it needs. */
   waitingJobs: WaitingNow[]
+  /** The same jobs by the labels they need (`groupWaiting`): one header per label set. */
+  waitingGroups: WaitingGroup[]
   apps: AppTime[]
   /** The worst delay across apps this week, as a sentence; null when none stands out. */
   bottleneck: string | null
@@ -366,7 +396,7 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     tone = tone === 'bad' ? 'bad' : 'warn'
     parts.push(`Slower than usual: ${slowest.job.jobName} (${slowest.app}), ${minutes(slowest.elapsedS ?? 0)} so far, usually ${minutes(slowest.usualS ?? 0)}.`)
   }
-  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, waitWhy, waitingJobs, apps, bottleneck }
+  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, waitWhy, waitingJobs, waitingGroups: groupWaiting(waitingJobs), apps, bottleneck }
 }
 
 export interface FailureGroup {

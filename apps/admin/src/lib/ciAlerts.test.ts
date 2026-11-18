@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ciOverviewFixture, FIXTURE_NOW } from '../components/ci/__fixtures__/ciOverview'
 import type { CiJobType, CiOverview } from './ciTypes'
 import { buildCiStatus } from './ciStatus'
-import { rankCiAlerts } from './ciAlerts'
+import { rankCiAlerts, waitLabels } from './ciAlerts'
 
 const jobType = (over: Partial<CiJobType>): CiJobType => ({
   repo: 'kensaurus/mushi-mushi',
@@ -137,5 +137,56 @@ describe('rankCiAlerts', () => {
     o.repos = o.repos.map((r) => ({ ...r, passRate: 0.95, queueP95s: 30 }))
     o.stats = { ...o.stats, infraFailures: 0, byJob: [] }
     expect(rank(o)).toEqual([])
+  })
+})
+
+/** Eight "kensaurus-local" jobs wait; only overseas-ci has the label; two idle machines lack it (live, 2026-11-18). */
+function waitingForLocal(): CiOverview {
+  const base = ciOverviewFixture()
+  const host = (hostId: string, hostname: string) => ({ ...base.hosts[0]!, hostId, hostname, stale: false, runners: [] })
+  const tmpl = base.jobs.find((j) => j.id === 'j2')!
+  const run = base.jobs.find((j) => j.id === 'j1')!
+  const local = ['self-hosted', 'kensaurus-local']
+  return {
+    ...base,
+    hosts: [host('h-os', 'overseas-ci'), host('h-a1', 'alienware-ci'), host('h-a2', 'alienwarex16')],
+    runners: [{ ...base.runners[0]!, name: 'aw-glot.it-1', hostId: 'h-os', labels: local }],
+    jobs: [
+      { ...run, id: 'r1', labels: local, runnerName: 'aw-glot.it-1' },
+      ...Array.from({ length: 8 }, (_, i) => ({ ...tmpl, id: `w${i}`, labels: local, createdAt: '2026-10-21T11:45:00Z' })),
+    ],
+  }
+}
+
+describe('the waiting card as label chips (2026-11-18)', () => {
+  it('names the needed label, the machine that has it and the idle ones missing it', () => {
+    const o = waitingForLocal()
+    const status = buildCiStatus(o, FIXTURE_NOW)
+    const a = rankCiAlerts(o, status, FIXTURE_NOW).find((x) => x.id === 'waiting')!
+    expect(a.title).toBe('8 jobs waiting for a machine')
+    expect(a.labels).toEqual({ needs: ['kensaurus-local'], has: ['overseas-ci'], missing: ['alienware-ci', 'alienwarex16'] })
+    // The sentence stays, for the screen-reader headline.
+    expect(a.detail).toBe(status.waitWhy)
+    expect(a.detail).toContain('alienware-ci and alienwarex16 are idle')
+    // Pointing at the card lights the machine tiles with (or without) the label.
+    expect(a.keys).toContain('label:kensaurus-local')
+  })
+
+  it('says no machine has the label when none ran such a job', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.filter((j) => j.id !== 'r1')
+    o.runners = []
+    const a = rankCiAlerts(o, buildCiStatus(o, FIXTURE_NOW), FIXTURE_NOW).find((x) => x.id === 'waiting')!
+    expect(a.labels).toEqual({ needs: ['kensaurus-local'], has: [], missing: ['alienware-ci', 'alienwarex16', 'overseas-ci'] })
+  })
+
+  it('draws no chips for jobs waiting on GitHub cloud', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.map((j) => (j.id.startsWith('w') ? { ...j, labels: ['ubuntu-latest'] } : j))
+    const status = buildCiStatus(o, FIXTURE_NOW)
+    expect(waitLabels(status)).toBeNull()
+    const a = rankCiAlerts(o, status, FIXTURE_NOW).find((x) => x.id === 'waiting')!
+    expect(a.labels).toBeUndefined()
+    expect(a.detail).toBe("They wait for GitHub's cloud (“ubuntu-latest”), not for your machines.")
   })
 })

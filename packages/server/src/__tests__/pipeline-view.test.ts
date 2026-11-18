@@ -589,6 +589,33 @@ describe('age buckets for the console age bar (2026-11-18)', () => {
     expect(sum[0] + sum[1] + sum[2] + sum[3]).toBe(150)
   })
 
+  it('the triaged backlog ("Waiting for a fix") buckets all of its reports by the created_at the stage card reads', () => {
+    // Preview of #1166: the stage card said "765 waiting over 3 days, oldest 58 d" while the bar was empty.
+    const report = (id: string, days: number) => ({ id, project_id: P, status: 'classified', title: id, summary: null, description: null, created_at: at(days), processing_error: null })
+    const reports = [
+      ...Array.from({ length: 20 }, (_, i) => report(`fresh${i}`, 1)), // under 3 days: moving, not the backlog
+      ...Array.from({ length: 30 }, (_, i) => report(`wk${i}`, 5)),
+      ...Array.from({ length: 70 }, (_, i) => report(`mo${i}`, 20)),
+      ...Array.from({ length: 65 }, (_, i) => report(`old${i}`, 58 - i * 0.1)),
+    ]
+    const stages = run({ reports, attempts: [], reviews: [] })
+    const triaged = stages.find((s) => s.id === 'triaged')!
+    const backlog = group(stages, 'no_fix_old')!.group
+    expect(backlog.tone).toBe('stuck')
+    expect(backlog.count).toBe(165)
+    expect(triaged.stuck).toBe(165)
+    // The same timestamp as "oldest 58 d" and "over 3 days": created_at, bucketed before the list is cut.
+    expect(backlog.oldestAt).toBe(at(58))
+    expect(triaged.oldestAt).toBe(at(58))
+    expect(backlog.items.length).toBe(MAX_ITEMS_PER_GROUP)
+    expect(backlog.ages).toEqual([0, 30, 70, 65])
+    expect(backlog.ages!.reduce((a, b) => a + b, 0)).toBe(triaged.stuck)
+    // The fresh ones stay in their own moving group, out of the stuck count.
+    const fresh = group(stages, 'no_fix')!.group
+    expect(fresh.tone).toBe('moving')
+    expect(fresh.ages).toEqual([20, 0, 0, 0])
+  })
+
   it('the local worker group buckets against the read time it is given', () => {
     const claims = [
       { id: 'c1', project_id: P, report_id: 'r1', lane_id: 'l1', outcome: 'infra', detail: null, claimed_at: at(1), finished_at: at(1) },
