@@ -182,10 +182,40 @@ export function nodeSeverity(node: JourneyNode, findings: JourneyFinding[]): Jou
   return worst
 }
 
-export function scoreTone(score: number): 'ok' | 'warn' | 'danger' {
+function scoreTone(score: number): 'ok' | 'warn' | 'danger' {
   if (score >= 80) return 'ok'
   if (score >= 50) return 'warn'
   return 'danger'
+}
+
+/**
+ * The Journey score card. The score is 100 minus the problems found, so before
+ * a site scan it read "100 · no problems found" beside "Not scanned yet"
+ * (owner, 2026-11-18). It says "not scanned yet" until a scan exists.
+ */
+export function journeyScoreStat(
+  score: number,
+  findingCount: number,
+  hasScan: boolean,
+): { value: string; detail: string; tone: 'ok' | 'warn' | 'danger' | 'off' } {
+  if (!hasScan) return { value: '—', detail: 'not scanned yet', tone: 'off' }
+  return {
+    value: String(score),
+    detail: findingCount === 0 ? 'no problems found' : `${findingCount} to look at`,
+    tone: scoreTone(score),
+  }
+}
+
+/** The most common paths, most visits first, each with its share of all visits (0–1). */
+export function rankedPaths(
+  flows: ReadonlyArray<{ pages: string[]; sessions: number }>,
+  totalSessions: number,
+  limit = 8,
+): Array<{ pages: string[]; sessions: number; share: number | null }> {
+  return [...flows]
+    .sort((a, b) => b.sessions - a.sessions)
+    .slice(0, limit)
+    .map((f) => ({ ...f, share: totalSessions > 0 ? Math.min(1, f.sessions / totalSessions) : null }))
 }
 
 export function percent(n: number | null): string {

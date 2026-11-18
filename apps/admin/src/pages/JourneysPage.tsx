@@ -21,9 +21,10 @@ import { FindingsSection, FlowsSection } from '../components/journeys/JourneyFin
 import { Btn, Callout, EmptyState, ErrorAlert, Section, SegmentedControl, Skeleton, StatCard } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { JOURNEY_DAYS, journeysPath, percent, scoreTone, type JourneyDays, type JourneysData } from '../lib/journeys'
+import { JOURNEY_DAYS, journeyScoreStat, journeysPath, percent, type JourneyDays, type JourneysData } from '../lib/journeys'
 
 const SCAN_POLL_MS = 4_000
+const SCORE_ACCENT = { ok: 'text-ok', warn: 'text-warn', danger: 'text-danger', off: 'text-fg-secondary' } as const
 /** Keep checking a scan this long after starting it, even if a refresh fails. */
 const SCAN_WATCH_MS = 25 * 60_000
 
@@ -86,6 +87,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
   const hasVisits = map.stats.sessions > 0
   const hasScan = data.mapScan != null
   const hasAnything = map.nodes.length > 0
+  const score = journeyScoreStat(map.score, map.findings.length, hasScan)
 
   return (
     <>
@@ -98,7 +100,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
-            <StatCard label="Journey score" value={`${map.score}`} detail={map.findings.length === 0 ? 'no problems found' : `${map.findings.length} to look at`} accent={scoreTone(map.score) === 'ok' ? 'text-ok' : scoreTone(map.score) === 'warn' ? 'text-warn' : 'text-danger'} hint="100 means no problems found. Each problem lowers it: fix-first ones the most." />
+            <StatCard label="Journey score" value={score.value} detail={score.detail} accent={SCORE_ACCENT[score.tone]} hint="100 means no problems found. Each problem lowers it: fix-first ones the most. It needs a site scan first." />
             <StatCard label="Visits" value={map.stats.sessions} detail={hasVisits ? `last ${data.days} days${map.stats.sampled ? ' (latest 20,000 page views)' : ''}` : 'SDK not sending visits'} />
             <StatCard label="Pages per visit" value={map.stats.avgPagesPerSession ?? '—'} detail={`${map.stats.pageViews} page views`} />
             <StatCard label="Leave after one page" value={percent(map.stats.bounceRate)} detail="visits that saw one page" />
@@ -116,22 +118,26 @@ function JourneysBody({ projectId }: { projectId: string }) {
             </Callout>
           )}
 
-          <Section
-            title="Flow map"
-            action={<SegmentedControl<JourneyDays> size="sm" value={days} onChange={setDays} ariaLabel="Period" options={JOURNEY_DAYS.map((d) => ({ id: d, label: `${d} days` }))} />}
-          >
-            <JourneyCanvas map={map} hasScan={hasScan} findings={map.findings} selected={selected} onSelect={setSelected} />
-            <MapLegend hasScan={hasScan} />
-          </Section>
-
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} />
-            </div>
-            <div className="min-w-0">
-              <FlowsSection flows={map.flows} />
+          {/* The map's labels are small at normal width, so the top paths sit
+              beside it as a ranked list (owner, 2026-11-18). */}
+          <div className="@container">
+            <div className="grid grid-cols-1 gap-3 @4xl:grid-cols-3">
+              <div className="min-w-0 @4xl:col-span-2">
+                <Section
+                  title="Flow map"
+                  action={<SegmentedControl<JourneyDays> size="sm" value={days} onChange={setDays} ariaLabel="Period" options={JOURNEY_DAYS.map((d) => ({ id: d, label: `${d} days` }))} />}
+                >
+                  <JourneyCanvas map={map} hasScan={hasScan} findings={map.findings} selected={selected} onSelect={setSelected} />
+                  <MapLegend hasScan={hasScan} />
+                </Section>
+              </div>
+              <div className="min-w-0">
+                <FlowsSection flows={map.flows} totalSessions={map.stats.sessions} />
+              </div>
             </div>
           </div>
+
+          <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} />
         </>
       )}
     </>
