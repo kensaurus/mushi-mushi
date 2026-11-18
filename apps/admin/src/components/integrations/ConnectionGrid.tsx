@@ -75,6 +75,7 @@ function ageMetric(iso: string | null, now = Date.now()): { value: string; unit:
   return { value: String(Math.round(h / 24)), unit: 'd since check' }
 }
 
+/** @internal One group of tiles (exported for tests; the page passes them inline). */
 export interface ConnectionGroup {
   /** Anchor id on the group, for links that point at a whole section. */
   id?: string

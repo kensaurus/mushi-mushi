@@ -14,6 +14,7 @@
  */
 import { SDK_COLD_MS, isSdkKeyScopes } from './heartbeat'
 
+/** @internal The key fields the rule reads (exported for tests). */
 export interface StaleKeyCandidate {
   id: string
   key_prefix: string

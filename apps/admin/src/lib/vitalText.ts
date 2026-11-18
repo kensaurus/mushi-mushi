@@ -12,7 +12,7 @@
  */
 import { parseVitalName, type VitalName } from '../components/signal/VitalBadge'
 
-export type VitalPart = string | { name: VitalName; value: number; raw: string }
+type VitalPart = string | { name: VitalName; value: number; raw: string }
 
 // Name, an optional joiner ("of", ":", "=", "is", "was"), the number, an optional unit.
 const VITAL_RE = /\b(LCP|INP|CLS|FCP|TTFB|FID)\b(?:\s*(?:of|is|was|=|:))?\s*(\d+(?:\.\d+)?)(?:\s*(ms|s|secs?|seconds?)\b)?/gi
