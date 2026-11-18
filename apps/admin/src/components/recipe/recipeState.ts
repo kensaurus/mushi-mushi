@@ -290,9 +290,34 @@ export function cardStatusLines(state: ElementState, lastCheckedAt: string | nul
  */
 export function reasonAfterState(reason: string, stateLabel: string): string {
   const lead = `${stateLabel}.`
-  if (!reason.toLowerCase().startsWith(lead.toLowerCase())) return reason
-  const rest = reason.slice(lead.length).trim()
-  return rest.length > 0 ? rest : reason
+  const text = recipeReasonText(reason)
+  if (!text.toLowerCase().startsWith(lead.toLowerCase())) return text
+  const rest = text.slice(lead.length).trim()
+  return rest.length > 0 ? rest : text
+}
+
+/**
+ * The server's reason, with its pointer to Risk checks matching the page: they moved to the top
+ * (390 px put them about 3,000 px down, 2026-11-18), so "at the end of the App blueprint page"
+ * is now "at the top of this page". The server copy should follow (reported).
+ */
+export function recipeReasonText(reason: string): string {
+  return (
+    reason
+      .replace(/ at the end of the App blueprint page/g, ' at the top of this page')
+      // The product name in full ("so Mushi can read", "Mushi knows your pages"); the server copy should follow (reported).
+      .replace(/(?<![\w-]|Mushi )Mushi(?![\w-]| Mushi)/g, 'Mushi Mushi')
+  )
+}
+
+/**
+ * The first sentence of a reason, for the header's next step: the card carries the rest, so the
+ * same two sentences no longer appear three times (header, card, side panel; 2026-11-18).
+ * "Mushi setup check (2)." keeps its parenthesis; a sentence ends at ". " or the end.
+ */
+export function firstSentence(text: string): string {
+  const i = text.search(/[.!?](\s|$)/)
+  return i < 0 ? text : text.slice(0, i + 1)
 }
 
 /**
@@ -320,7 +345,9 @@ const FACT_LABEL: Readonly<Record<string, string>> = {
   tokens: 'Design tokens',
   deviance: 'Off-system score',
   manifest: 'Recipe file',
-  graphNodes: 'Pages known',
+  // The server counts every graph_nodes row (pages and components from reports), not routes:
+  // "Pages known 2" contradicted "0 routes" on User stories (2026-11-18).
+  graphNodes: 'Graph nodes',
   inventory: 'inventory.yaml',
   validationErrors: 'File errors',
   gates: 'Checks that ran',

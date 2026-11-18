@@ -10,7 +10,7 @@
 import { useState } from 'react'
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
 import { formatSeconds, groupInfraFailures, groupSlowSteps, jobOutcome, recentInfraFailures, repoShortName, runnerDisplayName, slowestJobs } from '../../lib/ciView'
-import { groupCiAdvice, targetTitle, type CiAdviceGroup } from '../../lib/ciAdvice'
+import { groupCiAdvice, targetRowsByRepo, targetTitle, type CiAdviceGroup } from '../../lib/ciAdvice'
 import { Btn, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar, RelativeTime } from '../ui'
 import { IconExternalLink, IconInfo } from '../icons'
 import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
@@ -48,15 +48,22 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
         {group.count > 1 && <span className={`font-mono text-2xs font-bold whitespace-nowrap text-fg-secondary tabular-nums`}>{group.count} places</span>}
       </div>
       {group.targets.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Applies to">
-          {group.targets.map((t) => (
-            <li key={t.key} className="min-w-0 max-w-full">
-              <CodeChip title={targetTitle(t, group.evidence)} maxWidthClass="max-w-full">
-                {t.label}
-              </CodeChip>
-            </li>
+        <div className="flex flex-col gap-1" data-testid="ci-advice-targets">
+          {targetRowsByRepo(group.targets).map((row) => (
+            <div key={row.repo ?? '-'} className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {row.repo && <span className="text-2xs font-semibold text-fg-secondary">{row.repo}</span>}
+              <ul className="flex min-w-0 flex-wrap gap-1.5" aria-label={row.repo ? `Applies to, in ${row.repo}` : 'Applies to'}>
+                {row.targets.map((t) => (
+                  <li key={t.key} className="min-w-0 max-w-full">
+                    <CodeChip title={targetTitle(t, group.evidence)} maxWidthClass="max-w-full">
+                      {t.chip}
+                    </CodeChip>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
       <p className="text-xs text-fg-secondary">{group.detail}</p>
       {/* One line per chip that only names the chip again: the chips carry it on hover instead. */}
@@ -150,8 +157,11 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
 function DurationCell({ seconds, max, label }: { seconds: number | null; max: number; label: string }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <MiniInlineBar value={seconds ?? 0} max={max} widthClass="w-16" barClassName="bg-fg-secondary" aria-label={label} />
-      <span className="w-14 shrink-0 text-right whitespace-nowrap tabular-nums text-fg-secondary">{formatSeconds(seconds)}</span>
+      {/* The bar only where the table has room: at 390 it squeezed job names to one word per line (2026-11-18). */}
+      <span className="hidden @md:inline-flex">
+        <MiniInlineBar value={seconds ?? 0} max={max} widthClass="w-16" barClassName="bg-fg-secondary" aria-label={label} />
+      </span>
+      <span className="shrink-0 text-right whitespace-nowrap tabular-nums text-fg-secondary @md:w-14">{formatSeconds(seconds)}</span>
     </div>
   )
 }
@@ -241,11 +251,11 @@ export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOv
   const steps = groupSlowSteps(slowSteps).slice(0, 8)
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <div className="min-w-0 overflow-x-auto">
+      <div className="@container min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest jobs</h3>
         {slow.length === 0 ? <p className="text-xs text-fg-muted">No finished jobs in this window.</p> : <SlowJobsTable jobs={slow} />}
       </div>
-      <div className="min-w-0 overflow-x-auto">
+      <div className="@container min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest steps</h3>
         <p className="mb-1.5 text-2xs text-fg-muted">Typical time is the median over the runs Mushi Mushi holds.</p>
         {steps.length === 0 ? <p className="text-xs text-fg-muted">No step timings yet.</p> : <SlowStepsTable steps={steps} />}
@@ -254,19 +264,60 @@ export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOv
   )
 }
 
+/** Every job of a group carries the same GitHub message: it is shown once for the group. */
+function sameMessage(jobs: readonly CiJob[]): boolean {
+  const first = jobs[0]?.infraDetail
+  return !!first && jobs.every((j) => j.infraDetail === first)
+}
+
+/**
+ * The GitHub runs behind the stopped jobs, newest first: one "Re-run failed jobs" per run on
+ * GitHub covers every stopped job in it (2026-11-18: seven "Re-run on GitHub" and no way to
+ * re-run them all). `…/actions/runs/<id>/job/<id>` → `…/actions/runs/<id>`.
+ *
+ * @internal Exported for tests.
+ */
+export function stoppedRunUrls(jobs: ReadonlyArray<Pick<CiJob, 'htmlUrl'>>): string[] {
+  const out: string[] = []
+  for (const j of jobs) {
+    const m = j.htmlUrl?.match(/^(https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+)/)
+    if (m && !out.includes(m[1])) out.push(m[1])
+  }
+  return out
+}
+
 export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
   const list = recentInfraFailures(jobs, 10)
   if (list.length === 0) {
     return <p className="text-xs text-fg-muted">No test machine stopped a job in this window.</p>
   }
   const groups = groupInfraFailures(list)
+  const runs = stoppedRunUrls(list)
   return (
     <div data-testid="ci-infra-failures">
       {/* The reason once, for every row below (it repeated on all seven, 2026-11-18). */}
-      <p className="mb-1.5 max-w-prose text-xs text-fg-secondary">
-        The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
-        tested. They are not code failures: re-run them on GitHub.
-      </p>
+      <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
+        <p className="max-w-prose text-xs text-fg-secondary">
+          The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
+          tested. They are not code failures: re-run them on GitHub.
+        </p>
+        {runs.length > 1 && (
+          <details className="text-2xs" data-testid="ci-infra-rerun-all">
+            <summary className="cursor-pointer font-medium whitespace-nowrap text-fg-secondary hover:text-fg">Re-run all ({runs.length} runs)</summary>
+            <p className="mt-1 max-w-xs text-fg-muted">Each opens its run on GitHub; “Re-run failed jobs” there re-runs every stopped job in it.</p>
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {runs.map((u) => (
+                <li key={u}>
+                  <a href={u} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-medium text-accent hover:underline">
+                    {u.replace(/^https:\/\/github\.com\/[^/]+\//, '').replace('/actions/runs/', ' run ')}
+                    <IconExternalLink size={10} />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
       <ul className="flex flex-col divide-y divide-edge-subtle">
         {groups.map((g) => (
           <li key={g.key} className="py-1.5 text-xs" data-testid={`ci-infra-group-${g.key}`}>
@@ -277,6 +328,20 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
               </span>
               <span className="font-mono text-2xs text-fg-secondary">{g.prNumber ? `PR #${g.prNumber}` : 'no PR'}</span>
               {g.jobs.length > 1 && <span className="font-mono text-2xs font-bold whitespace-nowrap text-warn-foreground tabular-nums">{g.jobs.length} jobs</span>}
+              {/* One run behind the group: one re-run for all its jobs ("Re-run failed jobs" on GitHub). */}
+              {stoppedRunUrls(g.jobs).length === 1 && (
+                <a
+                  href={stoppedRunUrls(g.jobs)[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-0.5 text-2xs font-medium whitespace-nowrap text-accent hover:underline"
+                  title="Open the run on GitHub: “Re-run failed jobs” re-runs every stopped job in it"
+                  data-testid="ci-infra-group-rerun"
+                >
+                  Re-run {g.jobs.length > 1 ? 'these' : 'on GitHub'}
+                  <IconExternalLink size={10} />
+                </a>
+              )}
             </p>
             <ul className="mt-0.5 flex flex-col">
               {g.jobs.map((j) => (
@@ -286,7 +351,7 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
                   <span className="ml-auto text-2xs whitespace-nowrap text-fg-muted">
                     <RelativeTime value={j.completedAt ?? j.createdAt} />
                   </span>
-                  {j.htmlUrl && (
+                  {j.htmlUrl && stoppedRunUrls(g.jobs).length !== 1 && (
                     <a
                       href={j.htmlUrl}
                       target="_blank"
@@ -298,7 +363,7 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
                       <IconExternalLink size={10} />
                     </a>
                   )}
-                  {j.infraDetail && (
+                  {j.infraDetail && !sameMessage(g.jobs) && (
                     <details className="w-full text-2xs text-fg-muted">
                       <summary className="cursor-pointer">GitHub’s message</summary>
                       <p className="mt-0.5">{j.infraDetail}</p>
@@ -307,6 +372,12 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
                 </li>
               ))}
             </ul>
+            {sameMessage(g.jobs) && (
+              <details className="pl-5 text-2xs text-fg-muted">
+                <summary className="cursor-pointer">GitHub’s message{g.jobs.length > 1 ? ` (the same for all ${g.jobs.length})` : ''}</summary>
+                <p className="mt-0.5">{g.jobs[0].infraDetail}</p>
+              </details>
+            )}
           </li>
         ))}
       </ul>

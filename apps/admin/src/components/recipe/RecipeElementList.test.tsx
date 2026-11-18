@@ -117,7 +117,9 @@ describe('RecipeElementList', () => {
   it('says what checks each card and links to the page that owns it, outside the select button', () => {
     render(orderedRecipeElements({ design: summary('design', 'drift', { links: [{ label: 'Design system', to: '/design' }] }) }))
     const card = container.querySelector<HTMLButtonElement>('button[data-element="design"]')!
-    expect(card.textContent).toContain('How it is checked: The design scan reads your repo daily')
+    // How it is checked is the card's tooltip (and the side panel), not a line on every card (2026-11-18).
+    expect(card.textContent).not.toContain('How it is checked')
+    expect(card.getAttribute('title')).toContain('How it is checked: The design scan reads your repo daily')
     const link = [...container.querySelectorAll('a')].find((a) => a.textContent === 'Design system')
     expect(link?.getAttribute('href')).toBe('/design')
     expect(link?.closest('button')).toBeNull()
@@ -165,7 +167,9 @@ describe('RecipeElementList', () => {
     expect(t).toContain('Add deploy targets.')
     expect(t).not.toContain('Nothing to check until it is set up')
     expect(t).not.toContain('Not checked for problems')
-    expect(card.querySelectorAll('[data-testid="fact-not-checked"]').length).toBe(2)
+    // One muted line names the facts never checked, not a hatched pill per row (2026-11-18).
+    expect(card.querySelectorAll('[data-testid="fact-not-checked"]').length).toBe(0)
+    expect(card.querySelector('[data-testid="facts-not-checked"]')!.textContent).toMatch(/^Not checked: .+, .+$/)
   })
 
   it('selects a card on click', () => {

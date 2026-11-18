@@ -244,10 +244,10 @@ const COPY: CopyRegistry = {
     },
     '/projects': {
       title: 'Manage apps',
-      description: 'Banner shows what needs you — then Overview for the big picture, Your projects to create apps and copy keys.',
+      description: 'Banner shows what needs you — then Overview for the big picture, Your apps to add an app and copy its keys.',
       help: {
         title: 'About managing apps',
-        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.',
+        whatIsIt: 'Each app (one app or environment) holds its own bugs, fixes, reports and integrations in Mushi Mushi.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
           'Add a separate project for staging so test bugs don\'t mix with real ones',

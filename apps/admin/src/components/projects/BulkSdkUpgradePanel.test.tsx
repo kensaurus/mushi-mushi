@@ -6,11 +6,16 @@
  * QA bug 32: "Merge all ready (N)" squash-merged N GitHub PRs on one click, and
  * "Open PRs (N)" opened N PRs, with no preview. Both now confirm first and
  * list every repo and PR they will touch.
+ *
+ * 2026-11-18 round 2: the bulk actions live in the header of "What needs you, per app"
+ * and each app's Open PR in its SDK cell (the separate upgrade card repeated every
+ * version pair), so these render ProjectNextStepsPanel.
  */
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Project } from './project-models'
 
 const hook = vi.hoisted(() => ({
   mergePr: vi.fn(),
@@ -27,18 +32,43 @@ vi.mock('../../lib/useSdkUpgrade', () => ({
     syncStatus: vi.fn(),
   }),
 }))
+vi.mock('../ProjectFavicon', () => ({ ProjectFavicon: () => null }))
 
-import { BulkSdkUpgradePanel, type BulkUpgradeProject } from './BulkSdkUpgradePanel'
+import { ProjectNextStepsPanel } from './ProjectNextStepsPanel'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const READY: BulkUpgradeProject = { id: 'p-ready', name: 'Glot', slug: 'glot', hasRepo: true }
-const IDLE: BulkUpgradeProject = { id: 'p-idle', name: 'Yen', slug: 'yen', hasRepo: true }
+function project(overrides: Partial<Project>): Project {
+  return {
+    id: 'p',
+    name: 'app',
+    slug: 'app',
+    created_at: '2026-01-01T00:00:00Z',
+    organization_id: null,
+    organization_role: null,
+    api_keys: [{ id: 'k1', key_prefix: 'mushi_abc', created_at: '2026-01-01T00:00:00Z', is_active: true, revoked: false, last_seen_at: '2026-07-01T00:00:00Z' }],
+    active_key_count: 1,
+    member_count: 1,
+    members: [],
+    report_count: 5,
+    last_report_at: '2026-07-01T00:00:00Z',
+    pdca_bottleneck: null,
+    pdca_bottleneck_label: null,
+    primary_repo: { repo_url: 'https://github.com/acme/app' } as Project['primary_repo'],
+    sdk_version: '1.35.0',
+    sdk_latest_version: '1.37.0',
+    sdk_status: 'outdated',
+    ...overrides,
+  }
+}
+
+const READY = project({ id: 'p-ready', name: 'Glot', slug: 'glot' })
+const IDLE = project({ id: 'p-idle', name: 'Yen', slug: 'yen' })
 
 const button = (label: RegExp) =>
   Array.from(document.body.querySelectorAll('button')).find((b) => label.test(b.textContent ?? '')) as HTMLButtonElement
 
-describe('BulkSdkUpgradePanel bulk actions', () => {
+describe('bulk SDK upgrade actions in "What needs you, per app"', () => {
   let container: HTMLDivElement
   let root: Root
 
@@ -57,7 +87,7 @@ describe('BulkSdkUpgradePanel bulk actions', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     act(() => {
-      root.render(createElement(MemoryRouter, null, createElement(BulkSdkUpgradePanel, { projects: [READY, IDLE] })))
+      root.render(createElement(MemoryRouter, null, createElement(ProjectNextStepsPanel, { projects: [READY, IDLE] })))
     })
   })
 
@@ -85,6 +115,15 @@ describe('BulkSdkUpgradePanel bulk actions', () => {
     act(() => button(/^Cancel$/).click())
     expect(hook.createUpgradePr).not.toHaveBeenCalled()
   })
+
+  it('puts the bulk buttons in the table header, and no second card lists the versions again', () => {
+    expect(container.querySelector('[data-testid="project-needs"] [data-testid="bulk-upgrade-toolbar"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('SDK version upgrades')
+    // Each version pair shows once, in its row.
+    expect(container.textContent!.split('1.35.0 → 1.37.0').length - 1).toBe(2)
+    // No slug pill repeating the name.
+    expect(container.querySelector('code')).toBeNull()
+  })
 })
 
 describe('upgradeJobSuperseded (2026-11-16: October jobs blocked the 0.24.7 upgrade)', () => {
@@ -102,13 +141,13 @@ describe('upgradeJobSuperseded (2026-11-16: October jobs blocked the 0.24.7 upgr
 describe('up-to-date rows (fresh-eyes review 2026-11-18: "Open PRs (9)" beside 7 apps behind)', () => {
   it('hides Open PR on a row the catalog marks up to date and leaves it out of the count', () => {
     hook.state = {}
-    const current: BulkUpgradeProject = { id: 'p-cur', name: 'Kensaurus', slug: 'k', hasRepo: true, sdk_version: '1.37.0', sdk_latest_version: '1.37.0', sdk_status: 'up-to-date' }
-    const behind: BulkUpgradeProject = { id: 'p-old', name: 'Lets', slug: 'l', hasRepo: true, sdk_version: '1.35.0', sdk_latest_version: '1.37.0', sdk_status: 'outdated' }
+    const current = project({ id: 'p-cur', name: 'Kensaurus', slug: 'k', sdk_version: '1.37.0', sdk_latest_version: '1.37.0', sdk_status: 'up-to-date' })
+    const behind = project({ id: 'p-old', name: 'Lets', slug: 'l', sdk_version: '1.35.0', sdk_latest_version: '1.37.0', sdk_status: 'outdated' })
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
     act(() => {
-      root.render(createElement(MemoryRouter, null, createElement(BulkSdkUpgradePanel, { projects: [current, behind] })))
+      root.render(createElement(MemoryRouter, null, createElement(ProjectNextStepsPanel, { projects: [current, behind] })))
     })
     const rowButtons = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? '')
     expect(rowButtons).toContain('Open SDK bump PR for Lets')

@@ -144,6 +144,42 @@ export function dependentApps(p: ProviderAccount): string[] {
   return [...new Set((p.depends ?? []).map((d) => d.app).filter(Boolean))]
 }
 
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+
+/**
+ * The console's name for an app the ops registry names by its repo slug
+ * ("how-to-talk-to-girls" where every other page says "lets-talk", 2026-11-18). Matches the
+ * project's slug or name, ignoring case and punctuation; an app no project matches keeps its slug.
+ */
+export function makeAppNamer(projects: ReadonlyArray<{ project_name: string; project_slug: string }>): (app: string) => string {
+  const by = new Map<string, string>()
+  for (const p of projects) {
+    by.set(normName(p.project_slug), p.project_name)
+    by.set(normName(p.project_name), p.project_name)
+  }
+  return (app: string) => by.get(normName(app)) ?? app
+}
+
+/**
+ * Columns the Providers table draws: Balance only once some account has a reading, Incidents
+ * only once some account has one open. "not checked" on all five rows and "—" ×5 said nothing
+ * (2026-11-18); the note under the table says it once.
+ */
+export function providerColumns(
+  providers: readonly ProviderAccount[],
+  incidents: ReadonlyMap<string, { total: number }>,
+): { balance: boolean; incidents: boolean; note: string | null } {
+  const balance = providers.some((p) => providerGauge(p) != null)
+  const inc = providers.some((p) => (incidents.get(p.id)?.total ?? 0) > 0)
+  const parts = [!balance && 'Balance: not checked on any account yet', !inc && 'no open incidents'].filter(Boolean) as string[]
+  return { balance, incidents: inc, note: parts.length > 0 && providers.length > 0 ? parts.join(' · ') : null }
+}
+
+/** The Spend tab's one empty line: whose calls it counts, so "none" is not read as "Mushi Mushi made no AI calls". */
+export function spendEmptyLine(win: '24h' | '30d'): string {
+  return `No AI calls through your shared provider accounts in the last ${win === '24h' ? '24 hours' : '30 days'}.`
+}
+
 // ── alerts ──────────────────────────────────────────────────────────────────
 
 export interface ProvidersAlert {
@@ -571,7 +607,58 @@ export function buildHistory(routes: readonly RouteChange[], providers: readonly
   return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id.localeCompare(a.id))
 }
 
-export type HistoryItem = { type: 'row'; row: HistoryRow } | { type: 'group'; id: string; actor: string; op: HistoryRow['op']; kind: HistoryRow['kind']; rows: HistoryRow[] }
+export type HistoryItem =
+  | { type: 'row'; row: HistoryRow }
+  | { type: 'group'; id: string; actor: string; op: HistoryRow['op']; kind: HistoryRow['kind']; rows: HistoryRow[] }
+  /** The same change by one actor on several rows ("effort: low added" on four routes). */
+  | { type: 'same'; id: string; actor: string; kind: HistoryRow['kind']; changes: string[]; rows: HistoryRow[] }
+
+function parseObject(v: string): Record<string, unknown> | null {
+  if (!v.startsWith('{')) return null
+  try {
+    const o = JSON.parse(v) as unknown
+    return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+/** `{ thinking: { type: 'disabled' } }` → { 'thinking.type': 'disabled' }. */
+function flatten(o: Record<string, unknown>, prefix = ''): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(o)) {
+    const key = prefix ? `${prefix}.${k}` : k
+    if (v && typeof v === 'object' && !Array.isArray(v)) Object.assign(out, flatten(v as Record<string, unknown>, key))
+    else out[key] = show(v)
+  }
+  return out
+}
+
+/**
+ * A row's changes in plain words, one per changed value: "effort: low added", "model: gpt-6 →
+ * gpt-6-luna", "turned on". Raw JSON struck through (`{"thinking":…}` → `{"effort":"low",…}`) said
+ * the same thing in a way nobody reads, and cut off at 390 (2026-11-18).
+ */
+export function plainChanges(row: Pick<HistoryRow, 'op' | 'diff'>): string[] {
+  return row.diff.flatMap((d) => {
+    if (row.op === 'INSERT') return [`${d.field}: ${d.after}`]
+    if (row.op === 'DELETE') return [`${d.field}: ${d.before}`]
+    if (d.field === 'enabled' && (d.after === 'true' || d.after === 'false')) return [d.after === 'true' ? 'turned on' : 'turned off']
+    const b = parseObject(d.before)
+    const a = parseObject(d.after)
+    if (b || a) {
+      const fb = b ? flatten(b) : {}
+      const fa = a ? flatten(a) : {}
+      const keys = [...new Set([...Object.keys(fb), ...Object.keys(fa)])]
+      return keys.flatMap((k) => {
+        if (!(k in fb)) return [`${k}: ${fa[k]} added`]
+        if (!(k in fa)) return [`${k}: ${fb[k]} removed`]
+        return fb[k] === fa[k] ? [] : [`${k}: ${fb[k]} → ${fa[k]}`]
+      })
+    }
+    return [`${d.field}: ${d.before} → ${d.after}`]
+  })
+}
 
 /**
  * Runs of `minRun`+ adds or deletes by the same actor on the same kind (a migration that adds
@@ -583,6 +670,18 @@ export function groupHistory(rows: readonly HistoryRow[], minRun = 3): HistoryIt
   let i = 0
   while (i < rows.length) {
     const r = rows[i]!
+    // Two or more changes in a row by one actor that change the same thing the same way fold too.
+    if (r.op === 'UPDATE') {
+      const changes = plainChanges(r)
+      const sig = changes.join('\n')
+      let k = i + 1
+      while (sig && k < rows.length && rows[k]!.op === 'UPDATE' && rows[k]!.actor === r.actor && rows[k]!.kind === r.kind && plainChanges(rows[k]!).join('\n') === sig) k++
+      if (sig && k - i >= 2) {
+        out.push({ type: 'same', id: `s-${r.id}`, actor: r.actor, kind: r.kind, changes, rows: rows.slice(i, k) })
+        i = k
+        continue
+      }
+    }
     let j = i + 1
     if (r.op !== 'UPDATE') while (j < rows.length && rows[j]!.op === r.op && rows[j]!.actor === r.actor && rows[j]!.kind === r.kind) j++
     if (j - i >= minRun) {

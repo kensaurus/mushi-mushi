@@ -27,6 +27,24 @@ import { CiAdviceList } from './CiSections'
 import { CiCompareTable } from './CiCompareTable'
 import { CiCostExplainer } from './CiCostExplainer'
 import { CiBillCard } from './CiBillCard'
+import { machineByName, machinePresenceWord, type MachineNow } from '../../lib/ciStatus'
+
+/**
+ * A machine's status word, from the one source every CI tab uses: its own heartbeat (the Now
+ * board's). GitHub's runner list said overseas-ci "offline" while it ran three jobs: a one-job
+ * runner is gone between jobs (2026-11-18). GitHub's flag is the fallback for a machine that
+ * never reported in.
+ *
+ * @internal Exported for tests.
+ */
+export function costMachineStatus(name: string, githubOnline: boolean | null, machines: readonly MachineNow[]): { word: string; tone: 'ok' | 'warn' | 'muted' } | null {
+  const m = machineByName(machines, name)
+  if (m) return { word: machinePresenceWord(m), tone: m.stale ? 'warn' : m.running > 0 ? 'ok' : 'muted' }
+  // Not listed is not down: a one-job runner is deregistered between jobs (2026-11-18).
+  return githubOnline === false ? { word: 'not listed by GitHub now', tone: 'muted' } : null
+}
+
+const STATUS_TONE = { ok: 'text-st-running-ink', warn: 'text-warn-foreground', muted: 'text-fg-muted' } as const
 
 const CI_COST_SETTINGS_HREF = '/settings?tab=ci-cost'
 
@@ -69,7 +87,7 @@ function Accounts({ data }: { data: CiCompare }) {
 /** Machines shown before "Show all": one-job runners that do not group each count as one (2026-11-06: 30+ lines). */
 const MACHINES_SHOWN = 6
 
-function Machines({ data }: { data: CiCompare }) {
+function Machines({ data, live }: { data: CiCompare; live: readonly MachineNow[] }) {
   const [all, setAll] = useState(false)
   if (data.machines.length === 0) return null
   const busiest = [...data.machines].sort((a, b) => b.busyHours - a.busyHours)
@@ -83,11 +101,13 @@ function Machines({ data }: { data: CiCompare }) {
         {data.settings.every((s) => s.source === 'default') ? 'example figures' : 'your figures'}: estimated.
       </p>
       <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="ci-cost-machines">
-        {machines.map((m) => (
+        {machines.map((m) => {
+          const st = costMachineStatus(m.name, m.online, live)
+          return (
           <li key={m.name} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-xs">
             <IconServer size={14} className="shrink-0 text-brand" />
             <span className="font-medium text-fg">{m.name}</span>
-            {m.online === false && <span className="text-2xs text-warn-foreground">offline</span>}
+            {st && <span className={`text-2xs ${STATUS_TONE[st.tone]}`} data-testid="ci-cost-machine-status">{st.word}</span>}
             <span className="text-fg-secondary tabular-nums">
               busy {m.busyHours} h ({formatPercent(m.busyShare)})
             </span>
@@ -99,7 +119,8 @@ function Machines({ data }: { data: CiCompare }) {
               {m.runners.join(', ')} · {m.wattsLoad - m.wattsIdle} W extra under load
             </span>
           </li>
-        ))}
+          )
+        })}
       </ul>
       {(hidden > 0 || all) && (
         <Btn size="sm" variant="ghost" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="ci-cost-machines-more">
@@ -195,13 +216,13 @@ function WhatIfs({ data }: { data: CiCompare }) {
   )
 }
 
-export function CiCostSection({ projectId, scope }: { projectId: string | null; scope: 'project' | 'all' }) {
+export function CiCostSection({ projectId, scope, machines = [] }: { projectId: string | null; scope: 'project' | 'all'; machines?: readonly MachineNow[] }) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/compare?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/compare?days=30'
   const page = usePageData<CiCompare>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const data = page.data
   const wait = useReadTimedOut(page.loading && !data)
   // The measured bill reads its own route: it shows while the estimates load or fail.
-  const bill = <CiBillCard projectId={projectId} scope={scope} />
+  const bill = <CiBillCard projectId={projectId} scope={scope} hideLoader={!data && page.loading && !wait.timedOut} />
 
   if (!data) {
     return (
@@ -219,7 +240,8 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
             }}
           />
         ) : page.loading ? (
-          <Loading text="Working out what CI costs…" />
+          // One loader for the bill and the estimates: the bill card stays quiet while this one spins.
+          <Loading text="Working out what CI costs and reading your GitHub bill…" />
         ) : null}
       </div>
     )
@@ -251,7 +273,7 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
       )}
       <Accounts data={data} />
       <CiCompareTable data={data} />
-      <Machines data={data} />
+      <Machines data={data} live={machines} />
       {/* What to do sits next to the figures it acts on; the explanations follow, folded (2026-11-06). */}
       {data.advice.length > 0 && (
         <div>

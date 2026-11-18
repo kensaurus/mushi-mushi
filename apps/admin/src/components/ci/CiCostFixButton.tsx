@@ -133,7 +133,7 @@ export function CiCostFixButton({ fixable, initialJob = null }: { fixable: CiAdv
     <div className="flex min-w-0 flex-col gap-1" data-testid="ci-cost-fix">
       <div className="flex flex-wrap items-center gap-1.5">
         {canOpen && (
-          <Btn size="sm" variant="accent" onClick={() => setConfirming(true)} loading={busy} aria-label={`Open fix PR for ${fixable.label}`}>
+          <Btn size="sm" variant="primary" onClick={() => setConfirming(true)} loading={busy} aria-label={`Open fix PR for ${fixable.label}`}>
             Open fix PR
           </Btn>
         )}

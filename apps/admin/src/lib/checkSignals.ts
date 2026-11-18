@@ -162,7 +162,8 @@ export function checkAlerts(cards: readonly CheckSignalInput[], baseline: CheckB
           id: c.path.slice(1),
           severity: 'serious',
           label: change?.worse ? 'Getting worse' : 'Findings',
-          title: `${c.label}: ${n} to fix`,
+          // The number is the card's metric; the title does not say it again (2026-11-18 round 2).
+          title: c.label,
           detail: [change ? `${change.text} since your last visit` : null, when ?? c.description].filter(Boolean).join(' · '),
           metric: { value: String(n), unit: `${n === 1 ? 'finding' : 'findings'}${change ? ` · ${change.text}` : ''}` },
           keys,

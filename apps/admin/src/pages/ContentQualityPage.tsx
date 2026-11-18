@@ -198,7 +198,7 @@ export function ContentQualityPage() {
     ? `/v1/admin/content-quality?${params}`
     : null
 
-  const { data, loading, error, reload, lastFetchedAt: listFetchedAt } = usePageData<ListResponse>(apiPath)
+  const { data, loading, error, reload } = usePageData<ListResponse>(apiPath)
   const statsPath = activeProjectId
     ? `/v1/admin/content-quality/stats?project_id=${activeProjectId}`
     : null
@@ -209,6 +209,11 @@ export function ContentQualityPage() {
     reload: reloadStats,
   } = usePageData<ContentQualityStats>(statsPath, { deps: [activeProjectId] })
   const contentStats = statsData ?? EMPTY_CONTENT_QUALITY_STATS
+  // When nothing is open: what was ever reported, and when the last one came in. "checked
+  // 1 second ago" was the page's own load time, and nothing is scanned on a schedule: issues
+  // arrive as the scores, flags and ratings your apps send (2026-11-18).
+  const historyPath = activeProjectId ? `/v1/admin/content-quality?project_id=${activeProjectId}&status=all&limit=1&page=0` : null
+  const history = usePageData<ListResponse>(historyPath, { deps: [activeProjectId] })
   const pageItems = data?.items ?? []
   const total = data?.total ?? 0
   // The list route has no text search, so search filters the loaded page.
@@ -360,15 +365,22 @@ export function ContentQualityPage() {
             line (2026-11-18 sweep: a bare "No content issues" card). */}
         {nothingOpen && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="content-quality-all-clear">
-            <StatusGlyph tone="ok" />
-            <span className="font-medium text-ok-foreground">No content issues</span>
-            {listFetchedAt ? (
-              <span className="text-fg-muted">· checked <RelativeTime value={listFetchedAt} /></span>
-            ) : null}
-            <span className="text-fg-faint">· looks again every 15 minutes</span>
-            <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => changeFilter(() => setStatus('all'))}>
-              Show past issues
-            </Btn>
+            {/* Green only when issues came in and every one was dealt with; grey while none ever arrived. */}
+            <StatusGlyph tone={(history.data?.total ?? 0) > 0 ? 'ok' : 'off'} />
+            <span className={`font-medium ${(history.data?.total ?? 0) > 0 ? 'text-ok-foreground' : 'text-fg'}`}>No open content issues</span>
+            <span className="text-fg-muted" data-testid="content-quality-scope">
+              {history.data == null
+                ? null
+                : history.data.total > 0 && history.data.items[0]
+                  ? <>· {history.data.total.toLocaleString()} reported so far, the last <RelativeTime value={history.data.items[0].created_at} /></>
+                  : '· none reported yet'}
+            </span>
+            <span className="text-fg-faint">· from the scores, flags and ratings your apps send</span>
+            {(history.data?.total ?? 0) > 0 && (
+              <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => changeFilter(() => setStatus('all'))}>
+                Show past issues
+              </Btn>
+            )}
           </div>
         )}
 

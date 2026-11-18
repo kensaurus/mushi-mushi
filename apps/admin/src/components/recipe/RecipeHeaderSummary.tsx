@@ -10,7 +10,7 @@ import { Btn, Card, formatRelative } from '../ui'
 import type { RecipeElementKey, RecipeElementSummary, RecipeManifestStatus, RecipeResponse } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeIssueList } from './RecipeIssueList'
-import { classifyLinkTarget, elementStateMeta, elementsBehindWorst, worstState } from './recipeState'
+import { classifyLinkTarget, elementStateMeta, elementsBehindWorst, firstSentence, recipeReasonText, worstState } from './recipeState'
 
 function relativeOrNull(iso: string | null | undefined): string | null {
   if (!iso) return null
@@ -46,9 +46,9 @@ function NextStep({ element, onSelect }: { element: RecipeElementSummary; onSele
   const fixLink = element.links.find((l) => classifyLinkTarget(l.to) === 'internal')
   return (
     <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2 sm:flex-row sm:items-center sm:justify-between" data-testid="recipe-next-step">
-      <p className="min-w-0 text-xs text-fg-secondary">
+      <p className="min-w-0 text-xs text-fg-secondary" title={recipeReasonText(element.reason)}>
         <span className="font-medium text-fg">Next step, {element.label}: </span>
-        {element.reason}
+        {firstSentence(recipeReasonText(element.reason))}
       </p>
       <span className="flex shrink-0 flex-wrap gap-2">
         {fixLink ? (

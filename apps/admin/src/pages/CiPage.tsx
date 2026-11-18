@@ -42,7 +42,9 @@ import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconRefresh, IconServerOff, IconSliders } from '../components/icons'
-import { CiStatusBoard, MACHINE_GRID, MachineCard } from '../components/ci/CiStatusBoard'
+import { CiStatusBoard, MACHINE_GRID, MachineCard, MissingLabelsLine, sharedMissingLabels } from '../components/ci/CiStatusBoard'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { buildCiStatus } from '../lib/ciStatus'
 import { CiJobTimes } from '../components/ci/CiJobTimes'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -231,6 +233,8 @@ export function CiPage() {
   const { data, reload } = page
   const live = useBackgroundLiveSync(livePath, fetchScope, reload)
   useVisiblePolling(live.sync, POLL_MS)
+  // Never an endless "Reading your CI…" (390 All apps, 2026-11-18): after 20 s, "not checked" + Retry.
+  const firstRead = useReadTimedOut(page.loading && !data && !page.error)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
   const fixes = usePageData<{ fixes: FixAttempt[] }>(scope === 'project' && projectId ? '/v1/admin/fixes?limit=100' : null)
@@ -257,6 +261,7 @@ export function CiPage() {
   const empty = data ? isCiOverviewEmpty(data) : false
   // Every machine, busy first, for the Machines view (same placement as the Now board).
   const machinesAll = useMemo(() => (data ? buildCiStatus(data, Date.now()).allMachines : []), [data])
+  const machinesMissing = useMemo(() => sharedMissingLabels(machinesAll), [machinesAll])
   // The "What's wrong" strip ranks from the same status the board shows, refreshed with the clock.
   const now = useNow(30_000)
   const status = useMemo(() => (data ? buildCiStatus(data, now) : null), [data, now])
@@ -274,19 +279,30 @@ export function CiPage() {
   // test machine stopped, changes that would speed CI up.
   // Counts match what the view shows: advice as its grouped cards, not raw items.
   const waitingNow = useMemo(() => (data ? buildCiQueue(data.jobs, Date.now()).waiting.length : 0), [data])
+  // Waiting and running jobs are listed once, under "Right now"; the queue holds the finished ones.
+  // A `?job=` deep link to a live job still opens it as a card in the queue.
+  const focusLive = useMemo(
+    () => !!focusJobId && !!data && (() => {
+      const q = buildCiQueue(data.jobs, Date.now())
+      return [...q.waiting, ...q.running].some((j) => j.id === focusJobId)
+    })(),
+    [focusJobId, data],
+  )
   const adviceCards = useMemo(() => (data ? groupCiAdvice(data.advice).length : 0), [data])
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
   const tabs = CI_VIEWS.map((v) => {
     const stopped = data?.stats.infraFailures ?? 0
-    const [badge, badgeLabel] =
+    const [badge, badgeLabel]: [number | string, string] =
       v.id === 'now'
         ? [waitingNow, plural(waitingNow, 'job waiting for a test machine', 'jobs waiting for a test machine')]
         : v.id === 'machines'
-          ? [stopped, plural(stopped, 'job the test machine stopped', 'jobs the test machine stopped')]
+          ? // "7" beside "Machines" read as seven machines while three were listed (2026-11-18): say what it counts.
+            [stopped > 0 ? `${stopped} stopped` : 0, plural(stopped, 'job the test machine stopped', 'jobs the test machine stopped')]
           : v.id === 'cost'
             ? [adviceCards, plural(adviceCards, 'change that would speed CI up', 'changes that would speed CI up')]
             : [0, '']
-    return { to: viewHref(v.id), label: v.label, badge: badge > 0 ? badge : undefined, badgeLabel, match: () => view === v.id }
+    const shown = typeof badge === 'string' ? badge : badge > 0 ? badge : undefined
+    return { to: viewHref(v.id), label: v.label, badge: shown, badgeLabel, match: () => view === v.id }
   })
 
   return (
@@ -330,7 +346,17 @@ export function CiPage() {
       </PageHeaderBar>
 
       {page.error && <PageLoadError error={page.error} resource="CI runners" endpoint={path} onRetry={reload} />}
-      {page.loading && !data && <Loading text="Reading your CI…" />}
+      {page.loading && !data && !page.error && !firstRead.timedOut && <Loading text="Reading your CI…" />}
+      {!data && !page.error && firstRead.timedOut && (
+        <CiNotChecked
+          what="CI runners"
+          testId="ci-not-checked"
+          onRetry={() => {
+            firstRead.restart()
+            reload()
+          }}
+        />
+      )}
 
       {data && !empty && <TabbedSubNav ariaLabel="CI runners views" tabs={tabs} />}
 
@@ -392,16 +418,20 @@ export function CiPage() {
         <div className="@container">
         <div className={`grid items-start gap-4 ${NOW_GRID}`} data-testid="ci-now-grid">
           <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={`ci-rise ${NOW_MAIN}`}>
-            <CiStatusBoard overview={data} />
+            <CiStatusBoard overview={data} fixLinks={fixLinks} />
           </Section>
 
           <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={`ci-rise ${NOW_SIDE}`}>
             <CiSummary overview={data} />
           </Section>
 
-          <Section title="Queue" id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
-            <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
+          <Section title={focusLive ? 'Queue' : 'Finished jobs'} id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
+            <p className={HINT}>
+              {focusLive
+                ? 'Every job for your fixes, from waiting for a machine to finished.'
+                : 'What finished in the last 2 hours, failures first. Re-run a job the test machine stopped; open the fix for one that failed.'}
+            </p>
+            <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} showLive={focusLive} />
           </Section>
 
           <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={`ci-rise ${NOW_FULL}`}>
@@ -425,9 +455,10 @@ export function CiPage() {
             <div className="@container">
               <ul className={`grid gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-all">
                 {machinesAll.map((m) => (
-                  <MachineCard key={m.id} m={m} />
+                  <MachineCard key={m.id} m={m} sharedMissing={machinesMissing} />
                 ))}
               </ul>
+              <MissingLabelsLine shared={machinesMissing} />
             </div>
           </Section>
 
@@ -469,7 +500,7 @@ export function CiPage() {
 
           <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
             <PanelErrorBoundary label="Cost and speed">
-              <CiCostSection projectId={projectId} scope={scope} />
+              <CiCostSection projectId={projectId} scope={scope} machines={machinesAll} />
             </PanelErrorBoundary>
           </Section>
         </>
@@ -479,7 +510,7 @@ export function CiPage() {
         <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
           <p className={HINT}>Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
           <PanelErrorBoundary label="Where CI runs">
-            <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} />
+            <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} machines={machinesAll} />
           </PanelErrorBoundary>
         </Section>
       )}

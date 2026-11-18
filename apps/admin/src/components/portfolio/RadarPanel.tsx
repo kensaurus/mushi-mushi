@@ -21,7 +21,7 @@ import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RadarView } from '../../lib/radarTypes'
-import { groupRadarDetectors, radarErrorSentence, radarStateMeta, radarTitle } from './portfolioView'
+import { groupRadarDetectors, radarBadge, radarErrorSentence, radarTitle } from './portfolioView'
 
 type Detector = RadarView['detectors'][number]
 
@@ -68,7 +68,11 @@ export function RadarPanel({ projectId }: { projectId: string }) {
       {groups && (
         <div className="flex flex-col gap-2">
           {groups.problems.length > 0 ? (
-            <DetectorList detectors={groups.problems} />
+            // "Not met:" once for the group, not before every title (four times, 2026-11-18).
+            <div data-testid="radar-problems">
+              <p className="text-2xs font-semibold tracking-wide text-fg-secondary uppercase">Not met ({groups.problems.length})</p>
+              <DetectorList detectors={groups.problems} plainTitles />
+            </div>
           ) : (
             <p className="text-xs text-fg-muted">
               {groups.passing.length > 0 ? 'No check found a problem.' : 'No check has a result yet.'}
@@ -100,15 +104,15 @@ export function RadarPanel({ projectId }: { projectId: string }) {
   )
 }
 
-function DetectorList({ detectors }: { detectors: Detector[] }) {
+function DetectorList({ detectors, plainTitles = false }: { detectors: Detector[]; plainTitles?: boolean }) {
   return (
     <ul className="flex flex-col divide-y divide-edge-subtle">
       {detectors.map((d) => {
-        const meta = radarStateMeta(d.state)
+        const meta = radarBadge(d)
         return (
           <li key={d.ruleId} className="flex flex-col gap-1 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium text-fg" title={d.prevents}>{radarTitle(d)}</span>
+              <span className="text-sm font-medium text-fg" title={d.prevents}>{plainTitles ? d.title : radarTitle(d)}</span>
               <Badge tone={meta.tone}>{meta.label}</Badge>
             </div>
             {d.state === 'error' ? (
@@ -122,12 +126,17 @@ function DetectorList({ detectors }: { detectors: Detector[] }) {
             ) : (
               <p className="text-xs text-fg-muted">{d.reason}</p>
             )}
-            {d.findings.map((f) => (
-              <div key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-2 text-xs sm:flex-row sm:items-start sm:justify-between">
-                <span className="min-w-0 text-fg">{f.message}</span>
-                {f.fix && <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />}
-              </div>
-            ))}
+            {/* Plain rows, not a bordered box per finding inside the card (one level of card). */}
+            {d.findings.length > 0 && (
+              <ul className="flex flex-col gap-0.5 border-l-2 border-edge-subtle pl-2.5" data-testid="radar-findings">
+                {d.findings.map((f) => (
+                  <li key={f.id} className="flex flex-col gap-1 text-xs sm:flex-row sm:items-start sm:justify-between">
+                    <span className="min-w-0 text-fg">{f.message}</span>
+                    {f.fix && <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />}
+                  </li>
+                ))}
+              </ul>
+            )}
           </li>
         )
       })}

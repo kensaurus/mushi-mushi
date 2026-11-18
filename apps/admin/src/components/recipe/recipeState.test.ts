@@ -190,3 +190,14 @@ describe('classifyLinkTarget', () => {
     expect(classifyLinkTarget('http://plain.example')).toBe('text')
   })
 })
+
+describe('the next step said once (2026-11-18)', () => {
+  it('the header takes the first sentence; the card keeps the rest', async () => {
+    const { firstSentence, recipeReasonText } = await import('./recipeState')
+    const reason = '2 problems to fix: Mushi setup check (2). They and their fixes are under Risk checks at the end of the App blueprint page.'
+    expect(firstSentence(reason)).toBe('2 problems to fix: Mushi setup check (2).')
+    expect(firstSentence('No period here')).toBe('No period here')
+    expect(recipeReasonText(reason)).toContain('under Risk checks at the top of this page.')
+    expect(recipeReasonText('Link Supabase so Mushi can read the schema. Mushi Mushi knows it.')).toBe('Link Supabase so Mushi Mushi can read the schema. Mushi Mushi knows it.')
+  })
+})

@@ -13,7 +13,7 @@ import { useMediaQuery } from '../../lib/useMediaQuery'
  * recipeFlow.data.test.ts pins it to recipeDiagramBounds().
  * @internal Exported for tests.
  */
-export const RECIPE_DIAGRAM_MIN_WIDTH = 1168
+export const RECIPE_DIAGRAM_MIN_WIDTH = 1096
 
 /** True when the element is wide enough for the whole diagram; true too where it cannot be measured. */
 export function useFitsRecipeDiagram(ref: RefObject<HTMLElement | null>): boolean {

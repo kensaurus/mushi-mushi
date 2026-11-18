@@ -40,15 +40,15 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
     return (
       <StatusBannerShell
         tone="info"
-        title="No projects in this workspace yet"
+        title="No apps in this workspace yet"
         subtitle={roleHint ?? label}
         action={
           // A first-time user test (2026-10-29) clicked this twice on the
           // create tab, where it only re-opened the tab it was on.
           roleHint || activeTab === 'create' ? undefined : onTab ? (
-            <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Create project</Btn>
+            <Btn size="sm" variant="primary" onClick={() => onTab('create')}>Add an app</Btn>
           ) : (
-            <Btn to="/projects?tab=create" size="sm" variant="primary">Create project</Btn>
+            <Btn to="/projects?tab=create" size="sm" variant="primary">Add an app</Btn>
           )
         }
       />
@@ -86,11 +86,11 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.projectCount} project${stats.projectCount === 1 ? '' : 's'} — none have ingested yet`}
+        title={`${stats.projectCount} ${stats.projectCount === 1 ? 'app' : 'apps'} — none have ingested yet`}
         subtitle={label}
         action={
           onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('list')}>Open project list</Btn>
+            <Btn size="sm" variant="ghost" onClick={() => onTab('list')}>Open your apps</Btn>
           ) : actionTab ? (
             <Btn to={stats.topPriorityTo ?? '/projects?tab=list'} size="sm" variant="ghost">Open project list</Btn>
           ) : null
@@ -123,7 +123,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
         title={
           missing.length === 1 && count === 1
             ? `${missing[0]!.name} has no SDK heartbeat`
-            : `${count} projects have no SDK heartbeat`
+            : `${count} apps have no SDK heartbeat`
         }
         subtitle={label}
         action={
@@ -141,7 +141,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
     return (
       <StatusBannerShell
         tone="info"
-        title={`${stats.neverIngestedCount} project${stats.neverIngestedCount === 1 ? '' : 's'} never ingested`}
+        title={`${stats.neverIngestedCount} ${stats.neverIngestedCount === 1 ? 'app' : 'apps'} never ingested`}
         subtitle={
           <>
             {label}
@@ -150,7 +150,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
         }
         action={
           onTab ? (
-            <Btn size="sm" variant="ghost" onClick={() => onTab('list')}>View projects</Btn>
+            <Btn size="sm" variant="ghost" onClick={() => onTab('list')}>View your apps</Btn>
           ) : null
         }
       />
@@ -164,7 +164,7 @@ export function ProjectsStatusBanner({ stats, activeTeamName, roleHint, onTab, a
   return (
     <StatusBannerShell
       tone="ok"
-      title="All projects ingesting"
+      title="All apps ingesting"
       subtitle={
         <>
           {label}

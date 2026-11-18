@@ -8,11 +8,11 @@
  */
 
 import type { BadgeTone } from '../ui'
-import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioRadarColumn, PortfolioReadPart, SdkSkewEntry } from '../../lib/portfolioTypes'
+import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioFindingsResponse, PortfolioRadarColumn, PortfolioReadPart, SdkSkewEntry } from '../../lib/portfolioTypes'
 import type { RecipeElementKey } from '../../lib/recipeTypes'
 import type { DetectorState } from '../../lib/radarTypes'
 import { isPublicDemo } from '../../lib/publicDemo'
-import type { FixOnceRow } from '../../lib/groupAppFindings'
+import { fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, sortProblemRows, type FixOnceRow } from '../../lib/groupAppFindings'
 
 const COULD_NOT_READ = 'Could not read'
 
@@ -119,6 +119,20 @@ const STATE_META: Record<DetectorState, { label: string; tone: BadgeTone }> = {
 
 export function radarStateMeta(state: string): { label: string; tone: BadgeTone } {
   return STATE_META[state as DetectorState] ?? STATE_META.unknown
+}
+
+const SERIOUS_SEVERITY = new Set(['critical', 'error', 'high'])
+
+/**
+ * The badge on a risk check, from its worst finding's severity: the rejected key read amber
+ * "Found" here and red ERROR on Full-stack audit (2026-11-18). A serious finding is red "Error",
+ * the rest amber "Warning"; other states keep their state badge.
+ */
+export function radarBadge(d: { state: string; findings: ReadonlyArray<{ severity: string }> }): { label: string; tone: BadgeTone } {
+  if (d.state !== 'finding') return radarStateMeta(d.state)
+  return d.findings.some((f) => SERIOUS_SEVERITY.has(f.severity.toLowerCase()))
+    ? { label: 'Error', tone: 'dangerSubtle' }
+    : { label: 'Warning', tone: 'warnSubtle' }
 }
 
 /**
@@ -389,4 +403,63 @@ export function mergeSameAppRows(rows: readonly FixOnceRow[]): FixOnceRow[] {
     }
   }
   return out
+}
+
+/**
+ * The Apps tab's ONE problem list (2026-11-18 round 2: "Fix once", "Across your apps",
+ * "Mushi Mushi SDK versions" and "Missing setups" were four cards holding one list). Every
+ * problem shared by apps is a row: a severity mark, a short title, a dot per app and one
+ * action. Worst first across all of them. The "Fix once" metric in the page's status strip is
+ * this list's length, so the two never disagree (it counted the server's groups, 9, beside 8
+ * rows once two rows with the same apps and action had merged).
+ */
+export function appProblemList(data: PortfolioFindingsResponse, nameOf: (projectId: string) => string): FixOnceRow[] {
+  const fixOnce = mergeSameAppRows(fixOnceRows(data.groups, findingGroupTitle))
+  const across = groupAcrossApps(data.crossProject, nameOf).map(
+    (g): FixOnceRow => ({
+      ruleId: `across:${g.key}`,
+      severity: g.severity,
+      title: g.title,
+      fullTitle: g.detail,
+      action: g.fix ? g.action : '',
+      projectIds: g.projectIds,
+      gateLabel: null,
+      explanation: g.detail,
+      fix: g.fix ?? '',
+    }),
+  )
+  const sdk = groupSdkSkew(data.sdkSkew).map((g): FixOnceRow => {
+    const behind = g.status === 'behind'
+    const pkg = g.pkg ?? 'Mushi Mushi SDK'
+    const title = behind ? `${pkg} behind${g.latest ? ` → ${g.latest}` : ''}` : `${pkg}: ${g.title}`
+    return {
+      ruleId: `sdk:${g.key}`,
+      // Behind is a warning (amber); a version it could not read is a note, never a failure.
+      severity: behind ? 'warn' : 'info',
+      title,
+      fullTitle: title,
+      action: behind ? 'Upgrade' : '',
+      projectIds: g.apps.map((a) => a.projectId),
+      gateLabel: null,
+      explanation: behind ? `These apps run an older ${pkg}. Open Connect to create an upgrade PR.` : g.apps[0]?.reason ?? g.title,
+      fix: '',
+      to: behind ? '/connect' : undefined,
+      appTitles: Object.fromEntries(g.apps.map((a) => [a.projectId, a.version ? `${nameOf(a.projectId)} · on ${a.version}` : `${nameOf(a.projectId)} · ${a.reason}`.trim()])),
+    }
+  })
+  const holes = groupHoles(data.holes).map(
+    (h): FixOnceRow => ({
+      ruleId: `hole:${h.integration}`,
+      severity: 'info',
+      title: h.title,
+      fullTitle: h.detail,
+      action: 'Connect',
+      projectIds: h.projectIds,
+      gateLabel: null,
+      explanation: h.detail,
+      fix: '',
+      to: '/integrations',
+    }),
+  )
+  return sortProblemRows([...fixOnce, ...across, ...sdk, ...holes])
 }

@@ -32,7 +32,10 @@ function RepoBars({ bill }: { bill: CiBill }) {
             <span className="min-w-0 truncate font-mono text-fg" title={r.repo || 'No repository'}>
               {r.repo || 'No repository'}
             </span>
-            <span className="shrink-0 tabular-nums font-semibold text-fg">{formatMoney(r.netUsd)}</span>
+            {/* "charged": beside the month's $0.00 a bare "$102.29" read as a contradiction (2026-11-18). */}
+            <span className="shrink-0 tabular-nums font-semibold text-fg">
+              {formatMoney(r.netUsd)} <span className="font-normal text-fg-muted">charged</span>
+            </span>
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
             {/* Gross is the whole bar; the darker part is what was charged. */}
@@ -41,7 +44,7 @@ function RepoBars({ bill }: { bill: CiBill }) {
             </div>
           </div>
           <span className="text-2xs text-fg-muted">
-            {r.netUsd === 0 && r.grossUsd > 0 ? 'free: ' : ''}gross {formatMoney(r.grossUsd)}
+            {r.netUsd === 0 && r.grossUsd > 0 ? 'free: ' : ''}list price {formatMoney(r.grossUsd)}
             {r.minutes > 0 ? ` · ${formatMinutes(r.minutes)}` : ''}
           </span>
         </li>
@@ -81,7 +84,27 @@ function Connect({ bill }: { bill: CiBill }) {
   )
 }
 
-export function CiBillCard({ projectId, scope }: { projectId: string | null; scope: 'project' | 'all' }) {
+/**
+ * The big number and its sentence. The month so far, unless GitHub's bill has no day of this month
+ * yet: then "$0.00 charged in 2026-11" sat beside "$102.29" per repo for the last 30 days
+ * (2026-11-18), so the headline is the window's charge and says why.
+ *
+ * @internal Exported for tests.
+ */
+export function billHeadline(bill: Pick<CiBill, 'month' | 'totals' | 'window' | 'dataThrough'>): { usd: number; text: string } {
+  if (bill.dataThrough && bill.dataThrough < bill.month.from) {
+    return {
+      usd: bill.totals.netUsd,
+      text: `Charged for Actions in the last ${bill.window.days} days (list price ${formatMoney(bill.totals.grossUsd)}; public repos and included minutes are free). GitHub's bill has no ${bill.month.label} days yet: read through ${bill.dataThrough}.`,
+    }
+  }
+  return {
+    usd: bill.month.netUsd,
+    text: `Charged for Actions in ${bill.month.label} so far. List price ${formatMoney(bill.month.grossUsd)}: public repos and included minutes are free.`,
+  }
+}
+
+export function CiBillCard({ projectId, scope, hideLoader = false }: { projectId: string | null; scope: 'project' | 'all'; hideLoader?: boolean }) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/bill?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/bill?days=30'
   const page = usePageData<CiBill>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const bill = page.data
@@ -101,7 +124,8 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
         />
       )
     }
-    return page.loading ? <Loading text="Reading your GitHub bill…" /> : null
+    // While the estimates load too, the section shows ONE loader for both (two spun together, 2026-11-18).
+    return page.loading && !hideLoader ? <Loading text="Reading your GitHub bill…" /> : null
   }
 
   return (
@@ -120,10 +144,10 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
         <>
           <div>
             <p className="text-3xl font-semibold tabular-nums text-fg" data-testid="ci-bill-month-net">
-              {formatMoney(bill.month.netUsd)}
+              {formatMoney(billHeadline(bill).usd)}
             </p>
-            <p className="text-xs text-fg-secondary">
-              Charged for Actions in {bill.month.label} so far. Gross {formatMoney(bill.month.grossUsd)}: public repos and included minutes are free.
+            <p className="text-xs text-fg-secondary" data-testid="ci-bill-headline">
+              {billHeadline(bill).text}
             </p>
             {bill.change && (
               <p className="mt-0.5 text-2xs text-fg-muted" data-testid="ci-bill-change">
@@ -143,7 +167,7 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="min-w-0">
-              <h4 className="mb-1.5 text-2xs font-semibold text-fg-secondary">Net per repo, last {bill.window.days} days</h4>
+              <h4 className="mb-1.5 text-2xs font-semibold text-fg-secondary">Charged per repo, last {bill.window.days} days</h4>
               <RepoBars bill={bill} />
             </div>
             <div className="min-w-0">

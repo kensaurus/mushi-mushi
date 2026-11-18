@@ -19,7 +19,7 @@
 
 import { useState } from 'react'
 import type { CiCompare, CiCompareRow, Provenance } from '../../lib/ciCompareTypes'
-import { costText, formatMinutes, formatMoney, formatPercent, groupRowsByRepo, runsOnText, type RepoCostGroup } from '../../lib/ciCompareView'
+import { costText, formatMinutes, formatMoney, groupRowsByRepo, passRateText, runsOnText, type RepoCostGroup } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { Btn, DataTableCell, DataTableHead } from '../ui'
 import { IconCloud, IconServer, IconServerOff } from '../icons'
@@ -160,7 +160,7 @@ function WideTable({ groups, fields, expanded }: { groups: RepoCostGroup[]; fiel
                 <DataTableCell align="right" className="tabular-nums">{formatSeconds(r.queueP95s)}</DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">{formatSeconds(r.runP50s)}</DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">
-                  <span title={`${r.prJobs} pull-request jobs`}>{formatPercent(r.prPassRate)}</span>
+                  <span title={`${r.prJobs} pull-request jobs`}>{passRateText(r)}</span>
                 </DataTableCell>
                 <DataTableCell align="right" className="tabular-nums">
                   <span title={`${r.rawMinutes} minutes of run time; GitHub rounds each job up to a whole minute`}>{formatMinutes(r.billedMinutes)}</span>
@@ -206,7 +206,7 @@ function PhoneList({ groups, expanded }: { groups: RepoCostGroup[]; expanded: Re
                   <dt className="text-fg-muted">Run time p50 (measured)</dt>
                   <dd className="text-right tabular-nums text-fg">{formatSeconds(r.runP50s)}</dd>
                   <dt className="text-fg-muted">PR pass rate (measured)</dt>
-                  <dd className="text-right tabular-nums text-fg">{formatPercent(r.prPassRate)}</dd>
+                  <dd className="text-right tabular-nums text-fg">{passRateText(r)}</dd>
                   <dt className="text-fg-muted">Minutes billed (estimated)</dt>
                   <dd className="text-right tabular-nums text-fg">{formatMinutes(r.billedMinutes)}</dd>
                   <dt className="text-fg-muted">Per month (estimated)</dt>

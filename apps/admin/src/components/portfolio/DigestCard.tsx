@@ -15,7 +15,8 @@
  */
 
 import { useState } from 'react'
-import { Btn, Callout, Loading, Section } from '../ui'
+import { Btn, Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -39,7 +40,8 @@ function ProjectChannel({ label, what, value, projects, onChange }: { label: str
   return (
     <label className="flex flex-wrap items-center gap-2">
       <span className="w-20 text-fg-muted">{label}</span>
-      <select className={SELECT} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} aria-label={`${label}: which app's ${what}`}>
+      {/* One width for the four pickers, so they line up (round 2: ragged widths, each as wide as its longest app name). */}
+      <select className={`${SELECT} w-64 max-w-full`} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} aria-label={`${label}: which app's ${what}`}>
         <option value="">Off</option>
         {projects.map((p) => <option key={p.projectId} value={p.projectId}>{`${p.name}'s ${what}`}</option>)}
         {/* A channel already set on a hidden app (the public demo) stays selectable, unnamed. */}
@@ -109,7 +111,7 @@ export function DigestCard({ orgId, projects }: { orgId: string; projects: Proje
     <Section title="Daily digest">
       <p className="mb-3 text-xs text-fg-muted">One message a day across all your apps: new reports, holes found, releases and a jump in AI spend, plus once a week each app's signups and activations from the team funnel. Off until you pick where it goes.</p>
       {error && <PageLoadError error={error} resource="the daily digest" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Building today's digest…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Building today's digest…" what="Daily digest" onRetry={reload} testId="portfolio-digest-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>

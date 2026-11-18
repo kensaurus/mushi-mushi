@@ -20,7 +20,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Card, Loading, formatRelative } from '../ui'
+import { Loading, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
@@ -62,9 +62,52 @@ interface Props {
    * and a link, so the same findings are never listed twice.
    */
   shownElsewhere?: Partial<Record<string, { label: string; to: string }>>
+  /**
+   * The page's own status already shows these totals ("▲ 2 errors ◆ 5 warnings"): the list
+   * does not say them a second time (2026-11-18).
+   */
+  totalsShownAbove?: boolean
 }
 
-export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null, shownElsewhere = {} }: Props) {
+type Severity = 'error' | 'warn' | 'info'
+
+/**
+ * Exported for tests. A check's open findings by severity in words, worst first: "1 error ·
+ * 1 warning · 2 notes". "4 open" beside a header of "2 errors · 5 warnings" did not add up: the
+ * header counts errors and warnings, "open" counted notes too (2026-11-18).
+ */
+export function severityParts(findings: ReadonlyArray<{ severity?: string | null }>): string {
+  const n: Record<Severity, number> = { error: 0, warn: 0, info: 0 }
+  for (const f of findings) n[f.severity === 'error' || f.severity === 'warn' ? f.severity : 'info']++
+  const words: Array<[Severity, string, string]> = [
+    ['error', 'error', 'errors'],
+    ['warn', 'warning', 'warnings'],
+    ['info', 'note', 'notes'],
+  ]
+  return words
+    .filter(([k]) => n[k] > 0)
+    .map(([k, one, many]) => `${n[k].toLocaleString()} ${n[k] === 1 ? one : many}`)
+    .join(' · ')
+}
+
+/**
+ * Exported for tests. What a check looks at, without repeating its title: "App hole checks,
+ * daily (04:05 UTC): store listings…" under the title "App hole checks" → "Daily (04:05 UTC):
+ * store listings…" (2026-11-18).
+ */
+export function checksLine(title: string, checks: string): string {
+  const base = title.replace(/ checks$/i, '')
+  for (const head of [title, base]) {
+    if (!checks.toLowerCase().startsWith(head.toLowerCase())) continue
+    const after = checks.slice(head.length)
+    const rest = after.replace(/^[,:]? +/, '')
+    if (rest === after || rest.length === 0) continue
+    return rest.charAt(0).toUpperCase() + rest.slice(1)
+  }
+  return checks
+}
+
+export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50, refreshKey = 0, totals = null, shownElsewhere = {}, totalsShownAbove = false }: Props) {
   const path = `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings${gate ? `?gate=${gate}` : ''}`
   const { data, loading, error, errorCode, reload } = usePageData<GateFindingsPayload>(path, { deps: [projectId, gate ?? '', refreshKey] })
 
@@ -110,7 +153,7 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
       {findings.length === 0 && errored.length === 0 && !truncated && (
         <p className="text-xs text-fg-muted">The newest run of each check found nothing open.</p>
       )}
-      {errors + warnings > 0 && (
+      {errors + warnings > 0 && !(totalsShownAbove && totals) && (
         <p className="text-xs text-fg-secondary" data-testid="gate-findings-totals">
           {/* Past the route's caps the list is cut short, so its totals are a floor. */}
           {floor ? 'At least ' : ''}
@@ -123,25 +166,29 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
           {floor ? ' (only the newest 500 findings were read, so there may be more)' : ''}
         </p>
       )}
-      {open.map((g) => {
-        const elsewhere = shownElsewhere[g.gate]
-        if (elsewhere) {
-          return (
-            <Card key={g.gate} className="flex flex-wrap items-center justify-between gap-2 p-3" data-check={g.gate} data-testid="gate-shown-elsewhere">
-              <span className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</span>
-              <span className="text-xs text-fg-secondary">
-                {g.open.toLocaleString()} open ·{' '}
-                <Link to={elsewhere.to} className={LINK_ACCENT}>
-                  {elsewhere.label} →
-                </Link>
-              </span>
-            </Card>
-          )
-        }
-        return <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
-      })}
+      {/* One level of card: the checks are rows divided by a rule inside the page's section, not cards in a card. */}
+      <div className="flex flex-col divide-y divide-edge-subtle">
+        {open
+          .filter((g) => !shownElsewhere[g.gate])
+          .map((g) => (
+            <CheckGroupCard key={g.gate} projectId={projectId} group={g} limit={limit} onChanged={reload} />
+          ))}
+      </div>
+      {/* A check another card lists in full: one line that points there, with its counts, under the card's own
+          name, never a second card named almost the same ("Known holes in dependencies" over "Known holes in your
+          dependencies", 2026-11-18). */}
+      {open
+        .filter((g) => shownElsewhere[g.gate])
+        .map((g) => (
+          <p key={g.gate} className="text-xs text-fg-secondary" data-check={g.gate} data-testid="gate-shown-elsewhere">
+            {severityParts(g.findings) || `${g.open.toLocaleString()} open`} more ·{' '}
+            <Link to={shownElsewhere[g.gate]!.to} className={LINK_ACCENT}>
+              {shownElsewhere[g.gate]!.label} →
+            </Link>
+          </p>
+        ))}
       {quiet.length > 0 && (
-        <details className="rounded-md border border-edge-subtle px-3 py-2" data-testid="gate-checks-passing">
+        <details className="py-1" data-testid="gate-checks-passing">
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
             {quiet.length} check{quiet.length === 1 ? '' : 's'} {allPass ? 'passing' : 'with nothing open'}
           </summary>
@@ -186,14 +233,15 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
   const days = g.ranAt ? Math.floor((Date.now() - Date.parse(g.ranAt)) / 86_400_000) : null
   const shown = g.findings.slice(0, limit)
   return (
-    <Card className="p-3 space-y-2" data-check={g.gate}>
+    <div className="space-y-2 py-3 first:pt-0" data-check={g.gate}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <h3 className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</h3>
-          {info && <p className="text-xs text-fg-secondary">{info.checks}</p>}
+          {info && <p className="text-xs text-fg-secondary">{checksLine(gateLabel(g.gate), info.checks)}</p>}
         </div>
-        <span className={`shrink-0 text-xs font-medium ${status.tone}`}>
-          {status.label} · {g.open.toLocaleString()} open
+        <span className={`shrink-0 text-xs font-medium ${status.tone}`} data-testid="gate-check-counts">
+          {status.label}
+          {g.open > 0 ? ` · ${severityParts(g.findings)}` : ' · nothing open'}
         </span>
       </div>
       <p className="text-2xs text-fg-muted">
@@ -247,7 +295,7 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
           </div>
         </details>
       )}
-    </Card>
+    </div>
   )
 }
 

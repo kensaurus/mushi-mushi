@@ -67,8 +67,9 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
-import { BulkSdkUpgradePanel } from '../components/projects/BulkSdkUpgradePanel'
 import { ProjectNextStepsPanel } from '../components/projects/ProjectNextStepsPanel'
+import { rankProjectNeeds, stuckAppsSummary } from '../components/projects/projectNextSteps'
+import { StatusBannerShell } from '../components/StatusBannerShell'
 import { CHIP_TONE } from '../lib/chipTone'
 import { IconProjects } from '../components/icons'
 import { PageLoadError } from '../components/PageLoadError'
@@ -81,17 +82,17 @@ const TABS: Array<{ id: ProjectsTabId; label: string; description: string }> = [
   {
     id: 'overview',
     label: 'Overview',
-    description: 'Workspace posture — project count, ingest coverage, SDK heartbeats, and recommended next steps.',
+    description: 'Workspace posture — app count, ingest coverage, SDK heartbeats, and recommended next steps.',
   },
   {
     id: 'list',
-    label: 'Your projects',
-    description: 'Switch context, mint keys, send test reports, and inspect per-project SDK health.',
+    label: 'Your apps',
+    description: 'Switch context, mint keys, send test reports, and inspect per-app SDK health.',
   },
   {
     id: 'create',
-    label: 'New project',
-    description: 'Create a project for one app or environment — API keys and scoped inbox follow on the list tab.',
+    label: 'New app',
+    description: 'Add an app or environment — API keys and its inbox follow on the list tab.',
   },
 ]
 
@@ -246,6 +247,8 @@ export function ProjectsPage() {
   // THIS admin reads from. Mismatch = silent backend split = the bug class
   // we're surfacing here.
   const adminHost = data?.admin_host ?? null
+  // The same rows as the overview table, so the banner and the table agree.
+  const stuck = useMemo(() => stuckAppsSummary(rankProjectNeeds(projects)), [projects])
 
   usePublishPageContext({
     route: '/projects',
@@ -267,11 +270,11 @@ export function ProjectsPage() {
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: 'Overview' },
-      { id: 'list' as const, label: 'Your projects', count: stats.projectCount || undefined },
+      { id: 'list' as const, label: 'Your apps', count: stats.projectCount || undefined },
       // Always show the tab — hiding it when org data hasn't loaded yet
       // causes a silent "click does nothing" race during the first render.
       // Role-based access is enforced at the button level with a clear hint.
-      { id: 'create' as const, label: 'New project' },
+      { id: 'create' as const, label: 'New app' },
     ],
     [stats.projectCount],
   )
@@ -604,18 +607,18 @@ export function ProjectsPage() {
         helpTitle={copy?.help?.title ?? 'About managing apps'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.'
+          'An app here is one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to an app.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Create a project for your main app (takes 30 seconds)',
-            "Add a separate project for staging so test bugs don't mix with real ones",
+            'Add your main app (takes 30 seconds)',
+            "Add staging as a separate app so test bugs don't mix with real ones",
             'Generate an API key, send a test report, and confirm SDK heartbeat before production',
           ]
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Use Your projects to switch context, mint keys, and read per-project health. The banner and KPI strip tell you which projects ingest and which keys have connected.'
+          'Use Your apps to switch context, mint keys, and read per-app health. The banner and KPI strip tell you which apps ingest and which keys have connected.'
         }
       >
         <Badge
@@ -678,7 +681,7 @@ export function ProjectsPage() {
         value={activeTab}
         onChange={setTab}
         options={tabOptions}
-        ariaLabel="Projects sections"
+        ariaLabel="Manage apps sections"
         size="sm"
       />
 
@@ -718,34 +721,35 @@ export function ProjectsPage() {
             <p className="text-xs text-fg-muted" data-testid="projects-manage-hint">
               To rename or delete an app, or get its key, open{' '}
               <button type="button" className="text-brand underline underline-offset-2" onClick={() => setTab('list')}>
-                Your projects
+                Your apps
               </button>
               .
             </p>
           )}
-          {/* Advanced mode's hero already says it. */}
-          {stats.topPriority === 'healthy' && !isAdvanced && (
+          {/* Ingest is fine, but stuck reports still need you: warn, never a green "all good"
+              above a table of 129 stuck (2026-11-18 round 2). Advanced mode's hero says the rest. */}
+          {stuck.apps > 0 && stuck.worst ? (
+            <div data-testid="projects-stuck-banner">
+            <StatusBannerShell
+              tone="warn"
+              title={`${stuck.apps} ${stuck.apps === 1 ? 'app has' : 'apps have'} stuck reports`}
+              subtitle={`${stuck.worst.project.name} has the most (${stuck.worst.stuck}).`}
+              action={
+                <Btn to="/inbox" size="sm" variant="primary" data-testid="projects-stuck-open-inbox">
+                  Open inbox
+                </Btn>
+              }
+            />
+            </div>
+          ) : stats.topPriority === 'healthy' && !isAdvanced ? (
             <RecommendedAction
               tone="success"
-              title="All projects ingesting"
-              description={`${stats.projectCount} project${stats.projectCount === 1 ? '' : 's'} with recent reports.`}
+              title="All apps ingesting"
+              description={`${stats.projectCount} ${stats.projectCount === 1 ? 'app' : 'apps'} with recent reports, nothing stuck.`}
               cta={{ label: 'Open Reports', to: '/reports' }}
             />
-          )}
+          ) : null}
           <ProjectNextStepsPanel projects={projects} />
-          <BulkSdkUpgradePanel
-            projects={projects.map((p) => ({
-              id: p.id,
-              name: p.name,
-              slug: p.slug,
-              sdk_package: p.sdk_package,
-              sdk_version: p.sdk_version,
-              sdk_latest_version: p.sdk_latest_version,
-              sdk_status: p.sdk_status,
-              sdk_observation_source: (p as { sdk_observation_source?: string | null }).sdk_observation_source ?? null,
-              hasRepo: Boolean(p.primary_repo?.repo_url),
-            }))}
-          />
         </div>
       )}
 

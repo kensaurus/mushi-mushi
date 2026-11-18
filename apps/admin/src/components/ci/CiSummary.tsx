@@ -9,7 +9,7 @@
 
 import type { ComponentType, ReactNode } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
-import { ciOutcomeCounts, ciVerdict, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
+import { ciVerdict, ciWindowCounts, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
 import { IconAlertTriangle, IconCheck, IconGauge, IconInfo, IconPlay } from '../icons'
 import { CI_OUTCOME_STYLE, CiOutcomeLegend } from './ciOutcome'
 import { CiWeekHeat } from './CiWeekHeat'
@@ -62,12 +62,13 @@ const BAR_ORDER: Array<{ key: 'passed' | 'codeFailures' | 'infra' | 'other'; out
 
 export function CiSummary({ overview }: { overview: CiOverview }) {
   const verdict = ciVerdict(overview)
-  const counts = ciOutcomeCounts(overview.stats)
+  // One window for the headline, the bar and its counts (ciWindowCounts): the whole window when the
+  // server counted it, so "N jobs failed on the code" and "Tests failed N" are the same N.
+  const counts = ciWindowCounts(overview.stats)
   const { stats } = overview
   const tone = VERDICT_TONE[verdict.tone]
   const days = overview.window.days
-  // The server counts the whole window in the database (stats.windowJobs); the outcome counts come
-  // from the newest jobs it read, which a busy day fills in hours (1,005 of 10,954 on 2026-11-17).
+  // Older servers send only the newest jobs read (at most about 1,000): say so once.
   const weekJobs = Math.max(stats.windowJobs ?? counts.total, counts.total)
   const sampled = weekJobs > counts.total
 
@@ -140,12 +141,7 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
             )
           })}
         </ul>
-        {counts.infra > 0 && (
-          <p className="text-2xs text-fg-muted">
-            <span className="font-medium text-fg">{CI_OUTCOME_STYLE.infra.label}</span> is not a code failure: the
-            machine died or never picked the job up, so the code was never tested. Re-run those jobs.
-          </p>
-        )}
+        {/* "Not a code failure" is said once, in the alert strip above; the legend below holds the meaning. */}
       </div>
 
       {/* Real per-hour counts (stats.hourly); older servers do not send them and this stays out. */}

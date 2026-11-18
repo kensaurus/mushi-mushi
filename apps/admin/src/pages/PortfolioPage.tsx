@@ -42,7 +42,9 @@ import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
-import { needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { appProblemList, needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { PortfolioFindings, ReadErrorsCallout } from '../components/portfolio/PortfolioFindings'
 import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
@@ -90,7 +92,8 @@ const PORTFOLIO_TABS = [
   { id: 'apps', label: 'Apps' },
   { id: 'releases', label: 'Releases' },
   { id: 'payments', label: 'Payments' },
-  { id: 'spend', label: 'Spend & accounts' },
+  // "Spend", not "Spend & accounts": all five tabs fit a 390 px phone (round 2: Digest was off-screen).
+  { id: 'spend', label: 'Spend' },
   { id: 'digest', label: 'Digest' },
 ] as const
 type PortfolioTab = (typeof PORTFOLIO_TABS)[number]['id']
@@ -263,6 +266,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
     [cardById, faviconFor, names],
   )
   const appOrder = useMemo(() => rankedShown.map((r) => r.card.projectId), [rankedShown])
+  // The "Fix once" count is the length of the one problem list the Apps tab draws, never the
+  // server's group count (9 groups beside 8 rows once two merged, round 2 2026-11-18).
+  const problemCount = useMemo(() => (ownFindingsData ? appProblemList(ownFindingsData, (id) => names.get(id) ?? id).length : null), [ownFindingsData, names])
+  // Never an endless "Reading each app's signals…": after 20 s it says "not checked" with Retry.
+  const appsWait = useReadTimedOut(tab === 'apps' && !portfolio && page.loading)
 
   return (
     <HighlightProvider>
@@ -271,7 +279,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           title="Apps"
           description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
           helpTitle="About apps"
-          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs. Accounts and resilience (on Spend and accounts) lists every account your apps depend on, who owns it, and who else can get in if that person cannot. It holds only what you declare: Mushi Mushi cannot see a provider's own settings."
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and Digest are tabs. Accounts and resilience (on Spend) lists every account your apps depend on, who owns it, and who else can get in if that person cannot. It holds only what you declare: Mushi Mushi cannot see a provider's own settings."
           helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
           helpFlowPath="/portfolio"
         >
@@ -294,7 +302,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                   metrics={[
                     { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
                     { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                    { label: 'Fix once', value: ownFindings.data?.groups.length ?? portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                    { label: 'Fix once', value: problemCount ?? portfolio.repeatedGroups, hint: 'Problems shared by your apps, each fixed with one action: the rows of Fix once on the Apps tab.' },
                   ]}
                   action={
                     status.first && firstReason ? (
@@ -324,18 +332,6 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           />
         )}
 
-        {portfolio && cards.length > 0 && (
-          <AlertCards
-            alerts={alerts}
-            emptyText="No app needs you right now."
-            label="Apps that need you"
-            testIdPrefix="portfolio"
-            // One card on a phone, so the tabs and their content are in view (fresh-eyes 2026-11-18).
-            narrowShown={1}
-            keyLabel={(k) => names.get(k.replace(/^app:/, '')) ?? k}
-          />
-        )}
-
         {page.error && (
           <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
         )}
@@ -359,7 +355,17 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               ariaLabel="Apps sections"
               tabs={PORTFOLIO_TABS.map((t) => ({ to: tabHref(t.id), label: t.label, match: () => tab === t.id }))}
             />
-            {tab === 'apps' && !portfolio && page.loading && (
+            {tab === 'apps' && !portfolio && page.loading && appsWait.timedOut && (
+              <CiNotChecked
+                what="Apps"
+                testId="portfolio-apps-not-checked"
+                onRetry={() => {
+                  appsWait.restart()
+                  page.reload()
+                }}
+              />
+            )}
+            {tab === 'apps' && !portfolio && page.loading && !appsWait.timedOut && (
               // The apps are known before their details: list them at once instead of
               // a bare spinner, which sat for 5 s on a first load (2026-10-28).
               <section aria-label="Apps" data-testid="portfolio-tab-apps">
@@ -388,6 +394,20 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             )}
             {tab === 'apps' && portfolio && (
               <section id="portfolio-apps" aria-label="Apps" className="space-y-3" data-testid="portfolio-tab-apps">
+                {/* The worst apps lead the Apps tab, not the page: on the other tabs, and on a
+                    phone, the tabs sit right under the status strip (round 2: ~580 px of chrome
+                    stood before the tabs at 390 px). */}
+                {cards.length > 0 && (
+                  <AlertCards
+                    alerts={alerts}
+                    emptyText="No app needs you right now."
+                    label="Apps that need you"
+                    testIdPrefix="portfolio"
+                    // One card on a phone, so the grid below is in view (fresh-eyes 2026-11-18).
+                    narrowShown={1}
+                    keyLabel={(k) => names.get(k.replace(/^app:/, '')) ?? k}
+                  />
+                )}
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <SegmentedControl
                     value={view}
@@ -498,8 +518,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
 }
 
 /**
- * The headline as chips, not prose (2026-11-18): each of the worst apps as its icon, name and
- * open bugs (a mono number), then "+N more". The sentence stays for screen readers; the chips
+ * The headline as chips, not prose (2026-11-18): each of the worst apps as its icon and name,
+ * then "+N more". No bug count on the chip (round 2: 453 stood on the chip, the alert card and
+ * the grid); the alert cards and the grid carry the numbers. The sentence stays for screen readers; the chips
  * are hidden from them, so nothing is read twice.
  */
 function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof rankingSentence>; faviconFor: (card: PortfolioCard) => ProjectFaviconSource }) {
@@ -509,7 +530,6 @@ function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof ran
       <span aria-hidden="true" className="inline-flex flex-wrap items-center gap-1">
         <span className="mr-0.5 text-2xs font-semibold text-fg-secondary">Worst first</span>
         {status.top.map((r) => {
-          const bugs = `${r.openBugs.value}${r.openBugs.atLeast ? '+' : ''}`
           return (
             <span
               key={r.card.projectId}
@@ -519,7 +539,6 @@ function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof ran
             >
               <ProjectFavicon {...faviconFor(r.card)} size={12} />
               <span className="truncate font-semibold text-fg">{r.card.name}</span>
-              {r.openBugs.value > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">{bugs}</span>}
             </span>
           )
         })}

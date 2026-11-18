@@ -40,11 +40,12 @@ interface JobSpread {
   usualPct: number
   slowPct: number
   longestPct: number
+  /** The longest run lies past the scale: the whisker runs to the edge and ends in an arrow. */
+  clipped: boolean
 }
 
 /**
- * The shared scale is the longest run of ANY job, not only the rows on screen, so "Show more"
- * never rescales the rows already read. Null when the job has no finished run to draw.
+ * Where a job's runs sit on the shared scale. Null when the job has no finished run to draw.
  *
  * @internal Exported for tests only.
  */
@@ -54,13 +55,22 @@ export function jobSpread(t: Pick<CiJobType, 'durationP50s' | 'durationP90s' | '
   const usual = t.durationP50s
   const slow = Math.max(usual, t.durationP90s ?? usual)
   const longest = Math.max(slow, t.durationMaxS ?? slow)
-  return { usualPct: pct(usual), slowPct: pct(slow), longestPct: pct(longest) }
+  return { usualPct: pct(usual), slowPct: pct(slow), longestPct: pct(longest), clipped: longest > scaleMaxS }
 }
 
-/** @internal Exported for tests only. */
+/**
+ * The shared scale: the slowest "slow runs" (p90) of ANY job, not only the rows on screen, so
+ * "Show more" never rescales the rows already read. Not the longest single run: one 55-minute
+ * outlier squeezed every bar under 30% of the column (2026-11-18). A longer run's whisker is
+ * clipped at the edge (`clipped`).
+ *
+ * @internal Exported for tests only.
+ */
 export function spreadScaleMax(byJob: ReadonlyArray<Pick<CiJobType, 'durationP50s' | 'durationP90s' | 'durationMaxS'>>): number {
   let max = 0
-  for (const t of byJob) max = Math.max(max, t.durationMaxS ?? 0, t.durationP90s ?? 0, t.durationP50s ?? 0)
+  for (const t of byJob) max = Math.max(max, t.durationP90s ?? 0, t.durationP50s ?? 0)
+  // Only longest runs known: fall back to them rather than draw nothing.
+  if (max === 0) for (const t of byJob) max = Math.max(max, t.durationMaxS ?? 0)
   return max
 }
 
@@ -74,7 +84,12 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
         className="absolute top-1/2 h-px -translate-y-1/2 bg-fg-muted"
         style={{ left: `${spread.slowPct}%`, width: `${Math.max(0, spread.longestPct - spread.slowPct)}%` }}
       />
-      <span className="absolute top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${spread.longestPct}%` }} />
+      {spread.clipped ? (
+        // Past the scale: an arrow at the edge instead of the end tick.
+        <span className="absolute top-1/2 right-0 -translate-y-1/2 text-3xs leading-none text-fg-muted" data-testid="ci-job-spread-clipped">▸</span>
+      ) : (
+        <span className="absolute top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${spread.longestPct}%` }} />
+      )}
       {/* Usual run: solid; usual to slow runs: the lighter box. */}
       <span className="absolute inset-y-0.5 left-0 rounded-l-sm bg-fg-secondary" style={{ width: `${spread.usualPct}%` }} />
       <span
@@ -143,7 +158,7 @@ function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; wait
         {spread ? (
           <SpreadBar
             spread={spread}
-            title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}`}
+            title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}${spread.clipped ? ' (past the scale)' : ''}`}
           />
         ) : (
           <span className="text-fg-faint">–</span>
@@ -185,7 +200,10 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
             <DataTableHead>Job</DataTableHead>
             <DataTableHead align="right">Runs</DataTableHead>
             <DataTableHead align="right">Usually</DataTableHead>
-            <DataTableHead align="right">Slow runs (1 in 10)</DataTableHead>
+            {/* Short and unbroken: "Slow runs (1 in 10)" wrapped over two lines (2026-11-18); the key below says the rest. */}
+            <DataTableHead align="right" className="whitespace-nowrap">
+              <span title="1 run in 10 takes longer than this">Slow (1 in 10)</span>
+            </DataTableHead>
             <DataTableHead align="right">Longest</DataTableHead>
             <DataTableHead className={`${WIDE_ONLY} w-1/3`}>
               <span className="flex items-center justify-between gap-2">
@@ -212,7 +230,7 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
       <p className="mt-1.5 hidden items-center gap-3 text-2xs text-fg-muted @5xl:flex" aria-hidden="true">
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-secondary" /> usual run</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-faint/40" /> up to the slow runs (1 in 10)</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-4 bg-fg-muted" /> to the longest</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-4 bg-fg-muted" /> to the longest (▸ past the scale)</span>
       </p>
     </div>
   )

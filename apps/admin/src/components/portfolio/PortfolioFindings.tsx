@@ -4,25 +4,26 @@
  *   - Fix once: a findings × apps matrix (FindingsMatrix) from 768 px of room; below that, one
  *     row per problem in the "Across your apps" layout (both are in the DOM, a container query
  *     picks one).
- *   - Across your apps, SDK versions, Missing setups: one row per problem with the icons of
- *     the apps it is open in and one action, instead of the same sentence once per app
- *     ("yen-yen (app) has no version probe.", "glot.it (app) has no version probe." …).
- *     The grouping is lib/groupAppFindings.
- * An empty list is a green mark, a failed read is a red one with the server's reason.
+ *   - Round 2 (2026-11-18): Across your apps, SDK versions and Missing setups are rows of the
+ *     SAME list (portfolioView.appProblemList), not three more cards: one card, worst first,
+ *     one row per problem with a dot per app and one action. The per-app sentences ("yen-yen
+ *     (app) has no version probe." …) are grouped by lib/groupAppFindings.
+ * An empty list is one green mark (only when every part was read); a failed read is a red
+ * line with the server's reason.
  *
  * Data: GET /v1/admin/orgs/:orgId/portfolio/findings (read by the page).
  */
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { Btn, Callout, Loading, Section } from '../ui'
+import { Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { PageLoadError } from '../PageLoadError'
 import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import type { PageDataState } from '../../lib/usePageData'
 import type { PortfolioFindingsResponse, PortfolioReadError } from '../../lib/portfolioTypes'
-import { fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew } from '../../lib/groupAppFindings'
-import { findingGroupTitle, mergeSameAppRows } from './portfolioView'
-import { FindingsMatrix } from './FindingsMatrix'
-import { AppIconChips, CopyFixButton, type IconFor } from './AppIconChips'
+import { appProblemList } from './portfolioView'
+import { FindingsMatrix, RowAction } from './FindingsMatrix'
+import { AppIconChips, type IconFor } from './AppIconChips'
 
 const SEV_STATUS: Record<'info' | 'warn' | 'error', { status: RunStatus; word: string }> = {
   error: { status: 'failed', word: 'Serious' },
@@ -101,119 +102,66 @@ export function PortfolioFindings({
   appOrder: readonly string[]
 }) {
   const data = findings.data
-  const nameOf = (id: string) => iconFor(id).project_name
-  // Rows open in the same apps with the same fix are one row ("stopped working · rejected", 9 apps).
-  const matrix = useMemo(() => (data ? mergeSameAppRows(fixOnceRows(data.groups, findingGroupTitle)) : []), [data])
-  const across = useMemo(() => (data ? groupAcrossApps(data.crossProject, (id) => iconFor(id).project_name) : []), [data, iconFor])
-  const sdk = useMemo(() => (data ? groupSdkSkew(data.sdkSkew) : []), [data])
-  const holes = useMemo(() => (data ? groupHoles(data.holes) : []), [data])
+  // ONE list: Fix once, Across your apps, SDK versions and Missing setups, worst first (round 2).
+  const rows = useMemo(() => (data ? appProblemList(data, (id) => iconFor(id).project_name) : []), [data, iconFor])
 
-  if (findings.loading && !data) return <Loading text="Looking for problems shared across apps…" />
   if (findings.error) {
     return <PageLoadError error={findings.error} code={findings.errorCode} resource="shared problems" endpoint={findings.errorEndpoint} requestId={findings.requestId} onRetry={findings.reload} />
   }
-  if (!data) return null
+  if (!data) {
+    return (
+      <TimedLoading
+        waiting={findings.loading}
+        text="Looking for problems shared across apps…"
+        what="Fix once"
+        onRetry={findings.reload}
+        testId="portfolio-fix-once-not-checked"
+      />
+    )
+  }
   const failed = (part: PortfolioReadError['part']) => data.readErrors.find((e) => e.part === part && e.kind === 'failed')
   const sdkFailed = failed('sdk')
   const holesFailed = failed('integrations')
+  const otherErrors = data.readErrors.filter((e) => e !== sdkFailed && e !== holesFailed)
+  const inOrder = (ids: readonly string[]) => appOrder.filter((id) => ids.includes(id)).concat(ids.filter((id) => !appOrder.includes(id)))
   return (
     <div className="flex flex-col gap-3">
-      {data.readErrors.length > 0 && <ReadErrorsCallout errors={data.readErrors} />}
+      {otherErrors.length > 0 && <ReadErrorsCallout errors={otherErrors} />}
       <Section title="Fix once">
-        {matrix.length === 0 ? (
-          <StatusPill status="passed" label="Nothing open in 2+ apps" />
+        {(sdkFailed || holesFailed) && (
+          <div className="mb-2 flex flex-col gap-1">
+            {sdkFailed && <ReadFailed message={sdkFailed.message} />}
+            {holesFailed && <ReadFailed message={holesFailed.message} />}
+          </div>
+        )}
+        {rows.length === 0 ? (
+          // Green only when every part was read: a failed part is not "nothing to fix".
+          sdkFailed || holesFailed ? null : <StatusPill status="passed" label="Nothing to fix across your apps" />
         ) : (
           // The matrix needs about 768 px; narrower (a phone, a split window) each problem is a
-          // row like "Across your apps", so the buttons stay on screen (2026-11-18 preview at
-          // 390 px: the matrix scrolled and every action sat off to the right). The container is
-          // this wrapper, not an element carrying the @ classes itself.
+          // row with its app icons, so the buttons stay on screen (2026-11-18 preview at 390 px:
+          // the matrix scrolled and every action sat off to the right). The container is this
+          // wrapper, not an element carrying the @ classes itself.
           <div className="@container" data-testid="fix-once">
             <div className="hidden @3xl:block" data-testid="fix-once-wide">
-              <FindingsMatrix rows={matrix} appOrder={appOrder} iconFor={iconFor} />
+              <FindingsMatrix rows={rows} appOrder={appOrder} iconFor={iconFor} />
             </div>
             <ul className="divide-y divide-edge-subtle @3xl:hidden" data-testid="fix-once-list">
-              {matrix.map((r) => (
+              {rows.map((r) => (
                 <GroupedRow
                   key={r.ruleId}
                   testId={`fix-once-item-${r.ruleId}`}
                   mark={SEV_STATUS[r.severity]}
                   title={r.title}
                   detail={r.gateLabel ? `${r.gateLabel}: ${r.explanation}` : r.explanation}
-                  projectIds={appOrder.filter((id) => r.projectIds.includes(id)).concat(r.projectIds.filter((id) => !appOrder.includes(id)))}
+                  projectIds={inOrder(r.projectIds)}
                   iconFor={iconFor}
-                  action={<CopyFixButton label={r.action} prompt={r.fix} apps={r.projectIds.length} />}
+                  titleFor={r.appTitles ? (id) => r.appTitles?.[id] ?? iconFor(id).project_name : undefined}
+                  action={<RowAction row={r} />}
                 />
               ))}
             </ul>
           </div>
-        )}
-      </Section>
-      {across.length > 0 && (
-        <Section title="Across your apps">
-          <ul className="divide-y divide-edge-subtle" data-testid="across-apps">
-            {across.map((g) => (
-              <GroupedRow
-                key={g.key}
-                testId={`across-row-${g.ruleId}`}
-                mark={SEV_STATUS[g.severity]}
-                title={g.title}
-                detail={g.detail}
-                projectIds={g.projectIds}
-                iconFor={iconFor}
-                action={g.fix ? <CopyFixButton label={g.action} prompt={g.fix} apps={g.projectIds.length} /> : undefined}
-              />
-            ))}
-          </ul>
-        </Section>
-      )}
-      <Section title="Mushi Mushi SDK versions">
-        {sdkFailed ? (
-          <ReadFailed message={sdkFailed.message} />
-        ) : sdk.length === 0 ? (
-          <StatusPill status="passed" label="All on the latest SDK" />
-        ) : (
-          <ul className="divide-y divide-edge-subtle" data-testid="sdk-versions">
-            {sdk.map((g) => {
-              const versionOf = new Map(g.apps.map((a) => [a.projectId, a]))
-              return (
-                <GroupedRow
-                  key={g.key}
-                  testId={`sdk-row-${g.status}`}
-                  mark={g.status === 'behind' ? { status: 'waiting', word: 'Behind' } : { status: 'idle', word: 'Unknown' }}
-                  title={g.pkg ? `${g.pkg} · ${g.title}` : g.title}
-                  projectIds={g.apps.map((a) => a.projectId)}
-                  iconFor={iconFor}
-                  titleFor={(id) => {
-                    const a = versionOf.get(id)
-                    return a?.version ? `${nameOf(id)} · on ${a.version}` : `${nameOf(id)} · ${a?.reason ?? ''}`.trim()
-                  }}
-                  action={g.status === 'behind' ? <Btn size="sm" variant="ghost" to="/connect">Upgrade</Btn> : undefined}
-                />
-              )
-            })}
-          </ul>
-        )}
-      </Section>
-      <Section title="Missing setups">
-        {holesFailed ? (
-          <ReadFailed message={holesFailed.message} />
-        ) : holes.length === 0 ? (
-          <StatusPill status="passed" label="Nothing missing" />
-        ) : (
-          <ul className="divide-y divide-edge-subtle" data-testid="missing-setups">
-            {holes.map((h) => (
-              <GroupedRow
-                key={h.integration}
-                testId={`hole-row-${h.integration}`}
-                mark={{ status: 'idle', word: 'Missing' }}
-                title={h.title}
-                detail={h.detail}
-                projectIds={h.projectIds}
-                iconFor={iconFor}
-                action={<Btn size="sm" variant="ghost" to="/integrations">Connect</Btn>}
-              />
-            ))}
-          </ul>
         )}
       </Section>
     </div>

@@ -149,6 +149,9 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
         {error && <PageLoadError error={error} resource="the app recipe" endpoint={path} onRetry={reload} />}
         {loading && !data && <Loading text="Composing the recipe…" />}
 
+        {/* Problems first: Risk checks lead (at 390 px they sat about 3,000 px down, 2026-11-18). */}
+        <RadarPanel projectId={projectId} />
+
         {data && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -163,7 +166,10 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
                 size="sm"
               />
             </div>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            {/* The diagram gets the whole width: a 352 px "Pick a card…" column cut its Deploy lane and
+                hid Runtime (2026-11-18). A picked card opens its panel beside the list, or over the
+                diagram's right edge; nothing is reserved while no card is picked. */}
+            <div className={`relative flex flex-col gap-4 ${showList ? 'lg:flex-row lg:items-start' : ''}`}>
               <div ref={columnRef} className="min-w-0 flex-1">
                 {showList ? (
                   <RecipeElementList elements={elements} selectedKey={selectedKey} onSelect={onSelect} />
@@ -173,18 +179,17 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
                   </Suspense>
                 )}
               </div>
-              <div className="w-full shrink-0 lg:w-88">
-                <RecipeSidePanel
-                  key={selected?.key ?? 'none'}
-                  projectId={projectId}
-                  element={selected}
-                  onClose={() => setSelectedKey(null)}
-                />
-              </div>
+              {selected && (
+                <div
+                  className={showList ? 'w-full shrink-0 lg:w-88' : 'w-full lg:absolute lg:top-8 lg:right-3 lg:z-10 lg:w-88 lg:shadow-lg'}
+                  data-testid="recipe-side-panel-slot"
+                >
+                  <RecipeSidePanel key={selected.key} projectId={projectId} element={selected} onClose={() => setSelectedKey(null)} />
+                </div>
+              )}
             </div>
           </>
         )}
-        <RadarPanel projectId={projectId} />
       </div>
     </div>
   )

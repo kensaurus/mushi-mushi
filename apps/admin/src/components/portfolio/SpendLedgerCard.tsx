@@ -16,7 +16,8 @@
  */
 
 import { useMemo, useRef, useState } from 'react'
-import { Btn, Callout, Loading, Section } from '../ui'
+import { Btn, Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -167,7 +168,7 @@ export function SpendLedgerCard({
   return (
     <Section title="Spend per app (30 days)">
       {error && <PageLoadError error={error} resource="spend per app" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Adding up what each app costs…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Adding up what each app costs…" what="Spend per app" onRetry={reload} testId="portfolio-spend-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>

@@ -77,12 +77,19 @@ export const RULE_TITLE: Record<string, string> = {
  * One label for an app: what to fix first, else whether every check could look.
  * @internal Exported for tests; the card draws it through appStatus.
  */
-export function appSummary(app: Pick<MonetizationAppView, 'rules' | 'findings'>): { text: string; tone: BadgeTone } {
-  const serious = app.findings.filter((f) => f.severity !== 'info').length
-  if (serious > 0) return { text: `${serious} to fix`, tone: 'warnSubtle' }
+export function appSummary(app: Pick<MonetizationAppView, 'rules' | 'findings'>, planned: readonly string[] = []): { text: string; tone: BadgeTone } {
+  // Round 2 (2026-11-18): red only for a failure. Products waiting in store review are warnings
+  // (amber "3 to fix"); one serious (error) finding makes the whole count red.
+  const errors = app.findings.filter((f) => f.severity === 'error').length
+  const serious = errors + app.findings.filter((f) => f.severity === 'warn').length
+  if (serious > 0) return { text: `${serious} to fix`, tone: errors > 0 ? 'dangerSubtle' : 'warnSubtle' }
   if (app.rules.some((r) => r.state === 'error')) return { text: 'Could not check', tone: 'dangerSubtle' }
   if (app.rules.length === 0 || app.rules.some((r) => r.state === 'unknown')) return { text: app.findings.length ? `${app.findings.length} notes, partly checked` : 'Partly checked', tone: 'neutral' }
   if (app.findings.length > 0) return { text: `${app.findings.length} notes`, tone: 'infoSubtle' }
+  // A planned rule never ran: "Every check passed" would claim a check nobody made.
+  const checked = app.rules.length
+  const notRun = planned.filter((id) => !app.rules.some((r) => r.ruleId === id)).length
+  if (notRun > 0) return { text: `${checked} of ${checked + notRun} checked`, tone: 'neutral' }
   return { text: 'Every check passed', tone: 'okSubtle' }
 }
 
@@ -143,16 +150,17 @@ export function productStatus(p: Pick<ProductView, 'platform' | 'storeState'>): 
 }
 
 const SUMMARY_STATUS: Partial<Record<string, RunStatus>> = {
-  warnSubtle: 'failed',
+  // Amber for a warning, red for a failure, grey for "not (fully) checked".
+  warnSubtle: 'waiting',
   dangerSubtle: 'failed',
-  neutral: 'waiting',
+  neutral: 'idle',
   infoSubtle: 'idle',
   okSubtle: 'passed',
 }
 
-/** The app row's mark: ✕ N to fix or could not check, ◷ partly checked, ○ notes only, ✓ every check passed. */
-export function appStatus(app: Pick<MonetizationAppView, 'rules' | 'findings'>): { status: RunStatus; label: string } {
-  const s = appSummary(app)
+/** The app row's mark: ✕ serious or could not check, ◷ N to fix (warnings), ○ partly checked or notes, ✓ every check passed. */
+export function appStatus(app: Pick<MonetizationAppView, 'rules' | 'findings'>, planned: readonly string[] = []): { status: RunStatus; label: string } {
+  const s = appSummary(app, planned)
   return { status: SUMMARY_STATUS[s.tone] ?? 'idle', label: s.text }
 }
 

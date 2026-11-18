@@ -14,7 +14,8 @@
  */
 
 import { useState } from 'react'
-import { Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField, Textarea } from '../ui'
+import { Btn, Callout, DisclosurePanel, Input, Section, SelectField, Textarea } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { AppIconChips, type IconFor } from './AppIconChips'
@@ -174,7 +175,7 @@ export function ConnectorsCard({
       <p className="mb-3 text-xs text-fg-muted">Optional. Each one lets Mushi Mushi read one more thing it checks. Read-only unless you turn on more, and any release action still needs your approval each time.</p>
       {error && <PageLoadError error={error} resource="connected sources" endpoint={path} onRetry={reload} />}
       {canManage === false && <p className="mb-2 text-xs text-fg-muted">Adding, checking and removing sources: {ORG_ADMIN_ONLY_HINT}</p>}
-      {loading && !data && <Loading text="Reading connectors…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading connectors…" what="Connected sources" onRetry={reload} testId="portfolio-connectors-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>

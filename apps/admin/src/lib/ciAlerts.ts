@@ -253,8 +253,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'serious',
       label: 'Machine stopped',
       app: null,
-      // "recent": the newest jobs read (the list under Machines), not the week's count the summary gives.
-      title: `${overview.stats.infraFailures} recent job${overview.stats.infraFailures === 1 ? '' : 's'} never finished`,
+      // The window, named: the newest jobs read (the list under Machines), not the week's count the summary gives.
+      title: `${overview.stats.infraFailures} of the newest ${overview.stats.jobs.toLocaleString('en-US')} jobs never finished`,
       detail: 'Not code failures: the test machine stopped. Re-run them.',
       metric: {
         value: String(overview.stats.infraFailures),

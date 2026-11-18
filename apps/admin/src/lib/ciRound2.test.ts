@@ -62,14 +62,16 @@ describe('one machine status for every tab', () => {
   it('Speed and cost says what Now says, not GitHub\'s "offline" for a running machine', () => {
     const live = [machine({ running: 3 })]
     expect(costMachineStatus('overseas-ci', false, live)).toEqual({ word: 'running 3', tone: 'ok' })
-    expect(costMachineStatus('nuc12', false, live)).toEqual({ word: 'offline on GitHub', tone: 'warn' })
+    // Not listed by GitHub is not offline: one-job runners are deregistered between jobs.
+    expect(costMachineStatus('nuc12', false, live)).toEqual({ word: 'not listed by GitHub now', tone: 'muted' })
     expect(costMachineStatus('nuc12', true, live)).toBeNull()
   })
 
   it('Settings names the machine serving a label instead of "0 of 7 online"', () => {
     expect(labelServedBy('kensaurus-local', 0, 7, [machine({ running: 3 })])).toEqual({ text: 'overseas-ci running 3', ok: true })
     expect(labelServedBy('kensaurus-local', 0, 7, [machine({ stale: true })])).toEqual({ text: 'overseas-ci offline', ok: false })
-    expect(labelServedBy('nuc', 1, 2, [machine({})])).toEqual({ text: '1 of 2 online on GitHub', ok: true })
+    expect(labelServedBy('nuc', 1, 2, [machine({})])).toEqual({ text: 'GitHub lists 1 of 2 online', ok: true })
+    expect(labelServedBy('nuc', 0, 7, [])).toEqual({ text: 'no machine with this label reports in; GitHub lists none of 7 online', ok: false })
   })
 })
 

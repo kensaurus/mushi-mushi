@@ -116,7 +116,7 @@ describe('CiPage', () => {
     await render()
     expect(host.querySelector('h1')!.textContent).toBe('CI runners')
     expect(host.textContent).toContain('Where your tests run, how long they wait, and what slows them down.')
-    const order = ['Queue', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
+    const order = ['Finished jobs', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     // "Which machine, what is slow, when will it finish, what broke" (2026-11-16): the plain status
@@ -180,7 +180,7 @@ describe('CiPage', () => {
       expect(active.getAttribute('href')).toContain(`view=${view}`)
     }
     const tabs = Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.textContent ?? '')
-    expect(tabs.map((t) => t.replace(/\d+$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
+    expect(tabs.map((t) => t.replace(/\d+( stopped)?$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
   })
 
   it('keeps old section links working: the hash picks the view, then scrolls to it', async () => {
@@ -194,6 +194,9 @@ describe('CiPage', () => {
 
   it('labels each tab count with what it counts', async () => {
     await render()
+    // "Machines 7" read as seven machines while three were listed (2026-11-18).
+    const machinesTab = Array.from(host.querySelectorAll('[role="tab"]')).find((t) => t.textContent?.startsWith('Machines'))!
+    expect(machinesTab.textContent).toMatch(/Machines\d+ stopped$/)
     const labels = Array.from(host.querySelectorAll('[role="tab"] [aria-label]')).map((b) => b.getAttribute('aria-label') ?? '')
     expect(labels.some((l) => /jobs? waiting for a test machine$/.test(l))).toBe(true)
     expect(labels.some((l) => /changes? that would speed CI up$/.test(l))).toBe(true)
@@ -216,8 +219,22 @@ describe('CiPage', () => {
     expect(q('ci-updated-ago')!.textContent).toBe('Updated 20 s ago')
   })
 
-  it('lays out the queue: waiting oldest first with counts, hints and fix links', async () => {
+  // 2026-11-18: the queue repeated every job "Running now" lists. Live jobs are listed once, under
+  // Right now (with their fix link); the queue below holds what finished.
+  it('lists each live job once: under Running now with its fix link, the queue holds finished jobs', async () => {
     await render()
+    expect(q('ci-queue-count-waiting')).toBeNull()
+    expect(q('ci-queue-count-running')).toBeNull()
+    expect(q('ci-queue-count-finished')!.textContent).toBe('4')
+    expect(hasHeading('Finished jobs')).toBe(true)
+    for (const id of ['j1', 'j2', 'j3', 'j4']) expect(q(`ci-queue-job-${id}`)).toBeNull()
+    const fix = q('ci-waiting-j2')!.querySelector('[data-testid="ci-live-fix-link"]')
+    expect(fix?.getAttribute('href')).toBe('/reports/report-142')
+    expect(q('ci-running-j1')).not.toBeNull()
+  })
+
+  it('lays out the queue with a live job deep-linked: waiting oldest first with counts, hints and fix links', async () => {
+    await render('/ci?job=j2')
     expect(q('ci-queue-count-waiting')!.textContent).toBe('3')
     expect(q('ci-queue-count-running')!.textContent).toBe('1')
     expect(q('ci-queue-count-finished')!.textContent).toBe('4')
@@ -304,11 +321,12 @@ describe('CiPage', () => {
       // A new array: the fixture's jobs list is shared between calls.
       state.overview = { ...o, jobs: [...o.jobs, ...extra] }
     }
-    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] > li').length
+    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] [data-testid^="ci-queue-job-"]').length
 
     it('shows six cards, then all of them on "Show N more"', async () => {
       withWaiting(6) // 3 in the fixture + 6
-      await render()
+      // A live job in ?job= opens the live columns (Now otherwise lists live jobs under Running now).
+      await render('/ci?job=j2')
       expect(q('ci-queue-count-waiting')!.textContent).toBe('9')
       expect(waitingCards()).toBe(6)
       expect(q('ci-queue-list-waiting')!.className).not.toMatch(/overflow-y-auto|max-h-/)
@@ -372,7 +390,7 @@ describe('CiPage', () => {
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
     await render('/ci?view=machines')
     const stopped = q('ci-infra-failures')!
-    const banner = Array.from(host.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent?.startsWith('Mushi Mushi can only see a machine'))!
+    const banner = Array.from(host.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent?.startsWith('GitHub lists a runner to Mushi Mushi'))!
     expect(stopped.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -430,7 +448,7 @@ describe('CiPage', () => {
   })
 
   it('explains a missing runner permission where the runners are, not on top of Now', async () => {
-    const text = 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here.'
+    const text = 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way'
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
     await render('/ci?view=machines')
     expect(host.textContent).toContain(text)

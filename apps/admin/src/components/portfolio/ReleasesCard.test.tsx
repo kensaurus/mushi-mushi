@@ -14,7 +14,7 @@ vi.mock('../../lib/usePageData', () => ({
   usePageData: () => ({ data: state.data, loading: false, error: null, isValidating: false, reload: () => {} }),
 }))
 
-import { groupReleaseRows, ReleasesCard, sortReleaseRows } from './ReleasesCard'
+import { groupReleaseRows, releaseColumns, ReleasesCard, sortReleaseRows } from './ReleasesCard'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -74,10 +74,25 @@ describe('ReleasesCard', () => {
     expect(host.querySelector('[data-testid="releases-batch"]')?.textContent).toContain('ship them as OTA now')
     // Not checked is not zero: its counts are hatched "—", and the columns say what they count.
     const cells = rows[1].querySelectorAll('td')
-    expect([cells[3].textContent, cells[4].textContent]).toEqual(['—', '—'])
+    expect(cells[3].textContent).toBe('—')
     expect(cells[3].className).toContain('ci-nodata')
-    expect(host.querySelector('thead')?.textContent).toContain('Native changes')
     expect(host.querySelector('thead')?.textContent).toContain('OTA changes')
+    // No checked app has a native change: the all-zero column is one line instead.
+    expect(host.querySelector('thead')?.textContent).not.toContain('Native changes')
+    expect(host.querySelector('[data-testid="releases-no-native"]')?.textContent).toContain('No native changes waiting')
+  })
+
+  it('keeps Native changes when an app has one, and drops Stage when every stage is a group row', async () => {
+    expect(releaseColumns([row('a', 'waiting_for_build', 0, 2), row('b', 'idle')])).toEqual({ stage: true, native: true })
+    // An unchecked app's count is not a native change.
+    expect(releaseColumns([row('a', 'unknown', 0, 3), row('b', 'idle')]).native).toBe(false)
+    const grouped = [row('a', 'in_review'), row('b', 'in_review'), row('c', 'idle'), row('d', 'idle')]
+    expect(releaseColumns(grouped).stage).toBe(false)
+    state.data = { rows: grouped, batchSuggestion: null }
+    await act(async () => root.render(createElement(ReleasesCard, { orgId: 'org-1' })))
+    expect(host.querySelector('thead')?.textContent).not.toContain('Stage')
+    const head = host.querySelector('[data-testid="releases-stage-in_review"] th')!
+    expect(head.getAttribute('colspan')).toBe('3')
   })
 
   it('groups apps in one stage under one row ("In review · 3 apps") instead of repeating the pill', async () => {

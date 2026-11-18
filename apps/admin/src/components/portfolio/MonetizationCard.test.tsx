@@ -80,6 +80,10 @@ describe('monetization labels', () => {
   it('an app with an unchecked rule is "partly checked", never "every check passed"', () => {
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }, { ruleId: 'y', state: 'unknown', reason: '' }], findings: [] }).text).toBe('Partly checked')
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }], findings: [] }).text).toBe('Every check passed')
+    // A planned rule never ran: not "Every check passed" but how many of them were checked.
+    const three = ['x', 'y', 'z'].map((ruleId) => ({ ruleId, state: 'ok' as const, reason: '' }))
+    expect(appSummary({ rules: three, findings: [] }, ['monetization_billing_library_outdated'])).toEqual({ text: '3 of 4 checked', tone: 'neutral' })
+    expect(appStatus({ rules: three, findings: [] }, ['monetization_billing_library_outdated']).status).toBe('idle')
     expect(appSummary({ rules: [], findings: [] }).text).toBe('Partly checked')
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'error', reason: '' }], findings: [] }).tone).toBe('dangerSubtle')
   })
@@ -137,8 +141,10 @@ describe('payments signals', () => {
     expect(productStatus({ platform: 'Android', storeState: 'NOT_IN_STORE' })).toBe('failed')
     expect(productStatus({ platform: 'Android', storeState: null })).toBe('idle')
     expect(appStatus({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }], findings: [] })).toEqual({ status: 'passed', label: 'Every check passed' })
-    expect(appStatus({ rules: [{ ruleId: 'x', state: 'unknown', reason: '' }], findings: [] })).toEqual({ status: 'waiting', label: 'Partly checked' })
-    expect(appStatus({ rules: [], findings: [unready('a')] }).status).toBe('failed')
+    // Not fully checked is grey, never amber; products waiting in review are a warning (amber), not a failure.
+    expect(appStatus({ rules: [{ ruleId: 'x', state: 'unknown', reason: '' }], findings: [] })).toEqual({ status: 'idle', label: 'Partly checked' })
+    expect(appStatus({ rules: [], findings: [unready('a'), unready('b'), unready('c')] })).toEqual({ status: 'waiting', label: '3 to fix' })
+    expect(appStatus({ rules: [], findings: [unready('a'), { ...unready('b'), severity: 'error' }] })).toEqual({ status: 'failed', label: '2 to fix' })
     expect(offeringPlatforms({ offerings: [], rcApps: [{ id: 'a', platform: 'Android', storeId: null }, { id: 'b', platform: 'iOS', storeId: null }] })).toEqual(['iOS', 'Android'])
   })
 })
@@ -182,9 +188,9 @@ describe('MonetizationCard', () => {
     expect(chip.textContent).toBe('pro_monthly:monthly')
     expect(chip.getAttribute('title')).toBe('Android · pro_monthly:monthly: store not read')
     expect(chip.getAttribute('data-status')).toBe('idle')
-    // The app row: one mark with its words, red for something to fix.
+    // The app row: one mark with its words; the finding is a warning (severity warn), so amber, not red.
     const pill = container.querySelector('[data-testid="payments-app-p-yy"]')!.closest('button')!.querySelector('[data-testid="status-pill"]')!
-    expect([pill.getAttribute('data-status'), pill.textContent]).toEqual(['failed', '1 to fix'])
+    expect([pill.getAttribute('data-status'), pill.textContent]).toEqual(['waiting', '1 to fix'])
     expect(text).toContain('$21')
     expect(text).toContain('Planned, not checked yet')
     const link = Array.from(container.querySelectorAll('a')).find((a) => a.textContent?.includes('Open in RevenueCat'))
@@ -251,7 +257,7 @@ describe('MonetizationCard', () => {
     expect(apps.className.split(' ')).toContain('divide-y')
     expect(container.querySelector('[data-testid="payments-hub-proj7ff5b439"]')!.className).not.toMatch(/rounded|border/)
     // No bordered box below the section: every nested div is borderless or a hairline.
-    expect([...apps.querySelectorAll('div')].some((d) => /rounded-md.*border|border.*rounded-md/.test(d.className))).toBe(false)
+    expect([...apps.querySelectorAll('div')].some((d) => /\brounded-md\b.*\bborder\b|\bborder\b.*\brounded-md\b/.test(d.className))).toBe(false)
     const checks = container.querySelector('[data-testid="payments-checks-p-yy"]') as HTMLButtonElement
     expect(container.textContent).not.toContain('Purchases reach your backend')
     await act(async () => checks.click())

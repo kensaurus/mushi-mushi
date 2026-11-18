@@ -281,3 +281,18 @@ export const INDEX_HEALTH_CHIP_TONE: Record<IndexHealth, 'ok' | 'warn' | 'danger
   never: 'neutral',
   partial: 'warn',
 }
+
+/** "+2 reports, 7d": the change against the week before, with its unit (2026-11-18 round 2: "+2 7d" had none). */
+export function trendLabel(trend: { direction: 'up' | 'down' | 'flat'; delta: number }): string {
+  const n = Math.abs(trend.delta)
+  const sign = trend.direction === 'up' ? '+' : trend.direction === 'down' ? '−' : ''
+  return `${sign}${n} ${n === 1 ? 'report' : 'reports'}, 7d`
+}
+
+/**
+ * The install guide opens on its own only while the app still needs it: an app whose SDK is
+ * up to date gets it collapsed (2026-11-18 round 2: the full guide sat open under "SDK up to date").
+ */
+export function installGuideOpenByDefault(project: Pick<Project, 'sdk_status'>): boolean {
+  return project.sdk_status !== 'up-to-date'
+}

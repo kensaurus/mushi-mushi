@@ -96,15 +96,24 @@ describe('CiBillCard', () => {
   it('shows this month net large, gross against net in one line, the change, and net per repo', async () => {
     await render()
     expect(q('ci-bill-month-net')!.textContent).toBe('$27.50')
-    expect(host.textContent).toContain('Charged for Actions in 2026-10 so far. Gross $40.00: public repos and included minutes are free.')
+    expect(host.textContent).toContain('Charged for Actions in 2026-10 so far. List price $40.00: public repos and included minutes are free.')
     expect(host.textContent).toContain('From GitHub')
     expect(q('ci-bill-change')!.textContent).toContain('+$5.00 against the 30 days before (+50%)')
     const repos = q('ci-bill-repos')!.textContent!
-    expect(repos).toContain('acme/app$15.00')
-    expect(repos).toContain('free: gross $10.00')
+    expect(repos).toContain('acme/app$15.00 charged')
+    expect(repos).toContain('free: list price $10.00')
     expect(host.querySelector('[aria-label="Net Actions charge per day, last 30 days"]')).not.toBeNull()
     expect(q('ci-bill-agent-share')!.textContent).toContain('25%')
     expect(q('ci-bill-agent-share')!.textContent).toContain('estimated')
+  })
+
+  // 2026-11-18: "$0.00 charged in 2026-11" sat beside "$102.29" per repo: GitHub's bill had no November day yet.
+  it("leads with the window's charge when GitHub's bill has no day of this month yet", async () => {
+    state.data = bill({ month: { label: '2026-11', from: '2026-11-01', grossUsd: 0, discountUsd: 0, netUsd: 0 }, dataThrough: '2026-10-27' })
+    await render()
+    expect(q('ci-bill-month-net')!.textContent).toBe('$15.00')
+    expect(q('ci-bill-headline')!.textContent).toContain('Charged for Actions in the last 30 days')
+    expect(q('ci-bill-headline')!.textContent).toContain('no 2026-11 days yet: read through 2026-10-27')
   })
 
   it("says when only the caller's projects' repositories are shown", async () => {

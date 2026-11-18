@@ -51,6 +51,27 @@ import { useNow } from '../../lib/useNow'
 import { Badge, Btn, Callout, ErrorAlert, Input, Loading, RelativeTime, ResultChip, SelectField } from '../ui'
 import { IconAlertTriangle, IconLock, IconShield } from '../icons'
 import { RepoVisibilityBadge } from './RepoVisibilityBadge'
+import { machinePresenceWord, machinesWithLabel, type MachineNow } from '../../lib/ciStatus'
+
+/**
+ * Who serves a runner label, from the one machine status every CI tab uses (the machines' own
+ * heartbeats). GitHub's count said "kensaurus-local (0 of 7 online)" while overseas-ci ran three
+ * jobs on it: its one-job runners are deregistered between jobs (2026-11-18). GitHub's count is
+ * the fallback when no reporting machine carries the label.
+ *
+ * @internal Exported for tests.
+ */
+export function labelServedBy(label: string, online: number, runners: number, machines: readonly MachineNow[]): { text: string; ok: boolean } {
+  const ms = machinesWithLabel(machines, label)
+  if (ms.length > 0) {
+    const up = ms.filter((m) => !m.stale)
+    return { text: ms.map((m) => `${m.name} ${machinePresenceWord(m)}`).join(', '), ok: up.length > 0 }
+  }
+  // No machine that reports in carries the label: GitHub's count is all there is, said as GitHub's.
+  return online > 0
+    ? { text: `GitHub lists ${online} of ${runners} online`, ok: true }
+    : { text: `no machine with this label reports in; GitHub lists none of ${runners} online`, ok: false }
+}
 
 const CI_POLICY_SETTINGS_HREF = '/settings?tab=ci-policy'
 
@@ -121,7 +142,7 @@ function PreviewPanel({ preview }: { preview: PlacementPreview }) {
   )
 }
 
-function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; repo: PlacementRepo; data: CiPlacement; onChanged: () => void }) {
+function RepoCard({ projectId, repo, data, onChanged, machines = [] }: { projectId: string; repo: PlacementRepo; data: CiPlacement; onChanged: () => void; machines?: readonly MachineNow[] }) {
   const allowed = repo.variables.filter((v) => v.allowed)
   const [variable, setVariable] = useState(allowed[0]?.name ?? '')
   const v = allowed.find((x) => x.name === variable) ?? allowed[0]
@@ -266,9 +287,14 @@ function RepoCard({ projectId, repo, data, onChanged }: { projectId: string; rep
                   />
                   <span>
                     Self-hosted: <span className="font-mono">{l.label}</span>{' '}
-                    <span className={l.online > 0 ? 'text-ok' : 'text-warn-foreground'}>
-                      ({l.online} of {l.runners} online)
-                    </span>
+                    {(() => {
+                      const served = labelServedBy(l.label, l.online, l.runners, machines)
+                      return (
+                        <span className={served.ok ? 'text-fg-secondary' : 'text-warn-foreground'} data-testid="ci-placement-label-served">
+                          ({served.text})
+                        </span>
+                      )
+                    })()}
                   </span>
                 </label>
               ))}
@@ -574,12 +600,15 @@ export function CiPlacementSection({
   scope,
   apps = [],
   onPickApp,
+  machines = [],
 }: {
   projectId: string | null
   scope: 'project' | 'all'
   /** Apps to choose from when the page shows all apps (placement is per app). */
   apps?: Array<{ id: string; name: string; runsOn?: CiRunsOn }>
   onPickApp?: (projectId: string) => void
+  /** The machines that report in (the Now board's), so a label's status matches every other tab. */
+  machines?: readonly MachineNow[]
 }) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/placement?project_id=${encodeURIComponent(projectId)}` : null
   const page = usePageData<CiPlacement>(path)
@@ -664,7 +693,7 @@ export function CiPlacementSection({
       )}
       <ul className="grid gap-3 xl:grid-cols-2">
         {data.repos.map((r) => (
-          <RepoCard key={r.repo} projectId={projectId} repo={r} data={data} onChanged={page.reload} />
+          <RepoCard key={r.repo} projectId={projectId} repo={r} data={data} onChanged={page.reload} machines={machines} />
         ))}
       </ul>
       {data.repos.length === 0 && <p className="text-xs text-fg-muted">No repository is connected to this app.</p>}

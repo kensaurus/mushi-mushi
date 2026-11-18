@@ -11,11 +11,12 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Callout, Loading, Section } from '../ui'
+import { Badge, Btn, Callout, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { PageLoadError } from '../PageLoadError'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
-import { pullSummary, ratingLabel, storeLabel, type StoreIntakeResult } from './storeReviewsView'
+import { pullBlocker, pullSummary, ratingLabel, storeLabel, type StoreIntakeResult } from './storeReviewsView'
 
 interface StoreReviewsData {
   settings: { enabled: boolean; maxRating: number; lastPulledAt: string | null; lastStatus: string | null; lastError: string | null }
@@ -61,20 +62,30 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
   }
 
   const s = data?.settings
+  const blocker = pullBlocker(data)
   return (
     <Section
       title="Store reviews as reports"
       action={(
-        <Btn
-          size="sm"
-          variant="ghost"
-          onClick={pull}
-          loading={busy}
-          disabled={busy || !s?.enabled || !data?.canPull}
-          title={data && !data.canPull ? 'Viewers cannot pull store reviews.' : undefined}
-        >
-          Pull now
-        </Btn>
+        // The reason sits beside the button, one line, whenever it is disabled for one.
+        <span className="flex flex-wrap items-center justify-end gap-2">
+          {blocker && (
+            <span className="text-2xs text-fg-secondary" id={`store-pull-blocker-${projectId}`} data-testid="store-pull-blocker">
+              {blocker}
+            </span>
+          )}
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={pull}
+            loading={busy}
+            disabled={busy || blocker != null}
+            title={blocker ?? undefined}
+            aria-describedby={blocker ? `store-pull-blocker-${projectId}` : undefined}
+          >
+            Pull now
+          </Btn>
+        </span>
       )}
     >
       <p className="mb-3 text-xs text-fg-muted">
@@ -86,7 +97,7 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
         </Callout>
       )}
       {error && <PageLoadError error={error} resource="store reviews" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the store review settings…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading the store review settings…" what="Store reviews" onRetry={reload} testId="portfolio-store-reviews-not-checked" />
       {data && s && (
         <div className="flex flex-col gap-3 text-sm">
           <fieldset className="flex flex-col gap-2" disabled={busy || !data.canManage}>

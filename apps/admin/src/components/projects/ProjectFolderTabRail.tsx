@@ -1,11 +1,15 @@
 /**
  * FILE: apps/admin/src/components/projects/ProjectFolderTabRail.tsx
- * PURPOSE: Folder-style project picker for the Projects list tab — vertical
+ * PURPOSE: Folder-style app picker for the "Your apps" tab — vertical
  *          tabs on desktop (Finder-like), horizontal scroll chips on compact.
+ *          2026-11-18 round 2: no slug line repeating the name, the stuck line wraps
+ *          instead of cutting ("Auto-fix stopped on 10 re…"), "N reports · 23h ago"
+ *          never breaks inside a unit, and the trend says what it counts.
  */
 
 import { Badge } from '../ui'
 import { SignalChip } from '../report-detail/ReportSurface'
+import { trendLabel } from './project-models'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import {
@@ -143,13 +147,10 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         <span className="font-mono text-2xs text-fg-muted">v{project.sdk_version}</span>
       ) : null}
       {showTrend && trend ? (
-        <SignalChip
-          tone={trend.direction === 'up' ? 'warn' : 'ok'}
-          className="text-3xs normal-case tracking-normal tabular-nums"
-        >
-          {trend.direction === 'up' ? '+' : '−'}
-          {Math.abs(trend.delta)} 7d
-        </SignalChip>
+        // A count moving is neither a warning nor a pass: neutral, with its unit.
+        <span className="text-3xs whitespace-nowrap text-fg-secondary tabular-nums" title="Change in reports against the week before">
+          {trendLabel(trend)}
+        </span>
       ) : null}
       {critical > 0 ? (
         <Badge className={`${CHIP_TONE.dangerSubtle} text-3xs px-1 py-0`}>
@@ -173,7 +174,7 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         // and a link in a button is two tab stops for one row (QA bug 264).
         // The selected project's panel links to the bottleneck.
         <span
-          className="truncate text-3xs font-medium text-warn"
+          className="block w-full text-3xs font-medium wrap-break-word text-warn-foreground"
           title={project.pdca_bottleneck_label}
         >
           {bottleneckHumanHeadline({
@@ -246,23 +247,16 @@ function FolderTabButton({
     >
       <ProjectFavicon {...source} size={16} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-fg">{project.name}</span>
-        <span className="mt-0.5 block truncate font-mono text-2xs text-fg-muted">{project.slug}</span>
+        <span className="block text-xs font-semibold wrap-break-word text-fg" title={`Slug: ${project.slug}`}>
+          {project.name}
+        </span>
+        {/* Units never split: "· 23h ago" wrapped to a line of its own. Members live on the panel. */}
         <span className="mt-1 inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs text-fg-secondary">
-          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
-          <span className="tabular-nums">{project.report_count.toLocaleString()} reports</span>
-          {project.member_count != null && project.member_count > 0 ? (
-            <>
-              <span className="text-fg-faint">·</span>
-              <span className="tabular-nums">{project.member_count} member{project.member_count === 1 ? '' : 's'}</span>
-            </>
-          ) : null}
-          {lastReport ? (
-            <>
-              <span className="text-fg-faint">·</span>
-              <span>{lastReport}</span>
-            </>
-          ) : null}
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+            <span className="tabular-nums">{project.report_count.toLocaleString()} reports</span>
+          </span>
+          {lastReport ? <span className="whitespace-nowrap" title="Last report">· {lastReport}</span> : null}
         </span>
         <ProjectMetaRow project={project} />
       </span>
@@ -276,8 +270,8 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
   return (
     <>
       <nav
-        aria-label="Projects"
-        className="flex gap-1.5 overflow-x-auto pb-2 lg:hidden"
+        aria-label="Apps"
+        className="flex min-w-0 max-w-full gap-1.5 overflow-x-auto p-2 lg:hidden"
       >
         {projects.map((project) => (
           <FolderTabButton
@@ -293,11 +287,11 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="hidden shrink-0 lg:sticky lg:top-3 lg:z-10 lg:block lg:max-h-[calc(100dvh-5.5rem)] lg:w-56 lg:self-start lg:overflow-y-auto lg:overscroll-y-contain">
         <nav
-          aria-label="Projects"
-          className="flex flex-col gap-0.5 border-r border-edge-subtle bg-surface-root/50 p-1.5"
+          aria-label="Apps"
+          className="flex flex-col gap-0.5 bg-surface-root/50 p-1.5"
         >
           <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-fg-muted">
-            Projects
+            Apps
           </p>
           {projects.map((project) => (
             <FolderTabButton

@@ -23,7 +23,7 @@ interface Figure {
 /** @internal Exported for tests. */
 export function projectsSnapshotFigures(stats: ProjectsStats): Figure[] {
   return [
-    { label: 'Projects', value: stats.projectCount, hint: 'Apps or environments tracked' },
+    { label: 'Apps', value: stats.projectCount, hint: 'Apps or environments tracked' },
     {
       label: 'Ingesting',
       value: stats.projectsWithReports,
@@ -39,7 +39,7 @@ export function projectsSnapshotFigures(stats: ProjectsStats): Figure[] {
           : stats.sdkConnectedCount > 0 || stats.projectsWithReports > 0
             ? 'text-warn-foreground'
             : undefined,
-      hint: 'Projects whose SDK key checked in',
+      hint: 'Apps whose SDK key checked in',
     },
     { label: 'Active keys', value: stats.activeKeyCount, hint: `${stats.staleKeyCount} never seen` },
     { label: 'Reports · 24h', value: stats.reportsLast24h, hint: `${stats.reportsLast30d} in 30 days` },
@@ -49,7 +49,7 @@ export function projectsSnapshotFigures(stats: ProjectsStats): Figure[] {
 export function ProjectsSnapshotStrip({ stats }: Props) {
   return (
     <Card className="px-3 py-2" data-testid="projects-snapshot">
-      <dl className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Projects snapshot">
+      <dl className="flex flex-wrap gap-x-6 gap-y-2" aria-label="Apps snapshot">
         {projectsSnapshotFigures(stats).map((f) => (
           <div key={f.label} className="min-w-0" data-testid={`projects-snapshot-${f.label}`}>
             <dt className="flex items-center gap-1 text-2xs whitespace-nowrap text-fg-muted">

@@ -8,6 +8,9 @@ import { apiFetch } from '../../lib/supabase'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
+import { useReadTimedOut } from '../../lib/ciReadTimeout'
+import { CiNotChecked } from '../ci/CiNotChecked'
+import { discoverySnippet } from './inventoryView'
 import { useRealtimeReload } from '../../lib/realtime'
 import { DiscoveryLifecycle, type LifecycleStep } from './DiscoveryLifecycle'
 import { DiscoveryMetrics, type DiscoveryMetric } from './DiscoveryMetrics'
@@ -120,6 +123,8 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
   }
 
   const data = discovery.data
+  // Never an endless "Loading observed routes…": after 20 s, "not checked" with Retry.
+  const firstRead = useReadTimedOut(discovery.loading && !data && !discovery.error)
   const proposalRows = proposals.data?.proposals ?? []
   const draftRow = proposalRows.find((p) => p.status === 'draft')
   const acceptedCount = proposalRows.filter((p) => p.status === 'accepted').length
@@ -141,7 +146,7 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
           ? lastSeen
             ? `last ping ${formatRelative(lastSeen)}`
             : undefined
-          : '@mushi-mushi/web with discoverInventory',
+          : 'mushi-mushi with discoverInventory',
         icon: <SdkIcon />,
       },
       {
@@ -275,9 +280,34 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
     [observedRoutes],
   )
 
+  // Nothing observed yet: ONE zero state (the install step), not a stepper of "0 routes · 0 events",
+  // four 0/— tiles and "SDK not reporting" while Manage apps says the SDK is connected (2026-11-18).
+  // Zero discovery events means discoverInventory is off, or nobody opened a page since.
+  const zero = !!data && !hasAnyEvents
+
+  if (!data && !discovery.error) {
+    return (
+      <div className="space-y-4" data-testid="mushi-discovery-tab">
+        {firstRead.timedOut ? (
+          <CiNotChecked
+            what="Discovery"
+            testId="discovery-not-checked"
+            onRetry={() => {
+              firstRead.restart()
+              discovery.reload()
+            }}
+          />
+        ) : (
+          <p className="text-xs text-fg-muted">Reading what the SDK has seen…</p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4" data-testid="mushi-discovery-tab">
-      {/* (1) Lifecycle */}
+      {/* (1) Lifecycle, once something was observed */}
+      {!zero && (
       <Card className="p-4 space-y-3">
         <header className="flex items-start justify-between gap-3">
           <div>
@@ -290,9 +320,10 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
         </header>
         <DiscoveryLifecycle steps={lifecycle} />
       </Card>
+      )}
 
-      {/* (2) Hero metrics */}
-      <DiscoveryMetrics metrics={metrics} />
+      {/* (2) Hero metrics: only real numbers, never four zeros */}
+      {!zero && <DiscoveryMetrics metrics={metrics} />}
 
       {/* (3) Action / proposal area */}
       <ActionCard
@@ -333,12 +364,8 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
         />
       )}
 
-      {/* (5) Observed routes — rich cards */}
-      <ObservedRoutesSection
-        routes={observedRoutes}
-        maxEventCount={maxEventCount}
-        loading={discovery.loading && !data}
-      />
+      {/* (5) Observed routes — rich cards (the zero state above already says none were seen) */}
+      {!zero && <ObservedRoutesSection routes={observedRoutes} maxEventCount={maxEventCount} loading={false} />}
 
       {activeProposalId && (
         <ProposalReviewModal
@@ -393,32 +420,17 @@ function ActionCard({
             <SdkIcon />
           </div>
           <div className="min-w-0">
-            <SignalChip tone="info" className="mb-1.5 text-3xs font-semibold">Step 1 — Install</SignalChip>
-            <h3 className="text-sm font-semibold text-fg">Add the SDK so we can observe your app</h3>
-            <ContainedBlock tone="muted" className="mt-2">
-              <p className="text-xs text-fg-muted">
-                Install <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">@mushi-mushi/web</code> and
-                flip on <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">discoverInventory: true</code>.
-                Every navigation will post a tiny payload — route, page title, the data-testids in the DOM, outbound API calls,
-                and a 200-char DOM summary. Once we have ≥3 routes & ≥10 events, Claude can draft your inventory.
-              </p>
-            </ContainedBlock>
+            <h3 className="text-sm font-semibold text-fg" data-testid="discovery-zero">No page views seen yet: discoverInventory is off</h3>
+            <p className="mt-1 text-xs text-fg-muted">
+              Your SDK can be connected and still send nothing here: discovery is its own switch. Turn on{' '}
+              <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">discoverInventory</code> in the{' '}
+              <code className="px-1 py-0.5 rounded bg-surface-overlay/60 font-mono text-2xs">mushi-mushi</code> setup you already have. Each page
+              view then sends its route, title, data-testids and API calls; after 3 routes and 10 views Claude can draft your stories.
+            </p>
           </div>
         </div>
-        <pre className="mushi-code-block mushi-code-body text-2xs font-mono p-3 rounded-md border border-code-surface-border overflow-auto whitespace-pre">{`import { Mushi } from '@mushi-mushi/web'
-
-Mushi.init({
-  projectId: '${projectId}',
-  apiKey: process.env.MUSHI_API_KEY!,
-  capture: {
-    discoverInventory: {
-      enabled: true,
-      // Optional: feed your framework's static route templates so
-      // /practice/abc-123 normalizes to /practice/[id] cleanly.
-      routeTemplates: ['/practice/[id]', '/lessons/[lessonId]'],
-    },
-  },
-})`}</pre>
+        {/* The same package and init as the install guide on Manage apps (2026-11-18: this said @mushi-mushi/web). */}
+        <pre className="mushi-code-block mushi-code-body text-2xs font-mono p-3 rounded-md border border-code-surface-border overflow-auto whitespace-pre" data-testid="discovery-snippet">{discoverySnippet(projectId)}</pre>
       </Card>
     )
   }

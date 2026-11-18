@@ -186,7 +186,7 @@ export function KnownHolesCard({ projectId }: { projectId: string }) {
             <p className="text-xs text-fg-muted">No known holes in what ships to users.</p>
           ) : null}
           {devOnly.length > 0 && (
-            <details className="rounded-md border border-edge-subtle px-3 py-2">
+            <details className="border-t border-edge-subtle pt-2">
               <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">{devOnly.length} in development-only packages (not filed)</summary>
               <ul className="flex flex-col divide-y divide-edge-subtle">
                 {devOnly.map((g) => <HoleRow key={g.groupKey} g={g} busy={busy === g.groupKey} onDismiss={() => setStatus(g, 'dismissed')} />)}
@@ -194,7 +194,7 @@ export function KnownHolesCard({ projectId }: { projectId: string }) {
             </details>
           )}
           {dismissed.length > 0 && (
-            <details className="rounded-md border border-edge-subtle px-3 py-2">
+            <details className="border-t border-edge-subtle pt-2">
               <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">{dismissed.length} dismissed</summary>
               <ul className="flex flex-col divide-y divide-edge-subtle">
                 {dismissed.map((g) => <HoleRow key={g.groupKey} g={g} busy={busy === g.groupKey} onReopen={() => setStatus(g, 'open')} />)}

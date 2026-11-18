@@ -266,3 +266,13 @@ describe('radarTitle', () => {
     expect(radarTitle({ title: 'Store names match', state: 'error' })).toBe('Store names match')
   })
 })
+
+describe('radarBadge (2026-11-18)', () => {
+  it('a serious finding is red Error, like Full-stack audit; the rest amber Warning', async () => {
+    const { radarBadge } = await import('./portfolioView')
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'error' }] })).toEqual({ label: 'Error', tone: 'dangerSubtle' })
+    expect(radarBadge({ state: 'finding', findings: [{ severity: 'warn' }, { severity: 'info' }] })).toEqual({ label: 'Warning', tone: 'warnSubtle' })
+    expect(radarBadge({ state: 'error', findings: [] }).label).toBe('Check failed')
+    expect(radarBadge({ state: 'unknown', findings: [] }).label).toBe('Not checked')
+  })
+})

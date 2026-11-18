@@ -1,10 +1,12 @@
 /**
  * FILE: apps/admin/src/pages/HealthPage.tsx
- * PURPOSE: Real-time LLM + cron telemetry. Banner + HEALTH SNAPSHOT + tabs:
- *          Overview | LLM | Cron | Activity.
+ * PURPOSE: Real-time LLM + cron telemetry. Banner + HEALTH SNAPSHOT + one row of sections
+ *          (components/health/HealthSectionsBar): Overview | AI calls | Scheduled jobs |
+ *          Recent traces | Code size | Schema changes | Unusual spikes. Two stacked bars
+ *          (the hub's views, then this view's tabs) were flattened into one (2026-11-18).
  */
 
-import { useCallback, useEffect, useMemo, useState, lazy } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState, lazy, type ReactNode } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
@@ -25,7 +27,7 @@ import { Card,
   FilterSelect,
   RelativeTime,
   Pct,
-  SegmentedControl, } from '../components/ui'
+  Loading, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import { HealthSnapshotStrip } from '../components/health/HealthSnapshotStrip'
 import { HealthProbesGuide } from '../components/health/HealthProbesGuide'
@@ -70,8 +72,9 @@ import { AlertCards } from '../components/signal/AlertCards'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { CHIP_TONE } from '../lib/chipTone'
-import { PageHubView } from '../components/PageHubView'
-import { HEALTH_HUB } from '../lib/pageHubs'
+import { HealthSectionsBar, resolveHealthView, type HealthSection } from '../components/health/HealthSectionsBar'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { PageLoadError } from '../components/PageLoadError'
 import { PlatformDoctorCard } from '../components/health/PlatformDoctorCard'
 
@@ -153,28 +156,6 @@ const WINDOW_OPTIONS = [
 ]
 const RECENT_FILTER_OPTIONS = ['', 'errors', 'fallbacks']
 
-const HEALTH_TABS: Array<{ id: HealthTabId; label: string; description: string }> = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    description: 'Posture banner, workflow, and recommended next step.',
-  },
-  {
-    id: 'llm',
-    label: 'LLM',
-    description: 'Per-function and per-model breakdown for the selected window.',
-  },
-  {
-    id: 'cron',
-    label: 'Cron',
-    description: 'Scheduled jobs — last run, success rate, manual trigger.',
-  },
-  {
-    id: 'activity',
-    label: 'Activity',
-    description: 'Provider probes and recent LLM calls with Langfuse deep-links.',
-  },
-]
 
 function resolveHealthTab(value: string | null): HealthTabId {
   if (value === 'llm' || value === 'cron' || value === 'activity') return value
@@ -189,19 +170,22 @@ export function HealthPage() {
   if (hubParams.get('hub') === 'check') {
     return <CheckVerificationHub />
   }
-  // Mushi health (Plan 021; renamed from App health, P6): Code size, Schema changes and Unusual spikes are views here now.
+  // Mushi health (Plan 021; renamed from App health, P6): Code size, Schema changes and Unusual spikes are views here now,
+  // each a section of the one bar (HealthSectionsBar) next to the AI & jobs sections.
+  const view = resolveHealthView(hubParams)
+  if (view === 'integrations') return <HealthPageContent />
   return (
-    <PageHubView
-      hub={HEALTH_HUB}
-      render={{
-        integrations: () => <HealthPageContent />,
-        code: () => <CodeHealthPage />,
-        schema: () => <DriftPage />,
-        spikes: () => <AnomaliesPage />,
-      }}
-    />
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <HealthSectionsBar tabLabels={HEALTH_TAB_LABELS} />
+      <Suspense fallback={<Loading text="Loading…" />}>
+        {view === 'code' ? <CodeHealthPage /> : view === 'schema' ? <DriftPage /> : <AnomaliesPage />}
+      </Suspense>
+    </div>
   )
 }
+
+/** The AI & jobs section names the page copy gives, so the bar reads the same on every view. */
+const HEALTH_TAB_LABELS: Record<string, string> = { overview: 'Overview', llm: 'AI calls', cron: 'Scheduled jobs', activity: 'Recent traces' }
 
 function HealthPageContent() {
   const toast = useToast()
@@ -258,6 +242,9 @@ function HealthPageContent() {
 
   const llm = llmQuery.data
   const cron = cronQuery.data
+  // Never an endless skeleton: a read that has not answered in 20 s says "not checked" with Retry.
+  const statsWait = useReadTimedOut(statsLoading && !statsData)
+  const detailWait = useReadTimedOut(llmQuery.loading || cronQuery.loading)
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -395,23 +382,32 @@ function HealthPageContent() {
     amberCount: stats.amberCount,
   })
 
-  const tabOptions = useMemo(
-    () =>
-      HEALTH_TABS.map((t) => ({
-        id: t.id,
-        label: copy?.tabLabels?.[t.id] ?? t.label,
-        count:
-          t.id === 'cron' && stats.cronErrorCount > 0
-            ? stats.cronErrorCount
-            : t.id === 'llm' && stats.errorRatePct > 5
-              ? 1
-              : undefined,
-      })),
-    [stats.cronErrorCount, stats.errorRatePct, copy?.tabLabels],
+  const sectionCounts = useMemo<Partial<Record<HealthSection, number>>>(
+    () => ({
+      cron: stats.cronErrorCount > 0 ? stats.cronErrorCount : undefined,
+      llm: stats.errorRatePct > 5 ? 1 : undefined,
+    }),
+    [stats.cronErrorCount, stats.errorRatePct],
   )
+  const tabLabels = { ...HEALTH_TAB_LABELS, ...copy?.tabLabels }
+  // The one bar sits above every state of the page, loading and errors too.
+  const withBar = (node: ReactNode) => (
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      {!ux.hideTabs && <HealthSectionsBar tabLabels={tabLabels} counts={sectionCounts} />}
+      {node}
+    </div>
+  )
+  const retryAll = () => {
+    statsWait.restart()
+    detailWait.restart()
+    reloadAll()
+  }
 
+  if (statsLoading && !statsData && statsWait.timedOut) {
+    return withBar(<CiNotChecked what="Mushi Mushi health" testId="health-not-checked" onRetry={retryAll} />)
+  }
   if (statsLoading && !statsData) {
-    return (
+    return withBar(
       <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading health">
         <div className="h-8 w-48 rounded bg-surface-raised" />
         <div className="h-16 rounded bg-surface-raised/60" />
@@ -420,18 +416,21 @@ function HealthPageContent() {
             <div key={i} className="h-20 rounded bg-surface-raised" />
           ))}
         </div>
-      </div>
+      </div>,
     )
   }
 
   if (statsError) {
-    return <PageLoadError error={statsError} resource="health stats" onRetry={reloadStats} />
+    return withBar(<PageLoadError error={statsError} resource="health stats" onRetry={reloadStats} />)
   }
 
-  if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />
+  if ((llmQuery.loading || cronQuery.loading) && detailWait.timedOut && !llm) {
+    return withBar(<CiNotChecked what="AI calls and scheduled jobs" testId="health-detail-not-checked" onRetry={retryAll} />)
+  }
+  if (llmQuery.loading || cronQuery.loading) return withBar(<HealthSkeleton />)
   if (llmQuery.error || !llm) {
-    return (
-      <PageLoadError error={llmQuery.error ?? 'No data came back.'} resource="health metrics" onRetry={reloadAll} />
+    return withBar(
+      <PageLoadError error={llmQuery.error ?? 'No data came back.'} resource="health metrics" onRetry={reloadAll} />,
     )
   }
 
@@ -541,7 +540,7 @@ function HealthPageContent() {
     return null
   })()
 
-  return (
+  return withBar(
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-health">
       <PageHeaderBar
         title={copy?.title ?? 'Mushi Mushi health'}
@@ -577,17 +576,7 @@ function HealthPageContent() {
         </Btn>
       </PageHeaderBar>
 
-      {/* Sections sit under the title, and the overview's problem comes before the numbers (2026-11-18). */}
-      {!ux.hideTabs && (
-      <SegmentedControl<HealthTabId>
-        size="sm"
-        scrollable
-        ariaLabel="Health sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
+      {/* The sections are the one bar above the page (HealthSectionsBar); the overview's problem comes before the numbers. */}
 
       {/* RecommendedAction is always shown on the overview tab — it gives every
           mode (quickstart/beginner/advanced) an actionable next step rather than

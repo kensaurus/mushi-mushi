@@ -139,8 +139,8 @@ describe('FullStackAuditPage', () => {
     const copy = status.querySelector<HTMLButtonElement>('[data-testid="copy-fix-prompt"]')!
     await act(async () => copy.click())
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('src/orders.ts (line 41)'))
-    // The list totals use the same exact counts.
-    expect(host.querySelector('[data-testid="gate-findings-totals"]')?.textContent).toBe('9 errors · 9 warnings open in 1 check')
+    // The totals are said once, in the status above; the list does not repeat them (2026-11-18).
+    expect(host.querySelector('[data-testid="gate-findings-totals"]')).toBeNull()
     // Every finding in the list can be copied too.
     expect(host.querySelectorAll('[data-testid="copy-fix-prompt"]').length).toBe(3)
   })
@@ -156,7 +156,8 @@ describe('FullStackAuditPage', () => {
     }
     await render()
     const row = host.querySelector('[data-testid="gate-shown-elsewhere"]')!
-    expect(row.textContent).toContain('1 open')
+    expect(row.textContent).toContain('1 error more')
+    expect(row.textContent).toContain('Known holes in your dependencies')
     expect(row.querySelector('a')?.getAttribute('href')).toBe('/#dependency-holes')
     // The hole itself is not listed as a finding card a second time.
     expect(host.textContent).not.toContain('next 16.3.8 has 3 known security holes')

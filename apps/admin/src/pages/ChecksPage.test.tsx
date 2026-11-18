@@ -153,21 +153,60 @@ describe('ChecksPage', () => {
     render()
     const status = container.querySelector('[data-testid="checks-status"]')!
     expect(status.querySelector('[data-testid="checks-count-findings"]')?.textContent).toBe('1with findings')
-    expect(status.querySelector('[data-testid="checks-count-pass"]')?.textContent).toBe('1passing')
+    // Passing is counted once, on its fold, not again in the banner (2026-11-18 round 2).
+    expect(status.querySelector('[data-testid="checks-count-pass"]')).toBeNull()
+    expect(status.querySelector('[data-testid="checks-count-watching"]')).toBeNull()
     // The names and the Open button live on the alert card only.
     expect(status.textContent).not.toContain('Scheduled tests')
     expect(status.querySelector('a')).toBeNull()
   })
 
-  it('counts every state from one source: banner marks and the fold agree with the cards', () => {
+  it('counts every state from one source, each count shown once: banner, idle list and fold agree with the cards', () => {
     render()
     const shown = (state: string) => container.querySelectorAll(`li[data-state="${state}"]`).length + (state === 'findings' || state === 'failed' ? container.querySelectorAll(`[data-testid^="checks-alert-"][data-severity="${state === 'failed' ? 'critical' : 'serious'}"]`).length : 0)
-    for (const state of ['failed', 'findings', 'unavailable', 'not_checked', 'not_set_up', 'pass']) {
+    for (const state of ['failed', 'findings', 'unavailable']) {
       const mark = container.querySelector(`[data-testid="checks-count-${state}"]`)
       const n = mark ? Number(mark.textContent!.match(/^\d+/)![0]) : 0
       expect(n, state).toBe(shown(state))
     }
+    for (const state of ['not_checked', 'not_set_up', 'pass', 'watching']) {
+      expect(container.querySelector(`[data-testid="checks-status"] [data-testid="checks-count-${state}"]`), state).toBeNull()
+    }
+    const idle = shown('not_checked') + shown('not_set_up')
+    expect(idle).toBeGreaterThan(0)
+    expect(container.querySelector('[data-testid="checks-idle-count"]')!.textContent).toBe(`(${idle})`)
     expect(container.querySelector('[data-testid="checks-passing"] summary')!.textContent).toContain(`${shown('pass')}passing`)
+  })
+
+  it('lists the checks that are not running yet in one compact list, without a group footer per card', () => {
+    render()
+    const list = container.querySelector('[data-testid="checks-idle"]')!
+    const rows = [...list.querySelectorAll('li[data-testid^="checks-card-"]')]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(['not_checked', 'not_set_up']).toContain(row.getAttribute('data-state'))
+    // No card in the grid is idle any more; the idle ones live in the list only.
+    const grid = container.querySelector('ul[aria-label="Checks, failing first"]')
+    for (const li of grid?.querySelectorAll('li') ?? []) expect(['not_checked', 'not_set_up']).not.toContain(li.getAttribute('data-state'))
+    expect(container.textContent).not.toContain('App checks')
+  })
+
+  it('never spins: a read with no answer after 20 s reads as not checked, with Retry', () => {
+    vi.useFakeTimers()
+    try {
+      render()
+      expect(container.querySelector('[data-testid="checks-not-checked"]')).toBeNull()
+      act(() => {
+        vi.advanceTimersByTime(20_000)
+      })
+      const row = container.querySelector('[data-testid="checks-not-checked"]')!
+      expect(row.textContent).toContain('not checked')
+      expect(row.querySelector('button')?.textContent).toBe('Retry')
+      // The recipe read never answered: its card is "could not read", not "Checking…".
+      expect(container.querySelector('[data-testid="checks-card-recipe"]')?.getAttribute('data-state')).toBe('unavailable')
+      expect(container.textContent).not.toContain('Checking…')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps a plan-gated check visible with an upgrade pill', () => {
@@ -207,8 +246,10 @@ describe('ChecksPage signals (2026-11-18)', () => {
     render()
     const alert = q('checks-alert-qa-coverage')!
     expect(alert.getAttribute('data-severity')).toBe('serious')
-    expect(alert.textContent).toContain('Scheduled tests: 1 to fix')
-    expect(alert.textContent).toContain('finding')
+    expect(alert.textContent).toContain('Scheduled tests')
+    expect(alert.textContent).toContain('1finding')
+    // The number is the metric; the title does not repeat it (2026-11-18 round 2: "2 to fix" beside "2 findings").
+    expect(alert.textContent).not.toContain('to fix')
     expect(alert.querySelector('a[href="/qa-coverage"]')?.textContent).toBe('Open')
     // A passing check is not an alert.
     expect(q('checks-alert-fullstack-audit')).toBeNull()

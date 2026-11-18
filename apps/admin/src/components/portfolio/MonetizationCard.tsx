@@ -23,7 +23,8 @@
  */
 
 import { useState } from 'react'
-import { Btn, Callout, CopyButton, Loading, Section } from '../ui'
+import { Btn, Callout, CopyButton, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { IconChevronDown, IconChevronRight } from '../icons'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { formatRelative } from '../ui/metrics'
@@ -91,7 +92,7 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
   return (
     <Section title="Payments across apps">
       {error && <PageLoadError error={error} resource="payments" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading what each app sells…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading what each app sells…" what="Payments" onRetry={reload} testId="portfolio-payments-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>
@@ -105,7 +106,7 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
       {data && (
         <div className="flex flex-col gap-3 divide-y divide-edge-subtle [&>*:not(:first-child)]:pt-3">
           {data.hubs.map((hub) => (
-            <HubBlock key={hub.rcProjectId} hub={hub} busy={busy} onAsk={ask} iconFor={iconFor} />
+            <HubBlock key={hub.rcProjectId} hub={hub} busy={busy} onAsk={ask} iconFor={iconFor} planned={data.planned} />
           ))}
           {data.outsideHub.length > 0 && (
             <div className="border-t border-edge-subtle pt-2">
@@ -133,7 +134,7 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
 
 type AskFn = (hub: MonetizationHubView, finding: MonetizationFinding, projectId: string | null, key: string) => void
 
-function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; busy: string | null; onAsk: AskFn; iconFor?: IconFor }) {
+function HubBlock({ hub, busy, onAsk, iconFor, planned }: { hub: MonetizationHubView; busy: string | null; onAsk: AskFn; iconFor?: IconFor; planned: readonly string[] }) {
   return (
     <div className="flex flex-col gap-2" data-testid={`payments-hub-${hub.rcProjectId}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -179,7 +180,7 @@ function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; bus
       <ul className="divide-y divide-edge-subtle border-y border-edge-subtle" data-testid="payments-apps">
         {sortAppsWorstFirst(hub.apps).map((app) => (
           <li key={app.projectId}>
-            <AppBlock hub={hub} app={app} busy={busy} onAsk={onAsk} iconFor={iconFor} />
+            <AppBlock hub={hub} app={app} busy={busy} onAsk={onAsk} iconFor={iconFor} planned={planned} />
           </li>
         ))}
       </ul>
@@ -226,10 +227,11 @@ function CatalogLine({ catalog }: { catalog: MonetizationHubView['catalog'] }) {
   )
 }
 
-function AppBlock({ hub, app, busy, onAsk, iconFor }: { hub: MonetizationHubView; app: MonetizationAppView; busy: string | null; onAsk: AskFn; iconFor?: IconFor }) {
-  const mark = appStatus(app)
+function AppBlock({ hub, app, busy, onAsk, iconFor, planned }: { hub: MonetizationHubView; app: MonetizationAppView; busy: string | null; onAsk: AskFn; iconFor?: IconFor; planned: readonly string[] }) {
+  const mark = appStatus(app, planned)
   const groups = groupMonetizationFindings(app.findings, appProducts(app))
-  const [open, setOpen] = useState(mark.status === 'failed' && app.findings.some((f) => f.severity !== 'info'))
+  // Something to fix opens the app (amber warnings too, not only red failures).
+  const [open, setOpen] = useState(app.findings.some((f) => f.severity !== 'info'))
   const [checksOpen, setChecksOpen] = useState(false)
   return (
     <div>

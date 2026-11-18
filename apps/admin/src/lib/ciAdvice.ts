@@ -18,6 +18,38 @@ interface CiAdviceTarget {
   label: string
   /** Full, for the tooltip: `kensaurus/tsumagoi/.github/workflows/ci-pr.yml`. */
   title: string
+  /** For a workflow target: its repo's short name and the file alone, so chips can group by repo. */
+  repoShort?: string
+  file?: string
+}
+
+/** Workflow chips of one repo under one name: `mushi-mushi` once, then `ci.yml` `cla.yml` … */
+export interface CiAdviceTargetRow {
+  repo: string | null
+  targets: Array<CiAdviceTarget & { chip: string }>
+}
+
+/**
+ * Chips grouped by repo when a card spans several repos: "mushi-mushi ·" led 12 chips of one card
+ * (2026-11-18). One repo (or no workflow targets) stays one row with the chips as they are.
+ */
+export function targetRowsByRepo(targets: readonly CiAdviceTarget[]): CiAdviceTargetRow[] {
+  const repos = new Set(targets.map((t) => t.repoShort).filter(Boolean))
+  if (repos.size < 2) return [{ repo: null, targets: targets.map((t) => ({ ...t, chip: t.label })) }]
+  const rows = new Map<string, CiAdviceTargetRow>()
+  const other: CiAdviceTargetRow = { repo: null, targets: [] }
+  for (const t of targets) {
+    if (!t.repoShort || !t.file) {
+      other.targets.push({ ...t, chip: t.label })
+      continue
+    }
+    const row = rows.get(t.repoShort) ?? { repo: t.repoShort, targets: [] }
+    row.targets.push({ ...t, chip: t.file })
+    rows.set(t.repoShort, row)
+  }
+  // Repos with the most places first.
+  const out = [...rows.values()].sort((a, b) => b.targets.length - a.targets.length)
+  return other.targets.length > 0 ? [...out, other] : out
 }
 
 export interface CiAdviceGroup {
@@ -86,7 +118,12 @@ function targetsOf(items: CiAdvice[]): CiAdviceTarget[] {
     if (workflow) {
       const file = workflow.split('/').pop() ?? workflow
       const label = repo && repos.size > 1 ? `${repoShortName(repo)} · ${file}` : file
-      out.set(`wf:${repo}:${workflow}`, { key: `wf:${repo}:${workflow}`, label, title: repo ? `${repo}/${workflow}` : workflow })
+      out.set(`wf:${repo}:${workflow}`, {
+        key: `wf:${repo}:${workflow}`,
+        label,
+        title: repo ? `${repo}/${workflow}` : workflow,
+        ...(repo ? { repoShort: repoShortName(repo), file } : {}),
+      })
     } else if (a.runner) {
       out.set(`runner:${a.runner}`, { key: `runner:${a.runner}`, label: a.runner, title: repo ? `${a.runner} on ${repo}` : a.runner })
     } else if (repo) {

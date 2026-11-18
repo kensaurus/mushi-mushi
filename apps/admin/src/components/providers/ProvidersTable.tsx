@@ -8,7 +8,7 @@
  */
 
 import type { ProviderAccount } from '../../lib/kensaurusOpsTypes'
-import { ageLabel, dependentApps, PROVIDER_STATUS, providerGauge, providerState, type Gauge } from '../../lib/providersView'
+import { ageLabel, dependentApps, PROVIDER_STATUS, providerColumns, providerGauge, providerState, type Gauge } from '../../lib/providersView'
 import { Btn, Toggle } from '../ui'
 import { IconSliders } from '../icons'
 import { Chip } from '../signal/Chip'
@@ -46,13 +46,18 @@ export interface ProvidersTableProps {
   pending: ReadonlySet<string>
   onToggle: (account: ProviderAccount, enabled: boolean) => void
   onEditThresholds: (account: ProviderAccount) => void
+  /** The console's name for an ops app slug (makeAppNamer); the slug itself when none matches. */
+  appName?: (app: string) => string
 }
 
 export const providerPendingKey = (id: string) => `provider:${id}`
 
-export function ProvidersTable({ providers, incidents, now, pending, onToggle, onEditThresholds }: ProvidersTableProps) {
+export function ProvidersTable({ providers, incidents, now, pending, onToggle, onEditThresholds, appName = (a) => a }: ProvidersTableProps) {
   if (providers.length === 0) return <p className="text-xs text-fg-muted">No provider accounts yet.</p>
+  // Balance and Incidents draw only once some row has a value; the note says it once otherwise.
+  const cols = providerColumns(providers, incidents)
   return (
+    <div className="flex flex-col gap-1.5">
     <ul className="list-none divide-y divide-edge-subtle overflow-hidden rounded-md border border-edge p-0" aria-label="Provider accounts, worst first" data-testid="providers-rows">
       {/* Column names (2026-11-18: "11m" and "—" had no label). Wide screens only; each cell keeps its own title. */}
       <li
@@ -62,9 +67,9 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
       >
         <span className={COL.state}>State</span>
         <span className={COL.account}>Account</span>
-        <span className={COL.balance}>Balance</span>
+        {cols.balance && <span className={COL.balance}>Balance</span>}
         <span className={COL.probed}>Probed</span>
-        <span className={COL.incidents}>Incidents</span>
+        {cols.incidents && <span className={COL.incidents}>Incidents</span>}
         <span className={COL.apps}>Used by</span>
         <span className={`${COL.on} text-right`}>On</span>
       </li>
@@ -91,9 +96,11 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
               <Chip>{p.provider}</Chip>
               {p.is_test && <Chip>test</Chip>}
             </span>
-            <span className={COL.balance}>
-              <GaugeCell gauge={providerGauge(p)} />
-            </span>
+            {cols.balance && (
+              <span className={COL.balance}>
+                <GaugeCell gauge={providerGauge(p)} />
+              </span>
+            )}
             {/* On a phone there is no header row, so each value carries its own words. */}
             <span className={`font-mono text-2xs whitespace-nowrap text-fg-secondary tabular-nums ${COL.probed}`} title="Last probe" data-testid="provider-probed">
               {probed ? (
@@ -109,6 +116,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
                 </>
               )}
             </span>
+            {cols.incidents && (
             <span className={COL.incidents} data-testid="provider-incidents">
               {inc ? (
                 <Chip tone={inc.crit > 0 ? 'danger' : 'neutral'} title={`${inc.total} open incident${inc.total === 1 ? '' : 's'}`}>
@@ -122,11 +130,14 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
                 </span>
               )}
             </span>
-            <span className={`flex min-w-0 flex-wrap gap-1 ${COL.apps}`} aria-label="Apps that use it">
-              {apps.map((a) => (
-                <Chip key={a} tone="strong">
-                  {a}
-                </Chip>
+            )}
+            {/* Plain names, not ink pills: they are not buttons. The console's app names, the slug on hover. */}
+            <span className={`flex min-w-0 flex-wrap gap-x-1.5 text-2xs text-fg-secondary ${COL.apps}`} aria-label="Apps that use it">
+              {apps.map((a, n) => (
+                <span key={a} title={a} data-testid="provider-app">
+                  {appName(a)}
+                  {n < apps.length - 1 ? ',' : ''}
+                </span>
               ))}
             </span>
             <span className={`flex items-center justify-end gap-1.5 ${COL.on}`}>
@@ -149,5 +160,11 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         )
       })}
     </ul>
+    {cols.note && (
+      <p className="text-2xs text-fg-muted" data-testid="providers-columns-note">
+        {cols.note}
+      </p>
+    )}
+    </div>
   )
 }

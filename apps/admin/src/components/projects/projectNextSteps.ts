@@ -184,3 +184,14 @@ export function rankProjectNeeds(projects: readonly Project[]): ProjectNeedsRow[
         a.project.name.localeCompare(b.project.name),
     )
 }
+
+/**
+ * How many apps have reports stuck in the loop, and the worst one. The overview banner reads
+ * this, so it can never say "All apps ingesting" in green above a table of 129 stuck reports
+ * (2026-11-18 round 2). Reads the same rows as the table, so the two always agree.
+ */
+export function stuckAppsSummary(rows: readonly ProjectNeedsRow[]): { apps: number; reports: number; worst: ProjectNeedsRow | null } {
+  const stuck = rows.filter((r) => (r.stuck ?? 0) > 0)
+  const worst = stuck.reduce<ProjectNeedsRow | null>((w, r) => (!w || (r.stuck ?? 0) > (w.stuck ?? 0) ? r : w), null)
+  return { apps: stuck.length, reports: stuck.reduce((n, r) => n + (r.stuck ?? 0), 0), worst }
+}

@@ -586,7 +586,10 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {
-    return 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here. To see them too, give the GitHub token the “Administration: read” permission.'
+    // The machines that report in are listed (their own heartbeat); only GitHub's list of runners
+    // that are idle or offline right now is out of reach (2026-11-18: the old line said "idle
+    // machines are missing" right above two idle machines).
+    return 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way; to also see idle or offline runners on GitHub, give the GitHub token “Administration: read”.'
   }
   return null
 }
@@ -620,6 +623,23 @@ export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passe
   }
 }
 
+/**
+ * The window's outcome counts, from ONE source (2026-11-18: the headline said "777 jobs failed on
+ * the code in 7 days" from the whole window while the bar beside it said "Tests failed 67" from
+ * the newest 1,005 jobs read). When the server counted the whole window (stats.windowJobs and
+ * stats.hourly) every number comes from there; otherwise from the jobs read, flagged `sampled`.
+ */
+export function ciWindowCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures' | 'hourly' | 'windowJobs'>): CiOutcomeCounts & { sampled: boolean } {
+  const read = ciOutcomeCounts(stats)
+  if (stats.windowJobs == null || !stats.hourly) return { ...read, sampled: false }
+  const sum = (k: 'passed' | 'codeFailures' | 'infraFailures') => stats.hourly!.reduce((n, h) => n + h[k], 0)
+  const codeFailures = sum('codeFailures')
+  const infra = sum('infraFailures')
+  const total = Math.max(stats.windowJobs, codeFailures + infra)
+  const passed = Math.min(sum('passed'), total - codeFailures - infra)
+  return { passed, codeFailures, infra, other: Math.max(0, total - passed - codeFailures - infra), total, sampled: false }
+}
+
 export interface CiVerdict {
   tone: 'ok' | 'warn' | 'danger' | 'neutral'
   headline: string
@@ -632,18 +652,8 @@ export interface CiVerdict {
  * "3 jobs are waiting" here said the same thing twice (2026-11-16).
  */
 export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
-  const sampled = ciOutcomeCounts(o.stats)
-  // The whole window when the server counted it in the database (stats.windowJobs, stats.hourly);
-  // the newest jobs read otherwise, which a busy day fills in hours.
-  const hours = o.stats.windowJobs != null ? o.stats.hourly : undefined
-  const c = hours
-    ? {
-        ...sampled,
-        total: o.stats.windowJobs ?? sampled.total,
-        codeFailures: hours.reduce((n, h) => n + h.codeFailures, 0),
-        infra: hours.reduce((n, h) => n + h.infraFailures, 0),
-      }
-    : sampled
+  // The same counts the bar under it draws (ciWindowCounts), so the two never disagree.
+  const c = ciWindowCounts(o.stats)
   const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
 
   if (c.infra > 0 && c.infra >= c.codeFailures) {
@@ -657,7 +667,7 @@ export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
     return {
       tone: 'neutral',
       headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
-      detail: `${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+      detail: `${c.infra ? `${c.infra} more in ${days} stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
     }
   }
   return {

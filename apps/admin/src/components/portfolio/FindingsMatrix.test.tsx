@@ -77,7 +77,8 @@ describe('FindingsMatrix', () => {
     const cols = [...container.querySelectorAll('[data-testid^="fix-once-col-"]')]
     expect(cols.map((c) => c.getAttribute('data-testid'))).toEqual(['fix-once-col-d', 'fix-once-col-c', 'fix-once-col-b', 'fix-once-col-a'])
     expect(cols[0]!.getAttribute('title')).toBe('calm-app')
-    // Each column names its app (set vertically above the icon), never an avatar alone.
+    // Each column head is the icon; the name is its tooltip and screen-reader text, never a rotated, cut label.
+    expect(cols[0]!.querySelector('[data-testid="fix-once-app-name"]')!.className).toContain('sr-only')
     expect(cols[0]!.querySelector('[data-testid="fix-once-app-name"]')!.textContent).toBe('calm-app')
     expect(cols.map((c) => c.textContent)).toEqual(expect.arrayContaining(['calm-app', 'twm', 'yen-yen', 'glot.it'].map((n) => expect.stringContaining(n))))
   })
@@ -159,7 +160,9 @@ describe('PortfolioFindings', () => {
       iconFor,
       appOrder: ['a', 'b', 'c', 'd'],
     }))
-    const rows = [...container.querySelectorAll('[data-testid="across-apps"] > li')]
+    // Across your apps is no card of its own: its row sits in the one Fix once list.
+    expect(container.querySelector('[data-testid="across-apps"]')).toBeNull()
+    const rows = [...container.querySelectorAll('[data-testid^="fix-once-item-across:"]')]
     expect(rows).toHaveLength(1)
     expect(rows[0]!.textContent).toContain('No version probe')
     expect(rows[0]!.querySelector('[data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('3')
@@ -201,10 +204,39 @@ describe('PortfolioFindings', () => {
       appOrder: [],
     }))
     const pills = [...container.querySelectorAll('[data-testid="status-pill"]')]
-    expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([
-      ['passed', 'Nothing open in 2+ apps'],
-      ['passed', 'All on the latest SDK'],
-      ['passed', 'Nothing missing'],
-    ])
+    // One list, one mark (it was three green pills for three cards).
+    expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([['passed', 'Nothing to fix across your apps']])
+  })
+
+  it('puts SDK versions and missing setups in the same list, worst first, each with its one action', async () => {
+    await render(createElement(PortfolioFindings, {
+      findings: state({
+        organizationId: 'o', generatedAt: '', groups: GROUPS, crossProject: [], readErrors: [],
+        sdkSkew: [
+          { projectId: 'a', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.37.0', status: 'behind', reason: '' },
+          { projectId: 'c', package: '@mushi-mushi/web', version: '1.2.0', latest: '1.37.0', status: 'behind', reason: '' },
+        ],
+        holes: [{ projectId: 'd', integration: 'sentry', siblingsWith: 3, reason: '' }],
+      }),
+      iconFor,
+      appOrder: ['a', 'b', 'c', 'd'],
+    }))
+    // One card ("Fix once"), not four.
+    expect(container.textContent).not.toContain('Missing setups')
+    expect(container.textContent).not.toContain('Mushi Mushi SDK versions')
+    const ids = [...container.querySelectorAll('[data-testid^="fix-once-item-"]')].map((i) => i.getAttribute('data-testid')!.replace('fix-once-item-', ''))
+    // Serious first; the missing setup (a note) last; one row for the SDK behind.
+    expect(ids[0]).toBe('byok_key_invalid')
+    expect(ids[ids.length - 1]).toBe('hole:sentry')
+    expect(ids.filter((id) => id.startsWith('sdk:'))).toHaveLength(1)
+    const sdk = container.querySelector('[data-testid^="fix-once-item-sdk:"]')!
+    expect(sdk.textContent).toContain('@mushi-mushi/web behind → 1.37.0')
+    expect(sdk.querySelector('a')!.getAttribute('href')).toBe('/connect')
+    expect(sdk.querySelector('li[data-app="a"]')!.getAttribute('title')).toBe('glot.it · on 1.0.0')
+    expect(container.querySelector('[data-testid="fix-once-item-hole:sentry"] a')!.getAttribute('href')).toBe('/integrations')
+    // The wide matrix draws the same rows, a link button for Upgrade and Connect.
+    const wide = container.querySelector('[data-testid="fix-once-wide"]')!
+    expect(wide.querySelectorAll('[data-testid^="fix-once-row-"]')).toHaveLength(ids.length)
+    expect([...wide.querySelectorAll('a')].map((a) => a.textContent)).toEqual(expect.arrayContaining(['Upgrade', 'Connect']))
   })
 })

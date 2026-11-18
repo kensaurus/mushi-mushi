@@ -10,11 +10,15 @@
  * faint so the waiting work stands out, and apps with work waiting sort first.
  * Sweep 2026-11-18: two or more apps in one stage share a group row ("In review · 3 apps");
  * an app whose stage was not checked shows hatched "—" for its counts, never 0.
+ * Round 2 (2026-11-18): a column empty on every row is not drawn. The Stage column only holds
+ * a pill for an app alone in its stage (the group rows carry the rest), so with every stage
+ * grouped it is gone; Native changes at 0 on every checked app becomes one line instead.
  *
  * Data: GET /v1/admin/orgs/:orgId/releases
  */
 
-import { ErrorAlert, Loading, Section } from '../ui'
+import { ErrorAlert, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { StatusGlyph } from '../signal/StatusGlyph'
@@ -77,15 +81,31 @@ function Count({ n, unknown }: { n: number; unknown: boolean }) {
 
 const TH = 'px-2 py-1 align-bottom text-2xs font-semibold text-fg-secondary'
 
+/**
+ * Which optional columns carry anything (round 2: "Stage" was empty on every row and "Native
+ * changes" 0 on every row). @internal Exported for ReleasesCard.test.tsx.
+ */
+export function releaseColumns(rows: readonly ReleaseRow[]): { stage: boolean; native: boolean } {
+  const groups = groupReleaseRows(rows)
+  return {
+    // A pill sits in the Stage cell only for an app alone in its stage.
+    stage: groups.some((g) => g.rows.length === 1),
+    native: rows.some((r) => (STAGE[r.stage] ? r.stage : 'unknown') !== 'unknown' && r.mergedNotBuilt > 0),
+  }
+}
+
 export function ReleasesCard({ orgId }: { orgId: string }) {
   const path = `/v1/admin/orgs/${orgId}/releases`
   const { data, loading, error, reload } = usePageData<ReleasesResponse>(path)
   return (
     <Section title="Releases">
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading releases…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading releases…" what="Releases" onRetry={reload} testId="portfolio-releases-not-checked" />
       {data && data.rows.length === 0 && <p className="text-sm text-fg-muted">No apps yet.</p>}
-      {data && data.rows.length > 0 && (
+      {data && data.rows.length > 0 && (() => {
+        const cols = releaseColumns(data.rows)
+        const span = 3 + (cols.stage ? 1 : 0) + (cols.native ? 1 : 0)
+        return (
         <div className="flex flex-col gap-2">
           {data.batchSuggestion && (
             <p className="flex items-start gap-1.5 text-sm font-medium text-fg" data-testid="releases-batch">
@@ -99,9 +119,11 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
               <thead>
                 <tr className="border-b border-edge">
                   <th scope="col" className={`${TH} text-left`}>App</th>
-                  <th scope="col" className={`${TH} text-left`}>Stage</th>
+                  {cols.stage && <th scope="col" className={`${TH} text-left`}>Stage</th>}
                   <th scope="col" className={`${TH} text-left`}>Live</th>
-                  <th scope="col" className={`${TH} text-right`} title="Native changes merged since the live build: they need a store build">Native changes</th>
+                  {cols.native && (
+                    <th scope="col" className={`${TH} text-right`} title="Native changes merged since the live build: they need a store build">Native changes</th>
+                  )}
                   <th scope="col" className={`${TH} text-right`} title="JS-only changes that can ship as an over-the-air update">OTA changes</th>
                 </tr>
               </thead>
@@ -113,7 +135,7 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                   const unknown = id === 'unknown'
                   const head = grouped ? (
                     <tr key={`stage:${id}`} className="border-b border-edge-subtle bg-surface-overlay/40" data-testid={`releases-stage-${id}`}>
-                      <th scope="colgroup" colSpan={5} className="px-2 py-1 text-left font-normal">
+                      <th scope="colgroup" colSpan={span} className="px-2 py-1 text-left font-normal">
                         <span className="flex items-center gap-2">
                           <StatusPill status={stage.status} label={stage.label} />
                           <span className="whitespace-nowrap text-2xs font-semibold text-fg-secondary">{rows.length} apps</span>
@@ -124,7 +146,7 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                   const body = rows.map((r) => (
                     <tr key={r.projectId} className="border-b border-edge-subtle hover:bg-surface-overlay/60" data-stage={r.stage}>
                       <td className={`max-w-48 truncate px-2 py-1 font-semibold text-fg ${grouped ? 'pl-5' : ''}`}>{r.name}</td>
-                      <td className="px-2 py-1">{!grouped && <StatusPill status={stage.status} label={stage.label} />}</td>
+                      {cols.stage && <td className="px-2 py-1">{!grouped && <StatusPill status={stage.status} label={stage.label} />}</td>}
                       <td className="px-2 py-1">
                         {r.live ? (
                           <span className="flex items-center gap-2">
@@ -137,9 +159,11 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                           <span className="text-fg-faint">not checked</span>
                         )}
                       </td>
-                      <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
-                        <Count n={r.mergedNotBuilt} unknown={unknown} />
-                      </td>
+                      {cols.native && (
+                        <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
+                          <Count n={r.mergedNotBuilt} unknown={unknown} />
+                        </td>
+                      )}
                       <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
                         <Count n={r.otaPending} unknown={unknown} />
                       </td>
@@ -150,9 +174,15 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
               </tbody>
             </table>
           </div>
+          {!cols.native && data.rows.some((r) => STAGE[r.stage] && r.stage !== 'unknown') && (
+            <p className="text-2xs text-fg-secondary" data-testid="releases-no-native">
+              No native changes waiting: nothing needs a store build.
+            </p>
+          )}
           {data.note && <p className="text-2xs text-fg-faint">{data.note}</p>}
         </div>
-      )}
+        )
+      })()}
     </Section>
   )
 }

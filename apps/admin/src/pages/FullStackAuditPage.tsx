@@ -297,6 +297,7 @@ export function FullStackAuditPage() {
         <PageStatus
           ariaLabel="Audit status"
           tone={status.tone}
+          marked={!unknownCounts}
           sentence={unknownCounts ? status.sentence : <AuditMarks stats={auditStats} unfinished={unfinished} />}
           freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
           action={topFinding ? <CopyFixPromptButton finding={topFinding} variant="primary" label="Copy fix prompt for the top finding" /> : undefined}
@@ -318,7 +319,8 @@ export function FullStackAuditPage() {
             neverRunText="No check has run for this project yet."
             refreshKey={findingsKey}
             totals={auditStatsData && auditStats.topPriority !== 'unknown' ? { errors: auditStats.errorCount, warnings: auditStats.warnCount } : null}
-            shownElsewhere={{ portfolio_radar_vulns: { label: 'listed under Known holes below', to: '#dependency-holes' } }}
+            shownElsewhere={{ portfolio_radar_vulns: { label: 'Known holes in your dependencies, below', to: '#dependency-holes' } }}
+            totalsShownAbove={!!status && !unknownCounts}
           />
         </Section>
       )}
