@@ -23,7 +23,7 @@ import { VitalText } from '../signal/VitalText'
 import { IconAlertTriangle, IconCheck, IconReleases } from '../icons'
 import { ReleaseStations, ReleaseTrainLine } from '../release/ReleaseStations'
 import { stationsFromStages, trainNow } from '../../lib/releaseStations'
-import { COUNT_HINTS, isReadyToMerge, pipelineApprovedGreen } from '../../lib/countDefinitions'
+import { isReadyToMerge, pipelineApprovedGreen } from '../../lib/countDefinitions'
 import { failureCause, fixCauseLabel, fixReportLabel, needsAttention } from '../../lib/fixReportTruth'
 import { pluralize } from '../../lib/format'
 import type { PipelineData } from '../../lib/pipeline'
@@ -179,7 +179,7 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
           ) : undefined
         }
       >
-        <p className="mb-2 text-2xs text-fg-muted">{COUNT_HINTS.readyToMerge} Merge when ready updates each branch, waits for CI and merges one PR per repo at a time.</p>
+        {/* The definition is the ⓘ on the Ready to merge number above; no paragraph restating it (fresh-eyes 2026-11-18). */}
         {ready.length === 0 ? (
           <p className="text-xs text-fg-muted" data-testid="fixes-ready-empty">
             None right now. A fix lands here once Opus says merge about its latest commit and its CI passes.
@@ -213,10 +213,8 @@ export function FixesFirstView({ fixes, pipeline, projectId, stoppedTotal, busy,
 
       {reasons.length > 0 && (
         <Section title={`Stopped: ${stopped} ${pluralize(stopped, 'report')}`} id="fixes-stopped" icon={<IconAlertTriangle />}>
-          <p className="mb-2 text-2xs text-fg-muted">
-            {COUNT_HINTS.stopped}
-            {stopped > listed ? ` The reasons below cover the ${listed} in the newest attempts loaded on this page.` : ''}
-          </p>
+          {/* The definition is the ⓘ on the Stopped number; only the coverage caveat stays. */}
+          {stopped > listed && <p className="mb-2 text-2xs text-fg-muted">Reasons for the newest {listed}.</p>}
           <ul className="divide-y divide-edge-subtle" data-testid="fixes-stopped-reasons">
             {reasons.map((r) => (
               <li key={r.cause} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2" data-testid={`fixes-stopped-${r.cause}`}>

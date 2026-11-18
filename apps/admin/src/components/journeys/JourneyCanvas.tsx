@@ -19,7 +19,9 @@ import { KIND_LABEL, percent, type JourneyFinding, type JourneyMap } from '../..
 import { buildJourneyLayout, type JourneyEdgeData, type JourneyNodeData } from './journeyLayout'
 
 const HANDLE_CLS = '!h-1.5 !w-1.5 !min-h-0 !min-w-0 !border-0 !bg-transparent'
-const FIT_VIEW_OPTIONS = { padding: 0.08, maxZoom: 1.1, minZoom: 0.12 }
+// Nodes stay readable: fitting a long chain of pages used to shrink them to 12% (fresh-eyes 2026-11-18);
+// past this zoom the map pans instead.
+const FIT_VIEW_OPTIONS = { padding: 0.08, maxZoom: 1.1, minZoom: 0.5 }
 const PRO_OPTIONS = { hideAttribution: true }
 
 interface Selection {
@@ -129,7 +131,8 @@ interface Props {
 export function JourneyCanvas({ map, hasScan, findings, selected, onSelect }: Props) {
   const layout = useMemo(() => buildJourneyLayout(map, hasScan, findings), [map, hasScan, findings])
   const selection = useMemo(() => ({ selected, onSelect }), [selected, onSelect])
-  const height = Math.min(640, Math.max(320, layout.height + 80))
+  // At the readable zoom the map is about half its laid-out height; the box follows it.
+  const height = Math.min(640, Math.max(260, Math.round(layout.height * 0.6) + 60))
   return (
     <SelectionContext.Provider value={selection}>
       <div className="w-full overflow-hidden rounded-md border border-edge-subtle bg-surface" style={{ height }} data-testid="journey-canvas">
@@ -150,7 +153,7 @@ export function JourneyCanvas({ map, hasScan, findings, selected, onSelect }: Pr
             panOnScroll={false}
             zoomOnScroll={false}
             zoomOnPinch
-            minZoom={0.12}
+            minZoom={0.3}
             maxZoom={1.6}
             onPaneClick={() => onSelect(null)}
           >

@@ -62,11 +62,11 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
               >
                 <span className="flex min-w-0 items-center gap-1">
                   {tone && <StatusGlyph tone={tone} className="h-2.5 w-2.5" />}
-                  <span className={`truncate text-3xs font-bold tracking-wider uppercase ${tone ? TONE_INK[tone] : 'text-fg-secondary'}`}>
+                  <span className={`text-3xs leading-tight font-bold tracking-wider uppercase wrap-break-word ${tone ? TONE_INK[tone] : 'text-fg-secondary'}`}>
                     <span className="tabular-nums text-fg-faint">{i + 1}</span> {s.label}
                   </span>
                 </span>
-                <span className="truncate text-3xs text-fg-secondary" data-testid={`pipeline-stage-${s.id}-plain`}>
+                <span className="line-clamp-2 text-3xs leading-tight text-fg-secondary" data-testid={`pipeline-stage-${s.id}-plain`}>
                   {STAGE_PLAIN[s.id]}
                 </span>
                 <span className={`font-mono text-lg leading-none font-extrabold tabular-nums ${s.count === 0 ? 'text-fg-faint' : 'text-fg'}`} data-testid={`pipeline-stage-${s.id}-count`}>

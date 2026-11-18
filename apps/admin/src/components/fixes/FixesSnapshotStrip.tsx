@@ -48,7 +48,7 @@ const OPEN_BUGS_PATH = '/v1/admin/reports?status=open&sort=created_at&dir=desc&l
  * for one. "● No fixes in the last 30 days." in green while 4 bugs waited read
  * as all clear (fresh-eyes sweep 2026-11-18).
  */
-export function NoFixesLine({ openBugs }: { openBugs: number | null }) {
+function NoFixesLine({ openBugs }: { openBugs: number | null }) {
   return (
     <div
       role="status"

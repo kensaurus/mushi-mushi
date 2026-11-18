@@ -101,7 +101,7 @@ interface ThreadView {
   replies: OpsEvent[]
 }
 
-/** Replies under their parent (oldest reply first); a reply whose parent is off this page stands alone. */
+/** Replies under their parent (oldest reply first); a reply whose parent is off this page stands alone. @internal Exported for tests. */
 export function nestThreads(events: OpsEvent[]): ThreadView[] {
   const ids = new Set(events.map((e) => e.id))
   const replies = new Map<string, OpsEvent[]>()
@@ -172,8 +172,8 @@ export function needsAck(e: Pick<OpsEvent, 'severity' | 'acked_at'>): boolean {
   return e.severity !== 'resolved' && !e.acked_at
 }
 
-/** A thread still waiting for someone: an unacknowledged urgent or warning that no later resolve closed. @internal Exported for tests. */
-export function needsLook(t: ThreadView): boolean {
+/** A thread still waiting for someone: an unacknowledged urgent or warning that no later resolve closed. */
+function needsLook(t: ThreadView): boolean {
   const e = t.event
   return (e.severity === 'urgent' || e.severity === 'warn') && needsAck(e) && !t.replies.some((r) => r.severity === 'resolved')
 }

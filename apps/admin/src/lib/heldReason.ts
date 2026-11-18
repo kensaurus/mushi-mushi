@@ -75,3 +75,19 @@ export function heldReasonOf(detail: string | null | undefined): string | null {
 export function withoutReasonCode(detail: string): string {
   return detail.replace(CODE_IN_TEXT, '').trim()
 }
+
+/**
+ * Queue rows that say the same thing, grouped (fresh-eyes 2026-11-18): three rows of
+ * "Held · key used up · Merge conflict. The follow-up Cursor key cannot be used here" became one
+ * line with the three PRs on it. Rows group by state, repo and the sentence; order is kept.
+ */
+export function groupQueueRows<T extends { state: string; repo: string; detail: string | null }>(rows: readonly T[]): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const r of rows) {
+    const key = `${r.state}|${r.repo}|${r.detail ? withoutReasonCode(r.detail) : ''}`
+    const g = groups.get(key)
+    if (g) g.push(r)
+    else groups.set(key, [r])
+  }
+  return [...groups.values()]
+}

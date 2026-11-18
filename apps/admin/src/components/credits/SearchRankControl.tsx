@@ -45,7 +45,7 @@ function rankLabel(k: RankKeyword): string {
  * "20+" / not checked) and its move since the last check, so the ranks read
  * at a glance instead of as "…: not in the top 20" sentences.
  */
-export function rankChip(k: RankKeyword): { value: string; move: string | null; tone: 'ok' | 'off' | 'warn' | 'neutral' } {
+function rankChip(k: RankKeyword): { value: string; move: string | null; tone: 'ok' | 'off' | 'warn' | 'neutral' } {
   if (!k.last_checked_at) return { value: 'not checked', move: null, tone: 'off' }
   if (k.last_error) return { value: 'could not check', move: null, tone: 'warn' }
   const value = k.last_rank == null ? '20+' : `#${k.last_rank}`

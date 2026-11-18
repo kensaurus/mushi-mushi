@@ -30,7 +30,7 @@ import { renderDogfoodNarrative } from '../lib/copy'
 import { CHIP_TONE } from '../lib/chipTone'
 
 /** @internal Exported for tests. The fewest reports that make "most bugs come from X" true. */
-export const MIN_REPORTS_FOR_CLAIM = 2
+const MIN_REPORTS_FOR_CLAIM = 2
 
 export function DogfoodNarrativeBanner() {
   const { isAdvanced } = useAdminMode()

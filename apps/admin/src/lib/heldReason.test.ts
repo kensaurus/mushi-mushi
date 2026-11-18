@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { heldReasonLabel, heldReasonOf, withoutReasonCode } from './heldReason'
+import { groupQueueRows, heldReasonLabel, heldReasonOf, withoutReasonCode } from './heldReason'
 
 describe('heldReason', () => {
   it('maps known codes to short plain words', () => {
@@ -40,5 +40,19 @@ describe('heldReason', () => {
   it('drops the code from the sentence', () => {
     expect(withoutReasonCode('The follow-up Cursor key cannot be used here (key_used_up).')).toBe('The follow-up Cursor key cannot be used here.')
     expect(withoutReasonCode('CI is running (2 checks left).')).toBe('CI is running (2 checks left).')
+  })
+})
+
+describe('groupQueueRows', () => {
+  it('puts rows with the same state, repo and sentence on one line, keeping order', () => {
+    const row = (id: string, state: string, detail: string | null, repo = 'kensaurus/mushi-mushi') => ({ id, state, repo, detail })
+    const groups = groupQueueRows([
+      row('a', 'blocked', 'The AI review asked for changes.'),
+      row('b', 'blocked', 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).'),
+      row('c', 'blocked', 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).'),
+      row('d', 'queued', null),
+      row('e', 'blocked', 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).', 'kensaurus/glot.it'),
+    ])
+    expect(groups.map((g) => g.map((r) => r.id))).toEqual([['a'], ['b', 'c'], ['d'], ['e']])
   })
 })

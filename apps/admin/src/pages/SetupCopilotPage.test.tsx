@@ -28,7 +28,7 @@ describe('Setup copilot steps', () => {
 
   const render = (done: boolean) =>
     act(() => {
-      root.render(createElement(MemoryRouter, null, createElement(Step, { title: '1 · Connect credentials', done }, createElement('p', null, 'body'))))
+      root.render(createElement(MemoryRouter, null, createElement(Step, { title: '1 · Connect credentials', done, children: createElement('p', null, 'body') })))
     })
 
   it('folds a passed step to a closed ● row', () => {

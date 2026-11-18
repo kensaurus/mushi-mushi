@@ -70,7 +70,8 @@ describe('LabsPanel', () => {
   it('says where the page is listed, never that the page is off', () => {
     render()
     const row = container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]')
-    expect(row?.textContent).toContain('Not in sidebar')
+    // 2026-11-18: an off row says nothing (the heading explains the switches); never "Off".
+    expect(row?.textContent).not.toContain('Not in sidebar')
     expect(row?.textContent).not.toMatch(/Off/)
     act(() => switchFor('To-do list').click())
     expect((container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]'))?.textContent).toContain('In sidebar')

@@ -115,6 +115,7 @@ export function SettingsRow({
  * A row's purpose, one short line. Settings ran to 4,477px because many rows
  * carried two or three sentences; a longer purpose now shows its first
  * sentence and keeps the rest behind an (i) (fresh-eyes 2026-11-18).
+ * @internal Exported for tests.
  */
 export function splitPurpose(purpose: string): { lead: string; more: string | null } {
   const text = purpose.trim()

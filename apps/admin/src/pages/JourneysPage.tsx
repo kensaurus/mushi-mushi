@@ -112,11 +112,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
               Without visits the map shows your links, not what people do. Install the SDK with session tracking on to see real paths, dead ends and pages people leave from. <Link className="text-brand underline" to="/connect">Set up the SDK</Link>
             </Callout>
           )}
-          {!hasScan && (
-            <Callout tone="info" label="Not scanned yet">
-              A site scan finds duplicate pages, pages nothing links to and pages buried too deep. Press Scan my site above.
-            </Callout>
-          )}
+          {/* "Not scanned yet" is said by the score tile and by What to improve; no third banner (fresh-eyes 2026-11-18). */}
 
           {/* The map's labels are small at normal width, so the top paths sit
               beside it as a ranked list (owner, 2026-11-18). */}
@@ -137,7 +133,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} />
+          <FindingsSection findings={map.findings} selected={selected} onClear={() => setSelected(null)} appUrl={data.liveUrl} hasScan={hasScan} />
         </>
       )}
     </>

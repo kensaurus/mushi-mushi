@@ -149,7 +149,7 @@ function isExpired(card: CreditCountdown): boolean {
  * @internal Exported for tests. Live keys first, expired ones after them, each
  * keeping its order: an expired key led the row with "0 days" and an empty bar.
  */
-export function liveFirst<T extends CreditCountdown>(cards: readonly T[]): T[] {
+function liveFirst<T extends CreditCountdown>(cards: readonly T[]): T[] {
   return [...cards.filter((c) => !isExpired(c)), ...cards.filter(isExpired)]
 }
 

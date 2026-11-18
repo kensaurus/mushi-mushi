@@ -51,9 +51,10 @@ export function LabsPanel() {
                         <Toggle ariaLabel={`${f.label} in the sidebar`} checked={on} onChange={(next) => setEnabled(f.id, next)} />
                         <span className="min-w-0 flex-1 leading-tight">
                           <span className="block truncate text-xs font-semibold text-fg">{f.label}</span>
+                          {/* Only an "on" row says so: "Not in sidebar" on twenty rows was a wall next to
+                              the switches the heading already explains (fresh-eyes 2026-11-18). */}
                           <span className="block truncate text-3xs text-fg-secondary" title={f.description}>
-                            <span className={on ? 'font-semibold text-ok-foreground' : ''}>{on ? 'In sidebar' : 'Not in sidebar'}</span>
-                            {' · '}
+                            {on && <span className="font-semibold text-ok-foreground">● In sidebar · </span>}
                             {f.description}
                           </span>
                         </span>

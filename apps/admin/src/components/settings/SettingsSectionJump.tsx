@@ -9,7 +9,7 @@
 import { SETTINGS_SECTION_IDS } from '../../lib/settingsTabs'
 
 /** General's sections, in page order (ids set on each SettingsList / card). */
-export const GENERAL_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
+const GENERAL_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'slack', label: 'Bug alerts' },
   { id: 'error-tracking', label: 'Error tracking' },
   { id: 'supabase', label: 'Your database' },

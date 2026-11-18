@@ -68,7 +68,7 @@ const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running', 'awaitin
  * behind (fresh-eyes review 2026-11-18: "Open PRs (9)" beside 7 apps behind).
  * @internal Exported for tests only.
  */
-export function catalogUpToDate(project: Pick<BulkUpgradeProject, 'sdk_version' | 'sdk_latest_version' | 'sdk_status'>): boolean {
+function catalogUpToDate(project: Pick<BulkUpgradeProject, 'sdk_version' | 'sdk_latest_version' | 'sdk_status'>): boolean {
   return (
     resolveSdkDisplay({
       observedVersion: project.sdk_version ?? null,

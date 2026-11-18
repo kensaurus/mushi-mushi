@@ -365,11 +365,18 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               <section aria-label="Apps" data-testid="portfolio-tab-apps">
                 {teamApps.length > 0 ? (
                   <Card className="px-3 py-1">
+                    {/* One status line, then each app with placeholder cells shaped like the signal
+                        columns ("Checking…" on every row read as ten problems, fresh-eyes 2026-11-18). */}
+                    <p className="py-1.5 text-2xs text-fg-muted" role="status">Reading each app's signals…</p>
                     <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
                       {teamApps.map((app) => (
                         <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
-                          <span className="font-medium text-fg">{app.name}</span>
-                          <span className="text-2xs text-fg-faint">Checking…</span>
+                          <span className="min-w-0 truncate font-medium text-fg">{app.name}</span>
+                          <span className="flex shrink-0 gap-1.5" aria-hidden="true">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                              <span key={i} className="h-3 w-10 rounded-sm bg-surface-overlay motion-safe:animate-pulse" />
+                            ))}
+                          </span>
                         </li>
                       ))}
                     </ul>

@@ -20,7 +20,7 @@ interface Props {
  * @internal Exported for tests. The three numbers below already say how many; the sentence says
  * what to do next, so it never restates a count (fresh-eyes sweep 2026-11-18).
  */
-export function lessonsSentence(stats: LessonsStats): string {
+function lessonsSentence(stats: LessonsStats): string {
   if (stats.activeLessons === 0 && stats.candidateClusters === 0) {
     return 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.'
   }

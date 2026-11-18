@@ -10,7 +10,7 @@ import { Badge, CopyButton, Section } from '../ui'
 import { KIND_LABEL, KIND_SOURCE, SEVERITY_LABEL, SEVERITY_TONE, allFindingsPrompt, percent, rankedPaths, type JourneyFinding } from '../../lib/journeys'
 import { BarCell } from '../signal/BarCell'
 
-export function FindingsSection({ findings, selected, onClear, appUrl }: { findings: JourneyFinding[]; selected: string | null; onClear: () => void; appUrl: string | null }) {
+export function FindingsSection({ findings, selected, onClear, appUrl, hasScan = true }: { findings: JourneyFinding[]; selected: string | null; onClear: () => void; appUrl: string | null; hasScan?: boolean }) {
   const [kind, setKind] = useState<'all' | JourneyFinding['kind']>('all')
   const kinds = useMemo(() => [...new Set(findings.map((f) => f.kind))], [findings])
   const shown = findings.filter((f) => (kind === 'all' || f.kind === kind) && (!selected || f.pages.includes(selected)))
@@ -37,7 +37,14 @@ export function FindingsSection({ findings, selected, onClear, appUrl }: { findi
         </button>
       )}
       {shown.length === 0 ? (
-        <p className="text-xs text-fg-muted">{findings.length === 0 ? 'No problems found. Nice.' : 'Nothing here for this filter.'}</p>
+        <p className="text-xs text-fg-muted" data-testid="journey-findings-empty">
+          {findings.length > 0
+            ? 'Nothing here for this filter.'
+            : // Never "no problems" before the site was scanned: only visit problems were looked for (fresh-eyes 2026-11-18).
+              hasScan
+              ? 'No problems found.'
+              : 'No problems in visits so far. Scan the site to check its pages too.'}
+        </p>
       ) : (
         <ul className="space-y-2" data-testid="journey-findings">
           {shown.map((f) => (

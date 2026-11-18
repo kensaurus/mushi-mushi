@@ -28,7 +28,6 @@ import { StatusGlyph } from '../components/signal/StatusGlyph'
  * One setup step. When the whole setup passes, every step is a ● row you can
  * open, inside one card, instead of five open cards under "All checks pass".
  */
-/** @internal Exported for tests. */
 export function Step({ title, done, children }: { title: string; done: boolean; children: ReactNode }) {
   if (!done) return <Section title={title}>{children}</Section>
   return (
