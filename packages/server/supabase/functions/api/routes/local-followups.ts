@@ -147,7 +147,7 @@ async function ciStates(db: ReturnType<typeof getServiceClient>, projectId: stri
 
 /** Whether the project's team runs cloud review follow-ups (then cloud-agent PRs are theirs, not a local agent's). */
 async function cloudFollowupsOn(db: ReturnType<typeof getServiceClient>, projectId: string): Promise<boolean | { error: string }> {
-  const { data, error } = await db.from('projects').select('organizations(review_followup_enabled)').eq('id', projectId).maybeSingle();
+  const { data, error } = await db.from('projects').select('organizations!projects_organization_id_fkey(review_followup_enabled)').eq('id', projectId).maybeSingle();
   if (error) return { error: error.message };
   const org = (data as { organizations?: { review_followup_enabled?: boolean | null } | null } | null)?.organizations;
   return org?.review_followup_enabled === true;

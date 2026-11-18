@@ -14,7 +14,19 @@
  * bundler includes the module), never statically from a route or a module a
  * route imports.
  */
+import { createAnthropic as createAnthropicProvider } from 'npm:@ai-sdk/anthropic@1'
 export { generateObject, generateText, NoObjectGeneratedError, streamText, zodSchema } from 'npm:ai@4'
-export { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 export { parsePartialJson } from 'npm:@ai-sdk/ui-utils@1'
 export { default as Anthropic } from 'npm:@anthropic-ai/sdk@0.131.0'
+
+/**
+ * `createAnthropic` that needs a key. With none, the provider reads the
+ * ANTHROPIC_API_KEY env var, past the organization's AI provider switch
+ * (ai-provider.ts), so an empty key throws instead.
+ */
+export function createAnthropic(
+  settings: NonNullable<Parameters<typeof createAnthropicProvider>[0]>,
+): ReturnType<typeof createAnthropicProvider> {
+  if (!settings.apiKey?.trim()) throw new Error('No Claude API key for this call')
+  return createAnthropicProvider(settings)
+}
