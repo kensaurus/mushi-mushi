@@ -33,6 +33,8 @@ import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import { bottleneckDeepLink, bottleneckHumanHeadline } from '../../lib/pdcaBottleneck'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { plainIndexError } from '../../lib/githubAccess'
+import { repoFullName } from '../../lib/githubConnect'
 import { pluralize } from '../../lib/format'
 import { useToast } from '../../lib/toast'
 import { HeroPlugIntegration } from '../illustrations/HeroIllustrations'
@@ -802,7 +804,7 @@ function ProjectContextRail({ project }: { project: Project }) {
     const lastIso = lastIndexSweepAt(repo)
     const attemptIso = repo.last_index_attempt_at
     if (health === 'failed') {
-      const trimmed = (repo.last_index_error ?? '').slice(0, 220)
+      const trimmed = repo.last_index_error ? plainIndexError(repo.last_index_error, repoFullName(repo.repo_url)).text.slice(0, 220) : ''
       return `Last index attempt failed${attemptIso ? ` (${relativeTime(attemptIso)})` : ''}.${
         trimmed ? `\n\n${trimmed}` : ''
       }`
@@ -817,7 +819,7 @@ function ProjectContextRail({ project }: { project: Project }) {
       }
       if (repo.index_coverage_state === 'stalled') {
         return `Indexed ${of ?? 'part of the repo'}; the last sweep (${relativeTime(lastIso)}) added no file.${
-          repo.last_index_error ? `\n\n${repo.last_index_error.slice(0, 220)}` : ''
+          repo.last_index_error ? `\n\n${plainIndexError(repo.last_index_error, repoFullName(repo.repo_url)).text.slice(0, 220)}` : ''
         }`
       }
       return `Indexed ${of ?? 'part of the repo'} so far (${relativeTime(lastIso)}); the hourly sweep adds more.`

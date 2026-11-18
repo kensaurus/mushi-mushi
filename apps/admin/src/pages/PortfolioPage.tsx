@@ -23,19 +23,20 @@
  */
 
 import { Link, useSearchParams } from 'react-router-dom'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section } from '../components/ui'
+import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section, SegmentedControl } from '../components/ui'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData, type PageDataState } from '../lib/usePageData'
+import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards } from '../components/portfolio/portfolioView'
-import { setActiveProjectIdSnapshot } from '../lib/activeProject'
+import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
 import { MonetizationCard } from '../components/portfolio/MonetizationCard'
@@ -98,15 +99,40 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
   const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
-  const cards = useMemo(() => sortPortfolioCards(page.data?.cards ?? []), [page.data])
+  // Refresh also looks up the app icons again (a new store icon shows now,
+  // not after the daily check). One request with the flag, then the normal
+  // read, so the flag never becomes part of the cached path.
+  const [refreshingIcons, setRefreshingIcons] = useState(false)
+  const refresh = () => {
+    findings.reload()
+    setRefreshingIcons(true)
+    const groupParam = group ? `&group=${encodeURIComponent(group)}` : ''
+    void apiFetch(`${base}?refreshIcons=1${groupParam}`, { cache: 'no-store' }).finally(() => {
+      setRefreshingIcons(false)
+      page.reload()
+    })
+  }
+  // The public demo stays out of the cards and every count ("All 10 apps need you").
+  const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(page.data?.cards ?? []), [page.data])
+  const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
   const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
   const status = useMemo(() => portfolioStatusSentence(cards), [cards])
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
   const firstNext = status.first ? appUrgency(status.first).next : null
   // Apps that need a look get a full card; the rest collapse to one row each.
-  const attention = useMemo(() => cards.filter(needsALook), [cards])
-  const healthy = useMemo(() => cards.filter((c) => !needsALook(c)), [cards])
-  const appList = useMemo(() => cards.map((c) => ({ projectId: c.projectId, name: c.name })), [cards])
+  // The status sentence always names the worst app; the cards follow the toggle.
+  const sortBy: PortfolioSort = searchParams.get('sort') === 'name' ? 'name' : 'worst'
+  const setSortBy = (next: PortfolioSort) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'name') params.set('sort', 'name')
+    else params.delete('sort')
+    setSearchParams(params, { replace: true })
+  }
+  const shown = useMemo(() => sortPortfolioCards(cards, sortBy), [cards, sortBy])
+  const attention = useMemo(() => shown.filter(needsALook), [shown])
+  const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
+  // Every app, the demo included: spend, connectors and the digest still name it.
+  const appList = useMemo(() => (page.data?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [page.data])
   // App icons: the team's project list knows each app's SDK origin and repo.
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
@@ -130,7 +156,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         helpFlowPath="/portfolio"
       >
         <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
-        <Btn size="sm" variant="ghost" onClick={() => { page.reload(); findings.reload() }} loading={page.isValidating}>
+        <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
           Refresh
         </Btn>
       </PageHeaderBar>
@@ -139,7 +165,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         slots={[
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(page.data && page.data.cards.length > 0),
+            show: cards.length > 0,
             children: page.data ? (
               <PageStatus
                 sentence={status.sentence}
@@ -152,7 +178,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 ]}
                 action={
                   status.first && firstNext ? (
-                    <Btn size="sm" variant="primary" to={firstNext.to} onClick={() => setActiveProjectIdSnapshot(status.first!.projectId)}>
+                    <Btn size="sm" variant="primary" to={appLink(firstNext.to, status.first.projectId)} onClick={() => openApp(status.first!.projectId)}>
                       Fix {status.first.name}
                     </Btn>
                   ) : undefined
@@ -200,7 +226,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}
       {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
-      {page.data && page.data.cards.length === 0 && (
+      {page.data && cards.length === 0 && (
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
           <p className="mt-1 text-xs">
@@ -212,11 +238,24 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           </p>
         </Card>
       )}
+      {page.data && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
       {cards.length > 0 && page.data && (
         <>
           <PortfolioSectionNav />
           <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+              <SegmentedControl
+                value={sortBy}
+                onChange={setSortBy}
+                size="sm"
+                ariaLabel="Order the apps"
+                options={[
+                  { id: 'worst', label: 'Worst first' },
+                  { id: 'name', label: 'A to Z' },
+                ]}
+              />
+            </div>
             <PanelErrorBoundary label="Portfolio cards">
               {attention.length > 0 && (
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -237,6 +276,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                   </ul>
                 </Card>
               )}
+              {demo.length > 0 && <PublicDemoLine demo={demo} />}
             </PanelErrorBoundary>
             <PanelErrorBoundary label="Fix once">
               <FindingsSections findings={findings} names={names} />
@@ -288,6 +328,15 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         </>
       )}
     </div>
+  )
+}
+
+/** The public demo: one muted line, not a card that "needs you". */
+function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
+  return (
+    <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">
+      {demo.length === 1 ? "Mushi Mushi's public demo" : `Mushi Mushi's public demos (${demo.length})`} (sample data) · powers the docs try-it page
+    </p>
   )
 }
 

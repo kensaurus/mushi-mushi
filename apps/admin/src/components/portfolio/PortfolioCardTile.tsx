@@ -16,7 +16,7 @@
 import { Link } from 'react-router-dom'
 import { Badge, Card, RelativeTime, Tooltip } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { setActiveProjectIdSnapshot } from '../../lib/activeProject'
+import { appLink, openApp } from '../../lib/openApp'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectFavicon } from '../ProjectFavicon'
@@ -37,12 +37,12 @@ const APP_LINKS: ReadonlyArray<{ to: string; label: string }> = [
   { to: '/recipe', label: 'Blueprint' },
 ]
 
-function StatusChip({ chip, onOpen }: { chip: CardStatusChip; onOpen: () => void }) {
+function StatusChip({ chip, projectId }: { chip: CardStatusChip; projectId: string }) {
   return (
     <Tooltip content={chip.hint}>
       <Link
-        to={chip.to}
-        onClick={onOpen}
+        to={appLink(chip.to, projectId)}
+        onClick={() => openApp(projectId)}
         className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-medium leading-tight hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${CHIP_TONE[chip.tone]}`}
       >
         {chip.text}
@@ -52,7 +52,8 @@ function StatusChip({ chip, onOpen }: { chip: CardStatusChip; onOpen: () => void
 }
 
 export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
-  const open = () => setActiveProjectIdSnapshot(card.projectId)
+  const open = () => openApp(card.projectId)
+  const link = (to: string) => appLink(to, card.projectId)
   const chips = cardStatusChips(card)
   const urgency = appUrgency(card)
   const next = urgency.next
@@ -62,7 +63,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
         <ProjectFavicon {...favicon} size={32} className="shrink-0" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-fg">
-            <Link to="/recipe" onClick={open} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+            <Link to={link('/recipe')} onClick={open} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
               {card.name}
             </Link>
           </h3>
@@ -85,7 +86,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
 
       <div className="flex flex-wrap gap-1.5" aria-label="Status">
         {chips.map((chip) => (
-          <StatusChip key={chip.key} chip={chip} onOpen={open} />
+          <StatusChip key={chip.key} chip={chip} projectId={card.projectId} />
         ))}
       </div>
 
@@ -94,7 +95,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
         // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
         // the line, which pushed the card wider than a phone screen.
         <Link
-          to={next.to}
+          to={link(next.to)}
           onClick={open}
           title={next.more > 0 ? `${next.text} (+${next.more} more on the App blueprint page)` : next.text}
           className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
@@ -115,7 +116,7 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
 
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-edge pt-2 text-2xs text-fg-muted">
         {APP_LINKS.map((l) => (
-          <Link key={l.to} to={l.to} onClick={open} className="hover:text-fg hover:underline">
+          <Link key={l.to} to={link(l.to)} onClick={open} className="hover:text-fg hover:underline">
             {l.label}
           </Link>
         ))}
@@ -135,12 +136,12 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
 
 /** An app that does not need its owner: one line with its icon, name, chore and chips. */
 export function PortfolioCompactRow({ card, favicon }: Omit<Props, 'showSpend'>) {
-  const open = () => setActiveProjectIdSnapshot(card.projectId)
+  const open = () => openApp(card.projectId)
   const urgency = appUrgency(card)
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
       <ProjectFavicon {...favicon} size={20} className="shrink-0" />
-      <Link to="/recipe" onClick={open} className="min-w-0 truncate text-sm font-medium text-fg hover:underline">
+      <Link to={appLink('/recipe', card.projectId)} onClick={open} className="min-w-0 truncate text-sm font-medium text-fg hover:underline">
         {card.name}
       </Link>
       <span className="text-2xs text-fg-faint">{kindLabel(card)}</span>
@@ -149,7 +150,7 @@ export function PortfolioCompactRow({ card, favicon }: Omit<Props, 'showSpend'>)
       </Badge>
       <div className="ml-auto flex flex-wrap gap-1.5">
         {cardStatusChips(card).map((chip) => (
-          <StatusChip key={chip.key} chip={chip} onOpen={open} />
+          <StatusChip key={chip.key} chip={chip} projectId={card.projectId} />
         ))}
       </div>
     </li>

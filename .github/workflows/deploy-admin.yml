@@ -255,7 +255,24 @@ jobs:
             --exclude "*.html" \
             --exclude "*.js" \
             --exclude "*.css" \
-            --exclude "version.json"
+            --exclude "version.json" \
+            --exclude "favicon.svg" \
+            --exclude "manifest.webmanifest" \
+            --exclude "icons/*"
+
+      - name: Sync app icons and manifest to S3 (short cache)
+        # favicon.svg, icons/*.png and manifest.webmanifest keep their names
+        # on every build. Marked immutable for a year, a new app icon
+        # (2026-11-17) would stay hidden behind the old one in every browser
+        # tab and in the console's app card, which reads favicon.svg. The
+        # service worker precaches them by revision, so it is not affected.
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=3600, must-revalidate" \
+            --exclude "*" \
+            --include "favicon.svg" \
+            --include "manifest.webmanifest" \
+            --include "icons/*"
 
       - name: Sync HTML to S3 (no cache)
         run: |
@@ -389,18 +406,17 @@ jobs:
         run: node scripts/verify-auth-providers.mjs
 
       # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
-      # An Ops event through Mushi Mushi's own project when MUSHI_OPS_KEY is set; otherwise, or
-      # when Mushi Mushi does not take it, the Slack webhooks as before. Never fails the deploy;
-      # a missing secret skips it.
-      - name: Tell Mushi Mushi what shipped
+      # Never fails the deploy; a missing secret skips it.
+      - name: Tell Slack what shipped
         if: ${{ !cancelled() }}
         continue-on-error: true
         env:
-          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
-          MUSHI_API_URL: ${{ vars.MUSHI_API_URL || 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api' }}
           SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
           SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL }}
+          MUSHI_FUNCTION_REGION: ${{ vars.MUSHI_FUNCTION_REGION }}
           WHAT: Admin console
           VERSION: ${{ steps.version.outputs.app_version }}
         run: node scripts/notify-slack-release.mjs

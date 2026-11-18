@@ -201,13 +201,25 @@ describe('ReportRowView sample reports', () => {
     })
   }
 
+  const tag = () => container.querySelector('[data-testid="report-source-tag"]') as HTMLElement | null
+
   it('labels a "Send a test report" sample so it is not mistaken for a user bug', async () => {
     await renderRow({ ...ROW, metadata_source: 'admin_test_report' } as ReportRow)
-    expect(container.textContent).toContain('Test report')
+    expect(tag()?.dataset.sourceKind).toBe('test')
+    expect(tag()?.textContent).toContain('Test')
   })
 
-  it('leaves real reports unlabelled', async () => {
+  it('tags a real user report as one', async () => {
     await renderRow(ROW)
-    expect(container.textContent).not.toContain('Test report')
+    expect(tag()?.dataset.sourceKind).toBe('user')
+    expect(tag()?.textContent).toContain('User report')
+  })
+
+  // Owner's walkthrough, 2026-11-17: alarms and setup tasks read as user bugs.
+  it('tags an AWS alarm and a setup task, each with its own glyph', async () => {
+    await renderRow({ ...ROW, source: 'cloudwatch' } as ReportRow)
+    expect(tag()?.textContent).toBe('▲Alarm')
+    await renderRow({ ...ROW, source: 'sdk_health' } as ReportRow)
+    expect(tag()?.textContent).toBe('☐Setup task')
   })
 })

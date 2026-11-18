@@ -19,14 +19,13 @@
  *          "Not sure yet — here's what I'd check first."
  */
 
+import { roundLongDecimals } from '../../lib/format'
 import type { ReactNode } from 'react'
 import { Badge } from '../ui'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
 import {
-  SEVERITY,
   CATEGORY_LABELS,
-  severityLabel,
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
@@ -51,9 +50,8 @@ export function DiagnosisFixHero({
   const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
   const reproHint = (report.stage1_classification as { reproductionHint?: string } | null)
     ?.reproductionHint
-  const summary = report.summary?.trim()
+  const summary = report.summary ? roundLongDecimals(report.summary.trim()) : undefined
   const categoryText = CATEGORY_LABELS[report.category] ?? report.category
-  const severityText = report.severity ? severityLabel(report.severity) : null
 
   // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
   const view = reportDiagnosisView(report)
@@ -83,11 +81,7 @@ export function DiagnosisFixHero({
               : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {severityText && (
-              <Badge className={SEVERITY[report.severity!] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>
-                {severityText}
-              </Badge>
-            )}
+            {/* Severity shows once, in the page header (owner's walkthrough, 2026-11-17). */}
             <Badge className="border border-edge-subtle bg-surface-overlay text-fg-secondary">
               {categoryText}
             </Badge>
@@ -169,10 +163,10 @@ function Stage2DiagnosisBody({
   return (
     <div className="space-y-2 text-sm leading-relaxed text-fg-secondary">
       {streaming && <p className="text-2xs text-fg-faint italic">Full diagnosis still running — fields fill in as they arrive.</p>}
-      <DiagnosisField label="Why it broke">{inlineMarkdown(diagnosis.rootCause ?? summary ?? 'No root cause yet.')}</DiagnosisField>
+      <DiagnosisField label="Why it broke">{inlineMarkdown(roundLongDecimals(diagnosis.rootCause ?? summary ?? 'No root cause yet.'))}</DiagnosisField>
       {diagnosis.suggestedFix && (
         <DiagnosisField label="Suggested fix">
-          <span className="whitespace-pre-line">{inlineMarkdown(diagnosis.suggestedFix)}</span>
+          <span className="whitespace-pre-line">{inlineMarkdown(roundLongDecimals(diagnosis.suggestedFix))}</span>
         </DiagnosisField>
       )}
       {diagnosis.reproductionSteps.length > 0 && (

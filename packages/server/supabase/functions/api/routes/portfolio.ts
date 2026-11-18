@@ -75,9 +75,26 @@ export interface PortfolioRouteDeps {
   /**
    * Look up the store icons of projects whose icon is missing or stale. Runs
    * after the response (never delays the page); the next load shows them.
+   * A forced refresh (the Refresh button) waits a little for the result.
    * Optional so tests and callers without network skip it.
    */
-  refreshIcons?: (db: Db, projectIds: string[], now: Date) => void
+  refreshIcons?: (db: Db, projectIds: string[], now: Date) => Promise<Map<string, string | null>> | void
+}
+
+/** How long a forced icon refresh may hold the response before the page shows the old icons. */
+const ICON_FORCE_WAIT_MS = 6_000
+
+/** The task's result, or null when it fails or takes longer than `ms` (it keeps running). */
+async function settleWithin<T>(task: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  try {
+    return await Promise.race([task.catch(() => null), late])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export const defaultPortfolioDeps: PortfolioRouteDeps = {
@@ -85,11 +102,11 @@ export const defaultPortfolioDeps: PortfolioRouteDeps = {
   adminOrApiKeyRead: adminOrApiKey({ scope: 'mcp:read' }) as MiddlewareHandler,
   compose: defaultRecipeDeps,
   composeRecipe,
-  refreshIcons: (db, projectIds, now) =>
-    runInBackground(
-      refreshAppIcons(db as never, projectIds, (url) => publicFetch(url), now),
-      'portfolio-app-icons',
-    ),
+  refreshIcons: (db, projectIds, now) => {
+    const task = refreshAppIcons(db as never, projectIds, (url) => publicFetch(url), now)
+    runInBackground(task, 'portfolio-app-icons')
+    return task
+  },
 }
 
 type Access =
@@ -534,7 +551,15 @@ function unreadableFor(projectId: string, errs: readonly PortfolioReadError[], r
 }
 
 /** Build the cards for one page of projects. One project failing never fails the page. */
-export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: string, orgName: string | null, projectIds: string[], page: number): Promise<PortfolioResponse> {
+export async function buildPortfolio(
+  db: Db,
+  deps: PortfolioRouteDeps,
+  orgId: string,
+  orgName: string | null,
+  projectIds: string[],
+  page: number,
+  opts: { forceIcons?: boolean } = {},
+): Promise<PortfolioResponse> {
   const now = deps.compose.now()
   const sorted = [...projectIds].sort()
   let projectRows: ProjectRow[] = []
@@ -557,6 +582,11 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
   const pageProjects = projects.slice((page - 1) * PORTFOLIO_PAGE_SIZE, page * PORTFOLIO_PAGE_SIZE)
   const pageIds = pageProjects.map((p) => p.id)
 
+  // Icons this page shows that are missing or a day old (ten minutes old on
+  // Refresh): looked up beside the reads below, after the response unless forced.
+  const due = iconsDue(pageProjects, now, { force: opts.forceIcons })
+  const iconTask = due.length > 0 && deps.refreshIcons ? deps.refreshIcons(db, due, now) : undefined
+
   const errs: ReadErrors = []
   const since = new Date(now.getTime() - 30 * 86400_000).toISOString()
   const [runs, sdk, openReports, spend, presence, declaredKind, releases] = await Promise.all([
@@ -570,6 +600,7 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
   ])
   const findings = await loadOpenFindings(db, runs, errs)
   const skew = sdk ? sdkSkew(pageIds, sdk.observations, sdk.latest) : []
+  const freshIcons = opts.forceIcons && iconTask ? await settleWithin(iconTask, ICON_FORCE_WAIT_MS) : null
 
   const cards = await mapBounded(pageProjects, COMPOSE_CONCURRENCY, async (p): Promise<PortfolioCard> => {
     const sdkEntries: SdkSkewEntry[] = skew.filter((s) => s.projectId === p.id)
@@ -578,11 +609,13 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       ? inferKind(declaredKind.get(p.id), sdk.observations.filter((o) => o.project_id === p.id).map((o) => o.sdk_package))
       : { kind: null, source: 'unknown' as const }
     const radarRuns = runs.filter((r) => r.project_id === p.id && RADAR_COLUMN_GATES.includes(r.gate))
+    // A forced refresh that finished in time wins over the row read before it.
+    const iconUrl = freshIcons?.has(p.id) ? (freshIcons.get(p.id) ?? null) : p.icon_url
     const base = {
       projectId: p.id,
       name: p.name ?? p.slug ?? p.id,
       slug: p.slug,
-      iconUrl: isStoreIconUrl(p.icon_url) ? p.icon_url : null,
+      iconUrl: isStoreIconUrl(iconUrl) ? iconUrl : null,
       kind: kind.kind,
       kindSource: kind.source,
       openReports: openReports.get(p.id) ?? 0,
@@ -602,10 +635,6 @@ export async function buildPortfolio(db: Db, deps: PortfolioRouteDeps, orgId: st
       return { ...base, worst: 'error', elements: {}, error: 'The recipe for this project could not be composed. Open its App blueprint page for detail.', needsLook: [] }
     }
   })
-
-  // Icons this page shows that are missing or a week old: refresh after the response.
-  const due = iconsDue(pageProjects, now)
-  if (due.length > 0 && deps.refreshIcons) deps.refreshIcons(db, due, now)
 
   return {
     organizationId: orgId,
@@ -669,10 +698,13 @@ export function registerPortfolioRoutes(app: Hono<{ Variables: Variables }>, dep
     const access = await portfolioAccess(c, db, c.req.param('orgId') ?? '')
     if (!access.ok) return access.response
     const page = Math.max(1, Math.min(1000, Number.parseInt(c.req.query('page') ?? '1', 10) || 1))
+    // The Apps page Refresh button. Cheap by construction: it only re-checks
+    // icons older than ten minutes (ICON_FORCE_MIN_MS), so repeat clicks cost nothing.
+    const forceIcons = c.req.query('refreshIcons') === '1'
     const scoped = await scopeToGroup(c, db, access.orgId, access.projectIds)
     if (scoped instanceof Response) return scoped
     try {
-      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, scoped, page)
+      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, scoped, page, { forceIcons })
       return c.json({ ok: true, data })
     } catch (err) {
       plog.error('portfolio failed', { orgId: access.orgId, err: (err as Error)?.message ?? String(err) })

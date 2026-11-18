@@ -16,8 +16,9 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#f8f4ed',
     theme_color: '#0e0d0b',
     icons: [
-      { src: '/mushi-mushi/docs/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/mushi-mushi/docs/icon-512.png', sizes: '512x512', type: 'image/png' },
+      // ?v= busts the year-long cache the old icon was served with (new mark, 2026-11-17).
+      { src: '/mushi-mushi/docs/icon-192.png?v=20261117', sizes: '192x192', type: 'image/png' },
+      { src: '/mushi-mushi/docs/icon-512.png?v=20261117', sizes: '512x512', type: 'image/png' },
     ],
   }
 }

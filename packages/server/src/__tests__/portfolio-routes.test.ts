@@ -295,7 +295,7 @@ describe('portfolio fail-open: a failed read is never $0, "no cap", "none yet" o
 describe('portfolio app icons', () => {
   const APPLE_ICON = 'https://is1-ssl.mzstatic.com/image/thumb/Purple/AppIcon/512x512bb.jpg'
 
-  it('shows a stored store icon, drops an untrusted URL, and refreshes only missing or week-old icons after the read', async () => {
+  it('shows a stored store icon, drops an untrusted URL, and refreshes only missing or day-old icons after the read', async () => {
     const db = seed()
     const rows = db.table('projects')
     const fresh = new Date(NOW.getTime() - 3600_000).toISOString()
@@ -313,6 +313,30 @@ describe('portfolio app icons', () => {
     expect(due).not.toContain(pid(1))
     expect(due).not.toContain(pid(2))
     expect(due).toContain(pid(3))
+  })
+
+  it('Refresh (?refreshIcons=1) re-checks an icon checked two hours ago and shows the new one in the same response', async () => {
+    const NEW_ICON = 'https://is1-ssl.mzstatic.com/image/thumb/Purple/AppIcon/new-512x512bb.jpg'
+    const db = seed()
+    const rows = db.table('projects')
+    const hours = (h: number) => new Date(NOW.getTime() - h * 3600_000).toISOString()
+    for (const r of rows) Object.assign(r, { icon_url: APPLE_ICON, icon_checked_at: hours(0.01) })
+    Object.assign(rows.find((r) => r.id === pid(1))!, { icon_url: APPLE_ICON, icon_checked_at: hours(2) })
+    const refreshIcons = vi.fn(async (_db: unknown, ids: string[]) => new Map(ids.map((id) => [id, NEW_ICON] as [string, string | null])))
+    const { app } = harness(db, { refreshIcons } as never)
+
+    const plain = await app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(plain.status).toBe(200)
+    expect(refreshIcons).not.toHaveBeenCalled()
+
+    const res = await app.call(`/v1/admin/orgs/${ORG_A}/portfolio?refreshIcons=1`)
+    expect(res.status).toBe(200)
+    expect(refreshIcons).toHaveBeenCalledTimes(1)
+    // Two hours old is re-checked; seconds old (every other app) is not.
+    expect(refreshIcons.mock.calls[0][1]).toEqual([pid(1)])
+    const byId = new Map(res.body.data.cards.map((c: { projectId: string; iconUrl: string | null }) => [c.projectId, c.iconUrl]))
+    expect(byId.get(pid(1))).toBe(NEW_ICON)
+    expect(byId.get(pid(2))).toBe(APPLE_ICON)
   })
 })
 
