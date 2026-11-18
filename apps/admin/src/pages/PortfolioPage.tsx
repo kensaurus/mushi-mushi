@@ -271,7 +271,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           title="Apps"
           description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
           helpTitle="About apps"
-          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs."
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs. Accounts and resilience (on Spend and accounts) lists every account your apps depend on, who owns it, and who else can get in if that person cannot. It holds only what you declare: Mushi Mushi cannot see a provider's own settings."
           helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
           helpFlowPath="/portfolio"
         >

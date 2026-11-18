@@ -74,6 +74,13 @@ afterEach(() => {
 })
 
 describe('AccountsRegisterCard', () => {
+  it('opens with one line, the rule to keep, not a paragraph', async () => {
+    await render(DATA)
+    const intro = document.body.querySelector('[data-testid="accounts-intro"]')!
+    expect(intro.textContent?.trim()).toBe('Names and contacts only: never passwords, keys or recovery codes.')
+    expect(document.body.textContent).not.toContain('who else can get in if that person cannot')
+  })
+
   it('shows the open rule with its fix, the account and the domain', async () => {
     await render(DATA)
     const text = document.body.textContent ?? ''

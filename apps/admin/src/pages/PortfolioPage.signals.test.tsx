@@ -105,7 +105,8 @@ vi.mock('../lib/projectGroups', async (importOriginal) => ({
   writeActiveGroup: () => {},
 }))
 vi.mock('../components/PageHeaderBar', () => ({
-  PageHeaderBar: ({ title, children }: { title: string; children?: unknown }) => createElement('header', null, createElement('h1', null, title), children as never),
+  PageHeaderBar: ({ title, children, helpWhatIsIt }: { title: string; children?: unknown; helpWhatIsIt?: string }) =>
+    createElement('header', null, createElement('h1', null, title), createElement('p', { 'data-testid': 'help-what' }, helpWhatIsIt), children as never),
 }))
 // The other sections read their own routes; they are not under test here.
 for (const m of ['ReleasesCard', 'FunnelCard', 'CiRunnersCard', 'MonetizationCard', 'SpendLedgerCard', 'AccountsRegisterCard', 'SharedResourcesCard', 'ConnectorsCard', 'DigestCard']) {
@@ -309,6 +310,16 @@ describe('the public demo (keep-but-hide)', () => {
     expect(container.querySelector('[data-testid="hole-row-sentry"] [data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('1')
     // The header's Fix once count follows what the page shows, not the server's raw count.
     expect(container.querySelector('[data-testid="page-status"]')!.textContent).toContain('Fix once1')
+  })
+})
+
+describe('Spend and accounts', () => {
+  it("keeps what the accounts register is in the page's help, not a paragraph on the card", async () => {
+    await render('/portfolio?tab=spend')
+    const help = text('[data-testid="help-what"]')
+    expect(help).toContain('Accounts and resilience')
+    expect(help).toContain('who else can get in if that person cannot')
+    expect(help).toContain("cannot see a provider's own settings")
   })
 })
 
