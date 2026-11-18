@@ -10,8 +10,9 @@
  *          below". The verdicts come from connectionGridModel.ts, which reuses
  *          each card's own rules.
  *
- *          Shapes carry every state beside its colour (StatusGlyph): ● working,
- *          ◆ needs you, ■ not tested yet, ○ not connected.
+ *          Every state is a StatusMark (colour plus glyph): ✓ working or
+ *          connected and not checked yet (with a "Check now" beside it),
+ *          ✕ needs you, ⧗ expiring, ◷ still loading, ○ not connected.
  */
 
 import type { ReactNode } from 'react'
@@ -23,7 +24,7 @@ import type { InboundDeliveryLike } from '../../lib/integrationConnection'
 import { sentryConfiguredFromPlatform } from '../../lib/useSentryConnection'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
 import { HighlightProvider } from '../signal/linkedHighlight'
-import { StatusGlyph, TONE_INK, type SignalTone } from '../signal/StatusGlyph'
+import { STATUS_INK, StatusMark, type RunStatus } from '../signal/StatusMark'
 import {
   brokenConnections,
   buildConnectionGrid,
@@ -33,13 +34,19 @@ import {
   type GridTile,
 } from './connectionGridModel'
 
-/** A connection state's shape tone (also the page drawer's header). */
-export const CONNECTION_TONE: Record<ConnectionState, SignalTone> = {
-  working: 'ok',
-  attention: 'warn',
-  expiring: 'warn',
-  checking: 'info',
-  not_connected: 'off',
+const CONNECTION_STATUS: Record<ConnectionState, RunStatus> = {
+  working: 'passed',
+  attention: 'failed',
+  expiring: 'slow',
+  // Still loading (Slack settings, Sentry deliveries). Set up and never
+  // checked is relabelled in the model and reads as connected below.
+  checking: 'waiting',
+  not_connected: 'idle',
+}
+
+/** A tile's status mark (also the page drawer's header). */
+export function tileRunStatus(tile: Pick<GridTile, 'view' | 'neverChecked'>): RunStatus {
+  return tile.neverChecked ? 'passed' : CONNECTION_STATUS[tile.view.state]
 }
 
 /** A connection state in words. */
@@ -47,7 +54,7 @@ export const CONNECTION_WORD: Record<ConnectionState, string> = {
   working: 'Working',
   attention: 'Needs you',
   expiring: 'Expiring',
-  checking: 'Not tested yet',
+  checking: 'Checking',
   not_connected: 'Not connected',
 }
 
@@ -104,6 +111,8 @@ export function ConnectionGrid({
   groups,
   onOpen,
   onConnect,
+  onCheck,
+  checkingId = null,
 }: {
   tiles: readonly GridTile[]
   groups: readonly ConnectionGroup[]
@@ -111,6 +120,10 @@ export function ConnectionGrid({
   onOpen: (id: GridToolId) => void
   /** Start setting the tool up (opens its settings ready to fill in). */
   onConnect: (id: GridToolId) => void
+  /** Run the tool's read-only check (a connected tool nobody has checked yet). */
+  onCheck?: (tile: GridTile) => void
+  /** The tool whose check is running now. */
+  checkingId?: GridToolId | null
 }) {
   const broken = brokenConnections(tiles)
   const { sentence, tone } = connectionGridSentence(tiles)
@@ -162,7 +175,15 @@ export function ConnectionGrid({
               {g.lede ? <p className="-mt-1 mb-2 w-0 min-w-full text-2xs leading-snug text-fg-secondary">{g.lede}</p> : null}
               <ul className="flex flex-wrap gap-2">
                 {groupTiles.map((tile, i) => (
-                  <ConnectionTile key={tile.id} tile={tile} index={i} onOpen={onOpen} onConnect={onConnect} />
+                  <ConnectionTile
+                    key={tile.id}
+                    tile={tile}
+                    index={i}
+                    onOpen={onOpen}
+                    onConnect={onConnect}
+                    onCheck={onCheck}
+                    checkRunning={checkingId === tile.id}
+                  />
                 ))}
               </ul>
             </div>
@@ -178,15 +199,20 @@ function ConnectionTile({
   index,
   onOpen,
   onConnect,
+  onCheck,
+  checkRunning,
 }: {
   tile: GridTile
   index: number
   onOpen: (id: GridToolId) => void
   onConnect: (id: GridToolId) => void
+  onCheck?: (tile: GridTile) => void
+  checkRunning: boolean
 }) {
   const state = tile.view.state
-  const tone = CONNECTION_TONE[state]
-  const word = tile.view.label ?? CONNECTION_WORD[state]
+  const status: RunStatus = checkRunning ? 'running' : tileRunStatus(tile)
+  const word = checkRunning ? 'Checking now…' : (tile.view.label ?? CONNECTION_WORD[state])
+  const canCheck = Boolean(tile.neverChecked && tile.checkKind && onCheck)
   return (
     // The open target and Connect are siblings: a button never sits inside a button.
     <li
@@ -199,27 +225,36 @@ function ConnectionTile({
         onClick={() => onOpen(tile.id)}
         aria-label={`${tile.label}: ${word}. Open its settings.`}
         data-state={state}
+        data-status={status}
         title={tile.view.detail ?? undefined}
         className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <BrandIcon brand={tile.brand} size={16} decorative />
           <span className="min-w-0 flex-1 truncate text-xs font-bold text-fg">{tile.label}</span>
-          <StatusGlyph tone={tone} />
+          <StatusMark status={status} />
         </span>
-        <span className={`truncate text-3xs font-bold tracking-wider uppercase ${TONE_INK[tone]}`}>{word}</span>
-        {state !== 'not_connected' && (
+        <span className={`truncate text-3xs font-bold tracking-wider uppercase ${STATUS_INK[status]}`}>{word}</span>
+        {tile.lastAt && tile.lastLabel && state !== 'not_connected' ? (
           <span className="truncate text-3xs text-fg-secondary">
-            {tile.lastAt && tile.lastLabel ? (
-              <>
-                {tile.lastLabel} <RelativeTime value={tile.lastAt} />
-              </>
-            ) : (
-              'Nothing yet'
-            )}
+            {tile.lastLabel} <RelativeTime value={tile.lastAt} />
           </span>
-        )}
+        ) : null}
       </button>
+      {canCheck && (
+        <span className="px-2.5 pb-2">
+          <button
+            type="button"
+            className={CONNECT}
+            onClick={() => onCheck!(tile)}
+            disabled={checkRunning}
+            aria-label={`Check ${tile.label} now`}
+            data-testid={`integration-check-${tile.id}`}
+          >
+            {checkRunning ? 'Checking…' : 'Check now'}
+          </button>
+        </span>
+      )}
       {state === 'not_connected' && (
         <span className="px-2.5 pb-2">
           <button type="button" className={CONNECT} onClick={() => onConnect(tile.id)} aria-label={`Connect ${tile.label}`}>

@@ -49,12 +49,12 @@ import {
   type RoutingIntegration,
   type RoutingProviderDef,
 } from '../components/integrations/types'
-import { CONNECTION_TONE, CONNECTION_WORD, ConnectionGrid, useConnectionTiles } from '../components/integrations/ConnectionGrid'
+import { CONNECTION_WORD, ConnectionGrid, tileRunStatus, useConnectionTiles } from '../components/integrations/ConnectionGrid'
 import type { GridToolId } from '../components/integrations/connectionGridModel'
 import { integrationToolForHash } from '../lib/integrationAnchors'
 import { Drawer } from '../components/Drawer'
 import { BrandIcon } from '../components/ui/BrandIcon'
-import { StatusGlyph, TONE_INK } from '../components/signal/StatusGlyph'
+import { STATUS_INK, StatusMark } from '../components/signal/StatusMark'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
 import { usePageCopy } from '../lib/copy'
@@ -452,6 +452,9 @@ export function IntegrationsPage() {
     github: githubAccess,
   })
   const [openTool, setOpenTool] = useState<GridToolId | null>(null)
+  // A check running from a tile's "Check now" or its card's Test button.
+  const checkingTool =
+    tiles.find((t) => t.checkKind != null && (t.checkKind === testingRouting || t.checkKind === testing))?.id ?? null
   const openTile = openTool ? (tiles.find((t) => t.id === openTool) ?? null) : null
   const location = useLocation()
   const navigate = useNavigate()
@@ -731,6 +734,10 @@ export function IntegrationsPage() {
                   tiles={tiles}
                   onOpen={setOpenTool}
                   onConnect={connectTool}
+                  onCheck={(tile) => {
+                    if (tile.checkKind) void testRoutingKind(tile.checkKind, tile.label)
+                  }}
+                  checkingId={checkingTool}
                   groups={[
                     {
                       id: 'integrations-required',
@@ -827,8 +834,8 @@ export function IntegrationsPage() {
             <span className="flex min-w-0 items-center gap-2">
               <BrandIcon brand={openTile.brand} size={16} decorative />
               <h2 className="truncate text-sm font-bold text-fg">{openTile.label}</h2>
-              <StatusGlyph tone={CONNECTION_TONE[openTile.view.state]} />
-              <span className={`text-3xs font-bold tracking-wider uppercase ${TONE_INK[CONNECTION_TONE[openTile.view.state]]}`}>
+              <StatusMark status={tileRunStatus(openTile)} />
+              <span className={`text-3xs font-bold tracking-wider uppercase ${STATUS_INK[tileRunStatus(openTile)]}`}>
                 {openTile.view.label ?? CONNECTION_WORD[openTile.view.state]}
               </span>
             </span>
