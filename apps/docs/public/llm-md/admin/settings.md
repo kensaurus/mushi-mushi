@@ -58,6 +58,16 @@ only a short hint of each key. A key can belong to one app or be shared with you
 apps; an app's own key is tried first. The Cursor row also holds spend-down mode (see
 [Spend credits](/admin/credits)).
 
+**Run AI on** picks Claude or OpenAI for every app in the organization. An owner or
+admin can change it.
+
+| Choice | What runs |
+| --- | --- |
+| **Claude** | Your Claude keys first. Your OpenAI keys are used only when Claude has no working key. |
+| **OpenAI** | Everything runs on your OpenAI keys. No Claude key is used, yours or the platform's. |
+
+If you pick OpenAI with no OpenAI key saved, the add-key form opens so you can add one first.
+
 ### Web tools
 
 - **Firecrawl (web pages)**: your Firecrawl key, the websites it may read, and the pages
