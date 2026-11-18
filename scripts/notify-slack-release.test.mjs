@@ -137,7 +137,7 @@ test('notifyRelease: a 422 resends once without the body and never posts to Slac
   assert.equal(await notifyRelease(env, { fetchImpl: f.fn, log: () => {}, commitSubject: 'x' }), 'ops-without-body')
   assert.equal(f.calls.length, 2)
   assert.equal(JSON.parse(f.calls[1].init.body).body, undefined)
-  assert.ok(f.calls.every((c) => !c.url.includes('hooks.slack.com')))
+  assert.ok(f.calls.every((c) => c.url === 'https://mushi.example/functions/v1/api/v1/ops/events'))
 })
 
 test('notifyRelease: any other answer or a network error falls back to the right webhook', async () => {
