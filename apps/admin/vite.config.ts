@@ -145,7 +145,8 @@ export default defineConfig({
       // Bundled as a classic script so it works everywhere Web Push does
       // (Safari's module-worker support lags the rest).
       injectRegister: false, // registration lives in src/lib/pwaRegister.ts
-      registerType: 'autoUpdate',
+      // A new worker waits for the page's Reload (src/lib/swUpdate.ts), never an auto reload.
+      registerType: 'prompt',
       injectManifest: {
         // The plugin appends the manifest icons + manifest.webmanifest itself.
         globPatterns: ['index.html', 'favicon.svg'],

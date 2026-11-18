@@ -7,10 +7,15 @@
  *
  * Loaded lazily from main.tsx after `load`. No-op when the browser has no
  * service-worker support or the page is not on a secure origin.
+ *
+ * Updates are "prompt" (2026-11-18): a new deploy's worker waits, the page
+ * shows "New version — Reload" (components/NewVersionBanner.tsx), and the
+ * reload happens only when the user presses it. The logic is lib/swUpdate.ts.
  */
 
 import { registerSW } from 'virtual:pwa-register'
 import { debugLog } from './debug'
+import { createSwUpdater, publishSwUpdate } from './swUpdate'
 
 let registered = false
 
@@ -21,8 +26,18 @@ export function registerServiceWorker(): void {
   registered = true
   registerSW({
     immediate: true,
-    onRegisteredSW(swUrl) {
+    // Never reload on our behalf: lib/swUpdate.ts reloads once, after Reload.
+    onNeedReload: () => undefined,
+    onRegisteredSW(swUrl, registration) {
       debugLog('pwa', `service worker registered: ${swUrl}`)
+      if (!registration) return
+      createSwUpdater(registration, {
+        container: navigator.serviceWorker,
+        doc: document,
+        win: window,
+        reload: () => window.location.reload(),
+        onReady: publishSwUpdate,
+      })
     },
     onRegisterError(error) {
       debugLog('pwa', `service worker registration failed: ${String(error)}`)
