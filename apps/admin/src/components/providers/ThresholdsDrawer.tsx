@@ -39,7 +39,7 @@ function fromText(key: string, text: string): unknown {
 }
 
 /** The patch for changed fields only; null removes a key. */
-export function thresholdsPatch(keys: readonly string[], current: Record<string, unknown>, draft: Record<string, string>): Record<string, unknown> {
+function thresholdsPatch(keys: readonly string[], current: Record<string, unknown>, draft: Record<string, string>): Record<string, unknown> {
   const patch: Record<string, unknown> = {}
   for (const k of keys) {
     if (!(k in draft) || draft[k] === toText(current[k])) continue

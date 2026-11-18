@@ -130,7 +130,7 @@ function ParamsFields({ meta, provider, value, onChange }: { meta: OpsMeta | nul
 }
 
 /** The add-a-candidate form under a chain. */
-export function AddCandidate({
+function AddCandidate({
   meta,
   prices,
   priority,

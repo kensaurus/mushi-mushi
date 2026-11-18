@@ -36,7 +36,10 @@ export function formatMicroUsd(micro: number | null | undefined): string {
   return `${sign}$${(usd / 1_000_000).toFixed(1)}M`
 }
 
-/** Margin of sell over cost, as a fraction of sell; null when nothing was sold. */
+/**
+ * Margin of sell over cost, as a fraction of sell; null when nothing was sold.
+ * @internal Exported for tests.
+ */
 export function marginOf(cost: number | null, sell: number | null): number | null {
   if (!sell) return null
   return (sell - (cost ?? 0)) / sell
@@ -152,7 +155,7 @@ export interface ProvidersAlert {
   tab: ProvidersTab
 }
 
-export const ALERTS_MAX = 3
+const ALERTS_MAX = 3
 
 /**
  * At most three cards, worst first: providers down (critical) or warn
@@ -220,7 +223,7 @@ export function buildAlerts(snapshot: OpsSnapshot, now: number): ProvidersAlert[
 
 // ── spend ───────────────────────────────────────────────────────────────────
 
-export interface SpendCell {
+interface SpendCell {
   app: string
   provider: string
   calls: number
@@ -400,7 +403,10 @@ export function reorderPermutation(chain: readonly AiRoute[], index: number, dir
   return order
 }
 
-/** Apply a reorder to the routes the way upstream does: renumber the feature 1..n in `order`. */
+/**
+ * Apply a reorder to the routes the way upstream does: renumber the feature 1..n in `order`.
+ * @internal Exported for tests.
+ */
 export function applyReorder(routes: readonly AiRoute[], app: string, feature: string, order: readonly number[]): AiRoute[] {
   const byPriority = new Map(routes.filter((r) => r.app === app && r.feature === feature).map((r) => [r.priority, r]))
   const renumbered = order.flatMap((p, i) => {
@@ -488,7 +494,10 @@ function show(v: unknown): string {
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
 }
 
-/** The fields that differ between before and after, stamps left out. */
+/**
+ * The fields that differ between before and after, stamps left out.
+ * @internal Exported for tests.
+ */
 export function diffFields(before: Record<string, unknown> | null, after: Record<string, unknown> | null): HistoryRow['diff'] {
   const keys = [...new Set([...Object.keys(before ?? {}), ...Object.keys(after ?? {})])].filter((k) => !STAMP_FIELDS.has(k))
   return keys.flatMap((field) => {
@@ -498,7 +507,10 @@ export function diffFields(before: Record<string, unknown> | null, after: Record
   })
 }
 
-/** "console:<uuid>" → "console:1a2b3c4d"; migration and other labels as they are. */
+/**
+ * "console:<uuid>" → "console:1a2b3c4d"; migration and other labels as they are.
+ * @internal Exported for tests.
+ */
 export function actorLabel(actor: string | null): string {
   if (!actor) return 'unknown'
   const m = /^([a-z][a-z0-9-]*):([0-9a-f]{8})[0-9a-f-]{28}$/i.exec(actor)

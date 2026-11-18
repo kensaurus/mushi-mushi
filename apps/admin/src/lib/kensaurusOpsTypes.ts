@@ -8,7 +8,7 @@
 
 export type ProviderState = 'ok' | 'warn' | 'down' | 'stale' | 'unknown'
 
-export interface ProviderStatus {
+interface ProviderStatus {
   state: ProviderState
   state_since: string | null
   pending_state: string | null
@@ -41,7 +41,7 @@ export interface ProviderAccount {
   status: ProviderStatus | null
 }
 
-export interface ProviderIncident {
+interface ProviderIncident {
   id: number
   fingerprint: string
   account_id: string | null
@@ -58,7 +58,7 @@ export interface ProviderIncident {
   alerted_at: string | null
 }
 
-export interface SpendRow {
+interface SpendRow {
   app: string
   provider: string
   calls: number
