@@ -134,7 +134,7 @@ describe('fixOnceRows', () => {
 // mushi-mushi-allowlist: the hex values below are design-drift finding text under test, never a UI colour.
 describe('Fix once titles', () => {
   const group = (over: Partial<FindingGroup>): FindingGroup => ({
-    ruleId: 'x', title: null, gate: 'radar', gateLabel: null, severity: 'warn', projectIds: ['a', 'b'], findingCount: 2, sampleMessage: '', suggestedFix: 'p', ...over,
+    ruleId: 'x', title: null, gate: 'radar', severity: 'warn', projectIds: ['a', 'b'], findingCount: 2, sampleMessage: '', suggestedFix: 'p', ...over,
   })
 
   it('names the two spend checks so they read as different problems', () => {
@@ -163,7 +163,7 @@ describe('Fix once titles', () => {
 
 describe('withoutApps (the public demo, keep-but-hide)', () => {
   const g = (ruleId: string, projectIds: string[]): FindingGroup => ({
-    ruleId, title: null, gate: 'radar', gateLabel: null, severity: 'warn', projectIds, findingCount: projectIds.length, sampleMessage: '', suggestedFix: '',
+    ruleId, title: null, gate: 'radar', severity: 'warn', projectIds, findingCount: projectIds.length, sampleMessage: '', suggestedFix: '',
   })
   const data: PortfolioFindingsResponse = {
     organizationId: 'o',
