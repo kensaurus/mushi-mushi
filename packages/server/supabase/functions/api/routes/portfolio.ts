@@ -230,7 +230,6 @@ const MAX_REPORT_ROWS = 50_000
 const MAX_SPEND_ROWS = 50_000
 const MAX_RELEASE_ROWS = 5_000
 const MAX_SDK_VERSION_ROWS = 20_000
-const MAX_CI_FAIL_ROWS = 5_000
 /** Reads with at most a few rows per project (settings, repos, SDK observations, the project list). */
 const MAX_PER_PROJECT_ROWS = 20_000
 
@@ -494,54 +493,37 @@ async function loadOpenReports(db: Db, projectIds: string[], errs: ReadErrors): 
   return out
 }
 
-/** UTC midnight of `now`'s day: the "today" of the CI column (the report list's calendar day). */
-function utcDayStart(now: Date): string {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString()
-}
-
 /**
- * CI job failures per project since UTC midnight: code failures only
- * (`ci_kind = 'code_failure'`), so a lost runner or an expired queue is not
- * the app's fault (ADR 0033). null when the read failed.
+ * CI job failures per project since UTC midnight (the report list's calendar
+ * day): code failures only, so a lost runner or an expired queue is not the
+ * app's fault (ADR 0033). null when the read failed. Kept compact: `api` sits
+ * just under its upload budget (scripts/deploy-edge-function.test.mjs).
  */
-async function loadCiFailsToday(db: Db, projectIds: string[], now: Date, errs: ReadErrors): Promise<Map<string, number> | null> {
-  const out = new Map<string, number>(projectIds.map((id) => [id, 0]))
-  if (projectIds.length === 0) return out
-  type CiFailRow = { project_id: string }
+async function loadCiFailsToday(db: Db, ids: string[], now: Date, errs: ReadErrors): Promise<Map<string, number> | null> {
+  const out = new Map<string, number>(ids.map((id) => [id, 0]))
+  if (!ids.length) return out
+  const day = new Date(now)
+  day.setUTCHours(0, 0, 0, 0)
   try {
-    const read = await readAllPages<CiFailRow>(
-      (from, to, count) => db
-        .from('ci_jobs')
-        .select('id, project_id', { count })
-        .in('project_id', projectIds)
-        .eq('ci_kind', 'code_failure')
-        .gte('completed_at', utcDayStart(now))
-        .order('id', { ascending: true })
-        .range(from, to),
-      { what: 'ci_jobs', maxRows: MAX_CI_FAIL_ROWS },
+    const read = await readAllPages<{ project_id: string }>(
+      (from, to, count) => db.from('ci_jobs').select('id, project_id', { count }).in('project_id', ids).eq('ci_kind', 'code_failure').gte('completed_at', day.toISOString()).order('id').range(from, to),
+      { what: 'ci_jobs', maxRows: 5000 },
     )
-    if (read.truncated) {
-      noteTruncated(errs, 'ci', `More than ${MAX_CI_FAIL_ROWS.toLocaleString('en-US')} CI failures today: the counts shown are a lower bound.`)
-    }
+    if (read.truncated) noteTruncated(errs, 'ci', 'Over 5,000 CI failures today: the counts are a lower bound.')
     for (const r of read.rows) out.set(r.project_id, (out.get(r.project_id) ?? 0) + 1)
     return out
   } catch (err) {
-    noteFailed(errs, 'ci', "Today's CI failures could not be read.", err instanceof Error ? err.message : String(err))
+    noteFailed(errs, 'ci', "Today's CI failures could not be read.", String(err))
     return null
   }
 }
 
 /**
- * The CI column of one card: null without a repo (nothing to fail) or when
- * the read failed; when the repo list itself is unknown, a count above zero
- * still shows and zero reads as unknown.
+ * One card's CI column: null without a repo (nothing to fail) or when the
+ * read failed; with the repo list unknown, a count above zero still shows.
  */
-function ciFailsFor(projectId: string, fails: Map<string, number> | null, presence: Map<string, Set<IntegrationKey>> | null): number | null {
-  if (!fails) return null
-  const n = fails.get(projectId) ?? 0
-  if (!presence) return n > 0 ? n : null
-  return presence.get(projectId)?.has('github') ? n : null
-}
+const ciFailsFor = (id: string, fails: Map<string, number> | null, repos: Map<string, Set<IntegrationKey>> | null): number | null =>
+  !fails ? null : repos ? (repos.get(id)?.has('github') ? (fails.get(id) ?? 0) : null) : fails.get(id) || null
 
 /** Declared kind per project from the current recipe snapshot; null when it could not be read. */
 async function loadDeclaredKinds(db: Db, projectIds: string[], errs: ReadErrors): Promise<Map<string, unknown> | null> {
