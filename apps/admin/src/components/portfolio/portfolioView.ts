@@ -11,6 +11,7 @@ import type { BadgeTone } from '../ui'
 import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioRadarColumn, PortfolioReadPart, SdkSkewEntry } from '../../lib/portfolioTypes'
 import type { RecipeElementKey } from '../../lib/recipeTypes'
 import type { DetectorState } from '../../lib/radarTypes'
+import { isPublicDemo } from '../../lib/publicDemo'
 
 const COULD_NOT_READ = 'Could not read'
 
@@ -313,8 +314,27 @@ export function needsALook(card: PortfolioCard): boolean {
   return URGENCY_RANK[appUrgency(card).level] <= URGENCY_RANK.fix
 }
 
-/** Most urgent first, then the most open bugs, then by name. */
-export function sortPortfolioCards(cards: readonly PortfolioCard[]): PortfolioCard[] {
+/**
+ * The team's own apps, and the public demo apart (it powers the docs try-it
+ * page, has no repo or real users on purpose, and is never an app that needs
+ * you). The page shows it as one muted line, outside the cards and counts.
+ */
+export function splitPublicDemo(cards: readonly PortfolioCard[]): { apps: PortfolioCard[]; demo: PortfolioCard[] } {
+  const apps: PortfolioCard[] = []
+  const demo: PortfolioCard[] = []
+  for (const c of cards) (isPublicDemo(c) ? demo : apps).push(c)
+  return { apps, demo }
+}
+
+export type PortfolioSort = 'worst' | 'name'
+
+/**
+ * Worst first (the default): broken, then the most open bugs, then a part to
+ * fix, then chores; ties by name. Or by name (the Apps page toggle, owner's
+ * walkthrough 2026-11-17: "which app is worst" needed one look).
+ */
+export function sortPortfolioCards(cards: readonly PortfolioCard[], by: PortfolioSort = 'worst'): PortfolioCard[] {
+  if (by === 'name') return [...cards].sort((a, b) => a.name.localeCompare(b.name))
   const rank = new Map(cards.map((c) => [c, URGENCY_RANK[appUrgency(c).level]]))
   return [...cards].sort(
     (a, b) => (rank.get(a) ?? 5) - (rank.get(b) ?? 5) || b.openReports - a.openReports || a.name.localeCompare(b.name),

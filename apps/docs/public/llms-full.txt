@@ -15929,6 +15929,12 @@ copy buttons:
 - **Slash Commands** → create your command (for example `/kensaurus`) with the first URL.
 - **Interactivity & Shortcuts** → turn it on with the second URL.
 
+Slack calls from the United States and gives a command 3 seconds to answer. If your
+database is elsewhere, set the edge secret `MUSHI_FUNCTION_REGION` to its region (for
+example `ap-northeast-1`). The URLs then end in `?forceFunctionRegion=`, so the
+function runs next to the database: about 0.2 s instead of 4 s from the US. Without it,
+commands fail in Slack with `operation_timeout`.
+
 ### Save the token and the signing secret
 
 Install the app to your workspace, then paste the **Bot User OAuth Token** (`xoxb-…`) and

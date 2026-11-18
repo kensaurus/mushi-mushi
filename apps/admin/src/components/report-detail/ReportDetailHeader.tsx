@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
+import { ReportSourceTag } from '../reports/ReportSourceTag'
+import { REPORT_SOURCE_META, reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
 import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
@@ -43,6 +45,12 @@ export function ReportDetailHeader({
   )
   const glow = severityGlowClass(report.severity)
   const reporter = reporterLabel(report, reporterShort, { showIds: showInternals })
+  // Where it came from. An alarm, a setup task or a check has no person
+  // behind it: the Reporter chip says what filed it (owner's walkthrough,
+  // 2026-11-17: a CloudWatch alarm read "Reporter: A user").
+  const sourceRow = { source: report.source ?? null, metadata_source: (report.custom_metadata as { source?: string } | null)?.source ?? null }
+  const sourceKind = reportSourceKind(sourceRow)
+  const filedBy = sourceKind === 'user' ? null : REPORT_SOURCE_META[sourceKind]
   return (
     <div
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
@@ -57,10 +65,11 @@ export function ReportDetailHeader({
       <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
+          <ReportSourceTag report={sourceRow} />
           <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>
             {statusLabel(report.status)}
           </Badge>
-          {report.severity && (
+          {report.severity && showsSeverity(sourceKind) && (
             <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
           )}
           {report.category && (
@@ -128,10 +137,10 @@ export function ReportDetailHeader({
             // per-device token hash.
             // No reporter (integration / Sentry import): no link. It used
             // to open /reports?reporter=null, an empty list.
-            to={reporterReportsHref(report) ?? undefined}
+            to={filedBy ? undefined : (reporterReportsHref(report) ?? undefined)}
           >
-            <span className="max-w-48 truncate" title={reporter.title ?? undefined}>
-              {reporter.text}
+            <span className="max-w-48 truncate" title={filedBy?.hint ?? reporter.title ?? undefined}>
+              {filedBy ? `No user · ${filedBy.label}` : reporter.text}
             </span>
             {/* Real spaces as well as the flex gap: copied text and screen
                 readers read "Signed-in user b850e61a · view all", not

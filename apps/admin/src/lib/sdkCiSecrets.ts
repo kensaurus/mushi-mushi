@@ -174,3 +174,49 @@ export function sdkCiStatusMeta(
       }
   }
 }
+
+/** The placeholder the server puts where the API key goes (_shared/sdk-diagnostics.ts). */
+const KEY_PLACEHOLDER = '<your-mushi-project-api-key>'
+
+/**
+ * What a CI-secrets write that did not fully work should say, and the `gh`
+ * commands left to run, with the new key already in them so the person only
+ * pastes. Partial: only the names that failed.
+ *
+ * Owner, 2026-11-17: the variables were written, the secret was not, and the
+ * console said only "Some names were not written: VITE_MUSHI_API_KEY". The
+ * GitHub App has no "Secrets: write" permission (AGENTS.md, "GitHub App vs
+ * PAT permission boundary"), so GitHub refuses the secret.
+ */
+export function ciSecretsManualStep(input: {
+  status: 'partial' | 'forbidden' | 'no-repo' | 'failed'
+  failed?: ReadonlyArray<{ name: string; reason: string }>
+  commands?: readonly string[]
+  rawKey?: string
+  errorMessage?: string
+}): { reason: string; commands: string[] } {
+  const failedNames = (input.failed ?? []).map((f) => f.name)
+  const forbidden = input.status === 'forbidden' || (input.failed ?? []).some((f) => /\b403\b|permission/i.test(f.reason))
+  const fill = (cmd: string) => (input.rawKey ? cmd.split(KEY_PLACEHOLDER).join(input.rawKey) : cmd)
+  const all = (input.commands ?? []).map(fill)
+  const commands =
+    input.status === 'partial' && failedNames.length > 0
+      ? all.filter((cmd) => failedNames.some((name) => cmd.split(/\s+/).slice(0, 4).join(' ').endsWith(` set ${name}`)))
+      : all
+  const names = failedNames.join(', ')
+  const run = commands.length === 1 ? 'Run this command once' : 'Run these commands once'
+  let reason: string
+  if (input.status === 'no-repo') {
+    reason = `No GitHub repo or token is connected, so Mushi Mushi could not write anything. ${run}:`
+  } else if (forbidden && input.status === 'partial') {
+    reason = `The variables were written, but GitHub refused ${names || 'the secret'}: the Mushi Mushi GitHub App has no "Secrets: write" permission. ${run} to set ${failedNames.length === 1 ? 'it' : 'them'} yourself:`
+  } else if (forbidden) {
+    reason = `GitHub refused the write: the Mushi Mushi GitHub App has no "Secrets: write" permission. ${run} instead:`
+  } else if (input.status === 'partial') {
+    const why = (input.failed ?? []).map((f) => `${f.name}: ${f.reason}`).join('; ')
+    reason = `Some names were not written (${why}). ${run} to set them yourself:`
+  } else {
+    reason = `${input.errorMessage ?? 'The secrets were not written.'} ${run} instead:`
+  }
+  return { reason, commands }
+}

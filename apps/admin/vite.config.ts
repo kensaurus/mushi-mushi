@@ -167,8 +167,8 @@ export default defineConfig({
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          // Field Kenji's specimen disc at 80% on its vermillion field, so a
-          // maskable crop never cuts his top-knot or Mushi-chan.
+          // The magnifier and ladybug sit inside the 80% safe zone on the
+          // vermillion tile, so a maskable crop never cuts the mark (2026-11-17).
           { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         // Android Chrome: "Share" an audio file (Google Recorder .m4a, a voice

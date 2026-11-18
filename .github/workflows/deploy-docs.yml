@@ -221,7 +221,25 @@ jobs:
             --exclude "*.webm" \
             --exclude "*.webp" \
             --exclude "version.json" \
-            --exclude "_pagefind/*"
+            --exclude "_pagefind/*" \
+            --exclude "favicon.svg" \
+            --exclude "icon-192.png" \
+            --exclude "icon-512.png" \
+            --exclude "apple-touch-icon.png" \
+            --exclude "manifest.webmanifest"
+
+      - name: Sync site icons and manifest to S3 (short cache)
+        # Fixed names on every build: immutable for a year, a new icon
+        # (2026-11-17) would stay hidden in browsers behind the old one.
+        run: |
+          aws s3 sync apps/docs/out/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=3600, must-revalidate" \
+            --exclude "*" \
+            --include "favicon.svg" \
+            --include "icon-192.png" \
+            --include "icon-512.png" \
+            --include "apple-touch-icon.png" \
+            --include "manifest.webmanifest"
 
       - name: Sync demo clips and posters to S3 (explicit types)
         # Docs demo clips (DocVideo) and their posters. Their types are set

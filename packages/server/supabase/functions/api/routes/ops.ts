@@ -113,6 +113,13 @@ export interface OpsRouteDeps {
   adminBaseUrl: () => string | null
   /** This project's public Supabase URL, for the Request URLs to paste into Slack. */
   supabaseUrl: () => string | null
+  /**
+   * The database's region (MUSHI_FUNCTION_REGION, e.g. ap-northeast-1). Slack calls
+   * from the US, so without it the function runs in a US region and every database
+   * step crosses the ocean: 3.8 to 5 s, past Slack's 3 s limit (measured 2026-11-18).
+   * When set, the Request URLs carry ?forceFunctionRegion=<region>.
+   */
+  functionRegion: () => string | null
 }
 
 function env(name: string): string | null {
@@ -141,6 +148,10 @@ export const defaultOpsRouteDeps: OpsRouteDeps = {
   now: () => new Date(),
   adminBaseUrl: () => env('ADMIN_BASE_URL'),
   supabaseUrl: () => env('SUPABASE_URL'),
+  functionRegion: () => {
+    const r = env('MUSHI_FUNCTION_REGION')
+    return r && /^[a-z]{2}-[a-z]+-\d$/.test(r) ? r : null
+  },
 }
 
 // ── schemas ─────────────────────────────────────────────────────────────────
@@ -462,6 +473,8 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
 
 function settingsView(row: OpsSettingsRow | null, role: string, deps: OpsRouteDeps) {
   const base = deps.supabaseUrl()
+  const region = deps.functionRegion()
+  const regionQuery = region ? `?forceFunctionRegion=${region}` : ''
   return {
     enabled: row?.enabled ?? false,
     teamId: row?.team_id ?? null,
@@ -478,7 +491,7 @@ function settingsView(row: OpsSettingsRow | null, role: string, deps: OpsRouteDe
     iconBaseUrl: row?.icon_base_url ?? null,
     updatedAt: row?.updated_at ?? null,
     requestUrls: base
-      ? { commands: `${base}/functions/v1/api/v1/ops/slack/commands`, interactions: `${base}/functions/v1/api/v1/ops/slack/interactions` }
+      ? { commands: `${base}/functions/v1/api/v1/ops/slack/commands${regionQuery}`, interactions: `${base}/functions/v1/api/v1/ops/slack/interactions${regionQuery}` }
       : null,
     canEdit: canManage(role),
   }
@@ -789,7 +802,9 @@ async function slackCommand(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
       .then((reply) => postResponseUrl(responseUrl, reply, deps)),
   )
   await audit.resolve('accepted', 200)
-  return c.json(eph('⏳ Looking that up…'))
+  // An empty 200 is Slack's plain acknowledgement. A text reply here would stay on
+  // screen as a second message: the response_url answer cannot replace it.
+  return c.body(null, 200)
 }
 
 // ── Slack: buttons ──────────────────────────────────────────────────────────

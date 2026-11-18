@@ -17,6 +17,10 @@
  *     shorter copy of the same prompt (URLs cap how much they can carry).
  *   - Use MCP: the previous MCP-tool prompt, for agents that have it.
  * The whole-repo digest stays available as a small secondary link.
+ *
+ * Owner's walkthrough, 2026-11-17: the explanation sits under a fold (Copy
+ * stays in view), the lane picked last opens by default, and opening Cursor
+ * says "Sent to Cursor".
  */
 
 import { useMemo, useState } from 'react'
@@ -64,10 +68,31 @@ function buildCursorDeeplink(prompt: string): string {
   return `cursor://anysphere.cursor-deeplink/prompt?prompt=${encodeURIComponent(prompt)}`
 }
 
+/** The hand-off the person used last, opened by default next time (per browser). */
+const LAST_LANE_KEY = 'mushi:fix-handoff-lane'
+
+function readLastLane(): Lane | null {
+  try {
+    const v = window.localStorage.getItem(LAST_LANE_KEY)
+    return v === 'claude' || v === 'cursor' || v === 'mcp' ? v : null
+  } catch {
+    return null
+  }
+}
+
+function rememberLane(lane: Lane): void {
+  try {
+    window.localStorage.setItem(LAST_LANE_KEY, lane)
+  } catch {
+    // Storage blocked: the lanes just start closed.
+  }
+}
+
 export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanelProps) {
   const toast = useToast()
   const [copied, setCopied] = useState<'fix' | 'mcp' | null>(null)
-  const [open, setOpen] = useState<Lane | null>(null)
+  const [open, setOpen] = useState<Lane | null>(() => readLastLane())
+  const [sentTo, setSentTo] = useState<string | null>(null)
 
   // The page re-renders every second while a fix runs; build the prompts once per report.
   const { fixPrompt, urlPrompt, mcpPrompt } = useMemo(
@@ -103,15 +128,25 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
   const openUrl = (url: string, via: PulledVia, target: '_self' | '_blank') => {
     trackPulled(via)
     window.open(url, target, target === '_blank' ? 'noopener,noreferrer' : undefined)
+    if (via === 'cursor_ide' || via === 'cursor_cloud') {
+      const where = via === 'cursor_ide' ? 'Cursor' : 'a Cursor cloud agent'
+      setSentTo(where)
+      toast.success(`Sent to ${where}`, 'The fix prompt is waiting there. Check the change before you merge it.')
+    }
   }
 
   return (
+    // #fix-prompt: links that say "copy the fix prompt" land here.
+    <div id="fix-prompt" className="scroll-mt-chrome">
     <Card className="p-3 mb-3">
       <h2 className="text-sm font-semibold text-fg">Fix it with your coding agent</h2>
-      <p className="mt-0.5 text-xs text-fg-muted">
-        One prompt with the bug, why it broke, the suggested fix, where it happened and how to check the fix. Paste it
-        into Claude Code, Cursor, Codex, Windsurf or any other agent. No setup needed.
-      </p>
+      <details className="mt-0.5 text-xs text-fg-muted" data-testid="fix-agent-explainer">
+        <summary className="cursor-pointer text-2xs hover:text-fg-secondary">What the prompt holds</summary>
+        <p className="mt-0.5">
+          One prompt with the bug, why it broke, the suggested fix, where it happened and how to check the fix. Paste it
+          into Claude Code, Cursor, Codex, Windsurf or any other agent. No setup needed.
+        </p>
+      </details>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <Btn variant="primary" size="sm" leadingIcon={<IconCopy />} onClick={() => void copy('fix')}>
@@ -130,7 +165,11 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
             size="sm"
             aria-expanded={open === lane}
             aria-controls={`fix-lane-${lane}`}
-            onClick={() => setOpen(open === lane ? null : lane)}
+            onClick={() => {
+              const next = open === lane ? null : lane
+              setOpen(next)
+              if (next) rememberLane(next)
+            }}
           >
             {LANE_LABEL[lane]}
           </Btn>
@@ -197,6 +236,11 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
                 Cursor cloud agent
               </Btn>
             </div>
+            {sentTo && (
+              <p className="mt-1.5 flex items-center gap-1 text-2xs font-medium text-ok-foreground" role="status" data-testid="fix-sent-to">
+                <span aria-hidden="true">✓</span> Sent to {sentTo}.
+              </p>
+            )}
           </ContainedBlock>
         </div>
       )}
@@ -246,5 +290,6 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
         </div>
       )}
     </Card>
+    </div>
   )
 }

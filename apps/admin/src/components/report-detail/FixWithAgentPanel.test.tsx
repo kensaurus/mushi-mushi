@@ -36,6 +36,8 @@ beforeEach(() => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
   writeText.mockClear()
+  window.localStorage.clear()
+  toast.success.mockClear()
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -107,5 +109,28 @@ describe('FixWithAgentPanel', () => {
     act(() => button('Use with Cursor')!.click())
     expect(button('Open in Cursor')).toBeTruthy()
     expect(button('Cursor cloud agent')).toBeTruthy()
+  })
+
+  // Owner's walkthrough, 2026-11-17.
+  it('folds the explanation away and keeps Copy fix prompt in view', () => {
+    act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
+    const explainer = container.querySelector('[data-testid="fix-agent-explainer"]') as HTMLDetailsElement
+    expect(explainer.open).toBe(false)
+    expect(button('Copy fix prompt')).toBeTruthy()
+  })
+
+  it('opens the hand-off picked last, and says "Sent to Cursor" after opening it', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
+    act(() => button('Use with Cursor')!.click())
+    act(() => root.unmount())
+    root = createRoot(container)
+    act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
+    expect(button('Use with Cursor')?.getAttribute('aria-expanded')).toBe('true')
+    act(() => button('Open in Cursor')!.click())
+    expect(open).toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="fix-sent-to"]')!.textContent).toContain('Sent to Cursor.')
+    expect(toast.success).toHaveBeenCalledWith('Sent to Cursor', expect.any(String))
+    open.mockRestore()
   })
 })
