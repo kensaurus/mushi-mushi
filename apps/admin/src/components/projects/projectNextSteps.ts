@@ -7,6 +7,7 @@
  */
 
 import type { Project } from './project-models'
+import { isPublicDemo } from '../../lib/publicDemo'
 
 /** @internal Exported for tests only. */
 export interface ProjectNextStep {
@@ -115,15 +116,6 @@ export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
 }
 
 /** One-sentence layman verdict + the steps, for a project card. */
-/**
- * The public demo app ("Mushi demo (sample data)", slug `mushi-demo`): its key powers
- * the docs site's try-it page, and its reports are fixtures. Matched exactly, not by
- * "name contains demo": a customer's own app called "demo-app" is a real app.
- */
-function isPublicDemo(p: Pick<Project, 'name' | 'slug'>): boolean {
-  return p.slug === 'mushi-demo' || /\(sample data\)\s*$/i.test(p.name)
-}
-
 export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
   // A demo has no repo or real users on purpose: never "Needs you" (2026-11-16, the owner: "what is it about?").
   if (isPublicDemo(p)) {

@@ -81,7 +81,8 @@ import { attachAffects, problemsByProject, type HealthCheck } from '../../_share
 import { tagRootCauses } from '../../_shared/pipeline-view.ts'
 import { readWorkerFlags } from './work-status.ts'
 import { flagsForProject, type WorkerFlag } from '../../_shared/work-flags.ts'
-import { reportWindowStartIso } from '../../_shared/report-list-filters.ts'
+import { combineOrGroups, reportWindowStartIso } from '../../_shared/report-list-filters.ts'
+import { reportSourceKindFilter } from '../../_shared/report-source-kind.ts'
 import { dbError, OPEN_REPORT_STATUSES, parseUuidParam, userCanAccessProject } from '../shared.ts'
 
 const hlog = log.child('project-home')
@@ -286,15 +287,26 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
       })
     })().catch((e) => errorSignal('site', 'Site up', SITE_WATCH_HREF, e)),
     (async () => {
-      const [todayCount, yesterdayCount, criticalToday, ever, latest] = await Promise.all([
+      // From a person, not Sentry, an alarm, a setup task or a check.
+      const userOnly = reportSourceKindFilter('user')
+      const userReportsToday = () =>
+        db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', id)
+          .or(combineOrGroups([NOT_SAMPLE, ...(userOnly.kind === 'or' ? userOnly.groups : [])]) ?? NOT_SAMPLE)
+          .gte('created_at', todayStart)
+      const [todayCount, yesterdayCount, criticalToday, ever, latest, fromUsersToday] = await Promise.all([
         count('reports today', reportCount().gte('created_at', todayStart)),
         count('reports yesterday', reportCount().gte('created_at', yesterdayStart).lt('created_at', todayStart)),
         count('critical today', reportCount().gte('created_at', todayStart).eq('severity', 'critical')),
         count('reports ever', reportCount()),
         one<{ created_at: string }>('latest report', db.from('reports').select('created_at').eq('project_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()),
+        // A failed count only drops the "where from" note, never the tile
+        // (also when building the query throws).
+        Promise.resolve()
+          .then(() => count('user reports today', userReportsToday()))
+          .catch(() => undefined),
       ])
       const sdkSeen = keys.ok && !!latestSeen(keys.value.filter((k) => isSdkKey(k.scopes)))
-      return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref })
+      return errorsSignal({ today: todayCount, yesterday: yesterdayCount, criticalToday, everConnected: ever > 0 || sdkSeen, latestAt: latest?.created_at ?? null, sdkHref, fromUsersToday, sdkSeen })
     })().catch((e) => errorSignal('errors', 'Errors today', '/reports?days=1', e)),
     (async () => {
       if (!keys.ok) return errorSignal('sdk', 'SDK sending', sdkHref, keys.error)

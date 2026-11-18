@@ -13,7 +13,7 @@ vi.mock('./supabase', () => ({
   },
 }))
 
-import { ageLabel, openerSummary, outcomeSummary, pipelinePace, runPipelineAction, type DispatcherStatus, type PipelineStage } from './pipeline'
+import { ageLabel, openerSplit, openerSummary, outcomeSummary, pipelinePace, runPipelineAction, type DispatcherStatus, type PipelineStage } from './pipeline'
 
 beforeEach(() => {
   state.posts = []
@@ -58,6 +58,8 @@ describe('pipeline helpers', () => {
     const d = (server: number, local: number) =>
       ({ server: { dispatches24h: server }, local: { runs24h: local } }) as unknown as DispatcherStatus
     expect(openerSummary([d(0, 3), d(2, 0), d(0, 0), d(1, 1)])).toEqual({ server: 2, local: 2, nobody: 1, total: 4 })
+    // The stacked bar's parts add up to the apps (owner's walkthrough, 2026-11-17).
+    expect(openerSplit([d(0, 3), d(2, 0), d(0, 0), d(1, 1)])).toEqual({ serverOnly: 1, localOnly: 1, both: 1, nobody: 1 })
   })
 })
 

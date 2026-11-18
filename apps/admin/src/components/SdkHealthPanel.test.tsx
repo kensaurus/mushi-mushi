@@ -160,10 +160,12 @@ describe('SdkHealthPanel', () => {
     expect(calls.order).toEqual(['sync', 'install', 'upgrade', 'csp'])
     const text = document.body.textContent ?? ''
     expect(text).toContain('Wrote VITE_MUSHI_API_KEY.')
-    expect(text).toContain('Task filed: your fix agent picks it up and opens the PR.')
+    // The preflight was not read (apiFetch mocked empty): no promise either way.
+    expect(text).toContain('Task filed. Open it for the fix prompt to paste into your editor.')
+    expect(text).not.toContain('your fix agent picks it up')
     const links = Array.from(document.body.querySelectorAll('a')).map((a) => a.getAttribute('href'))
-    expect(links).toContain('/reports/r-install')
-    expect(links).toContain('/reports/r-csp')
+    expect(links).toContain('/reports/r-install#fix-prompt')
+    expect(links).toContain('/reports/r-csp#fix-prompt')
   })
 
   it('a single task files straight away; writing secrets asks first', async () => {
@@ -197,9 +199,9 @@ describe('SdkHealthPanel', () => {
     act(() => button(/Write secrets/)!.click())
     await flush()
     const text = document.body.textContent ?? ''
-    expect(text).toContain("GitHub didn't let Mushi Mushi write secrets")
-    expect(text).toContain('mushi_secret')
-    expect(text).toContain('gh secret set VITE_MUSHI_API_KEY')
+    expect(text).toContain('GitHub refused the write: the Mushi Mushi GitHub App has no "Secrets: write" permission.')
+    // The command carries the new key, so the person only pastes it.
+    expect(text).toContain('gh secret set VITE_MUSHI_API_KEY --body "mushi_secret" --repo a/b')
   })
 
   it('a failed task says why and keeps the rest of the panel', async () => {
@@ -281,5 +283,125 @@ describe('SdkHealthPanel', () => {
     expect(text).toContain('Not checked')
     expect(text).toContain('Site security policy: No live site address is known.')
     expect(button(/Fix all/)).toBeUndefined()
+  })
+
+  // Owner, 2026-11-17: "Task filed: your fix agent picks it up and opens the
+  // PR" while Autofix was off for the app and nothing was dispatched.
+  describe('a filed task says what really happens next', () => {
+    const preflightCheck = (key: string, ready: boolean) => ({ key, ready, label: key === 'codebase' ? 'Codebase indexed' : key, hint: '', fixHref: `/integrations/config#${key}` })
+    function preflightIs(checks: Array<ReturnType<typeof preflightCheck>>) {
+      api.apiFetch.mockImplementation(async (path: string, opts?: { method?: string }) => {
+        if (path.endsWith('/preflight')) return { ok: true, data: { ready: checks.every((c) => c.ready), checks } }
+        if (path.endsWith('/autofix/toggle') && opts?.method === 'POST') return { ok: true, data: { autofix_enabled: true } }
+        return { ok: false }
+      })
+    }
+
+    it('Autofix off: says so, offers to turn it on here, and links the fix prompt', async () => {
+      preflightIs([preflightCheck('github', true), preflightCheck('codebase', true), preflightCheck('agent', true), preflightCheck('autofix', false)])
+      await mount([ALL[1]!])
+      act(() => button(/File install task/)!.click())
+      await flush()
+      const text = document.body.textContent ?? ''
+      expect(text).toContain('Task filed. Autofix is off for this app: turn it on, or copy the fix prompt into your editor.')
+      expect(text).not.toContain('picks it up')
+      const prompt = Array.from(document.querySelectorAll('a')).find((a) => a.textContent === 'Copy the fix prompt')!
+      expect(prompt.getAttribute('href')).toBe('/reports/r-install#fix-prompt')
+      act(() => button(/Turn on Autofix/)!.click())
+      await flush()
+      expect(api.apiFetch).toHaveBeenCalledWith(`/v1/admin/projects/${PROJECT}/autofix/toggle`, expect.objectContaining({ method: 'POST' }))
+    })
+
+    it('Autofix off and no GitHub: the button says to connect GitHub first', async () => {
+      preflightIs([preflightCheck('github', false), preflightCheck('autofix', false)])
+      await mount([ALL[1]!])
+      act(() => button(/File install task/)!.click())
+      await flush()
+      expect(button(/Turn on Autofix/)).toBeUndefined()
+      expect(Array.from(document.querySelectorAll('a')).some((a) => a.textContent === 'Connect GitHub first')).toBe(true)
+    })
+
+    it('everything ready: Mushi Mushi opens the draft PR', async () => {
+      preflightIs([preflightCheck('github', true), preflightCheck('autofix', true)])
+      await mount([ALL[1]!])
+      act(() => button(/File install task/)!.click())
+      await flush()
+      expect(document.body.textContent).toContain('Task filed: Mushi Mushi starts the fix and opens it as a draft PR for you to review.')
+    })
+
+    it('Autofix on but another step missing: names it, never promises a PR', async () => {
+      preflightIs([preflightCheck('github', true), preflightCheck('codebase', false), preflightCheck('autofix', true)])
+      await mount([ALL[1]!])
+      act(() => button(/File install task/)!.click())
+      await flush()
+      const text = document.body.textContent ?? ''
+      expect(text).toContain("Mushi Mushi can't start the fix yet (codebase indexed is not done)")
+      expect(text).not.toContain('draft PR')
+    })
+  })
+
+  // Owner, 2026-11-17: the variables were written, the secret was not, and the
+  // panel said only "Some names were not written: VITE_MUSHI_API_KEY".
+  describe('a CI secrets write that only partly worked', () => {
+    const CMDS = [
+      'gh secret set VITE_MUSHI_API_KEY --body "<your-mushi-project-api-key>" --repo a/b',
+      'gh variable set VITE_MUSHI_PROJECT_ID --body "p1" --repo a/b',
+    ]
+    beforeEach(() => {
+      api.apiFetchMutate.mockResolvedValue({
+        ok: true,
+        data: {
+          minted: { prefix: 'mushi_abc', rawKey: 'mushi_secret' },
+          written: ['VITE_MUSHI_PROJECT_ID'],
+          failed: [{ name: 'VITE_MUSHI_API_KEY', reason: 'GitHub returned 403 — token lacks Secrets/Variables write permission.' }],
+          fallback: { commands: CMDS, envBlock: '' },
+          priorKeysRevoked: [],
+        },
+      })
+    })
+
+    async function writePartially() {
+      await mount([ALL[2]!])
+      act(() => button(/Write CI secrets/)!.click())
+      act(() => button(/Write secrets/)!.click())
+      await flush()
+    }
+
+    it('says why, and gives only the missing command with the new key already in it', async () => {
+      await writePartially()
+      const box = document.querySelector('[data-testid="sdk-health-ci-manual"]')!
+      expect(box.textContent).toContain('GitHub refused VITE_MUSHI_API_KEY: the Mushi Mushi GitHub App has no "Secrets: write" permission.')
+      const codes = Array.from(box.querySelectorAll('code')).map((c) => c.textContent)
+      expect(codes).toContain('gh secret set VITE_MUSHI_API_KEY --body "mushi_secret" --repo a/b')
+      expect(codes.some((c) => c?.includes('gh variable set'))).toBe(false)
+      expect(box.textContent).not.toContain('<your-mushi-project-api-key>')
+    })
+
+    it('Check again clears the warning once GitHub shows the secret set', async () => {
+      await writePartially()
+      page.data = { ...(page.data as object), problems: [], notes: [] }
+      act(() => button(/Check again/)!.click())
+      await flush()
+      expect(document.querySelector('[data-testid="sdk-health-ci-manual"]')).toBeNull()
+      expect(document.body.textContent).toContain('Every CI name is set in GitHub now.')
+    })
+
+    it('Check again, when the secrets cannot be read: no warning, the command kept under a fold', async () => {
+      await writePartially()
+      page.data = { ...(page.data as object), problems: [], notes: [{ check: 'ci_secrets', detail: 'Could not check the GitHub Actions secrets: 403' }] }
+      act(() => button(/Check again/)!.click())
+      await flush()
+      expect(document.querySelector('[data-testid="sdk-health-ci-manual"]')).toBeNull()
+      expect(document.querySelector('[data-testid="sdk-health-ci-unverifiable"]')!.textContent).toContain("can't confirm VITE_MUSHI_API_KEY")
+    })
+
+    it('never claims every name is set when the repo itself could not be read', async () => {
+      await writePartially()
+      page.data = { ...(page.data as object), problems: [], notes: [{ check: 'repo', detail: 'Could not read a/b: 403' }] }
+      act(() => button(/Check again/)!.click())
+      await flush()
+      expect(document.body.textContent).not.toContain('Every CI name is set')
+      expect(document.querySelector('[data-testid="sdk-health-ci-unverifiable"]')).toBeTruthy()
+    })
   })
 })

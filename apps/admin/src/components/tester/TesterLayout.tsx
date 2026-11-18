@@ -7,7 +7,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
-import brandMark from '../../assets/brand/kenji-mark.webp'
+import brandMark from '../../assets/brand/mushi-mark.webp'
 import { Btn, Loading } from '../ui'
 import { Drawer } from '../Drawer'
 import { useAuth } from '../../lib/auth'

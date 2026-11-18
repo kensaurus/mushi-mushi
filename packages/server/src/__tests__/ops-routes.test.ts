@@ -79,7 +79,7 @@ interface Harness {
   minted: Array<Record<string, unknown>>
 }
 
-function harness(seed: Record<string, Array<Record<string, unknown>>> = {}): Harness {
+function harness(seed: Record<string, Array<Record<string, unknown>>> = {}, region: string | null = null): Harness {
   const db = makeFakeDb(
     {
       projects: [
@@ -149,6 +149,7 @@ function harness(seed: Record<string, Array<Record<string, unknown>>> = {}): Har
     now: () => NOW,
     adminBaseUrl: () => 'https://kensaur.us/admin',
     supabaseUrl: () => 'https://proj.supabase.co',
+    functionRegion: () => region,
   })
   return { app, db, slack, background, rate, minted }
 }
@@ -268,6 +269,15 @@ describe('console routes', () => {
     expect(d.slack.enabled).toBe(true)
   })
 
+  it('with MUSHI_FUNCTION_REGION set, the Request URLs pin the function to the database region', async () => {
+    const h = harness({}, 'ap-northeast-1')
+    const get = await (await h.app.request(`/v1/admin/ops/slack-settings?org=${ORG}`, { headers: { 'x-test-user': OWNER } })).json()
+    expect(get.data.requestUrls).toEqual({
+      commands: 'https://proj.supabase.co/functions/v1/api/v1/ops/slack/commands?forceFunctionRegion=ap-northeast-1',
+      interactions: 'https://proj.supabase.co/functions/v1/api/v1/ops/slack/interactions?forceFunctionRegion=ap-northeast-1',
+    })
+  })
+
   it('settings never return a secret, give the Request URLs, and only owners and admins save', async () => {
     const h = harness()
     const get = await (await h.app.request(`/v1/admin/ops/slack-settings?org=${ORG}`, { headers: { 'x-test-user': VIEWER } })).json()
@@ -357,7 +367,9 @@ describe('Slack endpoints', () => {
     const h = harness({ ops_events: [{ organization_id: ORG, project_id: P1, category: 'payments', kind: 'payment.succeeded', amount_minor: 5000, currency: 'JPY', severity: 'info', occurred_at: '2026-11-17T01:00:00Z' }] })
     const body = form({ team_id: 'T0TEAM', command: '/kensaurus', text: 'sales today', user_id: 'U1', response_url: 'https://hooks.slack.com/commands/x', trigger_id: 't2' })
     const res = await h.app.request('/v1/ops/slack/commands', { method: 'POST', headers: await signed(body), body })
-    expect((await res.json()).text).toContain('Looking that up')
+    // Slack's plain acknowledgement: an empty 200, so no placeholder message stays behind.
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
     await Promise.all(h.background)
     const answer = h.slack.find((c) => c.url === 'https://hooks.slack.com/commands/x')
     expect(answer?.body.text).toContain('¥5,000')

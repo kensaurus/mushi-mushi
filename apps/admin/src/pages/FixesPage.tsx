@@ -911,7 +911,7 @@ export function FixesPage() {
       </PageHeaderBar>
 
       {/* Before the first fix: the no-setup path first (copy the fix prompt), GitHub second (audit 2026-11-11). */}
-      {fixes.length === 0 && <FixesStartCard githubConnected={fixesStats.topPriority !== 'no_github'} />}
+      {fixes.length === 0 && <FixesStartCard githubConnected={fixesStats.topPriority !== 'no_github'} projectId={activeProjectId} />}
 
       {/* Out of credits: say so, with the remedy, where Retry would have been (audit 2026-11-11). */}
       {agentCredits.state?.out && (

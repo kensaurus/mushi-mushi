@@ -64,7 +64,7 @@ import { AnimatedDisclosure } from './motion/AnimatedDisclosure'
 import { NavSectionStagger } from './motion/NavSectionStagger'
 import { CHIP_TONE } from '../lib/chipTone'
 import { MUSHI_CANONICAL_URLS } from '@mushi-mushi/brand'
-import brandMark from '../assets/brand/kenji-mark.webp'
+import brandMark from '../assets/brand/mushi-mark.webp'
 
 type NavItem = BuiltNavItem
 
@@ -472,9 +472,9 @@ export function Layout({ children }: { children: ReactNode }) {
   // gets `compact: false` because the mobile sidebar is a full overlay.
   const renderSidebarContent = (compact: boolean) => (
     <>
-      {/* Brand — the mark (Field Kenji's face with Mushi-chan under his
-          magnifier, so it shows the bug-finding job at 24 px; see
-          docs/mascot/README.md) and the wordmark, linking back to the landing
+      {/* Brand — the mark (a magnifier over a ladybug on the vermillion tile,
+          a small Mushi-chan face peeking in; it stays readable at 24 px, where
+          the old full-face mark smeared, 2026-11-17) and the wordmark, linking back to the landing
           page (owner, 2026-11-14). The compact rail keeps only the mark.
           A plain <a>: the landing is a
           different site, not a console route. */}

@@ -27,7 +27,8 @@ import { DispatchFixPreflight } from './DispatchFixPreflight'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconShare, IconExternalLink, IconClose } from '../icons'
 import { CHIP_TONE } from '../../lib/chipTone'
-import { isSampleReport } from '../../lib/diagnosisViewed'
+import { ReportSourceTag } from './ReportSourceTag'
+import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
@@ -221,13 +222,8 @@ function ReportRowViewInner({
                   className="truncate text-sm font-medium leading-snug text-fg"
                   title={typeof displayTitle === 'string' ? displayTitle : undefined}
                 >
-                  {isSampleReport({ source: row.metadata_source }) && (
-                    <Tooltip content={'A sample report from "Send a test report", not from a user. Dismiss it when you\'re done.'}>
-                      <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
-                        Test report
-                      </span>
-                    </Tooltip>
-                  )}
+                  {/* Where it came from: a user, Sentry, an alarm, a setup task, a test or a check. */}
+                  <ReportSourceTag report={row} className="mr-1.5 align-middle" />
                   {isLocalDevUrl(row.environment?.url) && (
                     <Tooltip content={LOCAL_DEV_TOOLTIP}>
                       <span className={`mr-1.5 inline-flex items-center rounded-sm px-1.5 py-px align-middle text-2xs font-medium ${CHIP_TONE.neutral}`}>
@@ -293,7 +289,8 @@ function ReportRowViewInner({
       </td>
       <td className={`reports-metric-cell ${REPORTS_TABLE_COL.severity} ${TABLE_CELL.pxMeta}`}>
         <div className="reports-metric-cell-slot">
-          <TableSeverityCell severity={row.severity} />
+          {/* A setup task or a test is not a bug: no bug severity. */}
+          <TableSeverityCell severity={showsSeverity(reportSourceKind(row)) ? row.severity : null} />
         </div>
       </td>
       <td className={`reports-metric-cell reports-metric-cell--confidence ${REPORTS_TABLE_COL.confidence} ${TABLE_CELL.pxMeta}`}>

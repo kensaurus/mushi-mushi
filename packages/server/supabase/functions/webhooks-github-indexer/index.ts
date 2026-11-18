@@ -28,7 +28,6 @@ import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts';
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { unverifiedGithubInstallsAllowed } from '../_shared/github-install-trust.ts';
 import { finalizeFixClosedUnmerged, finalizeFixMerge } from '../_shared/fix-merge.ts';
 import { requeueReviewForNewHead } from '../_shared/fix-review-db.ts';
 import { canonicalPrUrl } from '../_shared/pr-substance.ts';
@@ -1166,11 +1165,19 @@ async function handleSweep(
         continue;
       }
 
+      // The repo's GitHub App install first, then the project's or org's token.
+      // Every row's installation id is bound by a verified path: the
+      // "Connect GitHub" grant (api/routes/github-connect.ts), or an
+      // unverified binding only where a single-tenant self-host opted in
+      // (github-install-trust.ts gates those writes). The indexer alone
+      // used to skip the id, so an app connected through the App read
+      // "no_token" while its fixes, CI and secrets used the same install
+      // (owner, 2026-11-17, kensaur.us).
       let token: string | null = null;
+      const installationId = Number(repo.github_app_installation_id ?? 0);
       try {
-        // Stored installation ids are not verified yet (github-install-trust.ts).
-        token = repo.github_app_installation_id && unverifiedGithubInstallsAllowed()
-          ? await mintInstallationToken(Number(repo.github_app_installation_id))
+        token = installationId > 0
+          ? await mintInstallationToken(installationId)
           : await resolveProjectGithubToken(db, repo.project_id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

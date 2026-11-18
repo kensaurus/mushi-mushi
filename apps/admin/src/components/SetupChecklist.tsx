@@ -242,10 +242,15 @@ function optionalSteps(project: SetupProject): SetupStep[] {
   return project.steps.some((s) => s.required) ? project.steps.filter((s) => !s.required) : []
 }
 
-function optionalLabel(project: SetupProject): string {
-  const extras = optionalSteps(project)
+/**
+ * @internal Exported for unit tests only.
+ * "Optional: 2 of 6 on". It read "6 optional extras, not counted above (2 on)",
+ * which the owner's walkthrough could not parse (2026-11-17).
+ */
+export function optionalLabel(project: Pick<SetupProject, 'steps'>): string {
+  const extras = optionalSteps(project as SetupProject)
   const done = extras.filter((s) => s.complete).length
-  return `${extras.length} optional ${extras.length === 1 ? 'extra' : 'extras'}, not counted above${done > 0 ? ` (${done} on)` : ''}`
+  return `Optional: ${done} of ${extras.length} on`
 }
 
 function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndpointHost, extrasOnly }: InternalProps) {

@@ -321,3 +321,14 @@ describe('parseCloudWatchAlarm', () => {
     expect(ingest.alarmKey({ AlarmName: 'x', NewStateValue: 'OK', AWSAccountId: '590715976857' })).toBe('590715976857:x')
   })
 })
+
+describe('alarm text reads like a person wrote it', () => {
+  // Owner's walkthrough, 2026-11-17: "The alarm recorded 15.341893476 GB".
+  it('rounds long decimals, and leaves whole numbers, short decimals and versions alone', () => {
+    const r = ingest.roundLongDecimals
+    expect(r('Threshold Crossed: 1 datapoint [15.341893476 (13/11/26 10:00:00)] was greater than the threshold (15.0).')).toBe(
+      'Threshold Crossed: 1 datapoint [15.34 (13/11/26 10:00:00)] was greater than the threshold (15.0).',
+    )
+    expect(r('0.000123456 and 1234.56789 and 7444 and v1.2.3 and 3442.8')).toBe('0.000123 and 1234.6 and 7444 and v1.2.3 and 3442.8')
+  })
+})

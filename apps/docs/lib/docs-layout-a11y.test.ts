@@ -36,10 +36,10 @@ describe('docs layout accessible names', () => {
     expect(layout.slice(iconAt, chromeAt)).toContain('aria-hidden="true"')
   })
 
-  it("puts the mark (Kenji + Mushi-chan under his magnifier) in the navbar logo, decorative, inside Nextra's home link (owner, 2026-11-14)", () => {
+  it("puts the mark (a magnifier over a ladybug) in the navbar logo, decorative, inside Nextra's home link (owner, 2026-11-14)", () => {
     const logoAt = layout.indexOf('logo={')
     const logo = layout.slice(logoAt, layout.indexOf('</span>\n    }', logoAt))
-    expect(layout).toContain("import brandMark from '../assets/brand/kenji-mark.webp'")
+    expect(layout).toContain("import brandMark from '../assets/brand/mushi-mark.webp'")
     expect(logo).toContain('src={brandMark.src}')
     expect(logo).toContain('alt=""')
     expect(logo).toContain('aria-hidden="true"')

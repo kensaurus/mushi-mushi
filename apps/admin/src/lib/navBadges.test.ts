@@ -8,8 +8,11 @@
  * `dashboard` stays the default even when `/health` does not list it.
  */
 
+import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
-import { navSlicesForPaths } from './navBadges'
+import { navSlicesForPaths, renderNavBadge } from './navBadges'
+import { keepMissingSlices, type NavCounts } from './useNavCounts'
+import { EMPTY_NAV_STAT_SLICES } from './extendedNavMeta'
 import { CORE_NAV_PATHS } from './navRegistry'
 
 describe('navSlicesForPaths', () => {
@@ -51,5 +54,26 @@ describe('navSlicesForPaths', () => {
       'settings',
       'workers',
     ])
+  })
+})
+
+describe('Settings badge stays put (owner walkthrough, 2026-11-17)', () => {
+  // "1 key failing" appeared, vanished on the next load and came back.
+  const base = { ready: true, slices: EMPTY_NAV_STAT_SLICES } as unknown as NavCounts
+  const failing = { byokKeysFailing: 1, byokKeysUntested: 0, byokKeysExpiring: 0 } as unknown as NavCounts['slices']['settings']
+
+  it('holds the badge place with a skeleton before the first load', () => {
+    const el = renderNavBadge('/settings', { ...base, ready: false }, { criticalReports30d: 0 }) as ReactElement<{ 'data-testid'?: string }>
+    expect(el?.props['data-testid']).toBe('nav-badge-skeleton')
+    // A path with no slice-backed badge shows nothing while loading.
+    expect(renderNavBadge('/inbox', { ...base, ready: false }, { criticalReports30d: 0 })).toBeNull()
+  })
+
+  it('a load for the same app that lacks the settings slice keeps its last value', () => {
+    const prev = { ...base, slices: { ...EMPTY_NAV_STAT_SLICES, settings: failing } } as NavCounts
+    const next = { ...base, slices: { ...EMPTY_NAV_STAT_SLICES, settings: null } } as NavCounts
+    expect(keepMissingSlices(prev, next, true).slices.settings).toBe(failing)
+    // Another app or team never inherits it.
+    expect(keepMissingSlices(prev, next, false).slices.settings).toBeNull()
   })
 })

@@ -84,11 +84,12 @@ export function ReportsPage() {
   const severity = searchParams.get('severity') ?? ''
   // Unknown values from old bookmarks are dropped, not sent (the server
   // rejects them); legacy React / Capacitor SDK values map to the web SDK.
-  const { platform, sdkPackage, days, origin } = sanitizeListFilters({
+  const { platform, sdkPackage, days, origin, source } = sanitizeListFilters({
     platform: searchParams.get('platform') ?? '',
     sdkPackage: searchParams.get('sdkPackage') ?? '',
     days: searchParams.get('days') ?? '',
     origin: searchParams.get('origin') ?? '',
+    source: searchParams.get('source') ?? '',
   })
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
@@ -135,6 +136,7 @@ export function ReportsPage() {
     if (platform) p.set('platform', platform)
     if (sdkPackage) p.set('sdkPackage', sdkPackage)
     if (origin) p.set('origin', origin)
+    if (source) p.set('source', source)
     if (component) p.set('component', component)
     if (reporter) p.set('reporter', reporter)
     if (endUser) p.set('end_user', endUser)
@@ -147,7 +149,7 @@ export function ReportsPage() {
     p.set('limit', String(PAGE_SIZE))
     p.set('offset', String(page * PAGE_SIZE))
     return p.toString()
-  }, [status, category, userCategory, severity, platform, sdkPackage, origin, component, reporter, endUser, session, area, days, q, sort, dir, page])
+  }, [status, category, userCategory, severity, platform, sdkPackage, origin, source, component, reporter, endUser, session, area, days, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     // One app: wait for the pin so the first fetch doesn't briefly show
@@ -430,7 +432,7 @@ export function ReportsPage() {
   // red dot when there's unresolved severity=critical work. Inline here
   // because `criticalQueuedCount` further down is filtered by status.
   const criticalOnPage = reports.filter((r) => r.severity === 'critical').length
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || component || reporter || endUser || session || area || days || q)
+  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || source || component || reporter || endUser || session || area || days || q)
   // A project with no reports at all and nothing filtered: the page is the
   // "get your first report" state, so the filter rails and the second and
   // third "Send test report" buttons stay out of it (re-audit 2026-11-11).
@@ -914,6 +916,7 @@ export function ReportsPage() {
         platform={platform}
         sdkPackage={sdkPackage}
         origin={origin}
+        source={source}
         days={days}
         contextChips={contextChips}
         hasFilters={hasFilters}

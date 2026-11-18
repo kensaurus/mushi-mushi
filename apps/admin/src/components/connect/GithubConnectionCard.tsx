@@ -14,6 +14,7 @@ import { usePageData } from '../../lib/usePageData'
 import { repoRoleMeta } from '../../lib/repoRoles'
 import { GitHubConnectCard } from '../GitHubConnectCard'
 import { isReturningFromGithub } from '../../lib/githubConnect'
+import { githubAccessFromPreflight } from '../../lib/githubAccess'
 
 /** The project_repos columns this card reads (GET /v1/admin/repo/repos). */
 interface LinkedRepo {
@@ -46,7 +47,17 @@ export function GithubConnectionCard({
   // Not connected (or back from GitHub): the connect flow itself, not a link
   // to another page that has it.
   if (projectId && ((!loading && !hasGithub) || isReturningFromGithub(projectId))) {
-    return <GitHubConnectCard projectId={projectId} returnTo="connect" currentRepoUrl={hasGithub ? repoUrl : null} />
+    // A linked repo the App cannot reach reads "Repo linked · app access
+    // missing" with "Finish connecting", the same status as Integrations.
+    return (
+      <GitHubConnectCard
+        projectId={projectId}
+        returnTo="connect"
+        currentRepoUrl={repoUrl}
+        access={githubAccessFromPreflight(preflight)}
+        onConnected={preflight.reload}
+      />
+    )
   }
 
   return (

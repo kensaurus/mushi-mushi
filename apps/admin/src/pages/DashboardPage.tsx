@@ -184,6 +184,8 @@ export function DashboardPage() {
               fixFirst={data.fixFirst}
               partial={data.partial}
               hasReports={!!project && project.report_count > 0}
+              // One "do this next" on the page: the setup step wins while it is open.
+              primaryElsewhere={Boolean(openStep && project)}
             />
             <ReleaseCard section={data.release} projectId={activeProjectId} />
           </div>

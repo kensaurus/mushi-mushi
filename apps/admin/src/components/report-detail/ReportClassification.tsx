@@ -8,6 +8,7 @@ import {
   CodeValue,
   ProseBlock,
 } from '../ui'
+import { roundLongDecimals } from '../../lib/format'
 import {
   CATEGORY_BADGE,
   CATEGORY_LABELS,
@@ -86,7 +87,7 @@ export function ClassificationFields({ report, showInternals = false }: { report
 
       {report.summary && (
         <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
-          <ProseBlock value={report.summary} mode="auto" />
+          <ProseBlock value={roundLongDecimals(report.summary)} mode="auto" />
         </Callout>
       )}
 

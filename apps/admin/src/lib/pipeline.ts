@@ -174,6 +174,23 @@ export function openerSummary(dispatchers: DispatcherStatus[]): { server: number
   return { server, local, nobody, total: dispatchers.length }
 }
 
+/**
+ * The same apps split so the parts add up to the whole (an app can open fixes
+ * both ways), for the "Who opens fixes" stacked bar.
+ */
+export function openerSplit(dispatchers: DispatcherStatus[]): { serverOnly: number; localOnly: number; both: number; nobody: number } {
+  const out = { serverOnly: 0, localOnly: 0, both: 0, nobody: 0 }
+  for (const d of dispatchers) {
+    const s = d.server.dispatches24h > 0
+    const l = d.local.runs24h > 0
+    if (s && l) out.both++
+    else if (s) out.serverOnly++
+    else if (l) out.localOnly++
+    else out.nobody++
+  }
+  return out
+}
+
 export interface PipelineData {
   generatedAt: string
   projects: Array<{ id: string; name: string; lastDeploy: { at: string; version: string | null; ok: boolean } | null }>
