@@ -17,7 +17,7 @@
  */
 
 import { Btn } from './forms'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 
 export type ConnectionState = 'working' | 'attention' | 'expiring' | 'not_connected' | 'checking'
 
@@ -87,20 +87,16 @@ export function connectionStateFrom(input: {
   return 'working'
 }
 
-const TONE: Record<ConnectionState, string> = {
-  working: CHIP_TONE.okSubtle,
-  attention: CHIP_TONE.warnSubtle,
-  expiring: CHIP_TONE.warnSubtle,
-  not_connected: CHIP_TONE.neutral,
-  checking: CHIP_TONE.neutral,
-}
-
-const DOT: Record<ConnectionState, string> = {
-  working: 'bg-ok',
-  attention: 'bg-warn',
-  expiring: 'bg-warn',
-  not_connected: 'bg-fg-faint',
-  checking: 'bg-fg-faint',
+/**
+ * The console's status mark per state (2026-11-18): ✓ working, ✕ needs
+ * attention, ⧗ expiring, ◷ a check still to come, ○ not connected.
+ */
+const STATUS: Record<ConnectionState, RunStatus> = {
+  working: 'passed',
+  attention: 'failed',
+  expiring: 'slow',
+  not_connected: 'idle',
+  checking: 'waiting',
 }
 
 function defaultLabel(state: ConnectionState, expiresAt: string | null | undefined): string {
@@ -124,12 +120,7 @@ export function ConnectionStatus({ state, label, detail, expiresAt, action, clas
   const text = label ?? defaultLabel(state, expiresAt)
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 ${className}`} data-connection-state={state}>
-      <span
-        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${TONE[state]}`}
-      >
-        <span className={`h-1.5 w-1.5 rounded-full ${DOT[state]}`} aria-hidden />
-        {text}
-      </span>
+      <StatusPill status={STATUS[state]} label={text} className="shrink-0" />
       {detail ? <span className="text-xs text-fg-secondary leading-snug min-w-0">{detail}</span> : null}
       {action ? (
         <Btn

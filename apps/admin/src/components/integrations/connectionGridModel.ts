@@ -36,6 +36,26 @@ export type GridToolId =
   | 'github_issues'
   | 'pagerduty'
 
+/** The kinds POST /v1/admin/health/integration/:kind can check without sending anything. */
+type GridCheckKind =
+  | 'github'
+  | 'slack'
+  | 'cursor_cloud'
+  | 'claude_code_agent'
+  | 'linear'
+  | 'jira'
+  | 'github_issues'
+  | 'pagerduty'
+  | 'sentry'
+  | 'langfuse'
+
+/**
+ * Connected and never checked reads as a connection, not an unknown (owner,
+ * 2026-11-18: the GitHub tile said "Not tested yet · Nothing yet" while its
+ * drawer said "Connected: kensaurus/kensaur.us").
+ */
+const NEVER_CHECKED_LABEL = 'Connected · not checked yet'
+
 export interface GridTile {
   id: GridToolId
   label: string
@@ -47,6 +67,10 @@ export interface GridTile {
   /** When something last happened: an event received, or the last check. */
   lastAt: string | null
   lastLabel: 'Last event' | 'Checked' | 'Last import' | null
+  /** Set up, and no check has ever run: the tile offers "Check now". */
+  neverChecked?: boolean
+  /** The read-only check this tool has; null for Discord and Teams, whose only test posts a message. */
+  checkKind: GridCheckKind | null
 }
 
 export interface ConnectionGridInput {
@@ -82,12 +106,23 @@ function latestProbe(history: readonly HealthRow[], kind: string): HealthRow | u
   return history.find((h) => h.kind === kind)
 }
 
+/**
+ * Relabel a configured tool that no check has reached yet. Only a known
+ * configured tool qualifies: "checking" also means still loading (Slack
+ * settings, Sentry deliveries), and that must not read as connected.
+ */
+function withNeverChecked(tile: GridTile, configured: boolean, probe: HealthRow | undefined): GridTile {
+  const unchecked = configured && tile.view.state === 'checking' && (!probe || probe.status === 'unknown')
+  if (!unchecked) return { ...tile, neverChecked: undefined }
+  return { ...tile, view: { ...tile.view, label: NEVER_CHECKED_LABEL }, neverChecked: true }
+}
+
 function platformTile(input: ConnectionGridInput, kind: Kind, id: GridToolId, label: string, brand: string): GridTile {
   const def = PLATFORM_DEFS.find((d) => d.kind === kind)
   const config = input.platform?.platform?.[kind] ?? {}
   const configured = def ? platformRequiredOk(def, config, input.platform?.sourceByField) : false
   const probe = latestProbe(input.history, kind)
-  return {
+  const tile: GridTile = {
     id,
     label,
     brand,
@@ -95,7 +130,9 @@ function platformTile(input: ConnectionGridInput, kind: Kind, id: GridToolId, la
     view: connectionFromProbe({ configured, probe, now: input.now }),
     lastAt: configured ? (probe?.checked_at ?? null) : null,
     lastLabel: configured && probe ? 'Checked' : null,
+    checkKind: kind,
   }
+  return withNeverChecked(tile, configured, probe)
 }
 
 /** GitHub: a linked repo the App cannot reach is amber, never "Not connected". */
@@ -105,12 +142,16 @@ function githubTile(input: ConnectionGridInput): GridTile {
   if (!access) return fromToken
   if (access.state === 'connected') {
     const probe = latestProbe(input.history, 'github')
-    return {
-      ...fromToken,
-      view: connectionFromProbe({ configured: true, probe, now: input.now }),
-      lastAt: probe?.checked_at ?? null,
-      lastLabel: probe ? 'Checked' : null,
-    }
+    return withNeverChecked(
+      {
+        ...fromToken,
+        view: connectionFromProbe({ configured: true, probe, now: input.now }),
+        lastAt: probe?.checked_at ?? null,
+        lastLabel: probe ? 'Checked' : null,
+      },
+      true,
+      probe,
+    )
   }
   if (access.state === 'repo_no_access') {
     return {
@@ -118,9 +159,10 @@ function githubTile(input: ConnectionGridInput): GridTile {
       view: { state: 'attention', label: GITHUB_ACCESS_LABEL.repo_no_access, detail: githubAccessMissingSentence(access.repo) },
       lastAt: null,
       lastLabel: null,
+      neverChecked: undefined,
     }
   }
-  return { ...fromToken, view: { state: 'not_connected' }, lastAt: null, lastLabel: null }
+  return { ...fromToken, view: { state: 'not_connected' }, lastAt: null, lastLabel: null, neverChecked: undefined }
 }
 
 export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
@@ -153,30 +195,36 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
             : sentryProbe
               ? 'Checked'
               : null,
+    checkKind: 'sentry',
   }
 
   const slackProbe = latestProbe(input.history, 'slack')
-  const slack: GridTile = {
-    id: 'slack',
-    label: 'Slack',
-    brand: 'slack',
-    anchor: 'integrations-slack',
-    view: slackCardConnection({
-      slackConfigured: input.slack.configured,
-      canPost: input.slack.canPost,
-      channelId: input.slack.channelId,
-      probe: slackProbe,
-      now: input.now,
-    }),
-    lastAt: input.slack.configured ? (slackProbe?.checked_at ?? null) : null,
-    lastLabel: input.slack.configured && slackProbe ? 'Checked' : null,
-  }
+  const slack: GridTile = withNeverChecked(
+    {
+      id: 'slack',
+      label: 'Slack',
+      brand: 'slack',
+      anchor: 'integrations-slack',
+      view: slackCardConnection({
+        slackConfigured: input.slack.configured,
+        canPost: input.slack.canPost,
+        channelId: input.slack.channelId,
+        probe: slackProbe,
+        now: input.now,
+      }),
+      lastAt: input.slack.configured ? (slackProbe?.checked_at ?? null) : null,
+      lastLabel: input.slack.configured && slackProbe ? 'Checked' : null,
+      checkKind: 'slack',
+    },
+    input.slack.configured === true && input.slack.canPost,
+    slackProbe,
+  )
 
   // A builder who connects only Discord read "Nothing is connected yet"
   // (first-time user test, 2026-10-28): every alert channel is a tile.
   const webhookTile = (id: 'discord' | 'teams', label: string, brand: string, configured: boolean): GridTile => {
     const probe = latestProbe(input.history, id)
-    return {
+    const tile: GridTile = {
       id,
       label,
       brand,
@@ -184,21 +232,29 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
       view: connectionFromProbe({ configured, probe, now: input.now }),
       lastAt: configured ? (probe?.checked_at ?? null) : null,
       lastLabel: configured && probe ? 'Checked' : null,
+      // Their only test posts a message: that stays a deliberate press in the drawer.
+      checkKind: null,
     }
+    return withNeverChecked(tile, configured, probe)
   }
   const discord = webhookTile('discord', 'Discord', 'discord', Boolean(input.discordConfigured))
   const teams = webhookTile('teams', 'Teams', 'microsoftteams', Boolean(input.teamsConfigured))
 
   const linearProbe = latestProbe(input.history, 'linear')
-  const linear: GridTile = {
-    id: 'linear',
-    label: 'Linear',
-    brand: 'linear',
-    anchor: 'integrations-linear',
-    view: connectionFromProbe({ configured: input.linearConnected, probe: linearProbe, now: input.now }),
-    lastAt: input.linearConnected ? (linearProbe?.checked_at ?? null) : null,
-    lastLabel: input.linearConnected && linearProbe ? 'Checked' : null,
-  }
+  const linear: GridTile = withNeverChecked(
+    {
+      id: 'linear',
+      label: 'Linear',
+      brand: 'linear',
+      anchor: 'integrations-linear',
+      view: connectionFromProbe({ configured: input.linearConnected, probe: linearProbe, now: input.now }),
+      lastAt: input.linearConnected ? (linearProbe?.checked_at ?? null) : null,
+      lastLabel: input.linearConnected && linearProbe ? 'Checked' : null,
+      checkKind: 'linear',
+    },
+    input.linearConnected,
+    linearProbe,
+  )
 
   // Claude Code is the other fix agent. The integrations stats (and so the
   // sidebar badge) count it when it is set up, so the grid shows it then too.
@@ -216,7 +272,7 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
   // the user's Langfuse is not (it still has a tile, so it can be set up).
   const langfuse = langfuseOwn
     ? platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')
-    : { ...platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'), view: { state: 'not_connected' as const }, lastAt: null, lastLabel: null }
+    : { ...platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'), view: { state: 'not_connected' as const }, lastAt: null, lastLabel: null, neverChecked: undefined }
 
   // Same order as the page: what a solo builder needs first, monitoring last
   // (AGENTS.md positioning; first-time user test, 2026-10-28). The tiles are
@@ -248,7 +304,7 @@ function routingTile(
     saved && !saved.is_active
       ? { state: 'attention', label: 'Paused', detail: 'Paused: new reports are not forwarded here.' }
       : connectionFromProbe({ configured: Boolean(saved), probe, now: input.now })
-  return {
+  const tile: GridTile = {
     id: healthKind,
     label,
     brand: type === 'github' ? 'github' : type,
@@ -256,7 +312,9 @@ function routingTile(
     view,
     lastAt: saved ? (probe?.checked_at ?? null) : null,
     lastLabel: saved && probe ? 'Checked' : null,
+    checkKind: healthKind,
   }
+  return withNeverChecked(tile, Boolean(saved), probe)
 }
 
 /** Tiles whose card asks for a fix, worst first. "Not connected" is a choice, not a problem. */
@@ -283,6 +341,6 @@ export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: 
   const unchecked = connected.filter((t) => t.view.state === 'checking').length
   const working = connected.length - unchecked
   if (unchecked === 0) return { sentence: `${working} connected and working.`, tone: 'ok' }
-  if (working === 0) return { sentence: `${unchecked} set up, not tested yet.`, tone: 'neutral' }
-  return { sentence: `${working} connected and working, ${unchecked} not tested yet.`, tone: 'neutral' }
+  if (working === 0) return { sentence: `${unchecked} connected, not checked yet.`, tone: 'neutral' }
+  return { sentence: `${working} connected and working, ${unchecked} not checked yet.`, tone: 'neutral' }
 }

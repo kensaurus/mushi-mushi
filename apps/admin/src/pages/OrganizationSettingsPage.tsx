@@ -32,6 +32,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
+import { StatusPill, type RunStatus } from '../components/signal/StatusMark'
 import { useUpdateOrganization } from '../lib/useUpdateOrganization'
 import { MembersStatusBanner } from '../components/members/MembersStatusBanner'
 import { MembersReadout } from '../components/members/MembersReadout'
@@ -960,9 +961,9 @@ export function OrganizationSettingsPage() {
         <Card className="p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>
-            <span className="text-2xs text-fg-faint">
-              {openInvitations.length} open
-              {expiredInvitations.length > 0 ? ` · ${expiredInvitations.length} expired` : ''}
+            <span className="flex items-center gap-1" data-testid="invites-counts">
+              <StatusPill status="waiting" label={`${openInvitations.length} open`} />
+              {expiredInvitations.length > 0 ? <StatusPill status="failed" label={`${expiredInvitations.length} expired`} /> : null}
             </span>
           </div>
           <ul className="space-y-2">
@@ -974,6 +975,14 @@ export function OrganizationSettingsPage() {
               const resendCount = invite.resend_count ?? 0
               const isResending = resendingIds.has(invite.id)
               const justCopied = copiedInviteId === invite.id
+              // One mark for where the invite stands: ✕ expired, ⧗ about to, ◷ waiting on the invitee.
+              const inviteState: { status: RunStatus; label: string } = expired
+                ? { status: 'failed', label: 'Expired' }
+                : expiresSoon
+                  ? { status: 'slow', label: 'Expires soon' }
+                  : invite.last_seen_at
+                    ? { status: 'waiting', label: 'Opened' }
+                    : { status: 'waiting', label: 'Not opened' }
               return (
                 <li
                   key={invite.id}
@@ -983,6 +992,12 @@ export function OrganizationSettingsPage() {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
+                        <StatusPill
+                          status={inviteState.status}
+                          label={inviteState.label}
+                          title={invite.last_seen_at ? undefined : "The invitee hasn't opened the link yet — could be a spam filter. Try Resend or Copy link."}
+                          className="shrink-0"
+                        />
                         <span className="truncate font-medium text-fg" title={invite.email}>
                           {invite.email}
                         </span>
@@ -1018,11 +1033,7 @@ export function OrganizationSettingsPage() {
                           <span className="text-fg-faint" title={`Opened ${new Date(invite.last_seen_at).toLocaleString()}`}>
                             · opened <RelativeTime value={invite.last_seen_at} className="text-fg-muted" />
                           </span>
-                        ) : (
-                          <span className="text-warn" title="The invitee hasn't opened the link yet — could be a spam filter. Try Resend or Copy link.">
-                            · not opened
-                          </span>
-                        )}
+                        ) : null}
                         {resendCount > 0 && invite.last_resent_at && (
                           <span className="text-fg-faint" title={`Last resent ${new Date(invite.last_resent_at).toLocaleString()}`}>
                             · resent {resendCount}× (last{' '}

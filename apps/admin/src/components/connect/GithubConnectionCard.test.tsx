@@ -77,6 +77,9 @@ describe('GithubConnectionCard', () => {
     expect(pageData.usePageData).toHaveBeenCalledWith(null)
     expect(host.textContent).toContain('https://github.com/o/web')
     expect(host.textContent).toContain('Connected')
+    // Connected is the passed status pill (2026-11-18).
+    const pill = host.querySelector('[data-testid="status-pill"]')
+    expect([pill?.getAttribute('data-status'), pill?.textContent]).toEqual(['passed', 'Connected'])
   })
 
   // Owner, 2026-11-17: the same status as Integrations, never "Connect GitHub"

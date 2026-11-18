@@ -22,7 +22,7 @@ import {
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
 import { CopyButton, Panel, RelativeTime } from '../ui'
-import { StatusGlyph } from '../signal/StatusGlyph'
+import { StatusPill } from '../signal/StatusMark'
 import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
@@ -230,17 +230,12 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
           className="ci-rise flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-ok/45 bg-ok-muted px-3 py-2"
           data-testid="connect-editor-connected"
         >
-          <StatusGlyph tone="ok" />
-          <span className="text-sm font-bold text-fg">Connected ✓</span>
-          <span className="text-xs text-fg-secondary">
-            {connectedEditor.lastSeenAt ? (
-              <>
-                Your editor last checked in <RelativeTime value={connectedEditor.lastSeenAt} />
-              </>
-            ) : (
-              'Your editor is connected'
-            )}
-          </span>
+          <StatusPill status="passed" label="Editor connected" />
+          {connectedEditor.lastSeenAt ? (
+            <span className="text-xs text-fg-secondary">
+              Last check-in <RelativeTime value={connectedEditor.lastSeenAt} />
+            </span>
+          ) : null}
           <button
             type="button"
             className={`${FOLD_TOGGLE} ml-auto`}

@@ -13,6 +13,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
+const mockInvites = vi.hoisted(() => ({ list: [] as unknown[] }))
+
 vi.mock('../lib/track', () => ({
   trackSelf: () => {},
 }))
@@ -71,7 +73,7 @@ vi.mock('../lib/usePageData', () => ({
             plan_id: 'pro',
           },
           currentUserRole: 'owner',
-          invitations: [],
+          invitations: mockInvites.list,
           members: [
             {
               user_id: 'user-self',
@@ -157,11 +159,11 @@ afterEach(() => {
   host.remove()
 })
 
-function render() {
+function render(tab?: string) {
   act(() => {
     root.render(createElement(
       MemoryRouter,
-      { initialEntries: [`/organization/members?org=${ORG}`] },
+      { initialEntries: [`/organization/members?org=${ORG}${tab ? `&tab=${tab}` : ''}`] },
       createElement(OrganizationSettingsPage),
     ))
   })
@@ -214,6 +216,41 @@ describe('team roster at phone width', () => {
 
     expect(table.querySelector('button[aria-label="Leave this team"]')).toBeTruthy()
     expect(table.querySelector(`button[aria-label="Remove ${LONG_EMAIL}"]`)).toBeTruthy()
+  })
+
+  // 2026-11-18: each invite's state is a status pill, and the counts are pills too.
+  it('marks each pending invitation with its state', () => {
+    const day = 24 * 60 * 60 * 1000
+    const invite = (id: string, expiresIn: number, seen: boolean) => ({
+      id,
+      email: `${id}@example.com`,
+      role: 'member',
+      token: null,
+      invited_by: 'user-self',
+      invited_by_email: 'ada@example.com',
+      expires_at: new Date(Date.now() + expiresIn).toISOString(),
+      created_at: '2026-11-01T00:00:00Z',
+      last_seen_at: seen ? '2026-11-02T00:00:00Z' : null,
+      resend_count: 0,
+      last_resent_at: null,
+    })
+    mockInvites.list = [invite('fresh', 5 * day, false), invite('opened', 5 * day, true), invite('soon', 2 * 60 * 60 * 1000, true), invite('old', -day, false)]
+    try {
+      render('invites')
+      const pillFor = (email: string) => {
+        const row = Array.from(host.querySelectorAll('li')).find((li) => li.textContent?.includes(email))
+        const p = row?.querySelector('[data-testid="status-pill"]')
+        return [p?.getAttribute('data-status'), p?.textContent]
+      }
+      expect(pillFor('fresh@example.com')).toEqual(['waiting', 'Not opened'])
+      expect(pillFor('opened@example.com')).toEqual(['waiting', 'Opened'])
+      expect(pillFor('soon@example.com')).toEqual(['slow', 'Expires soon'])
+      expect(pillFor('old@example.com')).toEqual(['failed', 'Expired'])
+      const counts = [...host.querySelectorAll('[data-testid="invites-counts"] [data-testid="status-pill"]')].map((p) => p.textContent)
+      expect(counts).toEqual(['3 open', '1 expired'])
+    } finally {
+      mockInvites.list = []
+    }
   })
 
   // The unit job does not install a browser. Skip there; run wherever Chromium is present.

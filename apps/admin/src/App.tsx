@@ -22,6 +22,7 @@ import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
+import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
 
@@ -266,7 +267,12 @@ function TesterRoute({ children }: { children: ReactNode }) {
 
 function ResilienceLayer() {
   useSessionWatcher()
-  return <OfflineBanner />
+  return (
+    <>
+      <OfflineBanner />
+      <NewVersionBanner />
+    </>
+  )
 }
 
 /** Lazy-initialises the Mushi self-dogfood SDK.

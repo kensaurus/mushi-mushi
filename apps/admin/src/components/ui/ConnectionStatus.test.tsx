@@ -5,7 +5,7 @@ import { act, type ReactElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { ConnectionStatus, EXPIRY_WARNING_DAYS, connectionStateFrom } from './ConnectionStatus'
+import { ConnectionStatus, EXPIRY_WARNING_DAYS, connectionStateFrom, type ConnectionState } from './ConnectionStatus'
 
 const NOW = Date.parse('2026-10-04T01:00:00Z')
 const H = 3_600_000
@@ -125,5 +125,16 @@ describe('ConnectionStatus', () => {
 
   it('says "Not checked yet" for checking', () => {
     expect(render(<ConnectionStatus state="checking" />).textContent).toContain('Not checked yet')
+  })
+
+  // 2026-11-18: each state is the console's status pill, colour plus glyph.
+  it('draws each state as a status pill', () => {
+    const status = (state: ConnectionState) =>
+      render(<ConnectionStatus state={state} />).querySelector('[data-testid="status-pill"]')?.getAttribute('data-status')
+    expect(status('working')).toBe('passed')
+    expect(status('attention')).toBe('failed')
+    expect(status('expiring')).toBe('slow')
+    expect(status('checking')).toBe('waiting')
+    expect(status('not_connected')).toBe('idle')
   })
 })

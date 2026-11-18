@@ -136,11 +136,11 @@ describe('connectionGridSentence', () => {
   // beside tiles that showed nothing connected (integrator, 2026-10-28).
   it('counts a tool that is set up but not tested once', () => {
     expect(connectionGridSentence(buildConnectionGrid(input({ history: [probe('sentry')] })))).toEqual({
-      sentence: '1 connected and working, 1 not tested yet.',
+      sentence: '1 connected and working, 1 not checked yet.',
       tone: 'neutral',
     })
     expect(connectionGridSentence(buildConnectionGrid(input({ history: [] })))).toEqual({
-      sentence: '2 set up, not tested yet.',
+      sentence: '2 connected, not checked yet.',
       tone: 'neutral',
     })
   })
@@ -151,7 +151,12 @@ describe('connectionGridSentence', () => {
     const only = input({ platform: { platform: {} }, history: [], discordConfigured: true, teamsConfigured: true })
     const tiles = buildConnectionGrid(only)
     expect(tiles.map((t) => t.id)).toEqual(expect.arrayContaining(['discord', 'teams']))
-    expect(connectionGridSentence(tiles).sentence).toBe('2 set up, not tested yet.')
+    expect(connectionGridSentence(tiles).sentence).toBe('2 connected, not checked yet.')
+    // Their only test posts a message, so they get no one-press check.
+    for (const id of ['discord', 'teams']) {
+      const tile = tiles.find((t) => t.id === id)!
+      expect(tile).toMatchObject({ neverChecked: true, checkKind: null, view: { label: 'Connected · not checked yet' } })
+    }
   })
 
   it('with nothing connected, points at GitHub first', () => {
@@ -198,6 +203,39 @@ describe('the GitHub tile follows the app binding the GitHub card uses', () => {
     const tile = github(buildConnectionGrid(input({ platform: appOnly, github: { state: 'repo_no_access', repo: 'kensaurus/kensaur.us' } })))
     expect(tile.view).toMatchObject({ state: 'attention', label: 'Repo linked · app access missing' })
     expect(tile.view.detail).toBe("Mushi Mushi can't read this repo yet: give the Mushi Mushi GitHub App access to kensaurus/kensaur.us.")
+  })
+
+  // Owner, 2026-11-18: the tile read "Not tested yet · Nothing yet" beside a
+  // drawer saying "Connected: kensaurus/kensaur.us".
+  it('a connected repo nobody has checked reads connected, not checked yet, with a check to run', () => {
+    const tile = github(buildConnectionGrid(input({ platform: appOnly, history: [], github: { state: 'connected', repo: 'kensaurus/kensaur.us' } })))
+    expect(tile).toMatchObject({ neverChecked: true, checkKind: 'github', view: { state: 'checking', label: 'Connected · not checked yet' } })
+    // Once a check has run, the tile reads its result instead.
+    const checked = github(buildConnectionGrid(input({ platform: appOnly, history: [probe('github')], github: { state: 'connected', repo: 'kensaurus/kensaur.us' } })))
+    expect(checked.neverChecked).toBeUndefined()
+    expect(checked.view.state).toBe('working')
+  })
+
+  it('still-loading states never read as connected', () => {
+    const slack = buildConnectionGrid(input({ slack: { configured: null, canPost: false, channelId: null } })).find((t) => t.id === 'slack')!
+    expect(slack.neverChecked).toBeUndefined()
+    expect(slack.view.label).toBeUndefined()
+    const sentry = buildConnectionGrid(input({ sentryDeliveries: null })).find((t) => t.id === 'sentry')!
+    expect(sentry.neverChecked).toBeUndefined()
+    expect(sentry.view.label).not.toBe('Connected · not checked yet')
+  })
+
+  it('every never-checked tool with a read-only check names it', () => {
+    const tiles = buildConnectionGrid(
+      input({
+        history: [],
+        slack: { configured: true, canPost: true, channelId: 'C1' },
+        linearConnected: true,
+        routing: [{ integration_type: 'jira', is_active: true }],
+      }),
+    )
+    const unchecked = Object.fromEntries(tiles.filter((t) => t.neverChecked).map((t) => [t.id, t.checkKind]))
+    expect(unchecked).toMatchObject({ github: 'github', slack: 'slack', linear: 'linear', jira: 'jira' })
   })
 
   it('no repo reads not connected; without the status yet it falls back to the token form', () => {

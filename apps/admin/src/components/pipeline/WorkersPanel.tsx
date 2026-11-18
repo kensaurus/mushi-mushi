@@ -28,6 +28,9 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { PageLoadError } from '../PageLoadError'
 import { Badge, Btn, Card, CodeValue, HelpPopover, Input, Loading, PageFirstStep, PageStatus, Section } from '../ui'
 import { IconServer } from '../icons'
+import { BarCell } from '../signal/BarCell'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { hostRunStatus, signInRunStatus } from './pipelineRunStatus'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import {
@@ -79,7 +82,7 @@ function CursorAccountRow({ host, onChanged }: { host: WorkerHost; onChanged: ()
     <div className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid={`${testId}-account`}>
       <span>Lanes spend:</span>
       <span className="text-fg">{host.cursorAccount ?? 'the account the machine is signed in as'}</span>
-      {login && <Badge tone={login.state === 'signed_in' ? 'ok' : login.state === 'link_ready' || login.state === 'requested' || login.state === 'waiting_for_runs' ? 'warn' : 'danger'}>{SWITCH_STATE[login.state] ?? login.state}</Badge>}
+      {login && <StatusPill status={signInRunStatus(login.state)} label={SWITCH_STATE[login.state] ?? login.state} />}
       {host.mine && !host.revoked && (
         <Btn size="sm" variant="ghost" onClick={() => setOpen(true)} data-testid={`${testId}-switch-account`}>
           {login?.state === 'link_ready' ? 'Open the sign-in' : 'Switch account'}
@@ -93,13 +96,13 @@ function CursorAccountRow({ host, onChanged }: { host: WorkerHost; onChanged: ()
 const INSTALL_ONE = 'mushi worker install --lane my-app --project <app id> --repo-dir ~/src/my-app'
 const INSTALL_CONF = 'mushi worker install --lanes-conf ./lanes.conf --clone-root ~/.cache/mushi-work'
 
-const CURSOR_RESULT: Record<string, { text: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' }> = {
-  expected: { text: 'signed in as expected', tone: 'ok' },
-  other_account: { text: 'signed in as another account', tone: 'danger' },
-  signed_out: { text: 'signed out', tone: 'danger' },
-  timed_out: { text: 'check timed out', tone: 'warn' },
-  missing: { text: 'not installed', tone: 'danger' },
-  unclear: { text: 'unclear answer', tone: 'neutral' },
+const CURSOR_RESULT: Record<string, { text: string; status: RunStatus }> = {
+  expected: { text: 'signed in as expected', status: 'passed' },
+  other_account: { text: 'signed in as another account', status: 'failed' },
+  signed_out: { text: 'signed out', status: 'failed' },
+  timed_out: { text: 'check timed out', status: 'slow' },
+  missing: { text: 'not installed', status: 'failed' },
+  unclear: { text: 'unclear answer', status: 'idle' },
 }
 
 interface HostTelemetry {
@@ -127,21 +130,22 @@ function HostChecks({ host }: { host: WorkerHost }) {
         <span>Cursor account:</span>
         {cur && curMeta ? (
           <>
-            <Badge tone={curMeta.tone}>{curMeta.text}</Badge>
+            <StatusPill status={curMeta.status} label={curMeta.text} />
             <span>
               {cur.account ? `(${cur.account}) ` : ''}checked {durationLabel(cur.ageSec)} ago{cur.detail ? `: "${cur.detail}"` : ''}
             </span>
           </>
         ) : (
-          <span>not checked yet</span>
+          <StatusPill status="idle" label="not checked yet" />
         )}
         <span className="ml-2">GitHub (gh):</span>
-        {gh ? <Badge tone={gh.result === 'signed_in' ? 'ok' : gh.result === 'signed_out' ? 'danger' : 'neutral'}>{gh.result.replace('_', ' ')}</Badge> : <span>not checked yet</span>}
+        {gh ? <StatusPill status={signInRunStatus(gh.result)} label={gh.result.replace('_', ' ')} /> : <StatusPill status="idle" label="not checked yet" />}
       </p>
       {t.waitWhy && <p data-testid={`${testId}-wait`}>Waiting: {t.waitWhy}.</p>}
       {t.slots && (
-        <p data-testid={`${testId}-slots`}>
-          Agent spaces: {t.slots.length} of {host.guards.max_agents} in use
+        <p className="flex flex-wrap items-center gap-x-1.5" data-testid={`${testId}-slots`}>
+          <span>Agent spaces in use:</span>
+          <BarCell value={t.slots.length} max={host.guards.max_agents} tone={t.slots.length >= host.guards.max_agents ? 'warn' : 'info'} text={`${t.slots.length}/${host.guards.max_agents}`} />
           {t.slots.length > 0 && `: ${t.slots.map((x) => `${x.lane} (${durationLabel(x.ageSec)}, ${STAGE_LABEL[x.stage] ?? x.stage})`).join('; ')}`}.
         </p>
       )}
@@ -180,7 +184,7 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="text-xs font-semibold text-fg">{host.hostname}</span>
         <Badge tone="neutral">{host.platform}</Badge>
-        <Badge tone={host.revoked ? 'danger' : host.online ? 'ok' : 'warn'}>{host.revoked ? 'revoked' : host.online ? 'online' : 'offline'}</Badge>
+        <StatusPill status={hostRunStatus(host)} label={host.revoked ? 'revoked' : host.online ? 'online' : 'offline'} />
         <span className="text-2xs text-fg-muted" data-testid={`${testId}-heartbeat`}>
           last heartbeat {sinceLabel(host.lastHeartbeatAt, now)}
           {s.state ? ` · ${String(s.state)}` : ''}

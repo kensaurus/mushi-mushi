@@ -18,7 +18,7 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { ConnectionGrid, useConnectionTiles, type ConnectionGroup } from './ConnectionGrid'
-import type { GridToolId } from './connectionGridModel'
+import type { GridTile, GridToolId } from './connectionGridModel'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -52,7 +52,14 @@ const GROUPS: ConnectionGroup[] = [
   { heading: createElement('p', null, 'Errors you already catch (optional)'), tools: ['sentry', 'langfuse'] },
 ]
 
-function Harness(props: { history: HealthRow[]; onOpen: (id: GridToolId) => void; onConnect: (id: GridToolId) => void; routing?: Array<{ integration_type: string; is_active: boolean }> }) {
+function Harness(props: {
+  history: HealthRow[]
+  onOpen: (id: GridToolId) => void
+  onConnect: (id: GridToolId) => void
+  onCheck?: (tile: GridTile) => void
+  checkingId?: GridToolId | null
+  routing?: Array<{ integration_type: string; is_active: boolean }>
+}) {
   const tiles = useConnectionTiles({
     platform,
     history: props.history,
@@ -60,16 +67,27 @@ function Harness(props: { history: HealthRow[]; onOpen: (id: GridToolId) => void
     linearConnected: false,
     routing: props.routing,
   })
-  return createElement(ConnectionGrid, { tiles, groups: GROUPS, onOpen: props.onOpen, onConnect: props.onConnect })
+  return createElement(ConnectionGrid, {
+    tiles,
+    groups: GROUPS,
+    onOpen: props.onOpen,
+    onConnect: props.onConnect,
+    onCheck: props.onCheck,
+    checkingId: props.checkingId,
+  })
 }
 
-function render(history: HealthRow[], extra: { routing?: Array<{ integration_type: string; is_active: boolean }> } = {}) {
+function render(
+  history: HealthRow[],
+  extra: { routing?: Array<{ integration_type: string; is_active: boolean }>; checkingId?: GridToolId | null } = {},
+) {
   const onOpen = vi.fn()
   const onConnect = vi.fn()
+  const onCheck = vi.fn()
   act(() => {
-    root.render(createElement(MemoryRouter, null, createElement(Harness, { history, onOpen, onConnect, ...extra })))
+    root.render(createElement(MemoryRouter, null, createElement(Harness, { history, onOpen, onConnect, onCheck, ...extra })))
   })
-  return { onOpen, onConnect }
+  return { onOpen, onConnect, onCheck }
 }
 
 describe('ConnectionGrid', () => {
@@ -88,6 +106,35 @@ describe('ConnectionGrid', () => {
     expect(host.querySelector('[data-testid="integrations-alerts"]')).toBeNull()
     // Never the old "Set it up below" pointer.
     expect(host.textContent).not.toContain('Set it up below')
+    // States are status marks: broken is failed, not set up is idle.
+    expect(host.querySelector('[data-testid="integration-tile-github"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('failed')
+    expect(host.querySelector('[data-testid="integration-tile-slack"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('idle')
+  })
+
+  // Owner, 2026-11-18: a connected repo nobody had checked read "Not tested
+  // yet · Nothing yet" with a blue dot.
+  it('a connected tool nobody has checked reads connected with a passed mark and a Check now beside it', () => {
+    const { onCheck, onOpen } = render([])
+    const tile = host.querySelector('[data-testid="integration-tile-github"]')!
+    expect(tile.textContent).toContain('Connected · not checked yet')
+    expect(tile.textContent).not.toContain('Nothing yet')
+    expect(tile.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('passed')
+    const check = host.querySelector<HTMLButtonElement>('[data-testid="integration-check-github"]')!
+    expect(check.textContent).toBe('Check now')
+    expect(check.closest('[data-state]')).toBeNull()
+    act(() => check.click())
+    expect(onCheck).toHaveBeenCalledWith(expect.objectContaining({ id: 'github', checkKind: 'github' }))
+    expect(onOpen).not.toHaveBeenCalled()
+    // A checked tool has no Check now.
+    render(history)
+    expect(host.querySelector('[data-testid="integration-check-github"]')).toBeNull()
+  })
+
+  it('shows the running mark while the check runs', () => {
+    render([], { checkingId: 'github' })
+    const tile = host.querySelector('[data-testid="integration-tile-github"]')!
+    expect(tile.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('running')
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="integration-check-github"]')!.disabled).toBe(true)
   })
 
   it('opens the settings when a tile or Fix is pressed', () => {

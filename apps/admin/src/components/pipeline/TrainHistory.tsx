@@ -1,14 +1,15 @@
 /**
  * FILE: apps/admin/src/components/pipeline/TrainHistory.tsx
  * PURPOSE: Release trains (ADR 0044) of the last 7 days, one row per repo:
- *          a strip of squares, oldest left, green merged, red failed, blue
- *          on the way; the checks that failed them most; and "Run merge queue
+ *          a strip of status marks, oldest left (✓ merged, ✕ failed, a
+ *          pulsing ● on the way, ⊘ abandoned); the checks that failed them most; and "Run merge queue
  *          now" for the app. Clicking a square shows that train's detail.
  */
 
 import { useState } from 'react'
 import { Badge, Btn } from '../ui'
-import { ageLabel, TRAIN_STATE_TONE, type ActionOutcome, type TrainSummary } from '../../lib/pipeline'
+import { ageLabel, type ActionOutcome, type TrainSummary } from '../../lib/pipeline'
+import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 
 interface Props {
   trains: TrainSummary[]
@@ -20,13 +21,15 @@ interface Props {
   onRetry: (projectId: string, repo: string) => void
 }
 
-const SQUARE: Record<string, string> = {
-  merged: 'bg-ok',
-  failed: 'bg-danger',
-  building: 'bg-info',
-  testing: 'bg-info',
-  abandoned: 'bg-fg-faint',
+/** A train's state as a mark: shape plus colour, so a red/green strip never relies on colour alone. */
+const TRAIN_STATUS: Record<string, RunStatus> = {
+  merged: 'passed',
+  failed: 'failed',
+  building: 'running',
+  testing: 'running',
+  abandoned: 'cancelled',
 }
+const trainStatus = (state: string): RunStatus => TRAIN_STATUS[state] ?? 'idle'
 
 export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId, results, onRetry }: Props) {
   const [picked, setPicked] = useState<string | null>(null)
@@ -45,10 +48,21 @@ export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
                 <span className="wrap-anywhere font-mono text-xs text-fg">{repo.repo}</span>
                 {showApp && <Badge tone="neutral">{projectNames.get(repo.projectId) ?? 'app'}</Badge>}
-                <span className="text-2xs tabular-nums text-fg-muted">
-                  <span className="text-ok-foreground">{repo.merged} merged</span> ·{' '}
-                  <span className={repo.failed > 0 ? 'font-medium text-danger-foreground' : ''}>{repo.failed} failed</span>
-                  {repo.active > 0 && <> · <span className="text-info-foreground">{repo.active} on the way</span></>}
+                <span className="inline-flex flex-wrap items-center gap-x-2 text-2xs tabular-nums text-fg-muted">
+                  <span className="inline-flex items-center gap-1 text-ok-foreground">
+                    <StatusMark status="passed" size={10} />
+                    {repo.merged} merged
+                  </span>
+                  <span className={`inline-flex items-center gap-1 ${repo.failed > 0 ? 'font-medium text-danger-foreground' : ''}`}>
+                    <StatusMark status={repo.failed > 0 ? 'failed' : 'idle'} size={10} />
+                    {repo.failed} failed
+                  </span>
+                  {repo.active > 0 && (
+                    <span className="inline-flex items-center gap-1 text-info-foreground">
+                      <StatusMark status="running" size={10} />
+                      {repo.active} on the way
+                    </span>
+                  )}
                 </span>
               </span>
               <Btn
@@ -71,13 +85,16 @@ export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId
                   onClick={() => setPicked((cur) => (cur === t.id ? null : t.id))}
                   title={`${t.state} · ${t.members} fix${t.members === 1 ? '' : 'es'} · ${ageLabel(t.createdAt, now)} ago`}
                   aria-label={`Train ${t.prNumber ? `#${t.prNumber}` : ''} ${t.state}, ${ageLabel(t.createdAt, now)} ago`}
-                  className={`h-3.5 w-3.5 rounded-xs ${SQUARE[t.state] ?? 'bg-fg-faint'} ${picked === t.id ? 'ring-2 ring-brand ring-offset-1 ring-offset-surface-raised' : 'hover:opacity-80'}`}
-                />
+                  data-status={trainStatus(t.state)}
+                  className={`inline-flex h-4 w-4 items-center justify-center rounded-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${picked === t.id ? 'bg-surface-overlay ring-2 ring-brand' : 'hover:bg-surface-overlay'}`}
+                >
+                  <StatusMark status={trainStatus(t.state)} size={12} />
+                </button>
               ))}
             </div>
             {chosen && (
               <p className="flex flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted" data-testid="pipeline-train-detail">
-                <Badge tone={TRAIN_STATE_TONE[chosen.state] ?? 'neutral'}>{chosen.state}</Badge>
+                <StatusPill status={trainStatus(chosen.state)} label={chosen.state} />
                 {chosen.prNumber ? (
                   <a href={`https://github.com/${repo.repo}/pull/${chosen.prNumber}`} target="_blank" rel="noreferrer" className="font-mono hover:text-fg hover:underline">
                     #{chosen.prNumber}
@@ -94,9 +111,7 @@ export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId
               <p className="flex flex-wrap items-center gap-1 text-2xs text-fg-muted">
                 <span>Fails most on:</span>
                 {repo.topFailures.map((f) => (
-                  <Badge key={f.check} tone="dangerSubtle">
-                    {f.check} ×{f.count}
-                  </Badge>
+                  <StatusPill key={f.check} status="failed" label={`${f.check} ×${f.count}`} />
                 ))}
               </p>
             )}

@@ -19,6 +19,8 @@ import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { VitalText } from '../signal/VitalText'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import type { WorkerLane } from '../../lib/workers'
 
@@ -52,7 +54,7 @@ const TONE_BORDER = {
   done: 'border-l-ok',
 }
 
-const VERDICT_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'neutral'> = { merge: 'ok', fix_first: 'warn', hold: 'danger' }
+const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
 const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
 
 /** Where the person fixes what blocks an action, when it is a setting. */
@@ -192,20 +194,26 @@ function Evidence({ item }: { item: PipelineItem }) {
         <p className="flex flex-wrap items-center gap-1">
           <span>Failing:</span>
           {item.failingChecks.slice(0, 8).map((c) => (
-            <Badge key={c} tone="dangerSubtle">{c}</Badge>
+            <StatusPill key={c} status="failed" label={c} />
           ))}
         </p>
       )}
       {showReview && (
         <div className="space-y-0.5">
           <p className="flex flex-wrap items-center gap-1">
-            <Badge tone={VERDICT_TONE[verdict] ?? 'neutral'}>{VERDICT_LABEL[verdict] ?? verdict}</Badge>
-            {item.review?.summary && <span className="min-w-0 wrap-break-word">{item.review.summary}</span>}
+            <StatusPill status={VERDICT_STATUS[verdict] ?? 'idle'} label={VERDICT_LABEL[verdict] ?? verdict} />
+            {item.review?.summary && (
+              <span className="min-w-0 wrap-break-word">
+                <VitalText text={item.review.summary} />
+              </span>
+            )}
           </p>
           {item.review && item.review.findings.length > 0 && (
             <ul className="list-disc space-y-0.5 pl-4">
               {item.review.findings.map((f, i) => (
-                <li key={i} className="wrap-break-word">{f}</li>
+                <li key={i} className="wrap-break-word">
+                  <VitalText text={f} />
+                </li>
               ))}
             </ul>
           )}
@@ -223,7 +231,7 @@ function Evidence({ item }: { item: PipelineItem }) {
               {why}
             </span>
           )}
-          {why ? withoutReasonCode(note) : note}
+          <VitalText text={why ? withoutReasonCode(note) : note} />
         </p>
       )}
     </div>
@@ -237,10 +245,12 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {item.reportId ? (
           <Link to={`/reports/${item.reportId}`} className="min-w-0 max-w-full truncate text-xs font-medium text-fg hover:underline">
-            {item.title}
+            <VitalText text={item.title} />
           </Link>
         ) : (
-          <span className="min-w-0 max-w-full truncate text-xs font-medium text-fg">{item.title}</span>
+          <span className="min-w-0 max-w-full truncate text-xs font-medium text-fg">
+            <VitalText text={item.title} />
+          </span>
         )}
         {item.prUrl && (
           <a href={item.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 font-mono text-2xs text-fg-secondary hover:text-fg hover:underline">

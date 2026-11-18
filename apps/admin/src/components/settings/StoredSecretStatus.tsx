@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { Btn } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
@@ -46,12 +47,16 @@ export function StoredSecretStatus({ column, label, isSet, consequence, onRemove
   }
 
   if (!isSet) {
-    return <p className="mt-1 text-xs text-fg-muted">Not saved yet</p>
+    return (
+      <p className="mt-1">
+        <StatusPill status="idle" label="Not saved yet" />
+      </p>
+    )
   }
 
   return (
     <div className="mt-1 flex items-center gap-2">
-      <span className="text-xs text-ok">Saved</span>
+      <StatusPill status="passed" label="Saved" />
       <Btn variant="ghost" size="sm" onClick={() => setConfirming(true)} aria-label={`Remove ${label.toLowerCase()}`}>
         Remove
       </Btn>

@@ -17,8 +17,9 @@ import {
 } from '../report-detail/ReportSurface'
 import { ReportCodeText } from './ReportCodeText'
 import type { ReportBreadcrumb, ReportSentryContext, ReportSentryLink } from '../report-detail/types'
+import { StatusPill } from '../signal/StatusMark'
+import { reportRunStatus } from './reportRunStatus'
 import {
-  STATUS,
   SEVERITY,
   CATEGORY_BADGE,
   CATEGORY_LABELS,
@@ -134,9 +135,7 @@ export function ReportPreviewDrawer({ previewId, onClose, onSeen }: Props) {
           <>
             <div className="rounded-md border border-edge-subtle bg-surface-raised/35 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>
-                  {statusLabel(report.status)}
-                </Badge>
+                <StatusPill status={reportRunStatus(report.status)} label={statusLabel(report.status)} />
                 {report.severity && (
                   <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
                 )}

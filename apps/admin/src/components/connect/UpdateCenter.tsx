@@ -15,7 +15,8 @@ import { useSdkUpgrade } from '../../lib/useSdkUpgrade'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { CodeInline } from '../CodePanel'
 import { LockfileHelperDisclosure } from '../SdkUpgradeCTA'
-import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
+import { LINK_ACCENT } from '../../lib/chipTone'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { deriveUpdateCenterView, type UpdateCenterView } from '../../lib/updateCenterView'
 import type { SdkStatus } from '../SdkVersionBadge'
 import {
@@ -25,7 +26,6 @@ import {
   IconBolt,
   IconAlertTriangle,
   IconArrowRight,
-  IconCheck,
 } from '../icons'
 
 interface UpdateCenterProject {
@@ -41,7 +41,6 @@ interface UpdateCenterProps {
   preflight: PreflightState
 }
 
-const CHIP = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium'
 
 function prNumberFrom(url: string | undefined): string | null {
   const m = url?.match(/\/pull\/(\d+)/)
@@ -75,12 +74,9 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
             <td className="py-1.5 pr-3 font-mono">{p.latest ?? 'not checked yet'}</td>
             <td className="py-1.5">
               {p.current === true ? (
-                <span className={`${CHIP} ${CHIP_TONE.okSubtle}`}>
-                  <IconCheck className="h-3 w-3" aria-hidden />
-                  Up to date
-                </span>
+                <StatusPill status="passed" label="Up to date" />
               ) : p.current === false ? (
-                <span className={`${CHIP} ${CHIP_TONE.warnSubtle}`}>Update available</span>
+                <StatusPill status="slow" label="Update available" />
               ) : null}
             </td>
           </tr>
@@ -95,11 +91,11 @@ function checkedAgo(at: number): string {
   return s < 60 ? 'just now' : `${Math.round(s / 60)} min ago`
 }
 
-const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; tone: string }> = {
-  passing: { label: 'CI passing', tone: CHIP_TONE.okSubtle },
-  failing: { label: 'CI failing', tone: CHIP_TONE.dangerSubtle },
-  running: { label: 'CI running', tone: CHIP_TONE.infoSubtle },
-  not_checked: { label: 'CI not checked yet', tone: CHIP_TONE.neutral },
+const CI_CHIP: Record<UpdateCenterView['ci'], { label: string; status: RunStatus }> = {
+  passing: { label: 'CI passing', status: 'passed' },
+  failing: { label: 'CI failing', status: 'failed' },
+  running: { label: 'CI running', status: 'running' },
+  not_checked: { label: 'CI not checked yet', status: 'idle' },
 }
 
 export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
@@ -154,9 +150,8 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
 
       {/* State line — one sentence about where the upgrade stands. */}
       {view.mode === 'up_to_date' && (
-        <p className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium ${CHIP_TONE.okSubtle}`}>
-          <IconCheck className="h-3.5 w-3.5" aria-hidden />
-          Up to date — nothing to upgrade.
+        <p className="flex items-center gap-1.5 text-xs" data-testid="update-center-up-to-date">
+          <StatusPill status="passed" label="Up to date" />
         </p>
       )}
       {view.mode === 'repo_current' && (
@@ -180,7 +175,7 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
               Upgrade PR {prLabel} is open
               {view.prTargetVersion ? ` (to ${view.prTargetVersion})` : ''}.
             </span>
-            <span className={`${CHIP} ${ci.tone}`}>{ci.label}</span>
+            <StatusPill status={ci.status} label={ci.label} />
           </p>
           <p className="text-2xs text-fg-muted">
             Review and merge it on GitHub. Lockfile: your Mushi lockfile workflow refreshes it on

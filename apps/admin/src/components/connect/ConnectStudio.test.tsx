@@ -43,10 +43,12 @@ describe('ConnectStudio', () => {
     expect(host.querySelector('[data-testid="connect-editor-connected"]')).toBeNull()
   })
 
-  it('folds the picker to "Connected ✓" with an expandable "add another"', () => {
+  it('folds the picker to a connected pill with an expandable "add another"', () => {
     render({ lastSeenAt: new Date().toISOString() })
     const row = host.querySelector('[data-testid="connect-editor-connected"]')!
-    expect(row.textContent).toContain('Connected ✓')
+    // The fold leads with the passed status pill (2026-11-18), not words plus a ✓.
+    const pill = row.querySelector('[data-testid="status-pill"]')
+    expect([pill?.getAttribute('data-status'), pill?.textContent]).toEqual(['passed', 'Editor connected'])
     expect(host.querySelector('[data-testid="lane-picker"]')).toBeNull()
     const toggle = row.querySelector<HTMLButtonElement>('button[aria-expanded]')!
     expect(toggle.getAttribute('aria-expanded')).toBe('false')

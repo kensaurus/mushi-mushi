@@ -153,6 +153,10 @@ describe('SdkInstallKeyPanel stale keys', () => {
     await flush()
     const action = document.body.querySelector<HTMLButtonElement>('[data-testid="revoke-stale-keys"]')!
     expect(action.textContent).toBe('Revoke 2 stale keys')
+    // Each key's health is a status pill (2026-11-18): a live key passes, a never-used one is idle.
+    const keyStatus = (s: string) => document.body.querySelector(`[data-key-status="${s}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(keyStatus('healthy')).toBe('passed')
+    expect(keyStatus('never')).toBe('idle')
     act(() => action.click())
     // Nothing is revoked before the confirm.
     expect(api.apiFetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)

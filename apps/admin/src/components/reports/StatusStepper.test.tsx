@@ -129,4 +129,15 @@ describe('StatusStepper', () => {
     expect(barWrapper.className).toContain('flex-1')
     expect(host.textContent).toContain('Fixed')
   })
+
+  // 2026-11-18: the step's word carries the status mark (colour plus glyph).
+  it('marks the step word with the report status', () => {
+    const cases: Array<[string, string]> = [['new', 'waiting'], ['fixing', 'running'], ['fixed', 'passed'], ['reopened', 'failed']]
+    for (const [status, mark] of cases) {
+      act(() => root.render(createElement(StatusStepper, { status, size: 'table' })))
+      expect(host.querySelector('[data-testid="status-stepper-word"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe(mark)
+    }
+    act(() => root.render(createElement(StatusStepper, { status: 'dismissed' })))
+    expect(host.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('cancelled')
+  })
 })
