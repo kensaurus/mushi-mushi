@@ -47,10 +47,19 @@ import {
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { CHIP_TONE } from '../lib/chipTone'
 import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
+
+/** An empty section as one plain line (2026-11-18 sweep: dashed cards sat inside cards). */
+function FlatEmptyLine({ text, hint }: { text: string; hint?: string }) {
+  return (
+    <p className="text-xs text-fg-muted" data-testid="anti-gaming-empty-line">
+      {text}
+      {hint ? <span className="text-fg-faint"> {hint}</span> : null}
+    </p>
+  )
+}
 
 interface ReporterDevice {
   id: string
@@ -469,6 +478,7 @@ export function AntiGamingPage() {
           label="Show"
           value={filter}
           options={['flagged', 'all']}
+          optionLabel={(o) => (o === 'flagged' ? 'Flagged' : 'All devices')}
           onChange={(e) => setFilter(e.currentTarget.value as 'flagged' | 'all')}
         />
         <ConfigHelp helpId="anti-gaming.flagged_filter" />
@@ -490,7 +500,14 @@ export function AntiGamingPage() {
         ]}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2" data-dav-anchor="anti-gaming:decide">
+      {/* With no tracked device the three device tiles were boxes of zeros
+          (2026-11-18 sweep): one line instead, tiles once a device exists. */}
+      {stats.total === 0 ? (
+        <p className="text-xs text-fg-muted tabular-nums" data-testid="anti-gaming-zero-line" data-dav-anchor="anti-gaming:decide">
+          0 tracked devices · 0 flagged · 0 cross-account · {pluralizeWithCount(stats.totalReports, 'report')}
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2" data-dav-anchor="anti-gaming:decide">
         <KpiTile
           label="Tracked devices"
           value={stats.total}
@@ -513,7 +530,8 @@ export function AntiGamingPage() {
           value={stats.totalReports}
           meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
         />
-      </div>
+        </div>
+      )}
 
       {/* Mushi Bounties (super-admin only): withheld tester redemptions. The
           count lives here rather than as a fifth tile that wrapped alone. */}
@@ -555,7 +573,9 @@ export function AntiGamingPage() {
               }}
             />
             <Input
-              placeholder="Search fingerprint, token, IP, reason…"
+              placeholder="Search devices…"
+              aria-label="Search fingerprint, token, IP or reason"
+              title="Search fingerprint, token, IP or reason"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-xs"
@@ -569,12 +589,12 @@ export function AntiGamingPage() {
           <PageLoadError error={error} resource={merged.failedLabel ?? 'data'} onRetry={merged.retry} />
         ) : devices.length === 0 ? (
           search ? (
-            <EmptySectionMessage
+            <FlatEmptyLine
               text="No devices match this search."
               hint="Try a different fingerprint, token, or IP fragment."
             />
           ) : filter === 'flagged' ? (
-            <EmptySectionMessage
+            <FlatEmptyLine
               text="No flagged devices."
               hint="Switch to All to inspect every tracked device, or wait for the detector to fire."
             />
@@ -670,7 +690,7 @@ export function AntiGamingPage() {
         }
       >
         {events.length === 0 ? (
-          <EmptySectionMessage
+          <FlatEmptyLine
             text="No anti-gaming events yet."
             hint={eventFilter ? 'Try a different event type.' : 'Events appear when devices are flagged or unflagged.'}
           />

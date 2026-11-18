@@ -86,7 +86,42 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
 }
 
 /** A graded number cell: the colour says how bad, the number inside says exactly. */
-const CELL = 'inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold tabular-nums'
+const CELL = 'inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold whitespace-nowrap tabular-nums'
+
+/**
+ * The same job on a phone (2026-11-18: Pass and Fails sat off-screen behind the inner scroll):
+ * name with its fail rate beside it, then the times on one line.
+ */
+function JobCard({ t, waitMax }: { t: CiJobType; waitMax: number }) {
+  const link = useCiLink([ciJobKey(t.repo, t.job), ciRepoKey(t.repo)], ciJobKey(t.repo, t.job))
+  const failPct = t.failRate == null ? null : Math.round(t.failRate * 100)
+  return (
+    <li {...link} className={`${link.className} flex flex-col gap-1 py-1.5 text-xs`} data-testid="ci-job-times-card">
+      <span className="flex min-w-0 items-start gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="block wrap-anywhere font-medium text-fg">{t.job}</span>
+          <span className="block truncate text-2xs text-fg-faint" title={t.repo}>
+            {repoShortName(t.repo)} · {t.workflow}
+          </span>
+        </span>
+        {failPct != null && (
+          <span className={`${CELL} shrink-0 text-2xs ${failClass(t.failRate)}`} title="How often it fails">
+            {failPct}% fail
+          </span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-fg-secondary tabular-nums">
+        <span className="whitespace-nowrap">{t.runs} runs</span>
+        <span className="whitespace-nowrap">usually {formatSeconds(t.durationP50s)}</span>
+        <span className="whitespace-nowrap">longest {formatSeconds(t.durationMaxS)}</span>
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
+          waits <span className={`${CELL} min-w-0 ${heatClass(t.queueP50s, waitMax)}`}>{formatSeconds(t.queueP50s)}</span>
+        </span>
+        {t.infraFailures > 0 && <span className="whitespace-nowrap text-fg-faint">+{t.infraFailures} stopped</span>}
+      </span>
+    </li>
+  )
+}
 
 function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; waitMax: number }) {
   const link = useCiLink([ciJobKey(t.repo, t.job), ciRepoKey(t.repo)], ciJobKey(t.repo, t.job))
@@ -101,9 +136,9 @@ function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; wait
         </span>
       </DataTableCell>
       <DataTableCell align="right">{t.runs}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationP50s)}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationP90s)}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationMaxS)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationP50s)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationP90s)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationMaxS)}</DataTableCell>
       <DataTableCell className={WIDE_ONLY}>
         {spread ? (
           <SpreadBar
@@ -139,7 +174,12 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
   const rows = all ? sorted : sorted.slice(0, SHOWN)
   return (
     <div className="@container min-w-0 overflow-x-auto">
-      <table className="w-full text-xs" data-testid="ci-job-times">
+      <ul className="divide-y divide-edge-subtle @3xl:hidden" data-testid="ci-job-times-stacked">
+        {rows.map((t) => (
+          <JobCard key={`${t.repo}|${t.workflow}|${t.job}`} t={t} waitMax={waitMax} />
+        ))}
+      </ul>
+      <table className="hidden w-full text-xs @3xl:table" data-testid="ci-job-times">
         <thead>
           <tr className="border-b border-edge-subtle">
             <DataTableHead>Job</DataTableHead>

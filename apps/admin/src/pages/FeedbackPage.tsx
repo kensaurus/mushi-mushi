@@ -35,6 +35,7 @@ import {
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_FEEDBACK_STATS, type FeedbackStats, type FeedbackTabId } from '../components/feedback/types'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { MoreActionsMenu } from '../components/signal/MoreActionsMenu'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import {
@@ -291,13 +292,27 @@ export function FeedbackPage() {
           {stats.awaitingReply > 0 ? `${stats.awaitingReply} REPLY` : `${stats.activeTickets} ACTIVE`}
         </Badge>
         ) : null}
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || ticketsQuery.isValidating} />
-        <Btn size="sm" onClick={() => openFeedback('bug')}>
+        {/* Phone (2026-11-18): the pill dropped onto its own line and "Request feature"
+            onto a second row. The status card below carries the freshness there, and the
+            secondary action goes under More. */}
+        <span className="hidden sm:inline-flex">
+          <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || ticketsQuery.isValidating} />
+        </span>
+        <Btn size="sm" className="whitespace-nowrap" onClick={() => openFeedback('bug')}>
           Report a bug
         </Btn>
-        <Btn size="sm" variant="ghost" onClick={() => openFeedback('feature')}>
-          Request feature
-        </Btn>
+        <span className="hidden sm:inline-flex" data-testid="feedback-header-feature">
+          <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => openFeedback('feature')}>
+            Request feature
+          </Btn>
+        </span>
+        <span className="sm:hidden" data-testid="feedback-header-more">
+          <MoreActionsMenu
+            label="Help & support"
+            testId="feedback-more"
+            actions={[{ key: 'feature', label: 'Request feature', onSelect: () => openFeedback('feature'), testId: 'feedback-more-feature' }]}
+          />
+        </span>
       </PageHeaderBar>
 
       <PagePosture

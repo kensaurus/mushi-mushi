@@ -714,7 +714,11 @@ function CatalogTab({
           </div>
         ) : null}
 
-        {listState === 'list' && visibleCategories.map((cat) => {
+        {/* One card, one row per category (18 cards before, each with its own
+            frame and shadow). Skills inside are rows, not cards in a card. */}
+        {listState === 'list' && (
+        <div className="divide-y divide-edge-subtle overflow-hidden rounded-lg border border-edge-subtle bg-surface-raised" data-testid="skill-categories">
+        {visibleCategories.map((cat) => {
           const meta = getSkillCategoryMeta(cat)
           const catSkills = grouped[cat] ?? []
           // Searching or picking one category opens it; otherwise the user's
@@ -725,8 +729,8 @@ function CatalogTab({
           return (
             <section
               key={cat}
-              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-              className={`rounded-lg border border-edge-subtle bg-surface-raised p-3 shadow-card border-l-[3px] ${meta.accentClass}`}
+              className={`border-l-[3px] px-3 py-2 ${meta.accentClass}`}
+              data-testid="skill-category"
             >
               <h3>
                 <button
@@ -741,7 +745,7 @@ function CatalogTab({
               </h3>
               {open ? (
                 <>
-                  <div className={`mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
+                  <div className={`mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1 ${selected ? 'xl:grid-cols-2' : 'lg:grid-cols-3'}`}>
                     {shown.map((skill) => (
                       <Btn
                         key={skill.slug}
@@ -750,10 +754,10 @@ function CatalogTab({
                         size="sm"
                         onClick={() => selectSkill(skill)}
                         className={[
-                          '!justify-start !items-start !text-left !p-3 !rounded-lg !w-full !h-auto transition-opacity',
+                          '!justify-start !items-start !text-left !p-2 !rounded-md !w-full !h-auto transition-opacity',
                           selected?.slug === skill.slug
                             ? '!border-brand !bg-surface-raised ring-1 ring-brand/30'
-                            : '!border-edge-subtle !bg-surface-raised hover:!border-brand/40 hover:!bg-surface-overlay',
+                            : '!border-transparent !bg-transparent hover:!bg-surface-overlay',
                         ].join(' ')}
                       >
                         <div className="flex items-start gap-2">
@@ -790,6 +794,8 @@ function CatalogTab({
             </section>
           )
         })}
+        </div>
+        )}
       </div>
 
       {/* Desktop skill detail panel */}
@@ -1629,15 +1635,15 @@ function SkillCategoryHeader({
   count: number
 }) {
   return (
-    <span className="flex items-center gap-2.5">
-      <span className={`flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0 ${meta.badgeClass}`}>
-        <meta.Icon size={15} />
+    // One line: icon, name, count, then the hint (truncated) — a compact row, not a card header.
+    <span className="flex min-w-0 items-center gap-2">
+      <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md ${meta.badgeClass}`}>
+        <meta.Icon size={13} />
       </span>
-      <span className="block min-w-0">
-        <span className="block text-sm font-semibold text-fg">{meta.label}</span>
-        <span className="block text-2xs font-normal text-fg-muted">
-          {count} skill{count === 1 ? '' : 's'} · {meta.hint}
-        </span>
+      <span className="shrink-0 whitespace-nowrap text-sm font-semibold text-fg">{meta.label}</span>
+      <span className="shrink-0 font-mono text-2xs text-fg-muted tabular-nums">{count}</span>
+      <span className="min-w-0 truncate text-2xs font-normal text-fg-muted" title={meta.hint}>
+        {meta.hint}
       </span>
     </span>
   )

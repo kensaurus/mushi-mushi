@@ -442,6 +442,7 @@ export function InventoryPage() {
   const stub = Number(summary.stub ?? 0)
   const broken = regressed + stub
   const hasInventory = snapshot != null
+  const showInventoryTabs = hasInventory || tab !== 'stories' || findings.length > 0
 
   return (
     <div className="space-y-3" data-testid="mushi-page-inventory">
@@ -541,6 +542,10 @@ export function InventoryPage() {
         />
       ) : null}
 
+      {/* Seven empty tabs under the first step read as seven more things to
+          set up (2026-11-18 sweep). They appear once there is something to
+          show; the first step's links still open Discovery and the map file. */}
+      {showInventoryTabs ? (
       <SegmentedControl<Tab>
         size="sm"
         scrollable
@@ -550,6 +555,7 @@ export function InventoryPage() {
         options={INVENTORY_TABS}
         className="w-full sm:w-auto"
       />
+      ) : null}
 
       {tab === 'stories' && (
         hasInventory ? (

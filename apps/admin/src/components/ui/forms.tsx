@@ -372,7 +372,7 @@ const FIELD_FOCUS =
 
 const FIELD_BASE =
   'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
-  'placeholder:text-fg-faint hover:border-edge ' +
+  'placeholder:text-fg-faint/60 hover:border-edge ' +
   `${FIELD_FOCUS} ` +
   'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/40 ' +
   'disabled:opacity-50 disabled:cursor-not-allowed ' +

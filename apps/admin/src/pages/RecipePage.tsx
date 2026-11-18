@@ -14,7 +14,7 @@
  * and on request. Selecting a card opens the side panel.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, Loading, SegmentedControl } from '../components/ui'
@@ -28,7 +28,7 @@ import { orderedRecipeElements } from '../components/recipe/recipeState'
 import { RecipeElementList } from '../components/recipe/RecipeElementList'
 import { RecipeSidePanel } from '../components/recipe/RecipeSidePanel'
 import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
-import { usePrefersRecipeList } from '../components/recipe/useMediaQuery'
+import { useFitsRecipeDiagram, usePrefersRecipeList } from '../components/recipe/useMediaQuery'
 import { RadarPanel } from '../components/portfolio/RadarPanel'
 
 const RecipeFlow = lazy(() =>
@@ -75,7 +75,10 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<RefreshNotice>(null)
   const prefersList = usePrefersRecipeList()
-  const showList = view === 'list' || (view === 'auto' && prefersList)
+  // Auto shows the diagram only where every lane fits; an explicit Diagram choice still pans.
+  const columnRef = useRef<HTMLDivElement>(null)
+  const diagramFits = useFitsRecipeDiagram(columnRef)
+  const showList = view === 'list' || (view === 'auto' && (prefersList || !diagramFits))
 
   const elements = useMemo(() => orderedRecipeElements(data?.elements), [data])
   const selected = selectedKey ? elements.find((e) => e.key === selectedKey) ?? null : null
@@ -161,7 +164,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
               />
             </div>
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              <div className="min-w-0 flex-1">
+              <div ref={columnRef} className="min-w-0 flex-1">
                 {showList ? (
                   <RecipeElementList elements={elements} selectedKey={selectedKey} onSelect={onSelect} />
                 ) : (

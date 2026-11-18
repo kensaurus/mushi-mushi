@@ -68,7 +68,7 @@ import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import { groupCiAdvice } from '../lib/ciAdvice'
 import type { FixAttempt } from '../components/fixes/types'
-import { buildCiQueue, buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { appRunsOn, buildCiQueue, buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
 import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
@@ -263,7 +263,9 @@ export function CiPage() {
   const placementApps = useMemo(() => {
     const byId = new Map<string, string>()
     for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
-    return [...byId].map(([id, name]) => ({ id, name })).sort((x, y) => x.name.localeCompare(y.name))
+    // Where each app's jobs ran this window, for the mark on its chip.
+    const runsOn = appRunsOn(data?.jobs ?? [])
+    return [...byId].map(([id, name]) => ({ id, name, runsOn: runsOn.get(id) ?? null })).sort((x, y) => x.name.localeCompare(y.name))
   }, [data])
   // /ci#ci-placement (Connect's "CI settings" link) opens Settings, then scrolls there.
   useScrollToHash(!!data && !empty)
@@ -331,6 +333,13 @@ export function CiPage() {
       {page.loading && !data && <Loading text="Reading your CI…" />}
 
       {data && !empty && <TabbedSubNav ariaLabel="CI runners views" tabs={tabs} />}
+
+      {/* Problems first: the jobs the test machine stopped sit above the GitHub-access banner (2026-11-18). */}
+      {data && !empty && view === 'machines' && (
+        <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
+          <CiInfraFailures jobs={data.jobs} />
+        </Section>
+      )}
 
       <PagePosture
         slots={[
@@ -439,10 +448,6 @@ export function CiPage() {
             </details>
           </Section>
 
-          <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
-            <p className={HINT}>These jobs never finished testing. They are not code failures: re-run them.</p>
-            <CiInfraFailures jobs={data.jobs} />
-          </Section>
         </>
       )}
 

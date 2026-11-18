@@ -13,7 +13,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ReleasesSnapshotStrip } from './ReleasesSnapshotStrip'
+import { ReleasesSnapshotStrip, releasesFirstStep } from './ReleasesSnapshotStrip'
 import { EMPTY_RELEASES_STATS, type ReleasesStats } from './ReleasesStatsTypes'
 
 let container: HTMLDivElement
@@ -47,5 +47,13 @@ describe('ReleasesSnapshotStrip', () => {
   it('keeps the plain sentence when nothing waits', async () => {
     await render({ ...shipped, topPriority: 'healthy' })
     expect(container.textContent).toContain('3 releases published.')
+  })
+})
+
+describe('releasesFirstStep', () => {
+  it('is the one empty state only while every number is zero', () => {
+    expect(releasesFirstStep(EMPTY_RELEASES_STATS)).toBe(true)
+    expect(releasesFirstStep({ ...EMPTY_RELEASES_STATS, fixedReportsCount: 2 })).toBe(false)
+    expect(releasesFirstStep(shipped)).toBe(false)
   })
 })

@@ -70,6 +70,17 @@ export interface CoverageRowView {
   mutedUntil: string | null
 }
 
+/**
+ * The columns that have data first (most apps reporting first), the all-hatched ones last, so a
+ * phone that shows one column at a time shows one that says something. Stable for ties.
+ */
+export function orderOpsColumns(rows: readonly CoverageRowView[]): OpsColumn[] {
+  const filled = (id: OpsColumn) => rows.filter((r) => r.cells.some((c) => c.column === id && c.lastAt)).length
+  return OPS_COLUMNS.map((c, i) => ({ id: c.id, i, n: filled(c.id) }))
+    .sort((a, b) => b.n - a.n || a.i - b.i)
+    .map((c) => c.id)
+}
+
 /** One row per app; apps that never sent an Ops event first (worst first), then by name. */
 export function buildCoverageRows(data: OpsCoverageResponse, now: number): CoverageRowView[] {
   const byKey = new Map(data.coverage.map((r) => [`${r.project_id}|${r.category}`, r]))
@@ -123,9 +134,9 @@ export function paymentsToday(payments: Record<string, number>): string {
 }
 
 export const SEVERITY_META: Record<OpsSeverity, { label: string; glyph: string; tone: 'danger' | 'warn' | 'info' | 'ok' }> = {
-  urgent: { label: 'Urgent', glyph: '■', tone: 'danger' },
-  warn: { label: 'Warning', glyph: '▲', tone: 'warn' },
-  info: { label: 'Info', glyph: '●', tone: 'info' },
+  urgent: { label: 'Urgent', glyph: '▲', tone: 'danger' },
+  warn: { label: 'Warning', glyph: '◆', tone: 'warn' },
+  info: { label: 'Info', glyph: '■', tone: 'info' },
   resolved: { label: 'Resolved', glyph: '✓', tone: 'ok' },
 }
 
@@ -159,4 +170,108 @@ export function slackState(e: Pick<OpsEvent, 'slack_ts' | 'slack_channel' | 'sla
 /** An event that still needs someone. */
 export function needsAck(e: Pick<OpsEvent, 'severity' | 'acked_at'>): boolean {
   return e.severity !== 'resolved' && !e.acked_at
+}
+
+/** A thread still waiting for someone: an unacknowledged urgent or warning that no later resolve closed. */
+export function needsLook(t: ThreadView): boolean {
+  const e = t.event
+  return (e.severity === 'urgent' || e.severity === 'warn') && needsAck(e) && !t.replies.some((r) => r.severity === 'resolved')
+}
+
+export interface FeedThreadItem {
+  kind: 'thread'
+  thread: ThreadView
+  /** Every event this row stands for: the thread itself plus identical copies folded into it. */
+  ids: string[]
+}
+
+export interface FeedGroupItem {
+  kind: 'group'
+  key: string
+  projectId: string | null
+  category: OpsCategory
+  items: FeedThreadItem[]
+}
+
+export type FeedItem = FeedThreadItem | FeedGroupItem
+
+export interface ArrangedFeed {
+  /** Unacknowledged urgent, then warning rows, newest first within each: pinned on top. */
+  pinned: FeedThreadItem[]
+  /** The rest, newest first: info rows grouped per app and kind, identical rows folded together. */
+  items: FeedItem[]
+}
+
+const CATEGORY_NOUN: Record<OpsCategory, [string, string]> = {
+  payments: ['payment', 'payments'],
+  releases: ['release', 'releases'],
+  alerts: ['alert', 'alerts'],
+}
+
+/** "6 releases", "1 payment". */
+export function categoryCount(category: OpsCategory, n: number): string {
+  return `${n} ${CATEGORY_NOUN[category][n === 1 ? 0 : 1]}`
+}
+
+/**
+ * Problems first: unacknowledged urgent and warning threads pinned on top, worst first. Below,
+ * the same event sent twice (same app, kind, severity and title, no replies) shows once, and two or
+ * more info rows from one app and kind collapse into one group, placed where its newest row was.
+ */
+export function arrangeFeed(events: OpsEvent[]): ArrangedFeed {
+  const threads = nestThreads(events)
+  const rank = (s: OpsSeverity) => (s === 'urgent' ? 0 : 1)
+  const pinned = threads
+    .filter(needsLook)
+    .sort((a, b) => rank(a.event.severity) - rank(b.event.severity) || Date.parse(b.event.occurred_at) - Date.parse(a.event.occurred_at))
+    .map((thread): FeedThreadItem => ({ kind: 'thread', thread, ids: [thread.event.id] }))
+
+  const singles: FeedThreadItem[] = []
+  const seen = new Map<string, FeedThreadItem>()
+  for (const thread of threads) {
+    if (needsLook(thread)) continue
+    const e = thread.event
+    const key = thread.replies.length === 0 ? `${e.project_id ?? ''}|${e.category}|${e.severity}|${e.title}` : null
+    const copy = key ? seen.get(key) : undefined
+    if (copy) {
+      copy.ids.push(e.id)
+      continue
+    }
+    const item: FeedThreadItem = { kind: 'thread', thread, ids: [e.id] }
+    if (key) seen.set(key, item)
+    singles.push(item)
+  }
+
+  const groupKey = (t: ThreadView) => (t.event.severity === 'info' ? `${t.event.project_id ?? ''}|${t.event.category}` : null)
+  const sizes = new Map<string, number>()
+  for (const s of singles) {
+    const k = groupKey(s.thread)
+    if (k) sizes.set(k, (sizes.get(k) ?? 0) + 1)
+  }
+  const groups = new Map<string, FeedGroupItem>()
+  const items: FeedItem[] = []
+  for (const s of singles) {
+    const k = groupKey(s.thread)
+    if (!k || (sizes.get(k) ?? 0) < 2) {
+      items.push(s)
+      continue
+    }
+    let g = groups.get(k)
+    if (!g) {
+      g = { kind: 'group', key: k, projectId: s.thread.event.project_id, category: s.thread.event.category, items: [] }
+      groups.set(k, g)
+      items.push(g)
+    }
+    g.items.push(s)
+  }
+  return { pinned, items }
+}
+
+/** The ids in these rows that still need an acknowledgement. */
+export function unackedIds(items: readonly FeedThreadItem[], events: readonly OpsEvent[]): string[] {
+  const byId = new Map(events.map((e) => [e.id, e]))
+  return items.flatMap((i) => i.ids).filter((id) => {
+    const e = byId.get(id)
+    return e ? needsAck(e) : false
+  })
 }

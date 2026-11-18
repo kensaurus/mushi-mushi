@@ -98,25 +98,30 @@ export function OpsPage() {
     setOlder((cur) => ({ path: feedPath, events: [...(cur.path === feedPath ? cur.events : []), ...page.events], next: page.nextBefore }))
   }, [orgId, nextBefore, feedPath, params, toast])
 
-  const ack = useCallback(
-    async (id: string) => {
-      setAcking((cur) => new Set(cur).add(id))
-      const res = await apiFetchMutate<{ id: string }>(`/v1/admin/ops/events/${encodeURIComponent(id)}/ack`, { method: 'POST', scope: 'enumeration' })
+  const ackMany = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return
+      setAcking((cur) => new Set([...cur, ...ids]))
+      const results = await Promise.all(
+        ids.map((id) => apiFetchMutate<{ id: string }>(`/v1/admin/ops/events/${encodeURIComponent(id)}/ack`, { method: 'POST', scope: 'enumeration' }).then((res) => ({ id, res }))),
+      )
       setAcking((cur) => {
         const next = new Set(cur)
-        next.delete(id)
+        for (const id of ids) next.delete(id)
         return next
       })
-      if (!res.ok) {
-        toast.error(res.error?.message ?? 'Could not acknowledge that event.')
-        return
-      }
-      setOlder((cur) => ({ ...cur, events: cur.events.map((e) => (e.id === id ? { ...e, acked_at: new Date().toISOString() } : e)) }))
+      const done = new Set(results.filter((r) => r.res.ok).map((r) => r.id))
+      const failed = results.find((r) => !r.res.ok)
+      if (failed) toast.error(failed.res.error?.message ?? (ids.length > 1 ? 'Could not acknowledge every event.' : 'Could not acknowledge that event.'))
+      if (done.size === 0) return
+      const at = new Date().toISOString()
+      setOlder((cur) => ({ ...cur, events: cur.events.map((e) => (done.has(e.id) ? { ...e, acked_at: at } : e)) }))
       feed.reload()
       coverage.reload()
     },
     [feed, coverage, toast],
   )
+  const ack = useCallback((id: string) => ackMany([id]), [ackMany])
 
   const reloadAll = useCallback(() => {
     feed.reload()
@@ -222,7 +227,7 @@ export function OpsPage() {
             />
           )}
           {events.length > 0 && (
-            <OpsFeed events={events} apps={apps} now={now} canAck={feed.data?.canAck ?? false} acking={acking} onAck={(id) => void ack(id)} focusId={params.get('event')} />
+            <OpsFeed events={events} apps={apps} now={now} canAck={feed.data?.canAck ?? false} acking={acking} onAck={(id) => void ack(id)} onAckMany={(ids) => void ackMany(ids)} focusId={params.get('event')} />
           )}
           {nextBefore && (
             <div className="mt-2 flex justify-center">

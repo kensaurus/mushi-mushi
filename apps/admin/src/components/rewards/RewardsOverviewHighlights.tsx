@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { Card } from '../ui'
 import { usePageData } from '../../lib/usePageData'
+import { testerLabel } from './overviewHelpers'
 
 interface LeaderRow {
   end_user_id: string
@@ -38,7 +39,8 @@ export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutU
   const live = (quests.data ?? []).filter((q) => q.enabled).sort((a, b) => b.completion_points - a.completion_points).slice(0, 3)
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="rewards-overview-highlights">
+    // $0.00 waiting is already in the status line above: the Payouts card shows only when money is owed (2026-11-18).
+    <div className={`grid grid-cols-1 gap-3 ${pendingPayoutUsd > 0 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`} data-testid="rewards-overview-highlights">
       <Card className="p-3">
         <CardTitle>Top testers · 30 days</CardTitle>
         {leaders.loading && !leaders.data ? (
@@ -50,7 +52,7 @@ export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutU
             {top.map((r, i) => (
               <li key={r.end_user_id} className="flex min-w-0 items-center gap-2 text-xs">
                 <span className="w-4 shrink-0 text-right tabular-nums text-fg-faint">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-fg">{r.end_users?.display_name ?? r.end_users?.external_user_id ?? 'Anonymous tester'}</span>
+                <span className="min-w-0 flex-1 truncate text-fg">{testerLabel(r.end_users)}</span>
                 {r.reward_tiers ? <span className="shrink-0 text-2xs text-fg-muted">{r.reward_tiers.display_name}</span> : null}
                 <span className="shrink-0 font-mono tabular-nums text-fg-secondary">{r.points_30d.toLocaleString()} pts</span>
               </li>
@@ -62,20 +64,18 @@ export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutU
         </Link>
       </Card>
 
-      <Card className="p-3">
+      {pendingPayoutUsd > 0 && (
+      <Card className="p-3" data-testid="rewards-payouts-card">
         <CardTitle>Payouts waiting</CardTitle>
         <p className={`mt-2 text-2xl font-semibold tabular-nums ${pendingPayoutUsd > 0 ? 'text-warn' : 'text-fg'}`}>${pendingPayoutUsd.toFixed(2)}</p>
         <p className="mt-1 text-xs text-fg-muted">
-          {pendingPayoutUsd > 0
-            ? 'Paid at the next monthly run, once each tester has finished Stripe’s identity check.'
-            : 'Nothing owed to testers right now.'}
+          Paid at the next monthly run, once each tester has finished Stripe’s identity check.
         </p>
-        {pendingPayoutUsd > 0 ? (
-          <Link to="/rewards?tab=settings" className={`mt-2 inline-block ${LINK}`}>
-            Review payouts →
-          </Link>
-        ) : null}
+        <Link to="/rewards?tab=settings" className={`mt-2 inline-block ${LINK}`}>
+          Review payouts →
+        </Link>
       </Card>
+      )}
 
       <Card className="p-3">
         <CardTitle>Quests</CardTitle>

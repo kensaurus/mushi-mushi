@@ -8,6 +8,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Card, Btn, Badge, ErrorAlert } from './ui'
 import { ContainedBlock, SignalChip } from './report-detail/ReportSurface'
 import { CodeInline } from './CodePanel'
+import { StatusGlyph } from './signal/StatusGlyph'
 import { apiFetch } from '../lib/supabase'
 import { useSetupStatus, SETUP_STEPS } from '../lib/useSetupStatus'
 import { IconCheck, IconTerminal, IconCopy } from './icons'
@@ -198,8 +199,15 @@ export function VerifySetupPanel({
       {/* Dispatch track */}
       <section className="space-y-2 border-t border-edge-subtle pt-3">
         <div className="flex flex-wrap items-center gap-2">
+          {/* Before the preflight runs, dispatch is unknown: say "not checked", never a bare "—". */}
           <SignalChip tone={dispatchReady === true ? 'ok' : dispatchReady === false ? 'warn' : 'neutral'}>
-            Dispatch {dispatchChecks ? `${dispatchChecks.filter((c) => c.ready).length}/${dispatchChecks.length}` : '—'}
+            {dispatchChecks ? (
+              `Dispatch ${dispatchChecks.filter((c) => c.ready).length}/${dispatchChecks.length}`
+            ) : (
+              <span className="inline-flex items-center gap-1" data-testid="verify-dispatch-unchecked">
+                Dispatch <StatusGlyph tone="off" /> not checked
+              </span>
+            )}
           </SignalChip>
           <Btn size="sm" variant="primary" loading={dispatchLoading} onClick={() => void runDispatchCheck()}>
             Run dispatch preflight

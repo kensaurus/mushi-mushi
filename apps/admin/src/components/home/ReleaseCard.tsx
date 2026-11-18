@@ -23,6 +23,15 @@ function severityHref(s: SeverityKey): string {
   return s === 'unrated' ? '/reports?status=open' : `/reports?status=open&severity=${s}`
 }
 
+/**
+ * @internal Exported for tests.
+ * Nothing has started toward a release: every station is 0 and no train
+ * ran. Five "0" chips said one fact five times (fresh-eyes sweep 2026-11-18).
+ */
+export function releaseIsEmpty(r: Pick<HomeRelease, 'stations' | 'train'>): boolean {
+  return !r.train && r.stations.every((s) => s.count === 0 && s.stuck === 0)
+}
+
 export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeRelease>; projectId: string }) {
   const pipelineHref = `/pipeline?project=${encodeURIComponent(projectId)}`
   return (
@@ -30,10 +39,17 @@ export function ReleaseCard({ section, projectId }: { section: HomeSection<HomeR
       <HomeSectionBody section={section} what="the release" notConnectedText="Connect your GitHub repo to see fixes move toward a release.">
         {(r) => (
           <div className="space-y-4">
-            <ReleaseStations stations={r.stations} href={pipelineHref} />
+            {releaseIsEmpty(r) ? null : <ReleaseStations stations={r.stations} href={pipelineHref} />}
             <div className="grid gap-2 text-xs text-fg-secondary sm:grid-cols-2">
               <p>
-                <ReleaseTrainLine train={r.train} href={pipelineHref} />
+                {releaseIsEmpty(r) ? (
+                  <span className="inline-flex items-center gap-1.5 text-fg-muted" data-testid="home-release-empty">
+                    <span aria-hidden className="ci-nodata h-3 w-6 shrink-0 rounded-sm border border-edge-subtle" />
+                    No fix PRs yet
+                  </span>
+                ) : (
+                  <ReleaseTrainLine train={r.train} href={pipelineHref} />
+                )}
               </p>
               <p className="sm:text-right">
                 {r.lastDeploy ? (

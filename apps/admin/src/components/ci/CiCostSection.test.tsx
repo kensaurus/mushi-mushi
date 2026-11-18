@@ -173,4 +173,32 @@ describe('CiCostSection', () => {
     await render()
     expect(host.textContent).toContain('No CI jobs in this window')
   })
+
+  // Never an endless spinner (2026-11-18): a read with no answer after 20 s says "not checked" with a retry.
+  it('turns a read that never answers into "not checked" with a retry', async () => {
+    vi.useFakeTimers()
+    try {
+      state.data = null
+      state.loading = true
+      state.reload.mockClear()
+      await render()
+      expect(host.textContent).toContain('Working out what CI costs')
+      expect(q('ci-cost-not-checked')).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(20_000)
+      })
+      expect(host.textContent).not.toContain('Working out what CI costs')
+      const box = q('ci-cost-not-checked')!
+      expect(box.textContent).toContain('Cost and speed: not checked')
+      const retry = Array.from(box.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!
+      await act(async () => {
+        retry.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(state.reload).toHaveBeenCalled()
+      expect(q('ci-cost-not-checked')).toBeNull()
+      expect(host.textContent).toContain('Working out what CI costs')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

@@ -58,3 +58,30 @@ export function timelineEmpty(
     description: 'Upgrade the SDK to capture route changes, clicks, logs, and requests in one chronological trail.',
   }
 }
+
+export type CaptureKind = 'vitals' | 'console' | 'network' | 'repro'
+
+/** Short names for the one "Not captured" line. */
+export const CAPTURE_LABEL: Record<CaptureKind, string> = {
+  vitals: 'web vitals',
+  console: 'console',
+  network: 'network',
+  repro: 'repro',
+}
+
+/**
+ * Which evidence panels have nothing in them. Four cards each holding a
+ * dashed "nothing captured" box became one line, "Not captured: web vitals ·
+ * console · network · repro" (fresh-eyes sweep 2026-11-18); a panel with data
+ * keeps its card.
+ */
+export function missingCaptures(
+  report: Pick<ReportDetail, 'performance_metrics' | 'console_logs' | 'network_logs' | 'backend_spans' | 'repro_timeline'>,
+): CaptureKind[] {
+  const out: CaptureKind[] = []
+  if (!report.performance_metrics || Object.keys(report.performance_metrics).length === 0) out.push('vitals')
+  if (!report.console_logs || report.console_logs.length === 0) out.push('console')
+  if ((!report.network_logs || report.network_logs.length === 0) && (report.backend_spans?.length ?? 0) === 0) out.push('network')
+  if (!Array.isArray(report.repro_timeline) || report.repro_timeline.length === 0) out.push('repro')
+  return out
+}

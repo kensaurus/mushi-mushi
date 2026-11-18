@@ -157,6 +157,17 @@ describe('RecipeElementList', () => {
     expect(card?.textContent).not.toContain('Not checked yet')
   })
 
+  it('a not-set-up card says its state once and shows its zero facts as "not checked" (2026-11-18)', () => {
+    render(orderedRecipeElements({ deploy: summary('deploy', 'not_connected', { reason: 'Not set up. Add deploy targets.', facts: { releases: 0, versionsSeen: 0 } }) }))
+    const card = container.querySelector<HTMLButtonElement>('button[data-element="deploy"]')!
+    const t = card.textContent ?? ''
+    expect(t.match(/Not set up/g)?.length).toBe(1)
+    expect(t).toContain('Add deploy targets.')
+    expect(t).not.toContain('Nothing to check until it is set up')
+    expect(t).not.toContain('Not checked for problems')
+    expect(card.querySelectorAll('[data-testid="fact-not-checked"]').length).toBe(2)
+  })
+
   it('selects a card on click', () => {
     const onSelect = vi.fn()
     render(orderedRecipeElements({}), onSelect)

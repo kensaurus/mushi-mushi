@@ -70,7 +70,11 @@ export function EnvironmentFields({ environment, sessionId }: {
       ? {
           label: 'Viewport',
           hint: 'Browser inner width × height at report time.',
-          value: (
+          // A 0 x 0 viewport is the SDK not measuring (a Sentry import, a
+          // server event), not a window with no size (sweep 2026-11-18).
+          value: !(viewport.width > 0 && viewport.height > 0) ? (
+            <span className="text-2xs text-fg-muted" data-testid="env-viewport-missing">not captured</span>
+          ) : (
             <span className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono tabular-nums text-fg">
               <span className="text-info">{viewport.width.toLocaleString()}</span>
               <span className="text-fg-faint">×</span>

@@ -42,6 +42,12 @@ export interface Recommendation {
    *  indexing & retry" link so the user fixes the prerequisite in one click
    *  instead of hunting through /integrations. */
   actions?: RecommendationAction[]
+  /**
+   * The card says only what the triage bar below already says and does (the
+   * no-code-location reason and "Dispatch anyway"). The page shows the bar
+   * alone: "Dispatch anyway" and the reason appeared twice (sweep 2026-11-18).
+   */
+  repeatsTriageBar?: boolean
 }
 
 /**
@@ -238,6 +244,7 @@ function recommendationFor(
           description: `${NO_CODE_LOCATION_REASON} If it is config, an outage or expected behaviour, close it with Not a code bug below.`,
           tone: rec.tone,
           actions: [{ label: 'Dispatch anyway', onClick: onDispatch, tone: 'ghost' }],
+          repeatsTriageBar: true,
         }
 
   if (dispatchState.status === 'completed' && dispatchState.prUrl) {

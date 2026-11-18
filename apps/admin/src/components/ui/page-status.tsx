@@ -119,7 +119,7 @@ export function PageStatus({
         ) : null}
       </div>
       {shown.length > 0 ? (
-        <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-2 pl-4">
+        <dl className="mt-2 grid grid-cols-3 gap-x-4 gap-y-2 pl-4 sm:flex sm:flex-wrap sm:gap-x-6">
           {shown.map((m) => (
             <MetricItem key={m.label} metric={m} />
           ))}

@@ -32,6 +32,7 @@ import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
+import { filterIsolated } from '../components/graph/isolatedNodes'
 import { BugClusterList } from '../components/graph/BugClusterList'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { readVizToken } from '../lib/vizTokens'
@@ -250,28 +251,20 @@ export function GraphPage() {
     }
   }, [activeTab, searchParams, applyView])
 
-  const filteredNodes = useMemo(() => {
+  // A node is isolated if no enabled edge connects it, computed against the
+  // type-filtered set so the result is stable when only edge filters change.
+  // When every node is isolated they stay visible (filterIsolated): hiding
+  // all of them left an empty canvas on a young map.
+  const isolated = useMemo(() => {
     const q = search.trim().toLowerCase()
     const typeFiltered = rawNodes.filter((n) => {
       if (!enabledNodeTypes.has(n.node_type as NodeType)) return false
       if (q && !n.label.toLowerCase().includes(q)) return false
       return true
     })
-    if (!hideSingletons) return typeFiltered
-    // A node is a singleton if no enabled edge connects to it. We have to
-    // compute connections against the type-filtered set to keep the result
-    // stable when only edge filters change.
-    const visible = new Set(typeFiltered.map((n) => n.id))
-    const connected = new Set<string>()
-    for (const e of rawEdges) {
-      if (!enabledEdgeTypes.has(e.edge_type as EdgeType)) continue
-      if (visible.has(e.source_node_id) && visible.has(e.target_node_id)) {
-        connected.add(e.source_node_id)
-        connected.add(e.target_node_id)
-      }
-    }
-    return typeFiltered.filter((n) => connected.has(n.id))
+    return filterIsolated(typeFiltered, rawEdges, (t) => enabledEdgeTypes.has(t as EdgeType), hideSingletons)
   }, [rawNodes, rawEdges, enabledNodeTypes, enabledEdgeTypes, search, hideSingletons])
+  const filteredNodes = isolated.nodes
 
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id))
@@ -283,11 +276,7 @@ export function GraphPage() {
     )
   }, [rawEdges, filteredNodes, enabledEdgeTypes])
 
-  const singletonCount = useMemo(() => {
-    if (!hideSingletons) return 0
-    const typeFiltered = rawNodes.filter((n) => enabledNodeTypes.has(n.node_type as NodeType))
-    return typeFiltered.length - filteredNodes.length
-  }, [rawNodes, filteredNodes, enabledNodeTypes, hideSingletons])
+  const singletonCount = isolated.hidden
 
   const positions = useMemo(
     () => layoutNodes(filteredNodes, filteredEdges, layoutSeed),
@@ -503,7 +492,7 @@ export function GraphPage() {
             Surface · inventory overlay
           </SignalChip>
         )}
-        <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
+        <InlineProof className="tabular-nums border-0 bg-transparent px-0 py-0">
           {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)}
           {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''} ·{' '}
           {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
@@ -521,6 +510,7 @@ export function GraphPage() {
         <QuickViewsRow
           hideSingletons={hideSingletons}
           singletonCount={singletonCount}
+          allIsolated={isolated.allIsolated}
           onApplyView={applyView}
           onToggleSingletons={setHideSingletons}
           onRelayout={() => setLayoutSeed((s) => s + 1)}

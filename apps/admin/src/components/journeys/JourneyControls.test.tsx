@@ -9,7 +9,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RecordingCard, ScanBar } from './JourneyControls'
+import { RecordingCard, SCAN_NEEDS_URL, ScanBar } from './JourneyControls'
 import type { JourneyScan, JourneysData } from '../../lib/journeys'
 
 vi.mock('../../lib/supabase', () => ({ apiFetchMutate: vi.fn() }))
@@ -56,6 +56,26 @@ describe('journey controls', () => {
     // No scan yet: no state to mark, just what a scan does.
     render(createElement(ScanBar, { data: data({}), projectId: 'p1', onStarted: vi.fn() }))
     expect(pill('[data-testid="journey-scan-state"]')).toBeNull()
+  })
+
+  // Fresh-eyes sweep 2026-11-18: an empty address field and a disabled Scan button with no reason.
+  it('says why Scan my site is disabled when no address is on file', () => {
+    render(createElement(ScanBar, { data: data({ liveUrl: null }), projectId: 'p1', onStarted: vi.fn() }))
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="journey-scan"]')?.disabled).toBe(true)
+    expect(host.querySelector('[data-testid="journey-scan-why"]')?.textContent).toBe(SCAN_NEEDS_URL)
+  })
+
+  it('prefills the address on file and shows no reason', () => {
+    render(createElement(ScanBar, { data: data({}), projectId: 'p1', onStarted: vi.fn() }))
+    expect(host.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe('https://app.example')
+    expect(host.querySelector('[data-testid="journey-scan-why"]')).toBeNull()
+  })
+
+  it('keeps the on-demand recording note to one line', () => {
+    render(createElement(RecordingCard, { data: data({}), projectId: 'p1', onChanged: vi.fn() }))
+    const hint = host.querySelector('[data-testid="journey-recording-hint"]')!
+    expect(hint.className).toContain('truncate')
+    expect(hint.getAttribute('title')).toContain('Nobody is recorded until you start')
   })
 
   it('marks recording on and off', () => {

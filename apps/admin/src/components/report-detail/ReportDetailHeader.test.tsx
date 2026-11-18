@@ -117,7 +117,7 @@ describe('reporter chip spacing', () => {
         ),
       ),
     )
-    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter')
+    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter:')
     const value = label?.nextElementSibling
     expect(Array.from(value?.children ?? []).map((c) => c.textContent)).toEqual([
       'Signed-in user',
@@ -148,7 +148,7 @@ describe('reporter chip outside operator accounts', () => {
         ),
       ),
     )
-    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter')
+    const label = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'Reporter:')
     expect(label?.nextElementSibling?.textContent).toBe('A signed-in user · view all')
   })
 })

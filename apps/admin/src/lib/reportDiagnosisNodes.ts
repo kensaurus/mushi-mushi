@@ -198,14 +198,18 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
   const nodes: DiagnosisNode[] = []
   const s1 = isObject(report.stage1_classification) ? report.stage1_classification : null
   if (s1) {
-    const symptom = text(s1.symptom) ?? text(s1.actual) ?? text(report.summary) ?? 'Symptom not stated'
+    const stated = text(s1.symptom) ?? text(s1.actual)
+    const symptom = stated ?? text(report.summary) ?? 'Symptom not stated'
     const confidence = num(s1.confidence)
     const expected = text(s1.expected)
     const actual = text(s1.actual)
     nodes.push({
       id: 'symptom',
       lane: 'signal',
-      title: `Symptom: ${headline(symptom, 90)}`,
+      // With no symptom of its own the node would print the report summary,
+      // which the page already shows at the top (sweep 2026-11-18). Its full
+      // text stays in the panel's "why".
+      title: stated || !text(report.summary) ? `Symptom: ${headline(symptom, 90)}` : 'Symptom: as in the summary',
       detail: [text(s1.category) ?? report.category, text(s1.severity) ?? report.severity, modelName(report.stage1_model) ?? 'fast filter'].filter(Boolean).join(' · '),
       state: confidence != null && confidence < NEEDS_LOOK_BELOW ? 'weak' : 'ok',
       confidence,

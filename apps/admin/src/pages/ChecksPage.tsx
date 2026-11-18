@@ -28,7 +28,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, Card, Skeleton } from '../components/ui'
+import { Card, Skeleton } from '../components/ui'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { IconShieldCheck } from '../components/icons'
 import { UpgradePill } from '../components/billing/UpgradeNudge'
@@ -50,6 +50,7 @@ import { AlertCards } from '../components/signal/AlertCards'
 import { AgeCell, ChangeChip } from '../components/signal/AgeChips'
 import { HighlightProvider, useLinked } from '../components/signal/linkedHighlight'
 import { StatusMark, StatusPill, type RunStatus } from '../components/signal/StatusMark'
+import { StatusGlyph, TONE_INK, type SignalTone } from '../components/signal/StatusGlyph'
 import type { OpsReadResponse } from '../lib/kensaurusOpsTypes'
 import { providerState } from '../lib/providersView'
 
@@ -89,6 +90,17 @@ const STATE_STATUS: Record<CheckCardState, RunStatus> = {
   pass: 'passed',
 }
 
+/** The banner's marks per state, worst first: shape, count, a word (2026-11-18: no sentence restating the cards). */
+const COUNT_MARKS: ReadonlyArray<{ state: CheckCardState; tone: SignalTone; word: string }> = [
+  { state: 'failed', tone: 'danger', word: 'failed' },
+  { state: 'findings', tone: 'warn', word: 'with findings' },
+  { state: 'unavailable', tone: 'off', word: 'could not read' },
+  { state: 'not_checked', tone: 'off', word: 'not run yet' },
+  { state: 'not_set_up', tone: 'off', word: 'not set up' },
+  { state: 'watching', tone: 'info', word: 'watching' },
+  { state: 'pass', tone: 'ok', word: 'passing' },
+]
+
 /** Passing and watching checks fold into one line; everything else stays open. */
 const FOLDED: ReadonlySet<CheckCardState> = new Set(['pass', 'watching'])
 
@@ -118,7 +130,42 @@ export function sortCheckCards(cards: readonly CheckCard[]): CheckCard[] {
     .map((x) => x.card)
 }
 
-/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence: what needs you first, then what is fine. */
+/**
+ * Exported for tests; page modules are knip entries, so it carries no tag. How many checks are in
+ * each state, plus how many are still being read. The banner marks and the passing fold both read
+ * this, so no two places on the page count differently (2026-11-18).
+ */
+export function checkCounts(cards: readonly CheckCard[]): Record<CheckCardState, number> & { reading: number } {
+  const out = { failed: 0, findings: 0, unavailable: 0, not_checked: 0, not_set_up: 0, watching: 0, pass: 0, reading: 0 }
+  for (const c of cards) {
+    if (c.view) out[c.view.state] += 1
+    else out.reading += 1
+  }
+  return out
+}
+
+/** The banner: one mark per non-empty state, worst first. */
+function CountMarks({ counts }: { counts: ReturnType<typeof checkCounts> }) {
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="checks-counts">
+      {COUNT_MARKS.filter((m) => counts[m.state] > 0).map((m) => (
+        <span key={m.state} className="inline-flex items-center gap-1 whitespace-nowrap" data-testid={`checks-count-${m.state}`}>
+          <StatusGlyph tone={m.tone} />
+          <span className={`font-mono font-extrabold tabular-nums ${TONE_INK[m.tone]}`}>{counts[m.state]}</span>
+          <span className="text-fg-secondary">{m.word}</span>
+        </span>
+      ))}
+      {counts.reading > 0 && (
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-fg-secondary" data-testid="checks-count-reading">
+          <StatusMark status="running" />
+          {counts.reading} reading
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence (the page context summary): what needs you first, then what is fine. */
 export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTone; sentence: string } {
   const ready = cards.filter((c) => c.view)
   const failed = ready.filter((c) => c.view!.state === 'failed')
@@ -231,7 +278,7 @@ export function ChecksPage() {
     }),
   )
   const status = checksStatus(cards)
-  const firstRed = cards.find((c) => c.view && (c.view.state === 'failed' || c.view.state === 'findings'))
+  const counts = checkCounts(cards)
   const now = useNow(60_000)
 
   // Each check's count at the end of the last full read, per app: the "▲ +3" on the cards.
@@ -248,10 +295,12 @@ export function ChecksPage() {
     base.data,
     now,
   )
-  const open = cards.filter((c) => !c.view || !FOLDED.has(c.view.state))
+  // A check with an alert card is shown there once, not again in the grid (2026-11-18).
+  const alerted = new Set(alerts.map((a) => `/${a.id}`))
+  const open = cards.filter((c) => (!c.view || !FOLDED.has(c.view.state)) && !alerted.has(c.path))
   const folded = cards.filter((c) => c.view && FOLDED.has(c.view.state))
-  const passing = folded.filter((c) => c.view!.state === 'pass').length
-  const watching = folded.length - passing
+  const passing = counts.pass
+  const watching = counts.watching
   const labelOf = new Map(cards.map((c) => [`check:${c.path}`, c.item.label]))
 
   usePublishPageContext({
@@ -285,19 +334,8 @@ export function ChecksPage() {
             {
               priority: POSTURE_PRIORITY.status,
               children: (
-                <PageStatus
-                  ariaLabel="Checks status"
-                  tone={status.tone}
-                  sentence={status.sentence}
-                  action={
-                    firstRed ? (
-                      <Btn size="sm" variant="primary" to={firstRed.path}>
-                        Open {firstRed.item.label}
-                      </Btn>
-                    ) : undefined
-                  }
-                  data-testid="checks-status"
-                />
+                // Counts as marks; the alert cards below carry the names and the Open buttons.
+                <PageStatus ariaLabel="Checks status" tone={status.tone} sentence={<CountMarks counts={counts} />} data-testid="checks-status" />
               ),
             },
           ]}

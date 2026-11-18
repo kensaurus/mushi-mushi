@@ -268,6 +268,43 @@ export function elementsBehindWorst(elements: readonly RecipeElementSummary[]): 
   return elements.filter((e) => elementStateMeta(e.state).state === worst)
 }
 
+/** States whose card holds a real result; the others were never judged. */
+const JUDGED: ReadonlySet<ElementState> = new Set(['ok', 'drift', 'error'])
+
+/**
+ * Which of a card's two status lines to show (2026-11-18: a card said "Not set up", "Nothing to
+ * check until it is set up" and "Not checked for problems" at once). The chip already names an
+ * unjudged state, so the check time shows only when there is one (or the check failed or found
+ * drift), and the problem count only once the element was judged or has problems.
+ */
+export function cardStatusLines(state: ElementState, lastCheckedAt: string | null | undefined, findings: number): { checked: boolean; problems: boolean } {
+  return {
+    checked: Boolean(lastCheckedAt) || state === 'error' || state === 'drift',
+    problems: findings > 0 || JUDGED.has(state),
+  }
+}
+
+/**
+ * The server's reason without a leading restatement of the chip ("Not set up. Add deploy
+ * targets…" beside a "Not set up" chip reads the state twice).
+ */
+export function reasonAfterState(reason: string, stateLabel: string): string {
+  const lead = `${stateLabel}.`
+  if (!reason.toLowerCase().startsWith(lead.toLowerCase())) return reason
+  const rest = reason.slice(lead.length).trim()
+  return rest.length > 0 ? rest : reason
+}
+
+/**
+ * A fact's value for a card that was never judged: a 0, an empty value or "—" there is not a
+ * measured zero, so it reads "not checked" (2026-11-18: "Releases 0", "Connected 0" on cards
+ * that are not set up). Null when the value should show as it is.
+ */
+export function uncheckedFact(state: ElementState, v: string | number | boolean | null | undefined): 'not checked' | null {
+  if (JUDGED.has(state)) return null
+  return v === 0 || v === null || v === undefined || v === '' || v === '—' ? 'not checked' : null
+}
+
 /** Card fact value → short display string. */
 export function formatFactValue(v: string | number | boolean | null | undefined): string {
   if (v === null || v === undefined || v === '') return '—'

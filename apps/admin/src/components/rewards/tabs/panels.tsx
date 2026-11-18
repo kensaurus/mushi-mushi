@@ -44,7 +44,7 @@ import {
 import { Drawer } from '../../Drawer'
 import { TableSkeleton } from '../../skeletons/TableSkeleton'
 import { RewardsOverviewHighlights } from '../RewardsOverviewHighlights'
-import { eventsInLast24h, tierEmptyMessage } from '../overviewHelpers'
+import { eventsInLast24h, groupActivityEvents, sortTiersByLadder, tierEmptyMessage } from '../overviewHelpers'
 import { CHIP_TONE } from '../../../lib/chipTone'
 import { httpsUrl, numberInRange, token } from '../../../lib/validators'
 import { plainApiError } from '../../../lib/humanizeApiError'
@@ -165,6 +165,7 @@ export function OverviewTab() {
   const { data: feedData, reload: reloadFeed, lastFetchedAt: feedFetchedAt, isValidating: feedValidating } = usePageData<ActivityFeed>(
     `/v1/admin/rewards/activity`,
   )
+  const { data: tierList } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
 
   useRealtimeReload(
     ['end_user_activity', 'end_user_points'],
@@ -175,13 +176,14 @@ export function OverviewTab() {
   if (loading) return <TableSkeleton rows={3} />
   if (error) return <ErrorAlert message={error} />
 
-  const tierEntries = Object.entries(data?.tier_distribution ?? {})
-    .sort((a, b) => b[1] - a[1])
+  // Ladder order, not head count (2026-11-18: Explorer, Champion, Contributor).
+  const tierEntries = sortTiersByLadder(Object.entries(data?.tier_distribution ?? {}), tierList)
 
   const totalHolders = tierEntries.reduce((sum, [, n]) => sum + n, 0)
   const pendingLiability = data?.pending_payout_liability_usd ?? 0
   // The server's feed can reach past a day; the section promises the last 24 h.
   const recentEvents = eventsInLast24h(feedData?.events ?? [])
+  const recentGroups = groupActivityEvents(recentEvents)
 
   return (
     <div className="space-y-4">
@@ -213,7 +215,7 @@ export function OverviewTab() {
                       />
                     </div>
                   </div>
-                  <span className="text-xs font-mono text-fg-muted tabular-nums shrink-0 w-12 text-right">
+                  <span className="text-xs font-mono text-fg-muted tabular-nums shrink-0 whitespace-nowrap text-right">
                     {count} ({pct}%)
                   </span>
                 </div>
@@ -230,30 +232,17 @@ export function OverviewTab() {
         icon={<IconGauge />}
         freshness={{ at: feedFetchedAt, isValidating: feedValidating }}
       >
+        {/* One inline strip (2026-11-18): four grey boxes sat inside this card. */}
         {feedData && (
-          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">total events</div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              {/* text-ok is under 4.5:1 on this overlay in light mode. */}
-              <div className="text-lg font-semibold tabular-nums text-ok-foreground">{feedData.stats_24h.accepted}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
-            </div>
-            <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
-              <div className={`text-lg font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? 'text-danger' : 'text-fg-muted'}`}>
-                {feedData.stats_24h.rejected}
-              </div>
-              <div className="text-2xs text-fg-muted mt-0.5">
-                rejected{feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
-              </div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-brand">+{feedData.stats_24h.points_awarded.toLocaleString()}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">pts awarded</div>
-            </div>
-          </div>
+          <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted" data-testid="rewards-feed-strip">
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</span> events</span>
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">{feedData.stats_24h.accepted}</span> accepted</span>
+            <span className={`whitespace-nowrap ${feedData.stats_24h.rejected > 0 ? 'text-danger-foreground' : ''}`}>
+              <span className={`font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? '' : 'text-fg'}`}>{feedData.stats_24h.rejected}</span> rejected
+              {feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
+            </span>
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">+{feedData.stats_24h.points_awarded.toLocaleString()}</span> pts</span>
+          </p>
         )}
 
         {feedData && feedData.stats_24h.top_actions.length > 0 && (
@@ -277,27 +266,30 @@ export function OverviewTab() {
             className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
           >
             {/* Focusable so keyboard users can scroll the feed (axe scrollable-region-focusable). */}
-            {recentEvents.map((ev) => {
-              const rejected = !!ev.rejected_reason
+            {/* Grouped by tester and action (2026-11-18: 32 "session minute +1" rows). */}
+            {recentGroups.map((g) => {
+              const ev = g.latest
+              const rejected = !!g.rejectedReason
               return (
-                <div key={ev.id} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`}>
-                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 ${rejected ? 'bg-surface-overlay text-fg-faint' : CHIP_TONE.okSubtle}`}>
-                    {ev.action.replace(/_/g, ' ')}
+                <div key={g.key} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`} data-testid="rewards-feed-group">
+                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 whitespace-nowrap ${rejected ? 'bg-surface-overlay text-fg-faint' : CHIP_TONE.okSubtle}`}>
+                    {g.action.replace(/_/g, ' ')}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 justify-between">
-                      <span className="text-fg-muted truncate max-w-36">
-                        {ev.end_users?.display_name ?? ev.end_users?.external_user_id ?? 'anonymous'}
+                      <span className="min-w-0 truncate text-fg-muted">
+                        <span className="text-fg">{g.tester}</span>
+                        {g.count > 1 && <span className="tabular-nums"> · {g.count} events</span>}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!rejected && ev.points_awarded != null && (
-                          <span className="font-mono font-semibold text-ok tabular-nums">+{ev.points_awarded}</span>
+                        {!rejected && (g.count > 1 || ev.points_awarded != null) && (
+                          <span className="font-mono font-semibold text-ok-foreground tabular-nums">+{g.points}</span>
                         )}
-                        {rejected && ev.rejected_reason && (
+                        {rejected && g.rejectedReason && (
                           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                          <span className="text-fg-faint text-2xs truncate max-w-[100px]">{ev.rejected_reason}</span>
+                          <span className="text-fg-faint text-2xs truncate max-w-[100px]">{g.rejectedReason}</span>
                         )}
-                        <span className="text-fg-faint text-2xs">
+                        <span className="text-fg-faint text-2xs whitespace-nowrap">
                           <RelativeTime value={ev.created_at} />
                         </span>
                       </div>
@@ -307,6 +299,7 @@ export function OverviewTab() {
                       if (pairs.length === 0) return null
                       return (
                         <div className="text-2xs text-fg-faint mt-0.5 truncate">
+                          {g.count > 1 ? 'latest: ' : ''}
                           {pairs.map((pair, i) => (
                             <span key={pair.key}>
                               {i > 0 ? ' · ' : ''}

@@ -272,6 +272,8 @@ export function RepoPage() {
   const [branchPage, setBranchPage] = useState(1)
   const [activityKind, setActivityKind] = useState<ActivityKind | 'all'>('all')
   const [activityShown, setActivityShown] = useState(ACTIVITY_PAGE_SIZE)
+  // Open-PR counts reported by the list, so the status line can lead with "1 PR ready to merge".
+  const [prCounts, setPrCounts] = useState<{ open: number; mergeable: number } | null>(null)
   const setBucket = useCallback(
     (next: Bucket) => {
       setSearchParams((prev) => {
@@ -538,9 +540,11 @@ export function RepoPage() {
         ].join('\n')}
       >
         <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <span className="text-2xs text-fg-faint font-mono">
-          {pluralizeWithCount(counts.branches ?? counts.total, 'branch', 'branches')}
-        </span>
+        {(counts.branches ?? counts.total) > 0 && (
+          <span className="text-2xs text-fg-faint whitespace-nowrap tabular-nums" title="Branches Mushi Mushi pushed for fixes">
+            {pluralizeWithCount(counts.branches ?? counts.total, 'fix branch', 'fix branches')}
+          </span>
+        )}
         <Btn size="sm" variant="ghost" onClick={reload} loading={statsValidating}>
           Refresh
         </Btn>
@@ -571,6 +575,7 @@ export function RepoPage() {
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
+                readyToMerge={prCounts?.mergeable ?? null}
               />
             ),
           },
@@ -588,7 +593,7 @@ export function RepoPage() {
       )}
 
       {/* Every open PR in the connected repos, fix or not, with Merge once its checks pass. */}
-      {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} />}
+      {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} onCounts={setPrCounts} />}
 
       {/* Open PRs lead; the per-attempt history is a closed panel under them. */}
       {activeTab === 'branches' && (

@@ -17,7 +17,17 @@ import { formatRelative } from '../ui'
 import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
-import { describeLastChecked, ELEMENT_CHECKED_BY, elementStateMeta, factLabel, formatFactValue, problemCountText } from './recipeState'
+import {
+  cardStatusLines,
+  describeLastChecked,
+  ELEMENT_CHECKED_BY,
+  elementStateMeta,
+  factLabel,
+  formatFactValue,
+  problemCountText,
+  reasonAfterState,
+  uncheckedFact,
+} from './recipeState'
 
 const MAX_FACTS = 3
 
@@ -34,6 +44,9 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
   const checked = describeLastChecked(element.lastCheckedAt, formatRelative, element.state)
   const canvas = layout === 'canvas'
   const facts = canvas ? [] : Object.entries(element.facts ?? {}).slice(0, MAX_FACTS)
+  // Say the state once: the chip names it; these lines add only what it does not.
+  const lines = cardStatusLines(meta.state, element.lastCheckedAt, element.findingsCount)
+  const reason = reasonAfterState(element.reason, meta.label)
 
   return (
     <div
@@ -51,20 +64,31 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
           <span className="text-sm font-semibold text-fg">{element.label}</span>
           <RecipeStateChip state={element.state} lastCheckedAt={element.lastCheckedAt} className="shrink-0" />
         </span>
-        <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-2' : ''}`} title={canvas ? element.reason : undefined}>{element.reason}</span>
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-          <span title={checked.title}>{checked.text}</span>
-          <span>{problemCountText(meta.state, element.findingsCount)}</span>
-        </span>
+        <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-2' : ''}`} title={canvas ? element.reason : undefined}>{reason}</span>
+        {(lines.checked || lines.problems) && (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+            {lines.checked && <span title={checked.title}>{checked.text}</span>}
+            {lines.problems && <span>{problemCountText(meta.state, element.findingsCount)}</span>}
+          </span>
+        )}
         {!canvas && <span className="text-2xs leading-snug text-fg-faint">How it is checked: {ELEMENT_CHECKED_BY[element.key]}</span>}
         {facts.length > 0 && (
           <span className="flex flex-col gap-0.5 border-t border-edge-subtle pt-2">
-            {facts.map(([k, v]) => (
-              <span key={k} className="flex items-baseline justify-between gap-2 text-2xs">
-                <span className="text-fg-faint">{factLabel(k)}</span>
-                <span className="min-w-0 truncate font-mono text-fg-secondary">{formatFactValue(v)}</span>
-              </span>
-            ))}
+            {facts.map(([k, v]) => {
+              const unchecked = uncheckedFact(meta.state, v)
+              return (
+                <span key={k} className="flex items-baseline justify-between gap-2 text-2xs">
+                  <span className="text-fg-faint">{factLabel(k)}</span>
+                  {unchecked ? (
+                    <span className="ci-nodata rounded-xs border border-edge-subtle px-1 whitespace-nowrap text-fg-secondary" data-testid="fact-not-checked">
+                      {unchecked}
+                    </span>
+                  ) : (
+                    <span className="min-w-0 truncate font-mono text-fg-secondary">{formatFactValue(v)}</span>
+                  )}
+                </span>
+              )
+            })}
           </span>
         )}
       </button>

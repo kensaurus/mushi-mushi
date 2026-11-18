@@ -9,7 +9,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { ReportDetail } from './types'
-import { AgentTracePanel } from './AgentTracePanel'
+import { AgentTracePanel, agentTraceTotalCost } from './AgentTracePanel'
 
 let container: HTMLDivElement
 let root: Root
@@ -27,6 +27,17 @@ afterEach(() => {
 })
 
 describe('AgentTracePanel', () => {
+  // Sweep 2026-11-18: "$0.0000 total" over a column of "—".
+  it('says the cost was not captured when no row recorded one', () => {
+    expect(agentTraceTotalCost([{ cost_usd: null }, { cost_usd: null }])).toBeNull()
+    expect(agentTraceTotalCost([{ cost_usd: 0.01 }, { cost_usd: null }])).toBeCloseTo(0.01)
+    const report = {
+      llm_invocations: [{ id: 'i1', function_name: 'fast-filter', stage: 'stage1', used_model: 'm', status: 'success', latency_ms: 1, input_tokens: 1, output_tokens: 1, cost_usd: null, created_at: '2026-11-18T00:00:00Z' }],
+    } as unknown as ReportDetail
+    act(() => root.render(createElement(AgentTracePanel, { report })))
+    expect(container.querySelector('[data-testid="agent-trace-total"]')?.textContent).toBe('Cost not captured')
+  })
+
   it('puts the wide trace table in the tab order', () => {
     const report = {
       llm_invocations: [{

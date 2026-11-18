@@ -47,8 +47,12 @@ vi.mock('../lib/useSetupStatus', () => ({
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/track', () => ({ trackSelf: vi.fn(), trackAdHoc: vi.fn() }))
+const posture = vi.hoisted(() => ({ slots: [] as Array<{ priority: number; show?: boolean }> }))
 vi.mock('../components/PagePosture', () => ({
-  PagePosture: () => null,
+  PagePosture: ({ slots }: { slots: Array<{ priority: number; show?: boolean }> }) => {
+    posture.slots = slots
+    return null
+  },
   POSTURE_PRIORITY: { status: 0, heroOrSnapshot: 1 },
 }))
 vi.mock('../components/PageHeaderBar', () => ({
@@ -103,6 +107,27 @@ function queryFlexItem(): HTMLElement {
   while (el.parentElement && el.parentElement !== form) el = el.parentElement
   return el
 }
+
+describe('ResearchPage empty search tab', () => {
+  it('drops the "Run first search" card while the Search form is open (one action, not two)', () => {
+    render()
+    const snapshot = posture.slots.find((slot) => slot.priority === 1)
+    expect(snapshot?.show).toBe(false)
+    expect(host.querySelectorAll('form button[type="submit"]')).toHaveLength(1)
+  })
+
+  it('lists example queries as left-aligned single-line rows that truncate', () => {
+    render()
+    const box = host.querySelector('[data-testid="research-examples"]')
+    expect(box).toBeTruthy()
+    const rows = [...box!.querySelectorAll('button')]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(classTokens(row.className)).toEqual(expect.arrayContaining(['truncate', 'text-left', 'w-full']))
+      expect(row.getAttribute('title')).toBe(row.textContent)
+    }
+  })
+})
 
 describe('ResearchPage web query', () => {
   it('grows the field in the search row so the placeholder is not stuck at the input intrinsic width', () => {

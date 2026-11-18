@@ -66,6 +66,7 @@ import { useNextBestAction } from '../lib/useNextBestAction'
 import { markJudgeBatchSeen } from '../lib/judgeFreshness'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { AlertCards } from '../components/signal/AlertCards'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -463,6 +464,14 @@ function HealthPageContent() {
       : []),
   ]
 
+  // An overdue or late job is a problem too: never "All systems nominal" beside it. One count for
+  // the overdue card and the summary's tone, so the summary is never green beside it (2026-11-18).
+  const overdueCron = KNOWN_JOBS.filter((j) => {
+    const s = cron?.byJob[j]?.staleness
+    return s === 'stale' || s === 'warn'
+  })
+  const lateCount = Math.max(stats.cronStaleCount + stats.cronWarnCount, overdueCron.length)
+
   const recommendedAction = (() => {
     const failingCron = KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error')
     if (llm.errorRate > 0.05) {
@@ -495,19 +504,24 @@ function HealthPageContent() {
         />
       )
     }
-    // An overdue or late job is a problem too: never "All systems nominal" beside it.
-    const overdueCron = KNOWN_JOBS.filter((j) => {
-      const s = cron?.byJob[j]?.staleness
-      return s === 'stale' || s === 'warn'
-    })
-    const lateCount = Math.max(stats.cronStaleCount + stats.cronWarnCount, overdueCron.length)
     if (lateCount > 0) {
+      // Late, not broken: a serious ◆ card (2026-11-18), drawn first on the page.
       return (
-        <RecommendedAction
-          tone="urgent"
-          title={`${lateCount} scheduled ${lateCount === 1 ? 'job is' : 'jobs are'} overdue`}
-          description={`${overdueCron.length > 0 ? overdueCron.join(', ') : 'A job'} missed ${lateCount === 1 ? 'its' : 'their'} expected schedule. Open Scheduled jobs to see when each last ran, then run it by hand.`}
-          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
+        <AlertCards
+          testIdPrefix="health"
+          label="Jobs that need you"
+          emptyText={null}
+          alerts={[
+            {
+              id: 'cron-overdue',
+              severity: 'serious',
+              label: 'Overdue',
+              title: `${lateCount} scheduled ${lateCount === 1 ? 'job is' : 'jobs are'} overdue`,
+              detail: overdueCron.length > 0 ? overdueCron.join(', ') : 'Missed its expected schedule',
+              metric: { value: String(lateCount), unit: 'overdue' },
+              action: { label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') },
+            },
+          ]}
         />
       )
     }
@@ -563,6 +577,24 @@ function HealthPageContent() {
         </Btn>
       </PageHeaderBar>
 
+      {/* Sections sit under the title, and the overview's problem comes before the numbers (2026-11-18). */}
+      {!ux.hideTabs && (
+      <SegmentedControl<HealthTabId>
+        size="sm"
+        scrollable
+        ariaLabel="Health sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+      )}
+
+      {/* RecommendedAction is always shown on the overview tab — it gives every
+          mode (quickstart/beginner/advanced) an actionable next step rather than
+          leaving the page blank below the KPI snapshot. PageHero (PDCA chrome)
+          is still advanced-only. */}
+      {activeTab === 'overview' && recommendedAction}
+
       <PagePosture
         slots={[
           {
@@ -585,6 +617,7 @@ function HealthPageContent() {
             children: (
               <HealthSnapshotStrip
                 stats={stats}
+                lateJobs={lateCount}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
@@ -604,23 +637,6 @@ function HealthPageContent() {
           },
         ]}
       />
-
-      {!ux.hideTabs && (
-      <SegmentedControl<HealthTabId>
-        size="sm"
-        scrollable
-        ariaLabel="Health sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
-
-      {/* RecommendedAction is always shown on the overview tab — it gives every
-          mode (quickstart/beginner/advanced) an actionable next step rather than
-          leaving the page blank below the KPI snapshot. PageHero (PDCA chrome)
-          is still advanced-only. */}
-      {activeTab === 'overview' && recommendedAction}
 
       {activeTab === 'overview' && !ux.hideOverviewChrome && (
         <>

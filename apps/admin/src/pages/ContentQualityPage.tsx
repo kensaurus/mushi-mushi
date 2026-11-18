@@ -18,7 +18,9 @@ import {
   Btn,
   FilterSelect,
   Input,
+  RelativeTime,
 } from '../components/ui'
+import { StatusGlyph } from '../components/signal/StatusGlyph'
 import {
   IconCamera,
   IconCatalog,
@@ -196,7 +198,7 @@ export function ContentQualityPage() {
     ? `/v1/admin/content-quality?${params}`
     : null
 
-  const { data, loading, error, reload } = usePageData<ListResponse>(apiPath)
+  const { data, loading, error, reload, lastFetchedAt: listFetchedAt } = usePageData<ListResponse>(apiPath)
   const statsPath = activeProjectId
     ? `/v1/admin/content-quality/stats?project_id=${activeProjectId}`
     : null
@@ -354,7 +356,23 @@ export function ContentQualityPage() {
         {error && <PageLoadError error={error} resource="content issues" />}
         {loading && <TableSkeleton rows={8} />}
 
-        {!loading && items.length === 0 && (
+        {/* All clear is a state: the ok mark and when it was checked, on one
+            line (2026-11-18 sweep: a bare "No content issues" card). */}
+        {nothingOpen && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="content-quality-all-clear">
+            <StatusGlyph tone="ok" />
+            <span className="font-medium text-ok-foreground">No content issues</span>
+            {listFetchedAt ? (
+              <span className="text-fg-muted">· checked <RelativeTime value={listFetchedAt} /></span>
+            ) : null}
+            <span className="text-fg-faint">· looks again every 15 minutes</span>
+            <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => changeFilter(() => setStatus('all'))}>
+              Show past issues
+            </Btn>
+          </div>
+        )}
+
+        {!loading && items.length === 0 && !nothingOpen && (
           <EmptyState
             title={needle ? 'No matches on this page' : 'No content issues'}
             description={
@@ -363,13 +381,6 @@ export function ContentQualityPage() {
                 : status === 'open'
                 ? 'No open issues. Mushi Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
-            }
-            action={
-              nothingOpen ? (
-                <Btn size="sm" variant="ghost" onClick={() => changeFilter(() => setStatus('all'))}>
-                  Show past issues
-                </Btn>
-              ) : undefined
             }
           />
         )}

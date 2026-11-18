@@ -37,7 +37,7 @@ import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { FixFirstQueue } from '../components/reports/FixFirstQueue'
-import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ReportsStatusBanner, reportsBannerCoversQueue } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import { ReportsFileIssue } from '../components/reports/ReportsFileIssue'
 import {
@@ -662,6 +662,12 @@ export function ReportsPage() {
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
   ).length
 
+  const statusBannerShown = !reportsStatsLoading && isReportsBannerVisible(reportsStats) && !(emptyProject && setup.activeProject)
+  // The status banner already says how many wait for review or are critical;
+  // a second card saying "3 reports are waiting for triage" repeated it
+  // (fresh-eyes sweep 2026-11-18). One strip.
+  const bannerCoversQueue = reportsBannerCoversQueue(reportsStats, statusBannerShown)
+
   const recommendation = (() => {
     if (loading || error) return null
     if (total === 0 && !hasFilters) {
@@ -679,6 +685,7 @@ export function ReportsPage() {
         tone: 'info' as const,
       }
     }
+    if (bannerCoversQueue) return null
     if (criticalQueuedCount > 0) {
       return {
         title: `${pluralizeWithCount(criticalQueuedCount, 'critical report')} ${pluralize(criticalQueuedCount, 'needs', 'need')} triage`,
@@ -852,7 +859,7 @@ export function ReportsPage() {
             priority: POSTURE_PRIORITY.status,
             // On an empty project the first-diagnosis card below has the one
             // "Send test report" button; this banner would repeat it.
-            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats) && !(emptyProject && setup.activeProject),
+            show: statusBannerShown,
             children: (
               <ReportsStatusBanner
                 stats={reportsStats}

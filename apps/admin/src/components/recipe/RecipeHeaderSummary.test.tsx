@@ -75,6 +75,27 @@ describe('RecipeHeaderSummary next step', () => {
   })
 })
 
+describe('RecipeHeaderSummary recipe file', () => {
+  it('says a missing recipe file once, not again as a file problem', () => {
+    const elements = [el('ci', 'ok')]
+    const r = recipe(elements)
+    r.manifest = {
+      present: false,
+      path: null,
+      commitSha: null,
+      capturedAt: null,
+      validationErrors: [
+        { severity: 'info', code: 'MANIFEST_MISSING', message: 'No mushi.recipe.json at the repo root.' },
+        { severity: 'warn', code: 'OTHER', message: 'Something else.' },
+      ],
+    }
+    act(() => root.render(createElement(MemoryRouter, null, createElement(RecipeHeaderSummary, { recipe: r, elements }))))
+    expect(host.textContent).not.toContain('No mushi.recipe.json at the repo root.')
+    expect(host.textContent).toContain('Your recipe file has 1 problem.')
+    expect(host.textContent).toContain('Something else.')
+  })
+})
+
 describe('box edges', () => {
   it('read red, amber or green at a glance', () => {
     expect(elementStateMeta('error').cardEdge).toContain('border-danger')

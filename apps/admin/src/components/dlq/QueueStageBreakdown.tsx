@@ -66,7 +66,9 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
               }`}
             >
               <span className="text-xs font-mono text-fg-secondary">{queueStageLabel(s)}</span>
-              <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle">
+              {/* No backlog, no bar: a full grey track read as a full bar for 0 (2026-11-18). */}
+              {totalForStage === 0 ? <span aria-hidden className="h-2" data-testid="stage-bar-empty" /> : (
+              <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle" data-testid="stage-bar">
                 {BACKLOG_STATUSES.map((st) => {
                   const v = breakdown[st] ?? 0
                   if (v === 0) return null
@@ -80,6 +82,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
                   )
                 })}
               </div>
+              )}
               <span className="text-2xs font-mono text-fg-muted text-right">{totalForStage}</span>
             </button>
           )

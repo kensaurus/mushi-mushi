@@ -149,7 +149,8 @@ export function SlackBotCard({ id }: { id?: string }) {
           ).map(([label, url]) => (
             <div key={label} className="flex flex-wrap items-center gap-2 text-xs">
               <span className="w-48 shrink-0 text-fg-secondary">{label}</span>
-              <code className="min-w-0 flex-1 truncate font-mono text-2xs text-fg" title={url}>
+              {/* The whole URL wraps: truncated, a phone showed only "https://d…" to paste. */}
+              <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg" title={url}>
                 {url}
               </code>
               <CopyButton value={url} size="sm" label={`Copy ${label}`} />

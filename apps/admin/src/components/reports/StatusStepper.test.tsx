@@ -122,6 +122,13 @@ describe('StatusStepper', () => {
     expect(accessibleNames(host).filter((name) => name.includes('Dismissed'))).toEqual(['Dismissed'])
   })
 
+  // Fresh-eyes sweep 2026-11-18: the table showed a bare ⊘ with no word for a dismissed report.
+  it('prints the word for a dismissed report in the table row', () => {
+    act(() => root.render(createElement(StatusStepper, { status: 'dismissed', size: 'table' })))
+    expect(host.querySelector('[data-testid="status-stepper-word"]')?.textContent).toBe('Dismissed')
+    expect(accessibleNames(host).filter((name) => name.includes('Dismissed'))).toEqual(['Dismissed'])
+  })
+
   it('lets the table bar row grow next to its "Fixed" label', () => {
     act(() => root.render(createElement(StatusStepper, { status: 'fixed', size: 'table' })))
     const img = host.querySelector('[role="img"]')!

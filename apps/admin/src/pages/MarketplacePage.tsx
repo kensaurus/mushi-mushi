@@ -56,6 +56,7 @@ import {
   type MarketplaceTabId,
   type ReliabilityStats,
   INTEGRATIONS_HREF_BY_PLUGIN_SLUG,
+  marketplaceEmptyCopy,
 } from '../components/marketplace/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
@@ -651,10 +652,7 @@ export function MarketplacePage() {
 
       {isEmpty && (
         <div className="space-y-3">
-          <EmptyState
-            title="No plugins installed yet"
-            description="A plugin sends Mushi Mushi events (new report, fix merged) to your own HTTPS endpoint or a no-code tool like Zapier, signed so you can verify them. Pick one below."
-          />
+          <EmptyState {...marketplaceEmptyCopy(catalog)} />
           {catalogGrid}
         </div>
       )}

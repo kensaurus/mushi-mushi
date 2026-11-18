@@ -15,8 +15,25 @@ import { Chip } from '../signal/Chip'
 import { ThresholdBar } from '../signal/BarCell'
 import { StatusMark, StatusPill } from '../signal/StatusMark'
 
+/** Column widths shared by the header and every row, so a value always sits under its name. */
+const COL = {
+  state: 'md:w-32 md:shrink-0',
+  account: 'md:min-w-0 md:flex-1',
+  balance: 'md:w-44 md:shrink-0',
+  probed: 'md:w-16 md:shrink-0',
+  incidents: 'md:w-20 md:shrink-0',
+  apps: 'md:w-48 md:shrink-0',
+  on: 'md:w-24 md:shrink-0',
+} as const
+
 function GaugeCell({ gauge }: { gauge: Gauge | null }) {
-  if (!gauge) return <span className="text-3xs text-fg-faint">no balance</span>
+  // No balance reading: unknown, hatched, never an empty bar.
+  if (!gauge)
+    return (
+      <span className="ci-nodata inline-flex items-center rounded-sm border border-edge-subtle px-1.5 text-3xs whitespace-nowrap text-fg-secondary" data-testid="gauge-not-checked">
+        not checked
+      </span>
+    )
   const fill = gauge.max > 0 ? gauge.value / gauge.max : 0
   const at = (v: number | null) => (v == null || gauge.max <= 0 ? null : v / gauge.max)
   return <ThresholdBar fill={fill} warn={at(gauge.warn)} crit={at(gauge.crit)} level={gauge.level} label={gauge.label} />
@@ -43,19 +60,20 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         className="hidden gap-x-3 bg-surface-raised px-2.5 py-1 text-2xs font-semibold text-fg-secondary md:flex md:items-center"
         data-testid="providers-head"
       >
-        <span className="md:w-32 md:shrink-0">State</span>
-        <span className="md:flex-1">Account</span>
-        <span className="md:w-44 md:shrink-0">Balance</span>
-        <span className="md:w-12 md:shrink-0">Probed</span>
-        <span className="md:w-14 md:shrink-0">Incidents</span>
-        <span className="md:w-48 md:shrink-0">Used by</span>
-        <span className="md:ml-auto">On</span>
+        <span className={COL.state}>State</span>
+        <span className={COL.account}>Account</span>
+        <span className={COL.balance}>Balance</span>
+        <span className={COL.probed}>Probed</span>
+        <span className={COL.incidents}>Incidents</span>
+        <span className={COL.apps}>Used by</span>
+        <span className={`${COL.on} text-right`}>On</span>
       </li>
       {providers.map((p) => {
         const state = providerState(p)
         const inc = incidents.get(p.id)
         const busy = pending.has(providerPendingKey(p.id))
         const apps = dependentApps(p)
+        const probed = ageLabel(p.status?.last_probe_at, now)
         return (
           <li
             key={p.id}
@@ -63,39 +81,55 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
             data-testid={`provider-row-${p.id}`}
             data-state={state}
           >
-            <span className="md:w-32 md:shrink-0">
+            <span className={COL.state}>
               <StatusPill status={PROVIDER_STATUS[state]} label={[state, ageLabel(p.status?.state_since, now)].filter(Boolean).join(' · ')} />
             </span>
-            <span className="flex min-w-0 items-center gap-1.5 md:flex-1">
+            <span className={`flex min-w-0 items-center gap-1.5 ${COL.account}`}>
               <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? undefined}>
                 {p.label}
               </span>
               <Chip>{p.provider}</Chip>
               {p.is_test && <Chip>test</Chip>}
             </span>
-            <span className="md:w-44 md:shrink-0">
+            <span className={COL.balance}>
               <GaugeCell gauge={providerGauge(p)} />
             </span>
-            <span className="font-mono text-2xs text-fg-secondary tabular-nums md:w-12 md:shrink-0" title="Last probe">
-              {ageLabel(p.status?.last_probe_at, now) ?? '—'}
+            {/* On a phone there is no header row, so each value carries its own words. */}
+            <span className={`font-mono text-2xs whitespace-nowrap text-fg-secondary tabular-nums ${COL.probed}`} title="Last probe" data-testid="provider-probed">
+              {probed ? (
+                <>
+                  <span className="font-sans md:hidden">probed </span>
+                  {probed}
+                  <span className="font-sans md:hidden"> ago</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-sans md:hidden">never probed</span>
+                  <span className="hidden md:inline">—</span>
+                </>
+              )}
             </span>
-            <span className="md:w-14 md:shrink-0">
+            <span className={COL.incidents} data-testid="provider-incidents">
               {inc ? (
                 <Chip tone={inc.crit > 0 ? 'danger' : 'neutral'} title={`${inc.total} open incident${inc.total === 1 ? '' : 's'}`}>
                   ▲ {inc.total}
+                  <span className="md:hidden"> open</span>
                 </Chip>
               ) : (
-                <span className="text-3xs text-fg-faint">—</span>
+                <span className="text-3xs whitespace-nowrap text-fg-faint">
+                  <span className="md:hidden">no incidents</span>
+                  <span className="hidden md:inline">—</span>
+                </span>
               )}
             </span>
-            <span className="flex min-w-0 flex-wrap gap-1 md:w-48 md:shrink-0" aria-label="Apps that use it">
+            <span className={`flex min-w-0 flex-wrap gap-1 ${COL.apps}`} aria-label="Apps that use it">
               {apps.map((a) => (
                 <Chip key={a} tone="strong">
                   {a}
                 </Chip>
               ))}
             </span>
-            <span className="flex items-center justify-end gap-1.5 md:ml-auto">
+            <span className={`flex items-center justify-end gap-1.5 ${COL.on}`}>
               {busy && (
                 <span role="status" aria-label="Saving" data-testid="pending-mark">
                   <StatusMark status="running" />

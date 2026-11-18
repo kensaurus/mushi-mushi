@@ -13,6 +13,7 @@ import { useState } from 'react'
 import type { AiRoute, ModelPrice, OpsMeta, RouteParams } from '../../lib/kensaurusOpsTypes'
 import {
   LAST_DEFAULT_HINT,
+  chainSignature,
   featureLabel,
   groupRoutes,
   nextFreePriority,
@@ -240,8 +241,9 @@ function Candidate({
   const options = models.includes(route.model) ? models : [route.model, ...models]
   const chips = paramChips(route.params)
   return (
+    // A candidate is a column in the chain row, not a card of its own (one level of card).
     <li
-      className={`flex min-w-0 flex-col gap-1 rounded-md border px-2 py-1.5 ${route.enabled ? 'border-edge bg-surface' : 'border-dashed border-edge-subtle bg-surface-overlay opacity-70'}`}
+      className={`flex min-w-0 flex-col gap-1 py-0.5 ${route.enabled ? '' : 'opacity-60'}`}
       data-testid={`route-${routeKey(route)}`}
       data-enabled={route.enabled ? 'true' : 'false'}
     >
@@ -256,9 +258,24 @@ function Candidate({
           </span>
         )}
       </span>
-      <span className={`truncate font-mono text-xs font-bold text-fg ${down ? 'line-through decoration-danger decoration-2' : ''}`} title={route.note ?? route.model}>
-        {route.model}
-      </span>
+      {/* The model shows once: the switcher is its name. */}
+      <select
+        aria-label={`Switch model for #${route.priority}`}
+        className={`${SELECT} max-w-48 font-mono text-xs font-bold ${down ? 'line-through decoration-danger decoration-2' : ''}`}
+        value={route.model}
+        title={route.note ?? route.model}
+        disabled={busy}
+        onChange={(e) => {
+          if (e.target.value !== route.model) onSwitchModel(route, e.target.value)
+        }}
+        data-testid="switch-model"
+      >
+        {options.map((m) => (
+          <option key={m} value={m} disabled={!models.includes(m)}>
+            {m}
+          </option>
+        ))}
+      </select>
       {chips.length > 0 && (
         <span className="flex flex-wrap gap-1" data-testid="route-param-chips">
           {chips.map((c) => (
@@ -289,22 +306,6 @@ function Candidate({
             onChange={(next) => onToggle(route, next)}
           />
         </span>
-        <select
-          aria-label={`Switch model for #${route.priority}`}
-          className={`${SELECT} max-w-40`}
-          value={route.model}
-          disabled={busy}
-          onChange={(e) => {
-            if (e.target.value !== route.model) onSwitchModel(route, e.target.value)
-          }}
-          data-testid="switch-model"
-        >
-          {options.map((m) => (
-            <option key={m} value={m} disabled={!models.includes(m)}>
-              {m}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           className={`${ICON_BTN} hover:border-danger hover:text-danger`}
@@ -324,6 +325,9 @@ export function RoutesPanel(props: RoutesPanelProps) {
   const { routes, meta, prices, pending, onDelete, onAdd } = props
   const [confirm, setConfirm] = useState<AiRoute | null>(null)
   const groups = groupRoutes(routes)
+  // The first chain of each shape, in page order: later identical chains fold under it.
+  const firstWithShape = new Map<string, FeatureChain>()
+  for (const g of groups) for (const c of g.features) if (!firstWithShape.has(chainSignature(c))) firstWithShape.set(chainSignature(c), c)
   if (groups.length === 0) return <p className="text-xs text-fg-muted">No routes yet.</p>
   return (
     <div className="flex flex-col gap-3" data-testid="providers-routes">
@@ -331,13 +335,11 @@ export function RoutesPanel(props: RoutesPanelProps) {
         <section key={g.app} aria-label={`${g.app} routes`} className="rounded-md border border-edge">
           <h3 className="border-b border-edge-subtle bg-surface-overlay px-2.5 py-1 text-xs font-bold text-fg">{g.app}</h3>
           <div className="flex flex-col divide-y divide-edge-subtle">
-            {g.features.map((chain) => (
-              <div key={chain.feature} className="flex flex-col gap-1.5 px-2.5 py-2" data-testid={`chain-${g.app}-${chain.feature}`}>
-                <span className="flex items-center gap-1.5">
-                  <span className={`text-2xs font-bold ${chain.feature === '*' ? 'text-fg' : 'text-fg-secondary'}`}>{featureLabel(chain.feature)}</span>
-                  <span className="text-3xs text-fg-muted">{chain.routes.length} tried in order</span>
-                </span>
-                <ol className="flex list-none flex-wrap items-stretch gap-1.5 p-0" aria-label={`${g.app} ${featureLabel(chain.feature)}: candidates in order`}>
+            {g.features.map((chain) => {
+              const same = firstWithShape.get(chainSignature(chain))
+              const twin = same && same !== chain ? same : null
+              const body = (
+                <ol className="flex list-none flex-wrap items-start gap-x-4 gap-y-1.5 p-0" aria-label={`${g.app} ${featureLabel(chain.feature)}: candidates in order`}>
                   {chain.routes.map((r, i) => (
                     <Candidate
                       key={routeKey(r)}
@@ -353,7 +355,7 @@ export function RoutesPanel(props: RoutesPanelProps) {
                       onSwitchModel={props.onSwitchModel}
                     />
                   ))}
-                  <li className="flex items-center">
+                  <li className="flex items-center self-center">
                     <AddCandidate
                       meta={meta}
                       prices={prices}
@@ -363,8 +365,40 @@ export function RoutesPanel(props: RoutesPanelProps) {
                     />
                   </li>
                 </ol>
-              </div>
-            ))}
+              )
+              const title = (
+                <>
+                  <span className={`text-2xs font-bold ${chain.feature === '*' ? 'text-fg' : 'text-fg-secondary'}`}>{featureLabel(chain.feature)}</span>
+                  <span className="text-3xs text-fg-muted">{chain.routes.length} tried in order</span>
+                </>
+              )
+              return (
+                <div
+                  key={chain.feature}
+                  className="flex flex-col gap-1.5 px-2.5 py-2"
+                  data-testid={`chain-${g.app}-${chain.feature}`}
+                  data-same-as={twin ? `${twin.app}|${twin.feature}` : undefined}
+                >
+                  {twin ? (
+                    // The same chain as one above: one line; open it to edit this one.
+                    <details>
+                      <summary className="flex cursor-pointer items-center gap-1.5">
+                        {title}
+                        <span className="text-3xs whitespace-nowrap text-fg-secondary">
+                          same as {twin.app} › {featureLabel(twin.feature)}
+                        </span>
+                      </summary>
+                      <div className="pt-1.5">{body}</div>
+                    </details>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1.5">{title}</span>
+                      {body}
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </section>
       ))}

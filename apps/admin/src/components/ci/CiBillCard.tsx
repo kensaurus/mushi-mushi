@@ -12,6 +12,8 @@
 import type { CiBill } from '../../lib/ciBillTypes'
 import { formatDelta, formatMinutes, formatMoney, formatPercent } from '../../lib/ciCompareView'
 import { usePageData } from '../../lib/usePageData'
+import { useReadTimedOut } from '../../lib/ciReadTimeout'
+import { CiNotChecked } from './CiNotChecked'
 import { BarSparkline } from '../charts'
 import { Callout, CodeValue, ErrorAlert, Loading } from '../ui'
 import { IconCost } from '../icons'
@@ -83,9 +85,22 @@ export function CiBillCard({ projectId, scope }: { projectId: string | null; sco
   const path = scope === 'project' && projectId ? `/v1/admin/ci/bill?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/bill?days=30'
   const page = usePageData<CiBill>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const bill = page.data
+  const wait = useReadTimedOut(page.loading && !bill)
 
   if (!bill) {
     if (page.error) return <ErrorAlert title="Your real bill" message={page.error} onRetry={page.reload} />
+    if (wait.timedOut) {
+      return (
+        <CiNotChecked
+          what="Your real bill"
+          testId="ci-bill-not-checked"
+          onRetry={() => {
+            wait.restart()
+            page.reload()
+          }}
+        />
+      )
+    }
     return page.loading ? <Loading text="Reading your GitHub bill…" /> : null
   }
 

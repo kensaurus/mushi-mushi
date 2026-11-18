@@ -1,9 +1,8 @@
 /**
  * FILE: apps/admin/src/components/graph/GraphLegend.tsx
  * PURPOSE: In-canvas legend so a first-time visitor can decode the colors
- *          without opening the help drawer. Collapsed by default to stay out
- *          of the way; the summary line still shows the highest-signal info
- *          (node-type swatches).
+ *          without opening the help drawer. Open by default (the dots alone
+ *          named nothing); it collapses to a one-line summary of swatches.
  */
 
 import { useState } from 'react'
@@ -18,7 +17,8 @@ const LEGEND_EDGE_SPECS: Array<{ key: string; label: string; token: string }> = 
 ]
 
 export function GraphLegend() {
-  const [open, setOpen] = useState(false)
+  // Open by default: a row of twelve unlabelled dots decoded nothing.
+  const [open, setOpen] = useState(true)
   const edgeColors = LEGEND_EDGE_SPECS.map((spec) => ({
     ...spec,
     color: readVizToken(spec.token),

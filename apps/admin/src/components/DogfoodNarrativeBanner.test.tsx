@@ -62,6 +62,13 @@ describe('DogfoodNarrativeBanner', () => {
     expect(doc.body.textContent).not.toContain('fragile')
   })
 
+  // Fresh-eyes sweep 2026-11-18: "Most bugs come from minimatch: 1 report" claimed a pattern from one report.
+  it('makes no "most bugs" claim from a single report', () => {
+    state.loading = false
+    state.data = { topComponents: [{ component: 'minimatch', count: 1, draftedFixes: 0, mergedFixes: 0 }] }
+    expect(html()).toBe('')
+  })
+
   it('renders nothing in advanced mode, loading or not', () => {
     state.advanced = true
     expect(html()).toBe('')

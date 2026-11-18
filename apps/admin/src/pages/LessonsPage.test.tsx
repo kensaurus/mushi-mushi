@@ -96,10 +96,27 @@ describe('LessonsPage recurring patterns', () => {
     expect(text).toContain('Still growing')
   })
 
-  it('says how many patterns are ready, not every candidate', async () => {
+  it('says the next step, not the counts the numbers already show', async () => {
     mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, activeLessons: 2, candidateClusters: 3, readyToPromote: 1, topPriority: 'candidates_ready' }
     mocks.clusters = []
     await render('/lessons?tab=clusters')
-    expect(host.querySelector('[data-testid="page-status"]')?.textContent).toContain('2 lessons in use; 1 recurring pattern ready to become one.')
+    const status = host.querySelector('[data-testid="page-status"]')?.textContent ?? ''
+    expect(status).toContain('Promote a ready pattern to make its rule a lesson.')
+    expect(status).not.toContain('lessons in use;')
+  })
+
+  it('folds identical unnamed patterns into one row', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, candidateClusters: 3, topPriority: 'candidates_ready' }
+    mocks.clusters = [
+      cluster('a', 1, { name: null, suggested_rule: null }),
+      cluster('b', 1, { name: null, suggested_rule: null, last_seen_at: '2026-10-25T00:00:00Z' }),
+      cluster('named', 1, { suggested_rule: null }),
+    ]
+    await render('/lessons?tab=clusters')
+    const groups = host.querySelectorAll('[data-testid="lessons-cluster-group"]')
+    expect(groups).toHaveLength(1)
+    expect(groups[0].textContent).toContain('2 patterns still growing (1 report each)')
+    expect(host.textContent).not.toContain('Unnamed pattern')
+    expect(host.textContent).toContain('Pattern named')
   })
 })

@@ -16,26 +16,25 @@ interface Props {
   statLabels?: Record<string, string>
 }
 
-function lessonsSentence(stats: LessonsStats): string {
+/**
+ * @internal Exported for tests. The three numbers below already say how many; the sentence says
+ * what to do next, so it never restates a count (fresh-eyes sweep 2026-11-18).
+ */
+export function lessonsSentence(stats: LessonsStats): string {
   if (stats.activeLessons === 0 && stats.candidateClusters === 0) {
     return 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.'
   }
-  const active = `${pluralizeWithCount(stats.activeLessons, 'lesson')} in use${stats.criticalLessons > 0 ? ` (${stats.criticalLessons} critical)` : ''}`
-  // Ready = 3+ reports, the bar for promoting; smaller patterns are still growing.
-  const ready =
-    stats.readyToPromote > 0
-      ? `${pluralizeWithCount(stats.readyToPromote, 'recurring pattern')} ready to become one`
-      : stats.candidateClusters > 0
-        ? `${pluralizeWithCount(stats.candidateClusters, 'recurring pattern')} still growing`
-        : 'no new patterns waiting'
-  return `${active}; ${ready}.`
+  if (stats.criticalLessons > 0) return `${pluralizeWithCount(stats.criticalLessons, 'critical lesson')} in use.`
+  if (stats.readyToPromote > 0) return 'Promote a ready pattern to make its rule a lesson.'
+  if (stats.candidateClusters > 0) return 'A pattern can become a rule once 3 reports share its cause.'
+  return 'Mushi Mushi applies these rules to every new report.'
 }
 
 export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   return (
     <PageStatus
       ariaLabel="Lessons status"
-      tone={stats.criticalLessons > 0 ? 'warn' : stats.readyToPromote > 0 ? 'info' : 'ok'}
+      tone={stats.criticalLessons > 0 ? 'warn' : stats.readyToPromote > 0 ? 'info' : stats.activeLessons > 0 ? 'ok' : 'neutral'}
       sentence={lessonsSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[

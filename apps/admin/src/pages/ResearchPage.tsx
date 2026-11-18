@@ -13,6 +13,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useMarkPageEmpty } from '../lib/pageHelpContext'
 import { useResearchUx, resolveQuickResearchTab } from '../lib/researchModeUx'
 import { NextStep } from '../components/NextStep'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -22,12 +23,7 @@ import { Btn,
   SegmentedControl,
   EmptyState,
   RelativeTime, } from '../components/ui'
-import {
-  ActionPill,
-  ActionPillRow,
-  ContainedBlock,
-  InlineProof,
-} from '../components/report-detail/ReportSurface'
+import { InlineProof } from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { ResearchStatusBanner } from '../components/research/ResearchStatusBanner'
@@ -105,6 +101,11 @@ export function ResearchPage() {
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickResearchTab(stats)
   const activeTab: ResearchTabId = explicitResearchTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'search' : postureTab)
+
+  // No searches yet and the Search form is open: the form is the first step, so the
+  // "Run first search" card above it (the same action as the Search button) steps aside.
+  const searchIsFirstStep = stats.topPriority === 'ready_no_sessions' && activeTab === 'search'
+  useMarkPageEmpty(searchIsFirstStep)
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
@@ -343,7 +344,7 @@ export function ResearchPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideResearchSnapshot,
+            show: !ux.hideResearchSnapshot && !searchIsFirstStep,
             children: (
               <ResearchSnapshotStrip
                 stats={stats}
@@ -413,23 +414,29 @@ export function ResearchPage() {
                 </Btn>
               </form>
 
-              <ContainedBlock tone="muted" label="Example queries">
-                <ActionPillRow>
+              {/* One left-aligned line per example (2026-11-18): centred pills wrapped to two
+                  lines inside a grey box at 390px. */}
+              <div data-testid="research-examples">
+                <p className="text-xs font-medium text-fg-muted">Example queries</p>
+                <ul className="mt-1 divide-y divide-edge-subtle">
                   {SUGGESTIONS.map((s) => (
-                    <ActionPill
-                      key={s}
-                      onClick={() => {
-                        setQuery(s)
-                        void runSearch(s)
-                      }}
-                      tone="neutral"
-                      className={`font-mono ${searching || !stats.firecrawlReady ? 'opacity-50 pointer-events-none' : ''}`}
-                    >
-                      {s}
-                    </ActionPill>
+                    <li key={s} className="min-w-0">
+                      <button
+                        type="button"
+                        title={s}
+                        disabled={searching || !stats.firecrawlReady}
+                        onClick={() => {
+                          setQuery(s)
+                          void runSearch(s)
+                        }}
+                        className="block w-full truncate py-1.5 text-left font-mono text-xs text-fg-secondary hover:text-fg disabled:opacity-50"
+                      >
+                        {s}
+                      </button>
+                    </li>
                   ))}
-                </ActionPillRow>
-              </ContainedBlock>
+                </ul>
+              </div>
 
               {!stats.firecrawlReady && (
                 <EmptyState

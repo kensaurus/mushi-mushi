@@ -79,7 +79,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
     })
     setSaving(false)
     if (res.ok) {
-      toastSuccess('QA story created')
+      toastSuccess('Scheduled test created')
       onCreated()
       onClose()
     } else {
@@ -91,7 +91,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
     <Modal
       open
       onClose={onClose}
-      title="New QA story"
+      title="New scheduled test"
       size="sm"
       footer={
         <div className="flex justify-end gap-2">

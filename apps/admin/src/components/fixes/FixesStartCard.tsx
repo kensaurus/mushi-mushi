@@ -28,16 +28,15 @@ export function FixesStartCard({ githubConnected, projectId = null }: { githubCo
     <Card className="p-4 space-y-3" data-testid="fixes-start">
       <div>
         <h2 className="text-sm font-semibold text-fg">How a fix starts</h2>
-        <ul className="mt-1 space-y-0.5 text-xs text-fg-secondary">
+        {/* Two short steps, not two paragraphs (fresh-eyes sweep 2026-11-18). */}
+        <ol className="mt-1 space-y-0.5 text-xs text-fg-secondary" data-testid="fixes-start-steps">
           <li>
-            <strong>You:</strong> open a bug and press <strong>Copy fix prompt</strong>. Paste it into Lovable, Bolt, Cursor or
-            Claude Code: it says what broke and what to change. No setup needed.
+            <strong>1. You:</strong> open a bug, press <strong>Copy fix prompt</strong>, paste it into your editor.
           </li>
           <li>
-            <strong>Mushi Mushi:</strong> with Autofix on, it writes the change for each sorted bug and opens it as a draft
-            pull request for you to review. Nothing goes live without you.
+            <strong>2. Or Autofix:</strong> Mushi Mushi opens a draft pull request for you to review.
           </li>
-        </ul>
+        </ol>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Btn size="sm" variant="primary" to={WORST_BUG_HREF}>

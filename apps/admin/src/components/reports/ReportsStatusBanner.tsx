@@ -10,6 +10,16 @@ import { StatusBannerAction } from '../StatusBannerAction'
 import { scopedHref, triageBacklogHint } from '../../lib/humanPageHints'
 import type { ReportsStats, ReportsTabId } from './ReportsStatsTypes'
 
+/**
+ * The status banner already counts the reports waiting for review (or the
+ * critical ones), so the page's "N reports are waiting for triage" card
+ * repeated it (fresh-eyes sweep 2026-11-18). True when the shown banner is
+ * one of those; the page then drops the card.
+ */
+export function reportsBannerCoversQueue(stats: Pick<ReportsStats, 'hasIngest' | 'topPriority'>, bannerShown: boolean): boolean {
+  return bannerShown && stats.hasIngest && stats.topPriority !== 'clear'
+}
+
 interface Props {
   stats: ReportsStats
   onTab?: (tab: ReportsTabId) => void

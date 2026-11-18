@@ -162,6 +162,17 @@ describe('SkillPipelinesPage catalog layout', () => {
     expect(host.textContent).toContain('Workflow 7')
   })
 
+  // Fresh-eyes 2026-11-18: 18 framed category cards, each holding framed skill cards.
+  it('lists categories as rows of one card, with skills as rows inside', () => {
+    render()
+    const list = host.querySelector('[data-testid="skill-categories"]')!
+    const rows = list.querySelectorAll('[data-testid="skill-category"]')
+    expect(rows.length).toBeGreaterThan(1)
+    for (const row of Array.from(rows)) expect(row.className).not.toMatch(/shadow-card|rounded-lg/)
+    const skill = Array.from(list.querySelectorAll('button')).find((b) => b.textContent?.includes('Workflow 1'))!
+    expect(skill.className).toContain('!border-transparent')
+  })
+
   it('filters to one category from its chip', () => {
     render()
     act(() => buttonByText('Audit')!.click())

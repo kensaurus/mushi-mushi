@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import {
+  radarTitle,
   budgetText,
   appUrgency,
   cardStatusChips,
@@ -255,5 +256,13 @@ describe('sortPortfolioCards order toggle', () => {
   })
   it('or by name', () => {
     expect(sortPortfolioCards(apps, 'name').map((c) => c.name)).toEqual(['alpha', 'beta', 'gamma'])
+  })
+})
+
+describe('radarTitle', () => {
+  it('says the condition is not met when the check found something', () => {
+    expect(radarTitle({ title: 'No known holes in your dependencies', state: 'finding' })).toBe('Not met: No known holes in your dependencies')
+    expect(radarTitle({ title: 'Every connected key still works', state: 'ok' })).toBe('Every connected key still works')
+    expect(radarTitle({ title: 'Store names match', state: 'error' })).toBe('Store names match')
   })
 })

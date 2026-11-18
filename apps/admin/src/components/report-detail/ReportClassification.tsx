@@ -1,11 +1,9 @@
+import type { ReactNode } from 'react'
 import {
   ImageZoom,
   InfoHint,
   Tooltip,
   Badge,
-  Callout,
-  DefinitionChips,
-  CodeValue,
   ProseBlock,
 } from '../ui'
 import { roundLongDecimals } from '../../lib/format'
@@ -17,7 +15,7 @@ import {
   confidenceBadgeClass,
 } from '../../lib/tokens'
 import { IconCamera, IconIntelligence } from '../icons'
-import { ContainedBlock } from './ReportSurface'
+import { summaryPlace } from './summaryPlace'
 import type { ReportDetail } from './types'
 import { isSampleModel, SAMPLE_EXPLANATION_LABEL } from '../../lib/reportInternals'
 
@@ -28,84 +26,79 @@ export function ClassificationFields({ report, showInternals = false }: { report
   const conf = report.confidence
   const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
 
+  // One level of card (sweep 2026-11-18): the section is the card, so its
+  // facts are plain rows, not boxes inside it. The summary shows here only
+  // when no other place on the page shows it (summaryPlace).
+  const showSummary = Boolean(report.summary) && summaryPlace(report) === 'classification'
   return (
     <>
-      <DefinitionChips
-        items={[
-          {
-            label: 'Category',
-            hint: 'Coarse-grained type assigned by the Stage-1 classifier.',
-            value: (
-              <Badge
-                className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 text-xs" data-testid="classification-rows">
+        <ClassRow label="Category" hint="Coarse-grained type assigned by the Stage-1 classifier.">
+          <Badge className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}>{categoryLabel}</Badge>
+        </ClassRow>
+        <ClassRow label="Severity" hint="Estimated user impact, used to drive routing and SLA.">
+          {report.severity ? (
+            <Badge className={SEVERITY[report.severity] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>{severityText}</Badge>
+          ) : (
+            <span className="text-fg-muted">Unset</span>
+          )}
+        </ClassRow>
+        <ClassRow label="Confidence" hint="LLM self-reported confidence. Below 70% usually warrants human review.">
+          <span className="inline-flex items-center gap-2">
+            <Badge className={confidenceBadgeClass(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
+              {confLabel}
+            </Badge>
+            {conf != null && (
+              <span
+                className="h-1 w-24 overflow-hidden rounded-full bg-surface-overlay/80"
+                role="progressbar"
+                aria-valuenow={Math.round(conf * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Classification confidence"
               >
-                {categoryLabel}
-              </Badge>
-            ),
-          },
-          {
-            label: 'Severity',
-            hint: 'Estimated user impact, used to drive routing and SLA.',
-            value: report.severity ? (
-              <Badge className={SEVERITY[report.severity] ?? 'bg-surface-overlay border border-edge-subtle text-fg-muted'}>
-                {severityText}
-              </Badge>
-            ) : (
-              <span className="text-fg-muted">Unset</span>
-            ),
-          },
-          {
-            label: 'Confidence',
-            hint: 'LLM self-reported confidence. Below 70% usually warrants human review.',
-            value: (
-              <div className="flex min-w-0 flex-col gap-1">
-                <Badge className={confidenceBadgeClass(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
-                  {confLabel}
-                </Badge>
-                {conf != null && (
-                  <div
-                    className="h-1 w-full max-w-32 overflow-hidden rounded-full bg-surface-overlay/80"
-                    role="progressbar"
-                    aria-valuenow={Math.round(conf * 100)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Classification confidence"
-                  >
-                    <div
-                      className={`h-full rounded-full transition-[width] ${
-                        conf >= 0.85 ? 'bg-ok' : conf >= 0.7 ? 'bg-warn' : 'bg-danger'
-                      }`}
-                      style={{ width: `${Math.min(100, Math.max(0, conf * 100))}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
+                <span
+                  className={`block h-full rounded-full transition-[width] ${conf >= 0.85 ? 'bg-ok' : conf >= 0.7 ? 'bg-warn' : 'bg-danger'}`}
+                  style={{ width: `${Math.min(100, Math.max(0, conf * 100))}%` }}
+                />
+              </span>
+            )}
+          </span>
+        </ClassRow>
+        {report.component && (
+          <ClassRow label="Component" hint="The UI component or code area the LLM believes is responsible.">
+            <code className="break-all font-mono text-2xs text-fg-secondary">{report.component}</code>
+          </ClassRow>
+        )}
+        {reproductionHint && (
+          <ClassRow label="How to reproduce">
+            <span className="text-fg-secondary">{reproductionHint}</span>
+          </ClassRow>
+        )}
+      </dl>
 
-      {report.summary && (
-        <Callout tone="info" label="LLM summary" icon={<IconIntelligence className="text-info" />}>
-          <ProseBlock value={roundLongDecimals(report.summary)} mode="auto" />
-        </Callout>
+      {showSummary && (
+        <div className="mt-2 border-t border-edge-subtle pt-2" data-testid="classification-summary">
+          <p className="mb-0.5 flex items-center gap-1 text-2xs font-semibold text-fg-secondary">
+            <IconIntelligence className="text-info" /> LLM summary
+          </p>
+          <ProseBlock value={roundLongDecimals(report.summary ?? '')} mode="auto" />
+        </div>
       )}
 
-      {report.component && (
-        <ContainedBlock label="Component" tone="muted">
-          <div className="flex items-center gap-1 mb-1">
-            <InfoHint content="The UI component or code area the LLM believes is responsible." />
-          </div>
-          <CodeValue value={report.component} tone="hash" />
-        </ContainedBlock>
-      )}
-
-      {reproductionHint && (
-        <ContainedBlock label="Reproduction hint" tone="info">
-          <ProseBlock value={reproductionHint} mode="auto" tone="muted" maxWidth="max-w-none" />
-        </ContainedBlock>
-      )}
       <ModelFooter model={report.stage1_model} latency={report.stage1_latency_ms} showInternals={showInternals} />
+    </>
+  )
+}
+
+function ClassRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <>
+      <dt className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-fg-muted">
+        {label}
+        {hint ? <InfoHint content={hint} /> : null}
+      </dt>
+      <dd className="min-w-0">{children}</dd>
     </>
   )
 }

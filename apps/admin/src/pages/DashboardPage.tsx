@@ -109,6 +109,22 @@ export function DashboardPage() {
   // information), so the checklist is the one place.
   const openStep = setupIncomplete ? (project?.steps.find((s) => s.required && !s.complete) ?? null) : null
 
+  const needsRow =
+    data && activeProjectId ? (
+      // Cards sized to their content: a one-line Needs you stretched to the Release card's height was ~70% empty.
+      <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-needs-row">
+        <NeedsYouCard
+          section={data.needsYou}
+          fixFirst={data.fixFirst}
+          partial={data.partial}
+          hasReports={!!project && project.report_count > 0}
+          // One "do this next" on the page: the setup step wins while it is open.
+          primaryElsewhere={Boolean(openStep && project)}
+        />
+        <ReleaseCard section={data.release} projectId={activeProjectId} />
+      </div>
+    ) : null
+
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-dashboard">
       <Confetti triggerKey={confettiKey} />
@@ -169,7 +185,10 @@ export function DashboardPage() {
         <HomeSkeleton />
       ) : (
         <>
-          <div className="grid gap-3 lg:grid-cols-12 [&>*]:min-w-0">
+          {/* Problems first: while something needs the owner, that row leads,
+              above the green health lights (fresh-eyes sweep 2026-11-18). */}
+          {homeNeedsFirst(data) && needsRow}
+          <div className="grid items-start gap-3 lg:grid-cols-12 [&>*]:min-w-0">
             <div className="lg:col-span-5">
               <AppCard section={data.app} projectId={activeProjectId} canEdit={ent.canEditProject} onRefreshed={() => void reload()} />
             </div>
@@ -178,24 +197,14 @@ export function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <NeedsYouCard
-              section={data.needsYou}
-              fixFirst={data.fixFirst}
-              partial={data.partial}
-              hasReports={!!project && project.report_count > 0}
-              // One "do this next" on the page: the setup step wins while it is open.
-              primaryElsewhere={Boolean(openStep && project)}
-            />
-            <ReleaseCard section={data.release} projectId={activeProjectId} />
-          </div>
+          {!homeNeedsFirst(data) && needsRow}
 
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
             <SitemapCard section={data.sitemap} />
             <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-2 [&>*]:min-w-0">
+          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
             <WeekCard section={data.week} />
             <ActivityCard section={data.activity} />
           </div>
@@ -205,6 +214,17 @@ export function DashboardPage() {
       )}
     </div>
   )
+}
+
+/**
+ * @internal Exported for tests.
+ * Something on this app waits on the owner (a Needs you item or a root cause
+ * to fix first), so that row goes above the health lights.
+ */
+export function homeNeedsFirst(data: Pick<ProjectHome, 'needsYou' | 'fixFirst'>): boolean {
+  const needs = data.needsYou.status === 'ok' ? (data.needsYou.data ?? []).length : 0
+  const causes = data.fixFirst?.status === 'ok' ? (data.fixFirst.data ?? []).length : 0
+  return needs + causes > 0
 }
 
 function HomeSkeleton() {

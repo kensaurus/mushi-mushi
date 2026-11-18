@@ -41,11 +41,13 @@ export function EvalDatasetCard({ labelled, recentSamples }: EvalDatasetCardProp
                 className="flex items-start gap-2 border-t border-edge-subtle pt-1.5 first:border-0 first:pt-0"
               >
                 <div className="flex-1 min-w-0">
+                  {/* One line with an ellipsis: slice(0, 140) cut words mid-way with no mark. */}
                   <Link
                     to={`/reports/${s.id}`}
-                    className="text-fg-secondary hover:text-fg underline-offset-2 hover:underline"
+                    title={s.description ?? undefined}
+                    className="block truncate text-fg-secondary hover:text-fg underline-offset-2 hover:underline"
                   >
-                    {s.description?.slice(0, 140) ?? '(no description)'}
+                    {s.description || '(no description)'}
                   </Link>
                   <div className="mt-0.5 flex flex-wrap gap-1">
                     {s.category && <Badge tone="neutral" title="Category">{s.category}</Badge>}

@@ -18,3 +18,16 @@ describe('SQL query sample questions', () => {
     expect(src).toMatch(/runs\.length > 0 \? \([\s\S]*?\) : \(\s*queryMode === 'nl' \? \(\s*<QueryPromptLibrary/)
   })
 })
+
+describe('SQL query layout (2026-11-18 fresh-eyes)', () => {
+  it('gives the question box three rows and stacks the button under it on a phone', () => {
+    expect(src).toMatch(/<div className="flex flex-col gap-2 items-stretch sm:flex-row">\s*<textarea\s*id="query-composer"/)
+    expect(src).toMatch(/id="query-composer"[\s\S]*?rows=\{3\}/)
+  })
+
+  it('draws the Library empty states as plain lines, not dashed cards', () => {
+    const library = src.slice(src.indexOf('<Section title="Library">'))
+    expect(library).not.toContain('<EmptySectionMessage')
+    expect(library.match(/<LibraryEmpty/g)).toHaveLength(3)
+  })
+})

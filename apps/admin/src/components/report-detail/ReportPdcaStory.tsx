@@ -25,6 +25,7 @@
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { CATEGORY_LABELS } from '../../lib/tokens'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
 import { Card, RelativeTime } from '../ui'
@@ -216,7 +217,8 @@ export function buildStoryNodes(
   const planHeadline = classifyFailed
     ? `Classification failed — ${report.processing_error}`
     : classified
-      ? report.summary || `Classified as ${report.category}`
+      // The summary shows once, higher up (summaryPlace); the step says what was decided.
+      ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`
       : 'Report received — the LLM is classifying it now'
   const plan: StoryNode = {
     id: 'plan',

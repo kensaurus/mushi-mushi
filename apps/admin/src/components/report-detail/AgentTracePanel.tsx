@@ -22,18 +22,32 @@ interface Props {
   report: ReportDetail & { llm_invocations?: LlmInvocationRow[] | Array<Record<string, unknown>> }
 }
 
+/**
+ * @internal Exported for tests.
+ * The total of the costs that were recorded, or null when none was: "$0.0000
+ * total" over a column of "—" claimed a free run nobody measured (fresh-eyes
+ * sweep 2026-11-18). Unknown is not zero.
+ */
+export function agentTraceTotalCost(rows: ReadonlyArray<Pick<LlmInvocationRow, 'cost_usd'>>): number | null {
+  const known = rows.filter((r) => r.cost_usd != null && Number.isFinite(Number(r.cost_usd)))
+  if (known.length === 0) return null
+  return known.reduce((sum, r) => sum + Number(r.cost_usd), 0)
+}
+
 export function AgentTracePanel({ report }: Props) {
   const raw = report.llm_invocations ?? []
   const rows = raw.filter((r): r is LlmInvocationRow => typeof (r as LlmInvocationRow).id === 'string')
   if (rows.length === 0) return null
 
-  const totalCost = rows.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0)
+  const totalCost = agentTraceTotalCost(rows)
 
   return (
     <Card className="p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Agent trace</h3>
-        <Badge className="bg-surface-overlay text-fg-muted text-3xs">${totalCost.toFixed(4)} total</Badge>
+        <Badge className="bg-surface-overlay text-fg-muted text-3xs">
+          <span data-testid="agent-trace-total">{totalCost == null ? 'Cost not captured' : `$${totalCost.toFixed(4)} total`}</span>
+        </Badge>
       </div>
       {/* Wide on a phone: the table has no links or buttons, so the scroller
           itself has to take keyboard focus (axe scrollable-region-focusable). */}

@@ -32,6 +32,11 @@ export interface CiAdviceGroup {
   targets: CiAdviceTarget[]
   /** One line per piece of evidence: each item's, split at `; `. */
   evidence: string[]
+  /**
+   * True when every evidence line only names one of the target chips ("…/deploy.yml: a concurrency
+   * group without cancel-in-progress", once per chip): the card shows the chips, not the list again.
+   */
+  evidenceRepeatsTargets: boolean
   /** How many advice items the card stands for. */
   count: number
   /** The places Mushi can fix with a draft PR ("Open fix PR"), one per workflow file. */
@@ -111,6 +116,17 @@ function fixableOf(items: CiAdvice[]): CiAdviceFixable[] {
   return [...out.values()]
 }
 
+/** Every line names one of two or more targets, and there is no more than one line per target. */
+function evidenceRepeatsTargets(evidence: readonly string[], targets: readonly CiAdviceTarget[]): boolean {
+  if (targets.length < 2 || evidence.length === 0 || evidence.length > targets.length) return false
+  return evidence.every((line) => targets.some((t) => line.includes(t.title)))
+}
+
+/** The evidence line that names a target, for its chip's tooltip; the target's path otherwise. */
+export function targetTitle(target: Pick<CiAdviceTarget, 'title'>, evidence: readonly string[]): string {
+  return evidence.find((line) => line.includes(target.title)) ?? target.title
+}
+
 /**
  * One card per rule and title: severity is the worst of the group, the
  * targets list every workflow / repo / runner it fired on, the evidence keeps
@@ -124,18 +140,23 @@ export function groupCiAdvice(advice: CiAdvice[]): CiAdviceGroup[] {
     if (list) list.push(a)
     else groups.set(key, [a])
   }
-  const out: CiAdviceGroup[] = [...groups.entries()].map(([key, items]) => ({
-    key,
-    ruleId: adviceRuleId(items[0].id),
-    severity: items.reduce<CiAdvice['severity']>((worst, a) => (SEVERITY_RANK[a.severity] < SEVERITY_RANK[worst] ? a.severity : worst), 'low'),
-    title: items[0].title,
-    detail: items[0].detail,
-    fixes: [...new Set(items.map((a) => a.fix))],
-    targets: targetsOf(items),
-    evidence: [...new Set(items.flatMap((a) => splitEvidence(a.evidence)))],
-    count: items.length,
-    fixable: fixableOf(items),
-  }))
+  const out: CiAdviceGroup[] = [...groups.entries()].map(([key, items]) => {
+    const targets = targetsOf(items)
+    const evidence = [...new Set(items.flatMap((a) => splitEvidence(a.evidence)))]
+    return {
+      key,
+      ruleId: adviceRuleId(items[0].id),
+      severity: items.reduce<CiAdvice['severity']>((worst, a) => (SEVERITY_RANK[a.severity] < SEVERITY_RANK[worst] ? a.severity : worst), 'low'),
+      title: items[0].title,
+      detail: items[0].detail,
+      fixes: [...new Set(items.map((a) => a.fix))],
+      targets,
+      evidence,
+      evidenceRepeatsTargets: evidenceRepeatsTargets(evidence, targets),
+      count: items.length,
+      fixable: fixableOf(items),
+    }
+  })
   // Array.prototype.sort is stable: equal severities keep the server's order.
   return out.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity])
 }

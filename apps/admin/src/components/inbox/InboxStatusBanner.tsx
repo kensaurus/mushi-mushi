@@ -18,6 +18,16 @@ export function isInboxStatusBannerCritical(stats: InboxStats): boolean {
   return false
 }
 
+/**
+ * The "N things need you" banner only repeats the list when there is one
+ * open card: the same sentence twice and two buttons ("Take action",
+ * "Review & fix") for one action (fresh-eyes sweep 2026-11-18). Then the card
+ * is the banner.
+ */
+export function inboxBannerRepeatsCards(stats: InboxStats, openCards: number): boolean {
+  return stats.topPriority === 'actions' && openCards <= 1
+}
+
 interface Props {
   stats: InboxStats
   onTab?: (tab: InboxTabId) => void

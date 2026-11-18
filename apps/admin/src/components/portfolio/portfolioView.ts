@@ -121,6 +121,15 @@ export function radarStateMeta(state: string): { label: string; tone: BadgeTone 
   return STATE_META[state as DetectorState] ?? STATE_META.unknown
 }
 
+/**
+ * A check's name says what passing looks like ("No known holes in your dependencies"). When it
+ * found something, the same name next to "Found" contradicted itself (fresh-eyes 2026-11-18), so
+ * the title says the condition is not met.
+ */
+export function radarTitle(d: { title: string; state: string }): string {
+  return d.state === 'finding' ? `Not met: ${d.title}` : d.title
+}
+
 const RADAR_STATE_ORDER: Record<string, number> = { finding: 0, error: 1 }
 
 /**

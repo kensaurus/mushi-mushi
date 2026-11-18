@@ -21,7 +21,7 @@ import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RadarView } from '../../lib/radarTypes'
-import { groupRadarDetectors, radarErrorSentence, radarStateMeta } from './portfolioView'
+import { groupRadarDetectors, radarErrorSentence, radarStateMeta, radarTitle } from './portfolioView'
 
 type Detector = RadarView['detectors'][number]
 
@@ -108,7 +108,7 @@ function DetectorList({ detectors }: { detectors: Detector[] }) {
         return (
           <li key={d.ruleId} className="flex flex-col gap-1 py-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium text-fg" title={d.prevents}>{d.title}</span>
+              <span className="text-sm font-medium text-fg" title={d.prevents}>{radarTitle(d)}</span>
               <Badge tone={meta.tone}>{meta.label}</Badge>
             </div>
             {d.state === 'error' ? (

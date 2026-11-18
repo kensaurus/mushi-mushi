@@ -10,6 +10,7 @@ import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Loading, SegmentedControl } from './ui'
 import { LockedHubView } from './LockedHubView'
 import { useEntitlements } from '../lib/useEntitlements'
+import { useEdgeFade } from '../lib/useEdgeFade'
 import { hubRedirectTarget, lockedHubView, resolveHubView, visibleViews, type PageHub } from '../lib/pageHubs'
 
 export function PageHubView({ hub, render }: { hub: PageHub; render: Record<string, () => ReactNode> }) {
@@ -22,6 +23,8 @@ export function PageHubView({ hub, render }: { hub: PageHub; render: Record<stri
   const locked = entitlements.loading ? null : lockedHubView(hub, requested, entitlements)
   const view = locked ? locked.id : resolveHubView(hub, requested, entitlements)
   const options = locked ? hub.views.filter((v) => v === locked || views.includes(v)) : views
+  // Phone: the view picker scrolls with a fade at the edge, never a raw scrollbar (fresh-eyes 2026-11-18).
+  const fade = useEdgeFade<HTMLDivElement>(options.length)
 
   const select = (id: string) => {
     const next = new URLSearchParams(searchParams)
@@ -33,7 +36,7 @@ export function PageHubView({ hub, render }: { hub: PageHub; render: Record<stri
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
       {options.length > 1 && (
-        <div className="max-w-full overflow-x-auto">
+        <div ref={fade.ref} className={`max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`}>
           <SegmentedControl<string>
             value={view}
             options={options.map((v) => ({ id: v.id, label: v.label }))}

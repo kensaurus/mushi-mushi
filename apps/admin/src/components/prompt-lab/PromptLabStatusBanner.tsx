@@ -91,8 +91,8 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
   if (stats.topPriority === 'candidates_idle') {
     return (
       <StatusBannerShell
-        tone="brand"
-        title="Candidates waiting for traffic"
+        tone="warn"
+        title="Tests not started: 0% of traffic"
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (

@@ -31,9 +31,9 @@ const HAS_RESULT: ReadonlySet<CheckCardState> = new Set(['pass', 'findings', 'fa
 interface Staleness {
   /** Whole days since the run (0 under a day). */
   days: number
-  /** The cell class: neutral under a day, then the red ramp up to AGE_TOP_DAYS. */
+  /** The cell class: neutral until STALE_DAYS (an age is not a failure), then the red ramp up to AGE_TOP_DAYS. */
   cellClass: string
-  /** ● under a day, ◆ up to STALE_DAYS, ▲ past it. */
+  /** ● until STALE_DAYS, ▲ past it. */
   tone: SignalTone
   /** "now", "5h", "3d", "14d". */
   short: string
@@ -52,8 +52,9 @@ export function staleness(lastRunAt: string | null | undefined, now: number): St
   const stale = days >= STALE_DAYS
   return {
     days,
-    cellClass: days < 1 ? 'ci-cell-0' : badnessClass(days, AGE_TOP_DAYS),
-    tone: days < 1 ? 'ok' : stale ? 'danger' : 'warn',
+    // 2026-11-18: a red "◆4d" read as a failure. Only a stale run takes colour.
+    cellClass: stale ? badnessClass(days, AGE_TOP_DAYS) : 'ci-cell-0',
+    tone: stale ? 'danger' : 'ok',
     short,
     stale,
   }

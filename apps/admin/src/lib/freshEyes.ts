@@ -181,6 +181,25 @@ function agoText(iso: string, now: number): string {
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`
 }
 
+/**
+ * Why Run now is off, in one short line, or null when it can run (2026-11-18
+ * sweep: the button was disabled with no reason). The computer comes first:
+ * without one, fixing the fields would not help.
+ */
+export function runNowBlocker(input: { runnerCanRun: boolean; runnerSetup: 'install' | 'workers' | 'update' | null; url: string; goal: string }): string | null {
+  if (!input.runnerCanRun) {
+    if (input.runnerSetup === 'install') return 'Set up Mushi Mushi on your computer first (above).'
+    if (input.runnerSetup === 'update') return 'Update Mushi Mushi on your computer first (above).'
+    return 'Turn on a computer for this app first (above).'
+  }
+  if (!input.url.trim()) return 'Add a start page.'
+  if (!isStartUrl(input.url)) return 'Use a start page that starts with https://'
+  const goal = input.goal.trim()
+  if (!goal) return 'Say what a new visitor came to do.'
+  if (goal.length > 300) return 'Keep the goal under 300 characters.'
+  return null
+}
+
 /** True for an http(s) address the server will take as a start page. */
 export function isStartUrl(value: string): boolean {
   try {

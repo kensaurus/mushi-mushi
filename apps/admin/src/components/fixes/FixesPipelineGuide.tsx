@@ -48,7 +48,7 @@ export function FixesPipelineGuide({ topPriority, stats }: Props) {
 
   return (
     <FeatureExplainPanel
-      title="How Mushi Mushi makes a change for you (optional)"
+      title="How Autofix works (optional)"
       summary={FIXES_EXPLAINER_SUMMARY}
       category="workflow"
       defaultOpen={isFixesGuideExpanded(topPriority ?? live.topPriority)}

@@ -666,3 +666,92 @@ export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
     detail: `${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
   }
 }
+
+// ── Grouping helpers (fresh-eyes pass, 2026-11-18) ──────────────────────────
+
+/** "Browser gates (2/4)" → "Browser gates": the shard suffix GitHub adds to a matrix job. */
+function shardBase(job: string): string {
+  return job.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/, '')
+}
+
+/** One slow step, with the matrix shards of one job folded into one row. */
+export interface CiSlowStepGroup {
+  repo: string
+  /** The job without its shard suffix. */
+  job: string
+  step: string
+  /** The slowest shard's typical time. */
+  p50s: number
+  /** Runs across every shard. */
+  runs: number
+  /** How many shards share this row (1 = not a matrix job). */
+  shards: number
+}
+
+/**
+ * Folds the shards of a matrix job ("Browser gates (1/4)" … "(4/4)") that share a step into one
+ * row: the slowest shard's time, every shard's runs. Slowest first.
+ */
+export function groupSlowSteps(steps: ReadonlyArray<{ repo: string; job: string; step: string; p50s: number; runs: number }>): CiSlowStepGroup[] {
+  const out = new Map<string, CiSlowStepGroup>()
+  for (const s of steps) {
+    const job = shardBase(s.job)
+    const key = `${s.repo}|${job}|${s.step}`
+    const cur = out.get(key)
+    if (cur) {
+      cur.p50s = Math.max(cur.p50s, s.p50s)
+      cur.runs += s.runs
+      cur.shards += 1
+    } else out.set(key, { repo: s.repo, job, step: s.step, p50s: s.p50s, runs: s.runs, shards: 1 })
+  }
+  return [...out.values()].sort((a, b) => b.p50s - a.p50s)
+}
+
+/**
+ * GitHub's machines are packed into lanes "GitHub-hosted 1 … 10" that read as near-identical rows.
+ * The first GitHub lane and every one with a failure stay; the other clean ones fold into one
+ * summary row (`rest`) once that saves at least two rows. Order is kept.
+ */
+export function foldGithubLanes<L extends Pick<CiTimelineLane, 'kind' | 'bars'>>(lanes: readonly L[]): { shown: L[]; rest: L[] } {
+  const failed = (l: L) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
+  const clean = lanes.filter((l) => l.kind === 'github' && !failed(l))
+  if (clean.length < 3) return { shown: [...lanes], rest: [] }
+  const rest = new Set(clean.slice(1))
+  return { shown: lanes.filter((l) => !rest.has(l)), rest: clean.slice(1) }
+}
+
+/** Where an app's jobs ran in the window: your machines, GitHub's, both, or no job seen. */
+export type CiRunsOn = 'own' | 'github' | 'both' | null
+
+export function appRunsOn(jobs: ReadonlyArray<Pick<CiJob, 'projectId' | 'runnerKind'>>): Map<string, CiRunsOn> {
+  const seen = new Map<string, { own: boolean; github: boolean }>()
+  for (const j of jobs) {
+    if (j.runnerKind === 'unknown') continue
+    const s = seen.get(j.projectId) ?? { own: false, github: false }
+    if (j.runnerKind === 'self_hosted') s.own = true
+    else s.github = true
+    seen.set(j.projectId, s)
+  }
+  const out = new Map<string, CiRunsOn>()
+  for (const [id, s] of seen) out.set(id, s.own && s.github ? 'both' : s.own ? 'own' : 'github')
+  return out
+}
+
+/** Jobs the test machine stopped, grouped by app and PR (or branch), newest group first. */
+export interface CiInfraGroup {
+  key: string
+  repo: string
+  prNumber: number | null
+  jobs: CiJob[]
+}
+
+export function groupInfraFailures(jobs: readonly CiJob[]): CiInfraGroup[] {
+  const out = new Map<string, CiInfraGroup>()
+  for (const j of jobs) {
+    const key = `${j.repo}|${j.prNumber ?? 'none'}`
+    const g = out.get(key)
+    if (g) g.jobs.push(j)
+    else out.set(key, { key, repo: j.repo, prNumber: j.prNumber ?? null, jobs: [j] })
+  }
+  return [...out.values()]
+}

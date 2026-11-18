@@ -18,8 +18,6 @@ import { apiErrorText } from '../lib/apiErrorText'
 import { isFeatureClosed, isFeatureShipped } from '../lib/featureBoardStatus'
 import { PageLoadError } from '../components/PageLoadError'
 import { ContainedBlock, InlineProof } from '../components/report-detail/ReportSurface'
-import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { Modal } from '../components/Modal'
 import { FeatureBoardSnapshotStrip } from '../components/feature-board/FeatureBoardSnapshotStrip'
 import { type FeatureBoardClientStats } from '../components/feature-board/FeatureBoardStatsTypes'
@@ -414,6 +412,7 @@ export function FeatureBoardPage() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     })
   }, [tickets, sort, search, statusFilter])
+  const boardEmpty = !loading && !error && tickets.length === 0
 
   const handleVote = useCallback(
     async (id: string) => {
@@ -527,7 +526,23 @@ export function FeatureBoardPage() {
         />
       )}
 
-      {projectId && (
+      {/* No requests at all (2026-11-18): one plain empty state in the console font. The
+          search, status and sort controls had nothing to act on, and the serif hero sat in
+          a dashed card inside the list card. */}
+      {projectId && boardEmpty && (
+        <EmptyState
+          title="No feature requests yet"
+          description="Feature requests submitted via the Feedback form will appear here for voting."
+          hints={[
+            'Users pick “Request a feature” in the widget or My feedback',
+            'One vote per person; click again to take yours back',
+            'Mark shipped when the idea lands in a release',
+          ]}
+          action={<Btn to="/feedback" size="sm">Open My feedback</Btn>}
+        />
+      )}
+
+      {projectId && !boardEmpty && (
         <Card className="space-y-3 p-3">
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-48 flex-1">
@@ -577,28 +592,9 @@ export function FeatureBoardPage() {
           )}
 
           {!loading && filtered.length === 0 && !error && (
-            <div className="py-4">
-              {search || statusFilter !== 'all' ? (
-                <EmptySectionMessage
-                  text="No matching requests"
-                  hint="Try clearing search or switching the status filter."
-                />
-              ) : (
-                <EmptyState
-                  icon={<HeroPlugIntegration />}
-                  title="No feature requests yet"
-                  description="Feature requests submitted via the Feedback form will appear here for voting."
-                  hints={[
-                    'Users pick “Request a feature” in the widget or My feedback',
-                    'One vote per person; click again to take yours back',
-                    'Mark shipped when the idea lands in a release',
-                  ]}
-                  action={
-                    <Btn to="/feedback" size="sm">Open My feedback</Btn>
-                  }
-                />
-              )}
-            </div>
+            <p className="py-2 text-xs text-fg-muted">
+              No matching requests. <span className="text-fg-faint">Try clearing search or switching the status filter.</span>
+            </p>
           )}
 
           {filtered.length > 0 && (

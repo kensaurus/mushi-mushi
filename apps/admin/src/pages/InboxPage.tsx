@@ -21,7 +21,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { reportDetailPath } from '../lib/reportUrl'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { InboxStatusBanner, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
+import { InboxStatusBanner, inboxBannerRepeatsCards, isInboxStatusBannerCritical } from '../components/inbox/InboxStatusBanner'
 import { InboxPdcaGuide } from '../components/inbox/InboxPdcaGuide'
 import { InboxOverviewBody } from '../components/inbox/InboxOverviewBody'
 import {
@@ -261,7 +261,8 @@ export function InboxPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
-            show: isInboxStatusBannerCritical(stats),
+            // One open card: the card is the banner (sweep 2026-11-18).
+            show: isInboxStatusBannerCritical(stats) && !inboxBannerRepeatsCards(stats, openCards.length),
             children: (
               <InboxStatusBanner
                 stats={stats}

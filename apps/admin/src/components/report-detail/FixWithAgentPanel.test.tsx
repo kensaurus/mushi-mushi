@@ -72,6 +72,14 @@ const button = (name: string) =>
   Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === name)
 
 describe('FixWithAgentPanel', () => {
+  // Sweep 2026-11-18: a red "Copy fix prompt" argued with "a fix agent usually can't act on it".
+  it('leads with Copy fix prompt only when the report names code to change', () => {
+    act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
+    expect(container.querySelector('[data-testid="copy-fix-prompt"]')?.getAttribute('variant')).toBe('ghost')
+    act(() => root.render(createElement(FixWithAgentPanel, { report: { ...REPORT, component: 'src/home/FeaturedLessonCard.tsx' } as ReportDetail })))
+    expect(container.querySelector('[data-testid="copy-fix-prompt"]')?.getAttribute('variant')).toBe('primary')
+  })
+
   it('is named for any agent, not Cursor only', () => {
     act(() => root.render(createElement(FixWithAgentPanel, { report: REPORT })))
     expect(container.querySelector('h2')?.textContent).toBe('Fix it with your coding agent')

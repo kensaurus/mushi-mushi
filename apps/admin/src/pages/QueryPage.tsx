@@ -518,7 +518,9 @@ export function QueryPage() {
               <label htmlFor="query-composer" className="block text-xs font-medium text-fg-muted">
                 Ask a question about your bug data
               </label>
-              <div className="flex gap-2 items-stretch">
+              {/* Phone (2026-11-18): two rows beside the button clipped the placeholder behind
+                  an inner scrollbar. Three rows, and the button drops under the field. */}
+              <div className="flex flex-col gap-2 items-stretch sm:flex-row">
                 <textarea
                   id="query-composer"
                   value={question}
@@ -528,7 +530,7 @@ export function QueryPage() {
                   }}
                   placeholder="e.g. How many P0/P1 reports landed this week vs last week?"
                   disabled={loading}
-                  rows={2}
+                  rows={3}
                   className="flex-1 min-w-0 bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2.5 text-sm text-fg placeholder:text-fg-faint hover:border-edge focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-opacity resize-y"
                   aria-label="Question composer"
                 />
@@ -790,7 +792,7 @@ export function QueryPage() {
                       ))}
                     </ul>
                   ) : saved.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No saved queries yet"
                       hint="Pin a query (☆) and it shows up here for quick rerun."
                     />
@@ -817,7 +819,7 @@ export function QueryPage() {
                   ) : historyError ? (
                     <PageLoadError error={historyError} code={historyErrorCode} resource="query history" onRetry={loadHistory} />
                   ) : recent.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No recent queries"
                       hint="Ask a question — the prompt + row count land here."
                     />
@@ -845,7 +847,7 @@ export function QueryPage() {
                   ) : teamError ? (
                     <PageLoadError error={teamError} code={teamErrorCode} resource="team queries" onRetry={loadTeam} />
                   ) : team.length === 0 ? (
-                    <EmptySectionMessage
+                    <LibraryEmpty
                       text="No team queries shared"
                       hint="When a teammate pins a query in their console it shows up here."
                     />
@@ -885,5 +887,14 @@ export function QueryPage() {
         />
       )}
     </div>
+  )
+}
+
+/** The Library's empty line: plain text, not a dashed card inside the Library card (2026-11-18). */
+function LibraryEmpty({ text, hint }: { text: string; hint: string }) {
+  return (
+    <p className="py-1 text-xs text-fg-muted" data-testid="query-library-empty">
+      {text}. <span className="text-fg-faint">{hint}</span>
+    </p>
   )
 }

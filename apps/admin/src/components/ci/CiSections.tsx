@@ -9,20 +9,24 @@
 
 import { useState } from 'react'
 import type { CiAdvice, CiJob, CiOverview } from '../../lib/ciTypes'
-import { formatSeconds, jobOutcome, recentInfraFailures, repoShortName, runnerDisplayName, slowestJobs } from '../../lib/ciView'
-import { groupCiAdvice, type CiAdviceGroup } from '../../lib/ciAdvice'
-import { Badge, Btn, Card, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar, RelativeTime, type BadgeTone } from '../ui'
+import { formatSeconds, groupInfraFailures, groupSlowSteps, jobOutcome, recentInfraFailures, repoShortName, runnerDisplayName, slowestJobs } from '../../lib/ciView'
+import { groupCiAdvice, targetTitle, type CiAdviceGroup } from '../../lib/ciAdvice'
+import { Btn, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar, RelativeTime } from '../ui'
 import { IconExternalLink, IconInfo } from '../icons'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
-import { CI_OUTCOME_STYLE } from './ciOutcome'
 import { CiCostFixButton, costFixKey, useCostFixJobs } from './CiCostFixButton'
 import type { CiCostFixJob } from '../../lib/ciCostFix'
 
-const SEVERITY: Record<CiAdvice['severity'], { tone: BadgeTone; label: string }> = {
-  high: { tone: 'dangerSubtle', label: 'High' },
-  medium: { tone: 'warnSubtle', label: 'Medium' },
-  low: { tone: 'neutral', label: 'Low' },
+/** Severity as a mark (high, medium, low as the triangle, diamond, square), not a text pill; the word stays for readers and on hover. */
+const SEVERITY: Record<CiAdvice['severity'], { tone: SignalTone; label: string }> = {
+  high: { tone: 'danger', label: 'High' },
+  medium: { tone: 'warn', label: 'Medium' },
+  low: { tone: 'info', label: 'Low' },
 }
+
+/** "Open fix PR" buttons shown inline; more than this fold behind one disclosure (11 stacked on 2026-11-18). */
+const FIX_BUTTONS_INLINE = 2
 
 /** Cards a list shows before "Show N more" (most severe first; 2026-11-06: 65 cost advice cards were 16,000 px). */
 const ADVICE_CARDS_SHOWN = 5
@@ -35,17 +39,19 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
   const evidence = allEvidence ? group.evidence : group.evidence.slice(0, ADVICE_EVIDENCE_SHOWN)
   const hiddenEvidence = group.evidence.length - evidence.length
   return (
-    <Card className="flex flex-col gap-2 p-3">
+    <div className="flex flex-col gap-2 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={sev.tone}>{sev.label}</Badge>
+        <span className="inline-flex items-center" title={`${sev.label} impact`} data-testid="ci-advice-severity" data-severity={group.severity}>
+          <StatusGlyph tone={sev.tone} label={`${sev.label} impact`} />
+        </span>
         <span className="text-sm font-medium text-fg">{group.title}</span>
-        {group.count > 1 && <span className="text-2xs text-fg-muted">{group.count} places</span>}
+        {group.count > 1 && <span className={`font-mono text-2xs font-bold whitespace-nowrap text-fg-secondary tabular-nums`}>{group.count} places</span>}
       </div>
       {group.targets.length > 0 && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Applies to">
           {group.targets.map((t) => (
             <li key={t.key} className="min-w-0 max-w-full">
-              <CodeChip title={t.title} maxWidthClass="max-w-full">
+              <CodeChip title={targetTitle(t, group.evidence)} maxWidthClass="max-w-full">
                 {t.label}
               </CodeChip>
             </li>
@@ -53,6 +59,8 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
         </ul>
       )}
       <p className="text-xs text-fg-secondary">{group.detail}</p>
+      {/* One line per chip that only names the chip again: the chips carry it on hover instead. */}
+      {!group.evidenceRepeatsTargets && (
       <div className="text-2xs text-fg-muted">
         <p className="flex items-center gap-1 font-medium">
           <IconInfo size={12} className="shrink-0" />
@@ -75,21 +83,35 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
           </Btn>
         )}
       </div>
+      )}
       {group.fixes.map((fix) => (
-        <div key={fix} className="flex items-start gap-2 rounded-sm border border-edge-subtle bg-surface-overlay/60 px-2 py-1.5">
+        <div key={fix} className="flex items-start gap-2 rounded-sm bg-surface-overlay/60 px-2 py-1.5">
           <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap font-mono text-2xs text-fg">{fix}</pre>
           <CopyButton value={fix} label="Copy the fix" />
         </div>
       ))}
-      {group.fixable.length > 0 && (
-        <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2" aria-label="Fix with a pull request">
+      {group.fixable.length > 0 && group.fixable.length <= FIX_BUTTONS_INLINE && (
+        <div className="flex flex-col gap-2" aria-label="Fix with a pull request">
           <p className="text-2xs text-fg-muted">Or let Mushi Mushi open it as a draft pull request for you to review:</p>
           {group.fixable.map((f) => (
             <CiCostFixButton key={f.key} fixable={f} initialJob={jobs.get(costFixKey(f.autofix)) ?? null} />
           ))}
         </div>
       )}
-    </Card>
+      {group.fixable.length > FIX_BUTTONS_INLINE && (
+        // One control for many workflows; each still opens its own draft PR inside (kept mounted, so states survive).
+        <details className="text-2xs" aria-label="Fix with a pull request" data-testid="ci-advice-fix-prs">
+          <summary className="cursor-pointer font-medium whitespace-nowrap text-fg-secondary hover:text-fg">
+            Open draft fix PRs for {group.fixable.length} workflows
+          </summary>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {group.fixable.map((f) => (
+              <CiCostFixButton key={f.key} fixable={f} initialJob={jobs.get(costFixKey(f.autofix)) ?? null} />
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
   )
 }
 
@@ -105,7 +127,7 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
   const hidden = groups.length - shown.length
   return (
     <div className="flex flex-col gap-2">
-      <ul className="flex flex-col gap-2" data-testid="ci-advice">
+      <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="ci-advice">
         {shown.map((g) => (
           <li key={g.key}>
             <AdviceCard group={g} jobs={jobs} />
@@ -124,11 +146,12 @@ export function CiAdviceList({ advice }: { advice: CiAdvice[] }) {
 }
 
 /** A duration with a bar sized against the slowest row, number first for readers. */
-function DurationCell({ seconds, max, barClassName, label }: { seconds: number | null; max: number; barClassName: string; label: string }) {
+// A duration bar is neutral grey: colour on this page means an outcome, and a long run is not a failure.
+function DurationCell({ seconds, max, label }: { seconds: number | null; max: number; label: string }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <MiniInlineBar value={seconds ?? 0} max={max} widthClass="w-16" barClassName={barClassName} aria-label={label} />
-      <span className="w-14 shrink-0 text-right tabular-nums text-fg-secondary">{formatSeconds(seconds)}</span>
+      <MiniInlineBar value={seconds ?? 0} max={max} widthClass="w-16" barClassName="bg-fg-secondary" aria-label={label} />
+      <span className="w-14 shrink-0 text-right whitespace-nowrap tabular-nums text-fg-secondary">{formatSeconds(seconds)}</span>
     </div>
   )
 }
@@ -168,12 +191,7 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
                 <CiJobOutcomeChip outcome={outcome} />
               </DataTableCell>
               <DataTableCell align="right">
-                <DurationCell
-                  seconds={j.durationSeconds}
-                  max={max}
-                  barClassName={CI_OUTCOME_STYLE[outcome].fill}
-                  label={`${j.jobName} ran ${formatSeconds(j.durationSeconds)}`}
-                />
+                <DurationCell seconds={j.durationSeconds} max={max} label={`${j.jobName} ran ${formatSeconds(j.durationSeconds)}`} />
               </DataTableCell>
             </tr>
           )
@@ -183,7 +201,7 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
   )
 }
 
-function SlowStepsTable({ steps }: { steps: CiOverview['stats']['slowSteps'] }) {
+function SlowStepsTable({ steps }: { steps: ReturnType<typeof groupSlowSteps> }) {
   const max = Math.max(1, ...steps.map((s) => s.p50s))
   return (
     <table className="w-full text-xs" data-testid="ci-slow-steps">
@@ -196,15 +214,16 @@ function SlowStepsTable({ steps }: { steps: CiOverview['stats']['slowSteps'] }) 
       </thead>
       <tbody className="divide-y divide-edge-subtle">
         {steps.map((s) => (
-          <tr key={`${s.repo}:${s.job}:${s.step}`}>
+          <tr key={`${s.repo}:${s.job}:${s.step}`} data-shards={s.shards > 1 ? s.shards : undefined}>
             <DataTableCell>
               <span className="block wrap-anywhere font-medium text-fg">{s.step}</span>
               <span className="block wrap-anywhere text-2xs text-fg-faint" title={`${s.repo} · ${s.job}`}>
-                {s.job} · {repoShortName(s.repo)}
+                {s.job}
+                {s.shards > 1 && <span className="font-mono font-bold text-fg-secondary"> ×{s.shards} shards</span>} · {repoShortName(s.repo)}
               </span>
             </DataTableCell>
             <DataTableCell align="right">
-              <DurationCell seconds={s.p50s} max={max} barClassName="bg-brand" label={`${s.step} typically takes ${formatSeconds(s.p50s)}`} />
+              <DurationCell seconds={s.p50s} max={max} label={`${s.step} typically takes ${formatSeconds(s.p50s)}${s.shards > 1 ? ` (slowest of ${s.shards} shards)` : ''}`} />
             </DataTableCell>
             <DataTableCell align="right" className="tabular-nums text-fg-muted">
               {s.runs}
@@ -218,7 +237,8 @@ function SlowStepsTable({ steps }: { steps: CiOverview['stats']['slowSteps'] }) 
 
 export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOverview['stats']['slowSteps'] }) {
   const slow = slowestJobs(jobs, 8)
-  const steps = [...slowSteps].sort((a, b) => b.p50s - a.p50s).slice(0, 8)
+  // Matrix shards of one job ("Browser gates (1/4)" to "(4/4)") fold into one row.
+  const steps = groupSlowSteps(slowSteps).slice(0, 8)
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="min-w-0 overflow-x-auto">
@@ -239,37 +259,57 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
   if (list.length === 0) {
     return <p className="text-xs text-fg-muted">No test machine stopped a job in this window.</p>
   }
+  const groups = groupInfraFailures(list)
   return (
-    <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="ci-infra-failures">
-      {list.map((j) => (
-        <li key={j.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1.5 text-xs">
-          <CiJobOutcomeChip job={j} />
-          <span className="min-w-0 truncate font-medium text-fg">{j.jobName}</span>
-          <span className="text-fg-faint">
-            {j.repo}
-            {j.prNumber ? ` · PR #${j.prNumber}` : ''}
-            {runnerDisplayName(j) ? ` · ${runnerDisplayName(j)}` : ''}
-          </span>
-          <span className="ml-auto text-2xs text-fg-muted">
-            <RelativeTime value={j.completedAt ?? j.createdAt} />
-          </span>
-          {j.htmlUrl && (
-            <a href={j.htmlUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-2xs font-medium text-accent hover:underline">
-              GitHub
-              <IconExternalLink size={10} />
-            </a>
-          )}
-          <p className="w-full text-2xs text-fg-secondary">
-            The machine lost touch with GitHub before the job finished (it crashed, ran out of memory or lost its network), so the code was never tested. Re-run the job.
-          </p>
-          {j.infraDetail && (
-            <details className="w-full text-2xs text-fg-muted">
-              <summary className="cursor-pointer">GitHub’s message</summary>
-              <p className="mt-0.5">{j.infraDetail}</p>
-            </details>
-          )}
-        </li>
-      ))}
-    </ul>
+    <div data-testid="ci-infra-failures">
+      {/* The reason once, for every row below (it repeated on all seven, 2026-11-18). */}
+      <p className="mb-1.5 max-w-[80ch] text-xs text-fg-secondary">
+        The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
+        tested. They are not code failures: re-run them on GitHub.
+      </p>
+      <ul className="flex flex-col divide-y divide-edge-subtle">
+        {groups.map((g) => (
+          <li key={g.key} className="py-1.5 text-xs" data-testid={`ci-infra-group-${g.key}`}>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <StatusGlyph tone="warn" label="Test machine stopped" />
+              <span className="font-semibold text-fg" title={g.repo}>
+                {repoShortName(g.repo)}
+              </span>
+              <span className="font-mono text-2xs text-fg-secondary">{g.prNumber ? `PR #${g.prNumber}` : 'no PR'}</span>
+              {g.jobs.length > 1 && <span className="font-mono text-2xs font-bold whitespace-nowrap text-warn-foreground tabular-nums">{g.jobs.length} jobs</span>}
+            </p>
+            <ul className="mt-0.5 flex flex-col">
+              {g.jobs.map((j) => (
+                <li key={j.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-0.5 pl-5">
+                  <span className="min-w-0 truncate font-medium text-fg">{j.jobName}</span>
+                  {runnerDisplayName(j) && <span className="text-2xs text-fg-faint">{runnerDisplayName(j)}</span>}
+                  <span className="ml-auto text-2xs whitespace-nowrap text-fg-muted">
+                    <RelativeTime value={j.completedAt ?? j.createdAt} />
+                  </span>
+                  {j.htmlUrl && (
+                    <a
+                      href={j.htmlUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-2xs font-medium whitespace-nowrap text-accent hover:underline"
+                      title="Open the job on GitHub to re-run it"
+                    >
+                      Re-run on GitHub
+                      <IconExternalLink size={10} />
+                    </a>
+                  )}
+                  {j.infraDetail && (
+                    <details className="w-full text-2xs text-fg-muted">
+                      <summary className="cursor-pointer">GitHub’s message</summary>
+                      <p className="mt-0.5">{j.infraDetail}</p>
+                    </details>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

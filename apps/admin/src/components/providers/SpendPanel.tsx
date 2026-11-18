@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import type { OpsSnapshot } from '../../lib/kensaurusOpsTypes'
-import { buildHourlyBars, buildSpendGrid, cellKey, formatMicroUsd, marginChange } from '../../lib/providersView'
+import { buildHourlyBars, buildSpendGrid, cellKey, formatMicroUsd, hourlyEmptyText, marginChange } from '../../lib/providersView'
 import { heatClass } from '../../lib/ciWeek'
 import { SegmentedControl } from '../ui'
 import { Chip } from '../signal/Chip'
@@ -46,6 +46,8 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
   const grid = useMemo(() => buildSpendGrid(digest), [digest])
   const hourly = useMemo(() => buildHourlyBars(snapshot.spend_hourly, snapshot.generated_at), [snapshot.spend_hourly, snapshot.generated_at])
   const t = grid.totals
+  const calls24h = useMemo(() => buildSpendGrid(snapshot.spend.last_24h).totals.calls, [snapshot.spend.last_24h])
+  const hourlyEmpty = hourlyEmptyText(hourly.providers.length, calls24h)
   return (
     <div className="flex flex-col gap-3" data-testid="providers-spend">
       <div className="flex flex-wrap items-center gap-2">
@@ -138,18 +140,25 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
       <section aria-label="Cost per hour, last 48 hours" className="flex flex-col gap-1.5" data-testid="spend-hourly">
         <div className="flex flex-wrap items-center gap-2 text-3xs text-fg-secondary">
           <span className="font-bold tracking-wider uppercase">48 h per hour</span>
-          {hourly.apps.map((a, i) => (
+          {/* The legend only names what a chart draws; no bars, no legend. */}
+          {!hourlyEmpty && hourly.apps.map((a, i) => (
             <span key={a} className="inline-flex items-center gap-1">
               <span className={`h-2 w-2 rounded-xs ${APP_FILL[i % APP_FILL.length]}`} aria-hidden="true" />
               {a}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1">
-            <span className="h-2 w-0.5 bg-danger" aria-hidden="true" />
-            errors
-          </span>
+          {!hourlyEmpty && (
+            <span className="inline-flex items-center gap-1" data-testid="spend-hourly-legend-errors">
+              <span className="h-2 w-0.5 bg-danger" aria-hidden="true" />
+              errors
+            </span>
+          )}
         </div>
-        {hourly.providers.length === 0 && <p className="text-xs text-fg-muted">No calls in the last 48 hours.</p>}
+        {hourlyEmpty && (
+          <p className="text-xs text-fg-muted" data-testid="spend-hourly-empty">
+            {hourlyEmpty}
+          </p>
+        )}
         {hourly.providers.map((p) => (
           <div key={p} className="flex items-end gap-2">
             <span className="w-24 shrink-0">

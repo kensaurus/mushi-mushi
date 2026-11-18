@@ -181,6 +181,9 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
   ]
 }
 
+/** The second tab row (Ask, Tour… under Understand) reads as a sub-level: no frame, indented under the first. */
+const INNER_TABS = 'w-full sm:w-auto sm:ml-2 border-transparent! bg-transparent!'
+
 export function ExplorePage() {
   const copy = usePageCopy('/explore')
   const ux = useExploreUx()
@@ -846,7 +849,7 @@ export function ExplorePage() {
             isValidating={statsValidating || exploreQuery.isValidating}
           />
         )}
-        {projectId && <CopyRepoDigestButton projectId={projectId} />}
+        {projectId && <CopyRepoDigestButton projectId={projectId} fill />}
       </PageHeaderBar>
 
       <PagePosture
@@ -894,7 +897,7 @@ export function ExplorePage() {
               value={activeTab}
               options={understandViewOptions}
               onChange={setActiveTab}
-              className="w-full sm:w-auto"
+              className={INNER_TABS}
             />
           )}
           {primaryTab === 'map' && isMapView(activeTab) && (
@@ -905,7 +908,7 @@ export function ExplorePage() {
               value={activeTab}
               options={mapViewOptions}
               onChange={setActiveTab}
-              className="w-full sm:w-auto"
+              className={INNER_TABS}
             />
           )}
         </div>

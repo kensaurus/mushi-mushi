@@ -59,7 +59,11 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
 
   return (
     <div className="flex flex-col">
-      <div className="relative aspect-video w-full overflow-hidden border-b border-edge-subtle bg-surface-overlay">
+      {/* With no picture, a phone gets a thumbnail row, not a 200px grey box (sweep 2026-11-18). */}
+      <div
+        className={`relative w-full overflow-hidden border-b border-edge-subtle bg-surface-overlay ${shot ? 'aspect-video' : 'lg:aspect-video'}`}
+        data-testid="home-app-picture"
+      >
         {shot ? (
           <img
             src={shot.url}
@@ -69,9 +73,9 @@ function AppCardBody({ app, projectId, canEdit, onRefreshed }: { app: HomeApp; p
             onError={() => setBroken(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-3 text-center">
+          <div className="flex w-full items-center gap-2 px-3 py-2 lg:h-full lg:flex-col lg:justify-center lg:p-3 lg:text-center">
             <ProjectFavicon
-              size={40}
+              size={32}
               project_id={projectId}
               project_name={app.name}
               project_slug={app.slug ?? app.name}

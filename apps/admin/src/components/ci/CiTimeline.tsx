@@ -21,6 +21,7 @@ import type { CiJob } from '../../lib/ciTypes'
 import {
   CI_OUTCOME_META,
   buildCiTimeline,
+  foldGithubLanes,
   formatSeconds,
   splitQuietLanes,
   timelinePct,
@@ -186,13 +187,18 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
   const [win, setWin] = useState<WindowId>('2h')
   const [inspect, setInspect] = useState<CiTimelineBar | null>(null)
   const [showQuiet, setShowQuiet] = useState(false)
+  const [showGithub, setShowGithub] = useState(false)
   // Running bars grow to "now"; a 15 s tick is smooth enough at this scale.
   const now = useNow(15_000)
   const timeline = useMemo(() => buildCiTimeline(jobs, { now, windowMs: WINDOW_MS[win] }), [jobs, now, win])
   const { quiet } = useMemo(() => splitQuietLanes(timeline.lanes), [timeline.lanes])
   const quietIds = useMemo(() => new Set(quiet.map((l) => l.id)), [quiet])
   // Machines with a failed job first: what went wrong reads before what went fine.
-  const lanes = failingLanesFirst(showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id)))
+  const visible = failingLanesFirst(showQuiet ? timeline.lanes : timeline.lanes.filter((l) => !quietIds.has(l.id)))
+  // GitHub-hosted 2 to 10 read as near-identical rows (2026-11-18): clean ones fold into one row.
+  const github = foldGithubLanes(visible)
+  const lanes = showGithub ? visible : github.shown
+  const githubJobs = github.rest.reduce((n, l) => n + l.bars.length, 0)
   const ticks = useMemo(
     () => Array.from({ length: TICK_STEPS + 1 }, (_, i) => timeline.from + ((timeline.to - timeline.from) * i) / TICK_STEPS),
     [timeline.from, timeline.to],
@@ -256,6 +262,22 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
                 {lanes.map((lane) => (
                   <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
                 ))}
+                {github.rest.length > 0 && (
+                  <li className="flex items-center gap-2" data-testid="ci-timeline-github-fold">
+                    <span className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs font-medium text-fg-secondary`}>
+                      <IconCloud size={12} className="shrink-0" />
+                      <span className="truncate">{showGithub ? 'GitHub-hosted' : `+${github.rest.length} GitHub-hosted`}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="h-7 flex-1 rounded-sm bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                      aria-expanded={showGithub}
+                      onClick={() => setShowGithub((v) => !v)}
+                    >
+                      {showGithub ? 'Fold the clean GitHub-hosted rows' : `${githubJobs} ${githubJobs === 1 ? 'job' : 'jobs'}, none failed · show each row`}
+                    </button>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

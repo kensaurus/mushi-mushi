@@ -7,7 +7,6 @@
 import { PageStatus } from '../ui'
 import type { PromptLabStats } from './PromptLabStatsTypes'
 import { bestScoreSource } from './types'
-import { pluralizeWithCount } from '../../lib/format'
 
 const promptLabLinks = {
   active: '/prompt-lab?tab=prompts',
@@ -27,17 +26,19 @@ interface Props {
 export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels }: Props) {
   const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
   const source = bestScoreSource(stats) ?? (stats.bestScore != null ? 'grade' : null)
-  const testing =
-    stats.candidatePrompts > 0
-      ? `${pluralizeWithCount(stats.candidatePrompts, 'prompt')} being tested${stats.untestedAbCount > 0 ? `, ${stats.untestedAbCount} with no grades yet` : ''}`
-      : 'none being tested'
-  const bestPart =
-    stats.bestScore != null ? `; best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}` : ''
+  // Say the state; the numbers sit in the metrics below (2026-11-18: the sentence
+  // repeated them, and its "3 with no grades" disagreed with the rows).
+  const sentence =
+    stats.bestScore != null
+      ? `Best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}.`
+      : stats.untestedAbCount > 0
+        ? 'Tests are running, waiting for their first grades.'
+        : 'No version has grades yet.'
   return (
     <PageStatus
       ariaLabel="AI prompts status"
-      tone={stats.untestedAbCount > 0 ? 'info' : 'ok'}
-      sentence={`${pluralizeWithCount(stats.activePrompts, 'prompt')} in use, ${testing}${bestPart}.`}
+      tone={stats.bestScore != null ? 'ok' : stats.untestedAbCount > 0 ? 'info' : 'neutral'}
+      sentence={sentence}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {
@@ -47,9 +48,9 @@ export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating,
           to: promptLabLinks.active,
         },
         {
-          label: statLabels?.candidates ?? 'Being tested',
+          label: statLabels?.candidates ?? 'Steps with a test',
           value: stats.candidatePrompts,
-          hint: 'Copies of a prompt collecting grades before they replace it.',
+          hint: 'Steps with a copy of their prompt collecting grades before it replaces the one in use.',
           to: promptLabLinks.candidates,
         },
         {

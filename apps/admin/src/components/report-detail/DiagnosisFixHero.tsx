@@ -20,6 +20,7 @@
  */
 
 import { roundLongDecimals } from '../../lib/format'
+import { summaryPlace } from './summaryPlace'
 import type { ReactNode } from 'react'
 import { Badge } from '../ui'
 import { Card } from '../../components/ui'
@@ -60,12 +61,14 @@ export function DiagnosisFixHero({
 
   // Confident enough to lead with an answer?
   const isConfident = Boolean(summary) && (conf == null || conf >= LOW_CONFIDENCE)
+  // The page heading is the summary when there is no title: say it once (sweep 2026-11-18).
+  const summaryInHeading = summaryPlace(report) === 'hero'
 
   // What to check first, when we hedge — the most concrete signals we have.
   const checkFirst = [
     report.component ? `the \`${report.component}\` component` : null,
     reproHint || null,
-    summary || null,
+    summaryInHeading ? null : summary || null,
   ].filter((x): x is string => Boolean(x))
 
   return (
@@ -98,7 +101,7 @@ export function DiagnosisFixHero({
         {stage2 ? (
           <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} showInternals={showInternals} />
         ) : isConfident ? (
-          <p className="text-sm leading-relaxed text-fg-secondary"><VitalText text={summary ?? ''} /></p>
+          summaryInHeading ? null : <p className="text-sm leading-relaxed text-fg-secondary"><VitalText text={summary ?? ''} /></p>
         ) : (
           <div className="text-sm leading-relaxed text-fg-secondary">
             <p>

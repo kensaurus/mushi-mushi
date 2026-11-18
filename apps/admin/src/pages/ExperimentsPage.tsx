@@ -21,6 +21,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useMarkPageEmpty } from '../lib/pageHelpContext'
 import { useExperimentsUx, resolveQuickExperimentsRedirect, parseVariantWeight } from '../lib/experimentsModeUx'
 import { describeApiError } from '../lib/humanizeApiError'
 import { PageLoadError } from '../components/PageLoadError'
@@ -303,7 +304,9 @@ export function ExperimentsPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideExperimentsSnapshot,
+            // With the New form already open on an empty project, the form is the first
+            // step: a second "Create experiment" card above it would be the same action twice.
+            show: !ux.hideExperimentsSnapshot && !(stats.totalExperiments === 0 && activeTab === 'new'),
             children: (
               <ExperimentsSnapshotStrip
                 stats={stats}
@@ -347,6 +350,7 @@ export function ExperimentsPage() {
       {activeTab === 'new' && (
         <NewExperimentForm
           projectId={projectId ?? ''}
+          firstStep={stats.totalExperiments === 0}
           onCreated={() => { setActiveTab('experiments'); reloadAll() }}
           onCancel={ux.hideTabs && stats.totalExperiments > 0 ? () => setActiveTab('experiments') : undefined}
         />
@@ -492,15 +496,22 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
   )
 }
 
-function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: string; onCreated: () => void; onCancel?: () => void }) {
+/** Default variant names, shown as placeholders so they read as examples, and used when left blank. */
+function variantPlaceholder(index: number): string {
+  return index === 0 ? 'Control' : `Treatment ${String.fromCharCode(65 + index - 1)}`
+}
+
+function NewExperimentForm({ projectId, onCreated, onCancel, firstStep = false }: { projectId: string; onCreated: () => void; onCancel?: () => void; firstStep?: boolean }) {
   const toast = useToast()
+  // On an empty project this form is the page's first step (the first-step card steps aside).
+  useMarkPageEmpty(firstStep)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({ name: '', description: '', hypothesis: '', bandit_enabled: false })
   // Weights stay as typed text; parseVariantWeight validates on submit so an
   // empty field never reaches the API as NaN → null.
   const [variants, setVariants] = useState([
-    { name: 'Control', description: '', traffic_weight: '0.5' },
-    { name: 'Treatment A', description: '', traffic_weight: '0.5' },
+    { name: '', description: '', traffic_weight: '0.5' },
+    { name: '', description: '', traffic_weight: '0.5' },
   ])
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
@@ -508,7 +519,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name required'); return }
     if (!projectId) { toast.error('Select a project'); return }
-    const parsedVariants = variants.map((v) => ({ ...v, name: v.name.trim(), traffic_weight: parseVariantWeight(v.traffic_weight) }))
+    const parsedVariants = variants.map((v, i) => ({ ...v, name: v.name.trim() || variantPlaceholder(i), traffic_weight: parseVariantWeight(v.traffic_weight) }))
     const badVariant = parsedVariants.find((v) => !v.name || v.traffic_weight == null)
     if (badVariant) {
       toast.error('Check the variants', 'Every variant needs a name and a weight between 0 and 1.')
@@ -562,6 +573,9 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
   return (
     <Card className="max-w-2xl p-6 space-y-5">
       <h2 className="text-base font-semibold text-fg">New experiment</h2>
+      {firstStep && (
+        <p className="-mt-3 text-sm text-fg-muted">Compare two versions of a screen and see which one more of your users finish.</p>
+      )}
       {!projectId && (
         <p className="text-xs text-warn">Select a project from the switcher before creating an experiment.</p>
       )}
@@ -591,6 +605,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
               label={i === 0 ? 'Name' : undefined}
               aria-label={i === 0 ? undefined : `Variant ${i + 1} name`}
               value={v.name}
+              placeholder={variantPlaceholder(i)}
               onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
             />
             <Input
@@ -608,7 +623,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel }: { projectId: stri
             )}
           </div>
         ))}
-        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: '0.33' }])}>
+        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: '', description: '', traffic_weight: '0.33' }])}>
           + Add variant
         </Btn>
       </div>

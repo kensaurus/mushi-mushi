@@ -40,6 +40,14 @@ export function agreementPoints(weeks: readonly AgreementWeek[]): Array<{ ts: st
     .map((w) => ({ ts: `${w.weekStart}T00:00:00Z`, value: Math.round((w.agreed / w.graded) * 100) }))
 }
 
+/** "week of Nov 9 (2 grades)" for the one graded week. */
+function singleWeekWords(weeks: readonly AgreementWeek[]): string {
+  const w = weeks.find((x) => x.graded > 0)
+  if (!w) return ''
+  const day = new Date(`${w.weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return `week of ${day} (${w.agreed} of ${w.graded} grade${w.graded === 1 ? '' : 's'})`
+}
+
 function firstSentence(text: string | null): string | null {
   if (!text) return null
   const t = text.trim()
@@ -71,7 +79,17 @@ export function JudgeAgreementOverview({
   return (
     <div className="grid min-w-0 gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="judge-agreement-overview">
       <Section title="How often the grader agrees">
-        {points.length > 0 ? (
+        {points.length === 1 ? (
+          // One week can't draw a trend: its axis ran "0%" to "0%" and
+          // "Nov 9" to "Nov 9" (2026-11-18 sweep). Say the one value instead.
+          <div className="space-y-1" data-testid="judge-agreement-single">
+            <p className="text-sm text-fg">
+              <span className="font-semibold tabular-nums">{points[0]!.value}%</span>{' '}
+              <span className="text-fg-secondary">agreed, {singleWeekWords(weeks)}</span>
+            </p>
+            <p className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</p>
+          </div>
+        ) : points.length > 0 ? (
           <>
             <MetricTimeline title="Agreed with the diagnosis, per week (%)" points={points} formatValue={(v) => `${Math.round(v)}%`} height={120} />
             {capped ? <p className="mt-1 text-2xs text-fg-faint">The oldest week may be missing some grades.</p> : null}
@@ -94,7 +112,11 @@ export function JudgeAgreementOverview({
                     {r.report_summary ?? 'Untitled report'}
                   </Link>
                   {r.judge_score != null ? (
-                    <span className="shrink-0 text-2xs tabular-nums text-danger">{Math.round(r.judge_score * 100)}%</span>
+                    // Labelled, and not red: a disagreement can still earn a high
+                    // grade (87%), so the number alone isn't a failure.
+                    <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-fg-secondary">
+                      grade {Math.round(r.judge_score * 100)}%
+                    </span>
                   ) : null}
                 </div>
                 {firstSentence(r.judge_reasoning) ? (

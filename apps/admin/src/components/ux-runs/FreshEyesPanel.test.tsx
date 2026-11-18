@@ -36,7 +36,7 @@ vi.mock('../../lib/supabase', async (importOriginal) => ({
 }))
 
 import { FreshEyesPanel } from './FreshEyesPanel'
-import { formatSeconds, isStartUrl, runHeadline, runnerMessage, stepNotes, ttfvTrend, type FreshEyesStep } from '../../lib/freshEyes'
+import { formatSeconds, isStartUrl, runHeadline, runNowBlocker, runnerMessage, stepNotes, ttfvTrend, type FreshEyesStep } from '../../lib/freshEyes'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -178,6 +178,8 @@ describe('Run now', () => {
     expect(host.textContent).toContain('mushi worker install')
     expect(host.querySelector('a[href="/pipeline?tab=workers"]')).not.toBeNull()
     expect(button('Run now')!.disabled).toBe(true)
+    // The off button says why, next to it.
+    expect(host.querySelector('[data-testid="fresh-eyes-run-blocker"]')!.textContent).toContain('Set up Mushi Mushi on your computer first')
   })
 
   it('names an old or offline computer and what to do', () => {
@@ -261,6 +263,15 @@ describe('freshEyes helpers', () => {
     expect(runnerMessage({ state: 'busy', hostname: 'alienware', lastSeenAt: null }, now)).toMatchObject({ canRun: true })
     expect(runnerMessage(null, now)).toMatchObject({ canRun: true, setup: null })
     expect(runnerMessage({ state: 'paused', hostname: 'alienware', lastSeenAt: null }, now).setup).toBe('workers')
+  })
+
+  it('say why Run now is off: the computer first, then the start page, then the goal', () => {
+    const ok = { runnerCanRun: true, runnerSetup: null, url: 'https://glot.it', goal: 'sign up' } as const
+    expect(runNowBlocker(ok)).toBeNull()
+    expect(runNowBlocker({ ...ok, runnerCanRun: false, runnerSetup: 'install', url: '' })).toContain('Set up Mushi Mushi')
+    expect(runNowBlocker({ ...ok, url: '' })).toBe('Add a start page.')
+    expect(runNowBlocker({ ...ok, url: 'ftp://x' })).toContain('https://')
+    expect(runNowBlocker({ ...ok, goal: '  ' })).toContain('came to do')
   })
 
   it('take only http(s) start pages and keep the trend to time', () => {

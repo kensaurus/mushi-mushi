@@ -109,7 +109,7 @@ export function ReportDetailHeader({
             </Btn>
           )}
         </ContainedBlock>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />
           </MetaChip>
@@ -145,7 +145,7 @@ export function ReportDetailHeader({
                 readers read "Signed-in user b850e61a · view all", not
                 "userb850e61a·" (report 1a629775). Whitespace between flex
                 items takes no room, so the layout is unchanged. */}
-            {reporter.shortId ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
+            {reporter.shortId && !filedBy ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
                 className="text-3xs text-ok font-semibold"
@@ -154,7 +154,7 @@ export function ReportDetailHeader({
                 ✓ verified
               </span>
             )}
-            {reporterReportsHref(report) ? <>{' '}<span className="text-fg-faint">· view all</span></> : null}
+            {reporterReportsHref(report) && !filedBy ? <>{' '}<span className="text-fg-faint">· view all</span></> : null}
           </MetaChip>
           {report.session_id && (
             <MetaChip

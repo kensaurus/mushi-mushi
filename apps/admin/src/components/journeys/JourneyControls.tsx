@@ -58,10 +58,24 @@ export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; pr
             aria-label="Your live site address"
           />
         </label>
-        <Btn onClick={start} loading={busy || running} disabled={!url.trim() || running} data-testid="journey-scan">
+        <Btn
+          onClick={start}
+          loading={busy || running}
+          disabled={!url.trim() || running}
+          title={!url.trim() ? SCAN_NEEDS_URL : undefined}
+          className="whitespace-nowrap"
+          data-testid="journey-scan"
+        >
           {running ? 'Scanning…' : scan ? 'Scan again' : 'Scan my site'}
         </Btn>
       </div>
+      {/* A disabled button says why (fresh-eyes sweep 2026-11-18): this app has
+          no live address on file, so the field starts empty. */}
+      {!url.trim() && !running && (
+        <p className="mt-1 text-2xs text-warn-foreground" data-testid="journey-scan-why">
+          {SCAN_NEEDS_URL}
+        </p>
+      )}
       <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-fg-faint" aria-live="polite" data-testid="journey-scan-state">
         {scan ? <StatusPill status={SCAN_STATUS[scan.status]} label={SCAN_WORD[scan.status]} /> : null}
         <span className="min-w-0">{scanStatusText(scan, data.mapScan)}</span>
@@ -120,8 +134,13 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
           <StatusPill status="idle" label="Off" />
         )}
       </div>
-      <p className="mt-1 text-2xs text-fg-muted">
-        For apps that run the SDK with <code className="font-mono">trackSessions: &apos;on-demand&apos;</code>: nobody is recorded until you start, so real visitors pay nothing the rest of the time. Apps on the default already record every visit.
+      {/* One line (sweep 2026-11-18); the longer story stays on hover. */}
+      <p
+        className="mt-1 truncate text-2xs text-fg-muted"
+        title="Nobody is recorded until you start, so real visitors pay nothing the rest of the time. Apps on the default already record every visit."
+        data-testid="journey-recording-hint"
+      >
+        Only for SDKs on <code className="font-mono">trackSessions: &apos;on-demand&apos;</code>; the default records every visit.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <SegmentedControl size="sm" value={hours} onChange={setHours} ariaLabel="How long" options={RECORDING_HOURS.map((o) => ({ id: o.id, label: o.label }))} />
@@ -145,6 +164,9 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
     </Card>
   )
 }
+
+/** @internal Exported for tests. Why Scan my site is disabled. */
+export const SCAN_NEEDS_URL = "Enter your live site's address to scan it."
 
 /** The latest scan's state as a mark: scanning pulses, done is ✓, failed ✕. */
 const SCAN_STATUS: Record<JourneyScan['status'], RunStatus> = { running: 'running', done: 'passed', failed: 'failed' }

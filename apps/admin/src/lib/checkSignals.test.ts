@@ -28,7 +28,9 @@ describe('staleness', () => {
     expect(fresh).toMatchObject({ short: 'now', cellClass: 'ci-cell-0', tone: 'ok', stale: false })
     expect(old).toMatchObject({ short: '14d', cellClass: 'ci-fail-5', tone: 'danger', stale: true })
     expect(staleness(ago(5), NOW)).toMatchObject({ short: '5h', tone: 'ok' })
-    expect(staleness(ago(3 * 24), NOW)).toMatchObject({ short: '3d', tone: 'warn', stale: false })
+    // An age under a week is not a failure: neutral, no warning shape (2026-11-18).
+    expect(staleness(ago(3 * 24), NOW)).toMatchObject({ short: '3d', tone: 'ok', cellClass: 'ci-cell-0', stale: false })
+    expect(staleness(ago(4 * 24), NOW)).toMatchObject({ short: '4d', tone: 'ok', cellClass: 'ci-cell-0' })
     expect(staleness(ago(STALE_DAYS * 24), NOW)?.stale).toBe(true)
   })
 

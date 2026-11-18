@@ -36,7 +36,7 @@ vi.mock('../components/PageHeaderBar', () => ({
 }))
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: { guide: 1 } }))
 
-import { FullStackAuditPage, auditStatus } from './FullStackAuditPage'
+import { FullStackAuditPage, auditStatus, unfinishedChecks } from './FullStackAuditPage'
 import { findingFixPrompt } from '../components/gates/CopyFixPromptButton'
 import { EMPTY_FULLSTACK_AUDIT_STATS } from '../components/fullstack-audit/FullstackAuditStatsTypes'
 
@@ -93,10 +93,28 @@ describe('auditStatus', () => {
     })
   })
 
-  it('says a check that could not finish is unknown, not a pass', () => {
-    const s = auditStatus({ ...STATS, errorCount: 0, warnCount: 0, failedGateCount: 1, topPriority: 'failures' })
+  it('names each check that could not finish, and never calls a failing check unfinished', () => {
+    const s = auditStatus({ ...STATS, errorCount: 0, warnCount: 0 }, ['API contract'])
     expect(s.tone).toBe('warn')
-    expect(s.sentence).toContain('1 check could not finish')
+    expect(s.sentence).toContain('1 check could not finish: API contract.')
+    // failedGateCount counts `fail` runs: failing checks, not unfinished ones (2026-11-18).
+    const failing = auditStatus({ ...STATS, errorCount: 0, warnCount: 0, failedGateCount: 2, topPriority: 'failures' })
+    expect(failing.tone).toBe('danger')
+    expect(failing.sentence).not.toContain('could not finish')
+    expect(failing.sentence).toContain('2 checks failing')
+  })
+
+  it('reads unfinished checks from the newest run per check (status error), by name', () => {
+    expect(unfinishedChecks(null)).toEqual([])
+    const names = unfinishedChecks({
+      runs: [
+        { id: 'a', gate: 'api_contract', status: 'error', started_at: now, completed_at: now },
+        { id: 'b', gate: 'schema_drift', status: 'fail', started_at: now, completed_at: now },
+      ],
+      findings: [],
+    })
+    expect(names).toHaveLength(1)
+    expect(names[0]).toMatch(/API contract/i)
   })
 })
 
@@ -114,7 +132,10 @@ describe('FullStackAuditPage', () => {
     mocks.findings = FINDINGS
     await render()
     const status = host.querySelector('[data-testid="audit-status"]')!
-    expect(status.textContent).toContain('9 errors and 9 warnings are open')
+    // Counts as marks, not a text wall (2026-11-18).
+    expect(status.querySelector('[data-testid="audit-mark-errors"]')?.textContent).toBe('9errors')
+    expect(status.querySelector('[data-testid="audit-mark-warnings"]')?.textContent).toBe('9warnings')
+    expect(status.querySelector('[data-testid="audit-unfinished"]')).toBeNull()
     const copy = status.querySelector<HTMLButtonElement>('[data-testid="copy-fix-prompt"]')!
     await act(async () => copy.click())
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('src/orders.ts (line 41)'))

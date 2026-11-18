@@ -52,7 +52,16 @@ const H3 = 'mb-1.5 flex items-center gap-2 text-xs font-semibold text-fg'
 const CHIP = 'inline-flex max-w-full items-center gap-1 truncate rounded-sm border border-edge bg-surface-raised px-1.5 py-px text-2xs font-semibold text-fg'
 const labelKey = (l: string): CiKey => `label:${l.toLowerCase()}`
 
-function machineStatus(m: MachineNow): RunStatus {
+/** The tile's left edge: the only frame a machine gets inside its section (one level of card, 2026-11-18). */
+const MACHINE_EDGE: Record<MachineState, string> = {
+  idle: 'border-edge',
+  running: 'border-st-running',
+  failed: 'border-st-failed',
+}
+
+type MachineState = 'idle' | 'running' | 'failed'
+
+function machineStatus(m: MachineNow): MachineState {
   if (m.stale) return 'failed'
   return m.running > 0 ? 'running' : 'idle'
 }
@@ -84,7 +93,7 @@ export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
   const dots = Math.min(m.running, 8)
   return (
     <li {...link} className={`${link.className} min-w-0`} data-testid={testId ?? `ci-machine-${m.id}`} data-status={status}>
-      <div className={`flex h-full flex-col gap-1.5 rounded-md border px-2.5 py-2 ${status === 'idle' ? 'border-edge bg-surface' : STATUS_SOFT[status]}`}>
+      <div className={`flex h-full flex-col gap-1.5 border-l-2 py-1 pr-1 pl-2.5 ${MACHINE_EDGE[status]}`}>
         <div className="flex min-w-0 items-center gap-1.5">
           <StatusMark status={status} size={12} />
           <span className="truncate text-sm font-bold text-fg">{m.name}</span>
@@ -329,27 +338,78 @@ const DELAY: Record<NonNullable<CiStatus['apps'][number]['delay']> | 'none', { s
   none: { status: 'passed', word: 'fine' },
 }
 
+/** A number that never breaks inside ("18 / min" at 390 px, 2026-11-18). */
+const nw = (text: string) => <span className="whitespace-nowrap">{text}</span>
+
+/**
+ * The delay every app shares, or null when they differ. Nine "waits" pills in a column said one
+ * thing nine times (2026-11-18): then the header says it once and the column goes.
+ *
+ * @internal Exported for tests.
+ */
+export function sharedDelay(apps: ReadonlyArray<Pick<CiStatus['apps'][number], 'delay'>>): keyof typeof DELAY | null {
+  if (apps.length < 2) return null
+  const first = apps[0].delay ?? 'none'
+  return apps.every((a) => (a.delay ?? 'none') === first) ? first : null
+}
+
+function WaitBar({ a, maxWait }: { a: CiStatus['apps'][number]; maxWait: number }) {
+  return a.waitP95S != null ? <BarCell value={a.waitP95S} max={maxWait} tone={a.delay === 'waiting' ? 'warn' : 'heat'} text={nw(durationWords(a.waitP95S))} widthClass="w-20" /> : <>—</>
+}
+function RunBarCell({ a, maxRun }: { a: CiStatus['apps'][number]; maxRun: number }) {
+  return a.runP50S != null ? <BarCell value={a.runP50S} max={maxRun} tone={a.delay === 'slow' ? 'warn' : 'neutral'} text={nw(durationWords(a.runP50S))} widthClass="w-20" /> : <>—</>
+}
+function passOf(a: CiStatus['apps'][number]): number | null {
+  return a.passRate == null ? null : Math.round(a.passRate * 100)
+}
+
 /** One app's week; pointing at it lights the app across the page. */
-function AppTimeRow({ a, maxWait, maxRun }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number }) {
+function AppTimeRow({ a, maxWait, maxRun, showDelay }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number; showDelay: boolean }) {
   const link = useCiLink([ciRepoKey(a.repo)], ciRepoKey(a.repo))
   const d = DELAY[a.delay ?? 'none']
-  const pass = a.passRate == null ? null : Math.round(a.passRate * 100)
+  const pass = passOf(a)
   return (
     <tr {...link} className={link.className}>
       <DataTableCell className="font-semibold">{a.app}</DataTableCell>
       <DataTableCell>
-        {a.waitP95S != null ? <BarCell value={a.waitP95S} max={maxWait} tone={a.delay === 'waiting' ? 'warn' : 'heat'} text={durationWords(a.waitP95S)} widthClass="w-20" /> : '—'}
+        <WaitBar a={a} maxWait={maxWait} />
       </DataTableCell>
       <DataTableCell>
-        {a.runP50S != null ? <BarCell value={a.runP50S} max={maxRun} tone={a.delay === 'slow' ? 'warn' : 'neutral'} text={durationWords(a.runP50S)} widthClass="w-20" /> : '—'}
+        <RunBarCell a={a} maxRun={maxRun} />
       </DataTableCell>
       <DataTableCell>
-        {pass != null ? <BarCell value={pass} max={100} tone={pass < 80 ? 'danger' : 'ok'} text={`${pass}%`} widthClass="w-16" /> : '—'}
+        {pass != null ? <BarCell value={pass} max={100} tone={pass < 80 ? 'danger' : 'ok'} text={nw(`${pass}%`)} widthClass="w-16" /> : '—'}
       </DataTableCell>
-      <DataTableCell>
-        <StatusPill status={d.status} label={d.word} />
-      </DataTableCell>
+      {showDelay && (
+        <DataTableCell>
+          <StatusPill status={d.status} label={d.word} />
+        </DataTableCell>
+      )}
     </tr>
+  )
+}
+
+/** The same app on a phone: name and pass rate on one line, wait and run bars under it. */
+function AppTimeCard({ a, maxWait, maxRun, showDelay }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number; showDelay: boolean }) {
+  const link = useCiLink([ciRepoKey(a.repo)], ciRepoKey(a.repo))
+  const d = DELAY[a.delay ?? 'none']
+  const pass = passOf(a)
+  return (
+    <li {...link} className={`${link.className} flex flex-col gap-1 py-1.5`}>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate text-xs font-semibold text-fg">{a.app}</span>
+        {pass != null && (
+          <span className={`ml-auto shrink-0 font-mono text-2xs font-bold whitespace-nowrap tabular-nums ${pass < 80 ? 'text-st-failed-ink' : 'text-st-passed-ink'}`}>{pass}% pass</span>
+        )}
+        {showDelay && <StatusPill status={d.status} label={d.word} className={pass == null ? 'ml-auto' : ''} />}
+      </span>
+      <span className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary">
+        <span>Wait (1 in 20)</span>
+        <WaitBar a={a} maxWait={maxWait} />
+        <span>Usual run</span>
+        <RunBarCell a={a} maxRun={maxRun} />
+      </span>
+    </li>
   )
 }
 
@@ -364,6 +424,7 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
   const maxWait = Math.max(1, ...status.apps.map((a) => a.waitP95S ?? 0))
   const maxRun = Math.max(1, ...status.apps.map((a) => a.runP50S ?? 0))
   const machines = status.allMachines
+  const oneDelay = sharedDelay(status.apps)
 
   return (
     // The wrapper is the container: a container query never matches the container element itself.
@@ -459,8 +520,19 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
         <section aria-labelledby="ci-time" className={BOARD_SPAN}>
           <h3 id="ci-time" className={H3}>
             Where the time goes this week
+            {oneDelay && (
+              <span className="inline-flex items-center gap-1 font-normal text-fg-secondary" data-testid="ci-time-shared-delay">
+                every app: <StatusPill status={DELAY[oneDelay].status} label={DELAY[oneDelay].word} />
+              </span>
+            )}
           </h3>
-          <div className="overflow-x-auto">
+          {/* A phone gets one stacked row per app; the table (with its pass column) from a wider board. */}
+          <ul className="divide-y divide-edge-subtle @xl:hidden" data-testid="ci-time-by-app-stacked">
+            {status.apps.map((a) => (
+              <AppTimeCard key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} showDelay={!oneDelay} />
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto @xl:block">
             <table className="w-full min-w-120 text-left text-xs" data-testid="ci-time-by-app">
               <thead>
                 <tr>
@@ -472,12 +544,12 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     <span title="Half the jobs finish within this">Usual run</span>
                   </DataTableHead>
                   <DataTableHead>Pass</DataTableHead>
-                  <DataTableHead>Main delay</DataTableHead>
+                  {!oneDelay && <DataTableHead>Main delay</DataTableHead>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge-subtle">
                 {status.apps.map((a) => (
-                  <AppTimeRow key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} />
+                  <AppTimeRow key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} showDelay={!oneDelay} />
                 ))}
               </tbody>
             </table>

@@ -83,6 +83,8 @@ export function RecipeHeaderSummary({
   const behind = elementsBehindWorst(elements)
   const { manifest } = recipe
   const generated = relativeOrNull(recipe.generatedAt)
+  // "No mushi.recipe.json at the repo root" restates the missing-file line above: say it once (2026-11-18).
+  const issues = manifest.present ? manifest.validationErrors : manifest.validationErrors.filter((i) => i.code !== 'MANIFEST_MISSING')
 
   return (
     <Card className="flex flex-col gap-3 p-3">
@@ -103,12 +105,12 @@ export function RecipeHeaderSummary({
         </div>
       </div>
       {behind[0] ? <NextStep element={behind[0]} onSelect={onSelect} /> : null}
-      {manifest.validationErrors.length > 0 && (
+      {issues.length > 0 && (
         <div className="flex flex-col gap-1.5 border-t border-edge-subtle pt-2">
           <span className="text-xs font-medium text-fg-secondary">
-            Your recipe file has {manifest.validationErrors.length} problem{manifest.validationErrors.length === 1 ? '' : 's'}. Fix them in the repo, then press Refresh.
+            Your recipe file has {issues.length} problem{issues.length === 1 ? '' : 's'}. Fix them in the repo, then press Refresh.
           </span>
-          <RecipeIssueList issues={manifest.validationErrors} />
+          <RecipeIssueList issues={issues} />
         </div>
       )}
     </Card>

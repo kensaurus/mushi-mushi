@@ -122,6 +122,9 @@ export function IteratePage() {
   const runsEnvelope = pdcaRunsFromEnvelope(runs)
   const runList = runsEnvelope.runs
   const runsTotal = runsEnvelope.total ?? runList.length
+  // No runs yet: the status block's "Start a run" is the one way in, so the header button and
+  // the Runs | New Run tab bar would repeat it; both come back once a run exists or New Run is open.
+  const noRunsFirstStep = runsTotal === 0 && activeTab === 'runs' && !ux.hideIterateSnapshot && !runsLoading
 
   useEffect(() => {
     setRunsPage(1)
@@ -320,15 +323,18 @@ export function IteratePage() {
         {!ux.hideOverviewChrome && (
           <>
             <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || runsValidating} />
-            <Btn
-              size="sm"
-              variant="primary"
-              onClick={() => setActiveTab('new')}
-              disabled={!activeProjectId}
-              title={!activeProjectId ? 'Select a project first' : undefined}
-            >
-              + New Run
-            </Btn>
+            {!noRunsFirstStep && (
+              <Btn
+                size="sm"
+                variant="primary"
+                className="whitespace-nowrap"
+                onClick={() => setActiveTab('new')}
+                disabled={!activeProjectId}
+                title={!activeProjectId ? 'Select a project first' : undefined}
+              >
+                + New Run
+              </Btn>
+            )}
           </>
         )}
       </PageHeaderBar>
@@ -364,7 +370,7 @@ export function IteratePage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && !noRunsFirstStep && (
       <SegmentedControl<IterateTabId>
         size="sm"
         scrollable

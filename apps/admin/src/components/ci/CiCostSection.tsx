@@ -19,6 +19,8 @@ import type { CiCompare } from '../../lib/ciCompareTypes'
 import { formatDelta, formatMinutes, formatMoney, formatPercent } from '../../lib/ciCompareView'
 import { formatSeconds } from '../../lib/ciView'
 import { usePageData } from '../../lib/usePageData'
+import { useReadTimedOut } from '../../lib/ciReadTimeout'
+import { CiNotChecked } from './CiNotChecked'
 import { Btn, Callout, ErrorAlert, Loading } from '../ui'
 import { IconAlertTriangle, IconCost, IconServer } from '../icons'
 import { CiAdviceList } from './CiSections'
@@ -197,6 +199,7 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
   const path = scope === 'project' && projectId ? `/v1/admin/ci/compare?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/compare?days=30'
   const page = usePageData<CiCompare>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const data = page.data
+  const wait = useReadTimedOut(page.loading && !data)
   // The measured bill reads its own route: it shows while the estimates load or fail.
   const bill = <CiBillCard projectId={projectId} scope={scope} />
 
@@ -204,7 +207,20 @@ export function CiCostSection({ projectId, scope }: { projectId: string | null; 
     return (
       <div className="flex flex-col gap-4">
         {bill}
-        {page.error ? <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} /> : page.loading ? <Loading text="Working out what CI costs…" /> : null}
+        {page.error ? (
+          <ErrorAlert title="Cost and speed" message={page.error} onRetry={page.reload} />
+        ) : wait.timedOut ? (
+          <CiNotChecked
+            what="Cost and speed"
+            testId="ci-cost-not-checked"
+            onRetry={() => {
+              wait.restart()
+              page.reload()
+            }}
+          />
+        ) : page.loading ? (
+          <Loading text="Working out what CI costs…" />
+        ) : null}
       </div>
     )
   }

@@ -235,3 +235,15 @@ describe('headline', () => {
     expect(title(null)).toBe('Reported by a user')
   })
 })
+
+// Fresh-eyes sweep 2026-11-18: with no symptom of its own the node printed the report summary a fifth time.
+describe('symptom node with no stated symptom', () => {
+  it('points at the summary instead of printing it again, and keeps the text in its why', () => {
+    const r = report({ stage1_classification: { category: 'bug', confidence: 0.97 } })
+    const symptom = buildDiagnosisGraph(r).nodes.find((n) => n.id === 'symptom')!
+    expect(symptom.title).toBe('Symptom: as in the summary')
+    expect(symptom.why).toContain('glot-judge-content LLM judge output failed JSON.parse')
+    // A stated symptom still names itself.
+    expect(buildDiagnosisGraph(report()).nodes.find((n) => n.id === 'symptom')!.title).toContain('Judge response not valid JSON')
+  })
+})

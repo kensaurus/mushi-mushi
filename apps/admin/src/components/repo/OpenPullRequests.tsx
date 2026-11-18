@@ -86,18 +86,30 @@ function openPrGroup(pr: Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>): 
 }
 
 const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
-  { id: 'mergeable', title: 'Mergeable now', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
+  { id: 'mergeable', title: 'Ready to merge', hint: 'Required checks passed; a Mushi Mushi fix also has an Opus "merge" on its latest commit.' },
   { id: 'needs_fix', title: 'Needs a fix', hint: 'A required check fails, or Opus said fix first. Open the fix to send it back.' },
   { id: 'hold', title: 'Hold', hint: 'Opus said hold: a person decides. The fix page shows the findings.' },
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
 ]
 
-export function OpenPullRequests({ projectId }: { projectId: string }) {
+/** How many open PRs can merge now: the page's status line leads with it. */
+export function countMergeable(prs: ReadonlyArray<Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>>): number {
+  return prs.filter((pr) => openPrGroup(pr) === 'mergeable').length
+}
+
+export function OpenPullRequests({ projectId, onCounts }: { projectId: string; onCounts?: (c: { open: number; mergeable: number } | null) => void }) {
   const list = usePageData<{ pullRequests: OpenPullRequest[]; repos: string[] }>(`/v1/admin/projects/${projectId}/pull-requests`)
   const prs = list.data?.pullRequests ?? []
   const multiRepo = (list.data?.repos.length ?? 0) > 1
   const anyPending = prs.some((p) => uxRequiredChecks(p.checks).some((c) => c.result === 'pending'))
   const { reload } = list
+  const loaded = list.data != null
+  const openCount = prs.length
+  const mergeableCount = countMergeable(prs)
+
+  useEffect(() => {
+    onCounts?.(loaded ? { open: openCount, mergeable: mergeableCount } : null)
+  }, [onCounts, loaded, openCount, mergeableCount])
 
   useEffect(() => {
     if (!anyPending) return
@@ -210,7 +222,7 @@ function OpenPullRequestRow({
           {merged ? (
             <Badge tone="okSubtle">Merged</Badge>
           ) : (
-            <Btn size="sm" variant={primary ? 'success' : 'ghost'} disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
+            <Btn size="sm" variant={primary ? 'primary' : 'ghost'} className="whitespace-nowrap" disabled={blocker != null || merging} aria-expanded={confirming} onClick={() => { setConfirming(true); setError(null) }}>
               Merge
             </Btn>
           )}

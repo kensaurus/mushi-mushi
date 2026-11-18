@@ -21,3 +21,15 @@ describe('Feature requests with no requests', () => {
     expect(src).toContain('title="No feature requests yet"')
   })
 })
+
+describe('Feature requests empty board (2026-11-18 fresh-eyes)', () => {
+  it('shows one plain empty state with no filters and no serif hero', () => {
+    const emptyBranch = src.slice(src.indexOf('{projectId && boardEmpty && ('), src.indexOf('{projectId && !boardEmpty && ('))
+    expect(emptyBranch).toContain('title="No feature requests yet"')
+    expect(emptyBranch).not.toContain('icon=')
+    expect(emptyBranch).not.toContain('type="search"')
+    expect(src).toContain('const boardEmpty = !loading && !error && tickets.length === 0')
+    // The search / status / sort controls live only in the non-empty branch.
+    expect(src.indexOf('type="search"')).toBeGreaterThan(src.indexOf('{projectId && !boardEmpty && ('))
+  })
+})

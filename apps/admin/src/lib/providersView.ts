@@ -341,6 +341,17 @@ export function buildHourlyBars(
   return { providers, apps, bars, max }
 }
 
+/**
+ * What the hourly chart says when it has no bars (2026-11-18: it said "No calls in the last
+ * 48 hours" beside a 24 h cost, because the hourly series and the daily digest are separate
+ * feeds). Calls in the daily digest mean the hourly feed is missing, not that nothing ran.
+ * Null when the chart has bars.
+ */
+export function hourlyEmptyText(hourlyProviders: number, callsLast24h: number): string | null {
+  if (hourlyProviders > 0) return null
+  return callsLast24h > 0 ? 'No hourly breakdown yet. The 24 h totals above are current.' : 'No calls in the last 48 hours.'
+}
+
 // ── routes ──────────────────────────────────────────────────────────────────
 
 export interface FeatureChain {
@@ -348,6 +359,14 @@ export interface FeatureChain {
   feature: string
   /** By priority, best first. */
   routes: AiRoute[]
+}
+
+/**
+ * A chain's shape: provider, model, on/off and params per candidate, in order. Two chains with the
+ * same signature try the same things, so the Routes tab folds the later one under the first.
+ */
+export function chainSignature(chain: FeatureChain): string {
+  return chain.routes.map((r) => `${r.provider}|${r.model}|${r.enabled ? 1 : 0}|${JSON.stringify(r.params ?? {})}`).join('>')
 }
 
 export interface AppRoutes {
@@ -550,6 +569,31 @@ export function buildHistory(routes: readonly RouteChange[], providers: readonly
     })),
   ]
   return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id.localeCompare(a.id))
+}
+
+export type HistoryItem = { type: 'row'; row: HistoryRow } | { type: 'group'; id: string; actor: string; op: HistoryRow['op']; kind: HistoryRow['kind']; rows: HistoryRow[] }
+
+/**
+ * Runs of `minRun`+ adds or deletes by the same actor on the same kind (a migration that adds
+ * nine routes) fold into one item, so the list shows "migration added 9 routes" instead of nine
+ * near-identical rows of raw values. Changes stay one row each: their diffs differ.
+ */
+export function groupHistory(rows: readonly HistoryRow[], minRun = 3): HistoryItem[] {
+  const out: HistoryItem[] = []
+  let i = 0
+  while (i < rows.length) {
+    const r = rows[i]!
+    let j = i + 1
+    if (r.op !== 'UPDATE') while (j < rows.length && rows[j]!.op === r.op && rows[j]!.actor === r.actor && rows[j]!.kind === r.kind) j++
+    if (j - i >= minRun) {
+      out.push({ type: 'group', id: `g-${r.id}`, actor: r.actor, op: r.op, kind: r.kind, rows: rows.slice(i, j) })
+      i = j
+    } else {
+      out.push({ type: 'row', row: r })
+      i++
+    }
+  }
+  return out
 }
 
 // ── tabs and errors ─────────────────────────────────────────────────────────

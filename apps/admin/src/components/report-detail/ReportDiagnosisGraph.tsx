@@ -179,7 +179,7 @@ function WhyMushiBelieves({ why }: { why: string }) {
       tabIndex={overflows ? 0 : undefined}
       role={overflows ? 'region' : undefined}
       aria-label={overflows ? 'Why Mushi Mushi believes this' : undefined}
-      className="max-h-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      className="max-h-64 overflow-y-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
     >
       <p className="whitespace-pre-line text-xs leading-relaxed text-fg-secondary">{why}</p>
     </div>
@@ -353,9 +353,10 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
           </div>
         </div>
         <aside ref={panel} className="min-w-0 scroll-mt-16 lg:sticky lg:top-3 lg:self-start" aria-label="Selected node">
-          <Card variant="flat" className="p-3">
+          {/* A rule, not a card inside the card (sweep 2026-11-18). */}
+          <div className="border-t border-edge-subtle pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0" data-testid="diagnosis-node-panel">
             <NodePanel node={node} graph={graph} onSelect={select} showInternals={showInternals} />
-          </Card>
+          </div>
         </aside>
       </div>
     </Card>

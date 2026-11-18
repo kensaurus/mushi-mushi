@@ -92,8 +92,14 @@ describe('DiagnosisFixHero', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 
+  // Sweep 2026-11-18: with no title the page heading is the summary, so this card does not repeat it.
+  it('says the summary only when the page heading does not', () => {
+    expect(render(report({ stage2_analysis: null }))).not.toContain('Lesson card shows the wrong duration')
+    expect(render(report({ stage2_analysis: null, title: 'Lesson time is wrong' }))).toContain('Lesson card shows the wrong duration')
+  })
+
   it('is honest when only the stage-1 classifier ran', () => {
-    const text = render(report({ stage2_analysis: null }))
+    const text = render(report({ stage2_analysis: null, title: 'Lesson time is wrong' }))
     expect(text).toContain('Lesson card shows the wrong duration')
     expect(text).toContain('Quick summary only.')
     expect(text).toContain('the full diagnosis (why it broke and how to fix it) did not run')

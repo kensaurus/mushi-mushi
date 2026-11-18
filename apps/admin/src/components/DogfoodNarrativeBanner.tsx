@@ -29,6 +29,9 @@ import type { DashboardData } from './dashboard/types'
 import { renderDogfoodNarrative } from '../lib/copy'
 import { CHIP_TONE } from '../lib/chipTone'
 
+/** @internal Exported for tests. The fewest reports that make "most bugs come from X" true. */
+export const MIN_REPORTS_FOR_CLAIM = 2
+
 export function DogfoodNarrativeBanner() {
   const { isAdvanced } = useAdminMode()
   const activeProjectId = useActiveProjectId()
@@ -52,6 +55,9 @@ export function DogfoodNarrativeBanner() {
 
   const top = dashboardQuery.data?.topComponents?.[0]
   if (!top) return null
+  // "Most bugs come from minimatch: 1 report" is not a pattern; the claim
+  // needs at least two reports behind it (fresh-eyes sweep 2026-11-18).
+  if (top.count < MIN_REPORTS_FOR_CLAIM) return null
 
   const projectName = setup.activeProject.project_name
   // Area-scoped. Project fix_count is every attempt in the app; subtracting

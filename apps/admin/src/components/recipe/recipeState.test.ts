@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { RECIPE_ELEMENT_KEYS } from '../../lib/recipeTypes'
 import {
+  cardStatusLines,
   classifyLinkTarget,
   describeLastChecked,
   elementStateMeta,
@@ -15,6 +16,8 @@ import {
   factLabel,
   orderedRecipeElements,
   problemCountText,
+  reasonAfterState,
+  uncheckedFact,
   worstState,
 } from './recipeState'
 
@@ -122,6 +125,30 @@ describe('header and card wording', () => {
     expect(problemCountText('ok', 0)).toBe('Nothing open to fix')
     expect(problemCountText('unknown', 0)).toBe('Not checked for problems')
     expect(problemCountText('not_connected', 0)).toBe('Not checked for problems')
+  })
+})
+
+describe('say the state once (2026-11-18)', () => {
+  it('hides the check line and problem count a never-judged card would only restate', () => {
+    expect(cardStatusLines('not_connected', null, 0)).toEqual({ checked: false, problems: false })
+    expect(cardStatusLines('unknown', null, 0)).toEqual({ checked: false, problems: false })
+    expect(cardStatusLines('not_connected', '2026-11-18T00:00:00Z', 0)).toEqual({ checked: true, problems: false })
+    expect(cardStatusLines('error', null, 0)).toEqual({ checked: true, problems: true })
+    expect(cardStatusLines('ok', '2026-11-18T00:00:00Z', 0)).toEqual({ checked: true, problems: true })
+    expect(cardStatusLines('unknown', null, 2).problems).toBe(true)
+  })
+
+  it('drops a leading restatement of the chip from the reason, keeping the rest', () => {
+    expect(reasonAfterState('Not set up. Add deploy targets to mushi.recipe.json.', 'Not set up')).toBe('Add deploy targets to mushi.recipe.json.')
+    expect(reasonAfterState('CI passed on your latest commit.', 'OK')).toBe('CI passed on your latest commit.')
+    expect(reasonAfterState('Not set up.', 'Not set up')).toBe('Not set up.')
+  })
+
+  it('reads a zero or empty fact on a never-judged card as "not checked", never 0', () => {
+    expect(uncheckedFact('not_connected', 0)).toBe('not checked')
+    expect(uncheckedFact('unknown', null)).toBe('not checked')
+    expect(uncheckedFact('not_connected', 3)).toBeNull()
+    expect(uncheckedFact('ok', 0)).toBeNull()
   })
 })
 

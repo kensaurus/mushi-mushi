@@ -14,9 +14,12 @@ import {
   buildHourlyBars,
   buildSpendGrid,
   cellKey,
+  chainSignature,
   diffFields,
   formatMicroUsd,
+  groupHistory,
   groupRoutes,
+  hourlyEmptyText,
   marginChange,
   marginOf,
   nextFreePriority,
@@ -367,6 +370,30 @@ describe('tabs and errors', () => {
     )
     expect(writeErrorText({ code: 'last_default_route', message: '' })).toContain('Enable another default first')
     expect(writeErrorText(undefined)).toBe('Not saved.')
+  })
+})
+
+describe('fresh-eyes fixes (2026-11-18)', () => {
+  it('never says "no calls" for the hourly chart when the 24 h digest has calls', () => {
+    expect(hourlyEmptyText(2, 40)).toBeNull()
+    expect(hourlyEmptyText(0, 0)).toBe('No calls in the last 48 hours.')
+    expect(hourlyEmptyText(0, 3)).not.toMatch(/no calls/i)
+  })
+
+  it('folds a run of adds by one actor into one item and keeps changes one row each', () => {
+    const row = (id: string, op: 'INSERT' | 'UPDATE' | 'DELETE', actor = 'migration') => ({ id, at: AT, actor, op, kind: 'route' as const, subject: id, diff: [] })
+    const items = groupHistory([row('u1', 'UPDATE'), row('u2', 'UPDATE'), row('u3', 'UPDATE'), row('a1', 'INSERT'), row('a2', 'INSERT'), row('a3', 'INSERT'), row('b1', 'INSERT', 'console:x'), row('b2', 'INSERT', 'console:x')])
+    expect(items.map((i) => (i.type === 'row' ? i.row.id : `${i.id}:${i.rows.length}`))).toEqual(['u1', 'u2', 'u3', 'g-a1:3', 'b1', 'b2'])
+  })
+
+  it('gives identical chains the same signature and different params a different one', () => {
+    const r = (app: string, priority: number, model: string, params: Record<string, unknown> = {}) =>
+      ({ app, feature: '*', priority, provider: 'openai', model, enabled: true, params, provider_state: 'ok' }) as unknown as AiRoute
+    const a = { app: 'a', feature: '*', routes: [r('a', 1, 'm1'), r('a', 2, 'm2')] }
+    const b = { app: 'b', feature: '*', routes: [r('b', 1, 'm1'), r('b', 2, 'm2')] }
+    const c = { app: 'c', feature: '*', routes: [r('c', 1, 'm1', { effort: 'low' }), r('c', 2, 'm2')] }
+    expect(chainSignature(a)).toBe(chainSignature(b))
+    expect(chainSignature(a)).not.toBe(chainSignature(c))
   })
 })
 

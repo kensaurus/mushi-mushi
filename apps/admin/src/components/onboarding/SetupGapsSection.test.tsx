@@ -93,7 +93,9 @@ describe('SetupGapsSection', () => {
     expect(q('setup-gaps-status')!.textContent).toContain('Nothing missing found, but Mushi Mushi could not check 1 thing.')
     state.data = response([gap('slack_bot_token', 'ok'), gap('deploy_events', 'ok')])
     await render()
-    expect(q('setup-gaps-status')!.textContent).toContain('All 2 checks pass.')
+    // All pass: one line, the disclosure, not a status sentence over it.
+    expect(q('setup-gaps-status')).toBeNull()
+    expect(q('setup-gaps-fine')!.querySelector('summary')!.textContent).toContain('All 2 checks pass')
     expect(q('setup-gaps-open')).toBeNull()
   })
 

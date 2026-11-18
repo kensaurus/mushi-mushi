@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { DisclosurePanel, SegmentedControl } from '../components/ui'
+import { DisclosurePanel } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
 import { describeApiError } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -24,7 +24,7 @@ import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { STAGE_LABELS, type PromptLabData, type PromptVersion } from '../components/prompt-lab/types'
+import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
 import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
@@ -39,6 +39,7 @@ import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapsh
 import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
+import { reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
 
 export function PromptLabPage() {
   const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -49,7 +50,12 @@ export function PromptLabPage() {
     reload: reloadStats,
   } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
   const [searchParams] = useSearchParams()
-  const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
+  // One source: once the prompt list loads, the banner and status line count the same
+  // steps the scoreboard draws (the stats endpoint counted every candidate row).
+  const promptLabStats = useMemo(
+    () => reconcilePromptLabStats(statsData ?? EMPTY_PROMPT_LAB_STATS, data?.prompts),
+    [statsData, data?.prompts],
+  )
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -313,31 +319,17 @@ export function PromptLabPage() {
         stages={orderedStages}
         grouped={grouped}
         selected={visibleStage}
+        headingExtra={<ConfigHelp helpId="prompt-lab.stage" />}
         onOpen={(stage) => {
           setActiveStage(stage)
           document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }}
       />
 
-      {orderedStages.length > 0 && visibleStage && (
-        <div id="prompt-lab-stages" className="flex min-w-0 items-center gap-1.5 scroll-mt-4">
-          <ConfigHelp helpId="prompt-lab.stage" />
-          <SegmentedControl<string>
-            size="sm"
-            scrollable
-            ariaLabel="Prompt stage"
-            value={visibleStage}
-            options={orderedStages.map((stage) => ({
-              id: stage,
-              label: STAGE_LABELS[stage] ?? stage,
-              count: grouped[stage]?.length ?? 0,
-            }))}
-            onChange={setActiveStage}
-          />
-        </div>
-      )}
-
+      {/* The scoreboard rows above pick the step; a second strip of twelve stage tabs
+          repeated them (2026-11-18). The anchor stays for ?tab=prompts&stage= links. */}
       {visibleStage && (
+        <div id="prompt-lab-stages" className="min-w-0 scroll-mt-4">
         <PromptStageTable
           key={visibleStage}
           stage={visibleStage}
@@ -350,6 +342,7 @@ export function PromptLabPage() {
           onTraffic={setTraffic}
           onDelete={deletePrompt}
         />
+        </div>
       )}
 
       <EvalDatasetCard

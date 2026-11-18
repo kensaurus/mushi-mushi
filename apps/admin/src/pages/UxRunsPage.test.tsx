@@ -133,6 +133,10 @@ describe('UxRunsPage', () => {
     // It says where each step happens: the studio is local, review and merge are here.
     expect(host.textContent).toContain('Local studio · this computer')
     expect(host.textContent).toContain('Merge · this page')
+    // One strip of three steps, no boxed paragraphs; the studio's questions and the cost stay one line until opened.
+    expect(host.querySelectorAll('[aria-label="Where each step happens"] > li')).toHaveLength(3)
+    expect((host.querySelector('[data-testid="ux-start-costs"]') as HTMLDetailsElement).open).toBe(false)
+    expect((host.querySelector('[data-testid="ux-start-asks"]') as HTMLDetailsElement).open).toBe(false)
   })
 
   it('opens the run named in ?run=, which the studio links to', () => {

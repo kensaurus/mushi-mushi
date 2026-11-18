@@ -15,6 +15,7 @@ import { useAutoAnimate } from '@formkit/auto-animate/react'
 import { Btn, Kbd } from '../ui'
 import { ResponsiveTable } from '../ResponsiveTable'
 import { ReportRowView } from './ReportRowView'
+import { ReportRowCard } from './ReportRowCard'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
@@ -153,9 +154,31 @@ export function ReportsTable({
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
       <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="block text-2xs text-fg-muted min-w-0 truncate">
-          {total} report{total === 1 ? '' : 's'} — click a row to triage; scroll for status & actions
+          {total} report{total === 1 ? '' : 's'} — click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
         </span>
       </div>
+      {/* Phone: stacked rows with status and severity inline; the table
+          scrolled sideways and hid them (fresh-eyes sweep 2026-11-18). */}
+      <ul className="divide-y divide-edge-subtle sm:hidden" aria-label="Bug reports" data-testid="reports-card-list">
+        {displayRows.map((d) => {
+          const rowPreflight = preflightForReportRow(preflight, preflightProjectId, d.row)
+          return (
+            <ReportRowCard
+              key={d.row.id}
+              row={d.row}
+              isSelected={selected.has(d.row.id)}
+              dispatchBusy={dispatching.has(d.row.id)}
+              variantCount={d.variantCount}
+              onToggleSelect={() => onToggleSelect(d.row.id)}
+              onOpen={() => onOpen(d.row)}
+              onDispatchFix={() => onDispatchFix(d.row)}
+              preflight={rowPreflight.preflight}
+              dispatchScopeNote={rowPreflight.dispatchScopeNote}
+            />
+          )
+        })}
+      </ul>
+      <div className="hidden sm:block">
       <ResponsiveTable
         ariaLabel="Bug reports"
         stickyLeadColumns={3}
@@ -228,8 +251,8 @@ export function ReportsTable({
                 className={REPORTS_TABLE_COL.confidence}
               />
               <SortHeader
-                label="Action"
-                fullLabel="Action (sort by age)"
+                label="Action · age"
+                fullLabel="Action, and how long ago it came in (sort by age)"
                 field="created_at"
                 current={sort}
                 dir={dir}
@@ -273,19 +296,21 @@ export function ReportsTable({
           </tbody>
         </table>
       </ResponsiveTable>
+      </div>
 
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
-        <span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
+        <span className="min-w-0">
           Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           {groupCollapse && visibleGroupCount !== reports.length && (
             <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
           )}
         </span>
-        <div className="flex items-center gap-1">
+        {/* The pager stays on one line: "1 / 43" wrapped to three at 390px. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1 whitespace-nowrap" data-testid="reports-pager">
           <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => onSetPage(page - 1)}>
             <Kbd>[</Kbd> Prev
           </Btn>
-          <span className="font-mono px-2">
+          <span className="whitespace-nowrap font-mono px-2">
             {page + 1} / {totalPages}
           </span>
           <Btn

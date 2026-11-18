@@ -137,7 +137,8 @@ describe('OpsPage', () => {
     expect(host.querySelector('h1')?.textContent).toBe('Ops')
     const today = host.querySelector('[data-testid="ops-today"]')!.textContent!
     expect(today).toContain('¥12,000')
-    expect(today).toContain('■ 1 need a look')
+    expect(today).toContain('1 need a look')
+    expect(host.querySelector('[data-testid="ops-open-alerts-link"]')!.getAttribute('href')).toBe('/ops?category=alerts&unacked=1#ops-feed')
     const rows = [...host.querySelectorAll('[data-testid^="ops-coverage-row-"]')].map((r) => r.getAttribute('data-testid'))
     expect(rows).toEqual(['ops-coverage-row-p2', 'ops-coverage-row-p1'])
     expect(host.querySelector('[data-testid="ops-coverage-row-p2"]')!.textContent).toContain('How to connect')
@@ -165,6 +166,53 @@ describe('OpsPage', () => {
       btn.click()
     })
     expect(state.mutations).toEqual(['/v1/admin/ops/events/fail/ack'])
+  })
+
+  it('pins unacknowledged urgent and warning rows on top, worst first', () => {
+    state.feed = {
+      ...feed(),
+      events: [
+        ev({ id: 'dep1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 81243e7', occurred_at: '2026-11-17T04:50:00Z' }),
+        ev({ id: 'warn', severity: 'warn', kind: 'error.new', title: 'Error: Word not found', thread_key: null, occurred_at: '2026-11-17T04:40:00Z' }),
+        ev({ id: 'dep2', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:30:00Z' }),
+        ev({ id: 'urg', title: 'Release failed (v0.23.1)', thread_key: null, occurred_at: '2026-11-17T01:00:00Z' }),
+      ],
+    }
+    render()
+    const pinned = [...host.querySelectorAll('[data-testid="ops-needs-look"] [data-testid^="ops-event-"]')].map((r) => r.getAttribute('data-testid'))
+    expect(pinned).toEqual(['ops-event-urg', 'ops-event-warn'])
+    expect(host.querySelector('[data-testid="ops-feed"] [data-testid="ops-event-urg"]')).toBeNull()
+  })
+
+  it('groups an app\'s info rows with a bulk Acknowledge, and shows a repeated event once', async () => {
+    state.feed = {
+      ...feed(),
+      events: [
+        ev({ id: 'd1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 81243e7', occurred_at: '2026-11-17T04:50:00Z' }),
+        ev({ id: 'd2', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:30:00Z' }),
+        ev({ id: 'd3', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:29:00Z' }),
+      ],
+    }
+    render()
+    const group = host.querySelector('[data-testid="ops-group-p1|releases"]')!
+    expect(group.textContent).toContain('glot.it · 3 releases')
+    // Collapsed: the repeated Info / In Slack / Acknowledge row is not drawn per event.
+    expect(group.querySelector('[data-testid="ops-event-d1"]')).toBeNull()
+    act(() => (host.querySelector('[data-testid="ops-group-toggle-p1|releases"]') as HTMLButtonElement).click())
+    expect(group.querySelector('[data-testid="ops-event-d1"]')).not.toBeNull()
+    expect(group.querySelector('[data-testid="ops-event-d3"]')).toBeNull()
+    expect(group.querySelector('[data-testid="ops-copies-d2"]')!.textContent).toBe('×2')
+    await act(async () => {
+      ;(host.querySelector('[aria-label="Acknowledge all: glot.it · 3 releases"]') as HTMLButtonElement).click()
+    })
+    expect([...state.mutations].sort()).toEqual(['/v1/admin/ops/events/d1/ack', '/v1/admin/ops/events/d2/ack', '/v1/admin/ops/events/d3/ack'])
+  })
+
+  it('puts the columns that have data first, and stacks each app on a phone', () => {
+    render()
+    const heads = [...host.querySelectorAll('[data-testid="ops-coverage"] thead th')].map((th) => th.textContent!.trim())
+    expect(heads[1]).toContain('Releases')
+    expect(host.querySelector('[data-testid="ops-coverage-stacked"] [data-testid="ops-coverage-card-p1"]')!.textContent).toContain('×2')
   })
 
   it('reads its filters from the URL', () => {

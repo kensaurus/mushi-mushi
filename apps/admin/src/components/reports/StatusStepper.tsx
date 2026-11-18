@@ -79,8 +79,10 @@ export function StatusStepper({
   size = 'compact',
 }: StatusStepperProps) {
   if (status === 'dismissed') {
-    // Full size already prints the word, so the bar stays decorative.
-    const showCaption = size === 'full'
+    // Full size and the table row print the word, so the bar stays
+    // decorative. In the table a bare ⊘ with no word was unreadable
+    // (fresh-eyes sweep 2026-11-18).
+    const showCaption = size === 'full' || size === 'table'
     return (
       <div className={`flex items-center gap-1 ${className}`}>
         <span
@@ -90,7 +92,7 @@ export function StatusStepper({
           className="h-1 w-full rounded-full bg-surface-overlay"
         />
         {showCaption ? (
-          <span className="ml-1 inline-flex items-center gap-1 text-2xs text-fg-faint">
+          <span className="ml-1 inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-2xs text-fg-faint" data-testid="status-stepper-word">
             <StatusMark status="cancelled" size={10} />
             Dismissed
           </span>

@@ -1,6 +1,6 @@
 /**
  * FILE: panels.overviewA11y.test.tsx
- * PURPOSE: Rewards overview keeps the accepted count on the copy green and
+ * PURPOSE: Rewards overview keeps the 24 h counts readable (no low-contrast text-ok) and
  *          lets keyboard users scroll the 24h activity list (report 2b076ca8).
  */
 
@@ -82,15 +82,19 @@ function classes(el: Element): string[] {
 }
 
 describe('rewards overview accessibility', () => {
-  it('paints the accepted count with the copy green, not text-ok', async () => {
+  it('shows the 24 h counts as one inline strip in readable ink, not grey boxes or text-ok', async () => {
+    // 2026-11-18: the four grey stat boxes became one strip (one level of card).
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(OverviewTab)))
     })
-    const accepted = Array.from(container.querySelectorAll('.text-lg')).find((el) => el.textContent === '17')
+    const strip = container.querySelector('[data-testid="rewards-feed-strip"]')
+    expect(strip).toBeTruthy()
+    expect(strip!.querySelector('.bg-surface-overlay')).toBeNull()
+    const accepted = Array.from(strip!.querySelectorAll('span')).find((el) => el.textContent === '17')
     expect(accepted).toBeTruthy()
-    expect(classes(accepted!).includes('text-ok-foreground')).toBe(true)
-    expect(classes(accepted!).includes('text-ok')).toBe(false)
-    expect(accepted!.parentElement?.className).toContain('bg-surface-overlay')
+    expect(classes(accepted!)).toContain('text-fg')
+    expect(strip!.querySelector('.text-ok')).toBeNull()
+    expect(strip!.textContent).toContain('+40 pts')
   })
 
   it('lets the keyboard reach the 24h activity list', async () => {

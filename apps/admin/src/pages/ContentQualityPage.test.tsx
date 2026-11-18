@@ -61,6 +61,8 @@ describe('ContentQualityPage empty state', () => {
     await render()
     expect(host.querySelector('[role="toolbar"]')).toBeNull()
     expect(host.textContent).toContain('No content issues')
+    // All clear carries the ok mark, not a bare sentence.
+    expect(host.querySelector('[data-testid="content-quality-all-clear"] svg')).not.toBeNull()
     const past = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Show past issues')!
     await act(async () => past.click())
     // Looking at every status is a narrowed view: the filters come back.

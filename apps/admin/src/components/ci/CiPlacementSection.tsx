@@ -43,7 +43,7 @@ import {
   WATCH_STATUS,
 } from '../../lib/ciPlacementView'
 import { formatDelta } from '../../lib/ciCompareView'
-import { formatSeconds } from '../../lib/ciView'
+import { formatSeconds, type CiRunsOn } from '../../lib/ciView'
 import { apiFetch } from '../../lib/supabase'
 import { applyPlacementNow, GITHUB_INSTALLATIONS_URL, type ApplyResult } from '../../lib/ciPlacementApply'
 import { usePageData } from '../../lib/usePageData'
@@ -562,6 +562,13 @@ function RequestRow({ r, data, onChanged }: { r: PlacementRequestRow; data: CiPl
   )
 }
 
+/** Where an app's jobs ran this window: filled = your machines, hollow = GitHub-hosted. */
+const RUNS_ON: Record<Exclude<CiRunsOn, null>, { marks: string; words: string }> = {
+  own: { marks: '●', words: 'Runs on your machines' },
+  github: { marks: '○', words: 'Runs on GitHub-hosted runners' },
+  both: { marks: '●○', words: 'Runs on your machines and GitHub-hosted runners' },
+}
+
 export function CiPlacementSection({
   projectId,
   scope,
@@ -571,7 +578,7 @@ export function CiPlacementSection({
   projectId: string | null
   scope: 'project' | 'all'
   /** Apps to choose from when the page shows all apps (placement is per app). */
-  apps?: Array<{ id: string; name: string }>
+  apps?: Array<{ id: string; name: string; runsOn?: CiRunsOn }>
   onPickApp?: (projectId: string) => void
 }) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/placement?project_id=${encodeURIComponent(projectId)}` : null
@@ -582,13 +589,34 @@ export function CiPlacementSection({
       <div className="flex flex-col gap-2">
         <p className="text-xs text-fg-muted">Where CI runs is set per app. Pick one:</p>
         {apps.length > 0 && onPickApp ? (
-          <div className="flex flex-wrap gap-1.5" data-testid="ci-placement-app-picker">
-            {apps.map((a) => (
-              <Btn key={a.id} type="button" variant="ghost" size="sm" onClick={() => onPickApp(a.id)}>
-                {a.name}
-              </Btn>
-            ))}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-1.5" data-testid="ci-placement-app-picker">
+              {apps.map((a) => {
+                const on = a.runsOn ? RUNS_ON[a.runsOn] : null
+                return (
+                  <Btn
+                    key={a.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    onClick={() => onPickApp(a.id)}
+                    title={on ? on.words : 'No job seen this week'}
+                    data-runs-on={a.runsOn ?? 'none'}
+                  >
+                    <span className="font-mono text-fg-secondary" aria-hidden="true">
+                      {on ? on.marks : '–'}
+                    </span>
+                    <span data-app-name>{a.name}</span>
+                    {on && <span className="sr-only">: {on.words.toLowerCase()}</span>}
+                  </Btn>
+                )
+              })}
+            </div>
+            <p className="text-2xs text-fg-muted" aria-hidden="true">
+              ● your machines · ○ GitHub-hosted · – no job seen this week
+            </p>
+          </>
         ) : (
           <p className="text-xs text-fg-muted">Choose an app in the app switcher at the top, then switch to This app.</p>
         )}

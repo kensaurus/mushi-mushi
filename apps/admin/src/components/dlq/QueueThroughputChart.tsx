@@ -19,6 +19,9 @@ export function QueueThroughputChart({ throughput }: Props) {
     return null
   }
 
+  // An empty Failed / DLQ panel is a third chart of nothing (2026-11-18): drop it.
+  const anyFailed = throughput.some((d) => d.failed > 0)
+
   return (
     <Card elevated className="p-3">
       {/* Hyphens are wrap points, so a squeezed range splits after "2026-10-".
@@ -45,7 +48,7 @@ export function QueueThroughputChart({ throughput }: Props) {
           />
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 ${anyFailed ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
         <div>
           <div className="text-3xs font-semibold text-fg-secondary mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-info/70" aria-hidden="true" />
@@ -78,7 +81,8 @@ export function QueueThroughputChart({ throughput }: Props) {
             showPeakLabel
           />
         </div>
-        <div>
+        {anyFailed && (
+        <div data-testid="throughput-failed">
           <div className="text-3xs font-semibold text-fg-secondary mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger/70" aria-hidden="true" />
             Failed / DLQ
@@ -94,6 +98,7 @@ export function QueueThroughputChart({ throughput }: Props) {
             showPeakLabel
           />
         </div>
+        )}
       </div>
     </Card>
   )

@@ -42,4 +42,15 @@ describe('QueueThroughputChart', () => {
     expect(range?.classList.contains('shrink-0')).toBe(true)
     expect(range?.closest('div')?.parentElement?.className).toContain('flex-wrap')
   })
+
+  it('drops the Failed / DLQ panel when nothing failed in the window', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(QueueThroughputChart, { throughput })))
+    })
+    expect(container.querySelector('[data-testid="throughput-failed"]')).not.toBeNull()
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(QueueThroughputChart, { throughput: throughput.map((d) => ({ ...d, failed: 0 })) })))
+    })
+    expect(container.querySelector('[data-testid="throughput-failed"]')).toBeNull()
+  })
 })

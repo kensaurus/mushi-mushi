@@ -751,6 +751,18 @@ export function JudgePage() {
         )}
       </PageHeaderBar>
 
+      {/* Tabs sit under the title, above what they switch (2026-11-18 sweep:
+          they were below the overview, so they read as part of it). */}
+      {!ux.hideTabs && (
+      <SegmentedControl<JudgeTabId>
+        size="sm"
+        ariaLabel="Judge sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+      )}
+
       {/* Once grades exist the page leads with one status sentence and its
           "See disagreements" action; the banner and the pipeline guide are
           for an empty or broken page only (console journeys 2026-10-27). */}
@@ -808,16 +820,6 @@ export function JudgePage() {
           capped={stats.agreementCapped}
         />
       ) : null}
-
-      {!ux.hideTabs && (
-      <SegmentedControl<JudgeTabId>
-        size="sm"
-        ariaLabel="Judge sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
 
       {/* The score summary repeats the banner and snapshot, so it stays closed until asked for. */}
       {activeTab === 'overview' && !ux.hideOverviewChrome && (

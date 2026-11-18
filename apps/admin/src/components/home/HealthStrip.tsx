@@ -8,7 +8,8 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
-import { LIGHT_DOT, LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
+import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
@@ -46,6 +47,20 @@ const PLAIN_CONNECT: Record<string, string> = {
   'Set up the SDK': 'Add the report button',
 }
 
+/** Each light's shape as well as its colour (signal kit: colour never works alone). */
+const LIGHT_TONE: Record<HealthSignal['light'], SignalTone> = { good: 'ok', warn: 'warn', bad: 'danger', busy: 'info', off: 'off' }
+
+/**
+ * @internal Exported for tests.
+ * The detail line only when it adds something the mark does not: a problem
+ * to read. "Passing / 4 checks green on the latest commit" said one state
+ * twice (fresh-eyes sweep 2026-11-18); a good or unconnected light keeps the
+ * mark and the number, with the sentence as a tooltip.
+ */
+export function showHealthDetail(s: Pick<HealthSignal, 'light' | 'detail'>): boolean {
+  return !!s.detail && (s.light === 'bad' || s.light === 'warn')
+}
+
 function HealthTile({ signal: server }: { signal: HealthSignal }) {
   const s: HealthSignal = {
     ...server,
@@ -63,15 +78,15 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
         }
         action={
           <span className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
-            <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${LIGHT_DOT[s.light]}`} />
+            <StatusGlyph tone={LIGHT_TONE[s.light]} />
             <span>{s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]}</span>
           </span>
         }
       />
-      <Link to={s.href} className="text-base font-semibold leading-tight text-fg hover:underline">
+      <Link to={s.href} className="text-base font-semibold leading-tight text-fg hover:underline" title={s.detail ?? undefined}>
         {s.headline}
       </Link>
-      {s.detail && <p className="line-clamp-2 text-xs leading-snug text-fg-muted">{s.detail}</p>}
+      {showHealthDetail(s) && <p className="line-clamp-2 text-xs leading-snug text-fg-muted">{s.detail}</p>}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {s.at ? (
           <span className="text-2xs text-fg-faint">

@@ -33,6 +33,7 @@ import {
   RUN_STATUS_META,
   runHeadline,
   runnerMessage,
+  runNowBlocker,
   STALL_LABEL,
   stepNotes,
   ttfvTrend,
@@ -150,6 +151,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   const urlOk = isStartUrl(url)
   const goalOk = goal.trim().length > 0 && goal.trim().length <= 300
   const canRun = status.canRun && urlOk && goalOk && !busy
+  const blocker = runNowBlocker({ runnerCanRun: status.canRun, runnerSetup: status.setup, url, goal })
 
   async function runNow() {
     setBusy(true)
@@ -224,6 +226,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
             value={sessions}
             options={['1', '2', '3'].map((n) => ({ id: n, label: n }))}
             onChange={setSessions}
+            className="self-start"
           />
           <span className="text-2xs text-fg-faint">With 2 or more, an opinion such as &quot;confusing&quot; counts only when two visitors agree.</span>
         </div>
@@ -233,7 +236,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
       )}
 
       <div className="flex flex-col gap-1">
-        <SegmentedControl<Mode> size="sm" wrap ariaLabel="What the test may do" value={mode} options={modes} onChange={setMode} />
+        <SegmentedControl<Mode> size="sm" wrap ariaLabel="What the test may do" value={mode} options={modes} onChange={setMode} className="self-start" />
         <span className="text-2xs text-fg-muted">
           {mode === 'look' && 'The visitor reads and clicks but never sends a form, and nothing becomes a report. It stops at the sign-up page.'}
           {mode === 'file' && 'Same visit; what stops the visitor (errors, dead ends, a step that needs a terminal or an inbox) is filed as a bug report.'}
@@ -245,6 +248,11 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         <Btn onClick={runNow} disabled={!canRun} loading={busy} data-testid="fresh-eyes-run-button">
           Run now
         </Btn>
+        {blocker && !busy && (
+          <span className="text-2xs text-fg-secondary" data-testid="fresh-eyes-run-blocker">
+            {blocker}
+          </span>
+        )}
         {queued && <span className="text-2xs text-fg-secondary">Started. It shows below and updates by itself.</span>}
         {error && (
           <span role="alert" className="text-2xs text-danger">

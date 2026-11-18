@@ -47,6 +47,7 @@ import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
+import { groupClusters, groupedClustersLabel } from '../lib/lessonsView'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -372,13 +373,65 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     }
   }, [toast, reload, onChanged])
 
+  const renderCluster = (cluster: Cluster) => (
+    <div
+      key={cluster.id}
+      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+      className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <Badge
+              className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
+            >
+              {clusterStatusWord(cluster)}
+            </Badge>
+            <span className="text-xs font-semibold tabular-nums text-fg">
+              {cluster.cluster_size} {cluster.cluster_size === 1 ? 'report' : 'reports'}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-fg">
+            {cluster.name ?? <span className="text-fg-faint italic">Unnamed pattern</span>}
+          </p>
+          {cluster.suggested_rule ? (
+            <p className="mt-1.5 border-l-2 border-brand/40 pl-2 text-xs text-fg-secondary" data-testid="suggested-rule">
+              <span className="text-fg-muted">Suggested rule: </span>
+              {cluster.suggested_rule}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-fg-faint">A rule is suggested once a few more reports arrive.</p>
+          )}
+          <p className="text-xs text-fg-faint mt-1">
+            Last seen: <RelativeTime value={cluster.last_seen_at} />
+          </p>
+        </div>
+        {canPromote(cluster) && (
+          <Btn
+            size="sm"
+            variant={cluster.id === firstReady?.id ? 'primary' : 'ghost'}
+            loading={promoting === cluster.id}
+            disabled={promoting !== null || !canEditProject}
+            title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
+            onClick={() => handlePromote(cluster)}
+          >
+            Promote
+          </Btn>
+        )}
+      </div>
+    </div>
+  )
+
   if (error) return <ErrorAlert message={error} />
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-fg-muted">
-          Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report. Strong patterns are promoted for you every 6 hours.
+        <p
+          className="min-w-0 truncate text-sm text-fg-muted"
+          title="Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report."
+        >
+          Promote a pattern to make its rule a lesson. Strong ones are promoted every 6 hours.
         </p>
         <SegmentedControl
           value={statusFilter}
@@ -402,54 +455,26 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
       )}
 
       <div className="space-y-2">
-        {clusters.map((cluster) => (
-          <div
-            key={cluster.id}
-            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-            className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <Badge
-                    className={cluster.status === 'promoted' ? CHIP_TONE.okSubtle : canPromote(cluster) ? CHIP_TONE.warnSubtle : 'bg-surface-overlay text-fg-secondary'}
-                  >
-                    {clusterStatusWord(cluster)}
-                  </Badge>
-                  <span className="text-xs font-semibold tabular-nums text-fg">
-                    {cluster.cluster_size} {cluster.cluster_size === 1 ? 'report' : 'reports'}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-fg">
-                  {cluster.name ?? <span className="text-fg-faint italic">Unnamed pattern</span>}
-                </p>
-                {cluster.suggested_rule ? (
-                  <p className="mt-1.5 border-l-2 border-brand/40 pl-2 text-xs text-fg-secondary" data-testid="suggested-rule">
-                    <span className="text-fg-muted">Suggested rule: </span>
-                    {cluster.suggested_rule}
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-fg-faint">A rule is suggested once a few more reports arrive.</p>
-                )}
-                <p className="text-xs text-fg-faint mt-1">
-                  Last seen: <RelativeTime value={cluster.last_seen_at} />
-                </p>
-              </div>
-              {canPromote(cluster) && (
-                <Btn
-                  size="sm"
-                  variant={cluster.id === firstReady?.id ? 'primary' : 'ghost'}
-                  loading={promoting === cluster.id}
-                  disabled={promoting !== null || !canEditProject}
-                  title={canEditProject ? undefined : 'Viewers can read clusters but cannot promote them.'}
-                  onClick={() => handlePromote(cluster)}
-                >
-                  Promote
-                </Btn>
-              )}
+        {groupClusters(clusters).map((item) =>
+          item.kind === 'group' ? (
+            <div
+              key={item.key}
+              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-edge px-4 py-2.5"
+              data-testid="lessons-cluster-group"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Badge className="bg-surface-overlay text-fg-secondary whitespace-nowrap">{item.size >= 3 ? 'No rule suggested yet' : 'Still growing'}</Badge>
+                <span className="text-sm font-medium text-fg">{groupedClustersLabel(item.clusters.length, item.size)}</span>
+              </span>
+              <span className="text-xs text-fg-faint whitespace-nowrap">
+                Last seen: <RelativeTime value={item.lastSeenAt} />
+              </span>
             </div>
-          </div>
-        ))}
+          ) : (
+          renderCluster(item.cluster)
+          ),
+        )}
       </div>
     </div>
   )

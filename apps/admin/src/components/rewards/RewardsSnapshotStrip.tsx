@@ -20,22 +20,14 @@ interface Props {
   action?: ReactNode
 }
 
-function rewardsSentence(stats: RewardsStats): string {
-  if (!stats.projectRewardsEnabled) {
-    // Off is about new activity: points already earned still count (report 5f2ab6c5).
-    const earned =
-      stats.activeContributors30d > 0
-        ? ` In the last 30 days ${pluralizeWithCount(stats.activeContributors30d, 'tester')} earned ${stats.pointsAwarded30d.toLocaleString()} points.`
-        : ''
-    return `Rewards are off for this app. New activity earns no points.${earned}`
-  }
-  const earned =
-    stats.activeContributors30d > 0
-      ? `${pluralizeWithCount(stats.activeContributors30d, 'tester')} earned ${stats.pointsAwarded30d.toLocaleString()} points in the last 30 days`
-      : 'Rewards are on; nobody earned points in the last 30 days'
-  const owed = stats.pendingPayoutLiabilityUsd > 0 ? `; $${stats.pendingPayoutLiabilityUsd.toFixed(2)} in payouts waiting` : ''
-  const failing = stats.webhooksFailing > 0 ? `; ${pluralizeWithCount(stats.webhooksFailing, 'webhook')} failing` : ''
-  return `${earned}${owed}${failing}.`
+/** @internal Exported for tests. States the program's state; the counts sit in the metrics (2026-11-18). */
+export function rewardsSentence(stats: RewardsStats): string {
+  // Off is about new activity: points already earned still count (report 5f2ab6c5).
+  if (!stats.projectRewardsEnabled) return 'Rewards are off for this app. New activity earns no points.'
+  const parts = [stats.activeContributors30d > 0 ? 'Rewards are on' : 'Rewards are on; nobody earned points in the last 30 days']
+  if (stats.pendingPayoutLiabilityUsd > 0) parts.push('payouts are waiting')
+  if (stats.webhooksFailing > 0) parts.push(`${pluralizeWithCount(stats.webhooksFailing, 'webhook')} failing`)
+  return `${parts.join('; ')}.`
 }
 
 export function RewardsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, action }: Props) {

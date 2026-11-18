@@ -27,6 +27,8 @@ export type QuickView = (typeof QUICK_VIEWS)[number]['key']
 interface QuickViewsProps {
   hideSingletons: boolean
   singletonCount: number
+  /** Every node is unlinked, so the option shows them anyway (nothing would be left). */
+  allIsolated?: boolean
   onApplyView: (preset: QuickView) => void
   onToggleSingletons: (next: boolean) => void
   onRelayout: () => void
@@ -35,6 +37,7 @@ interface QuickViewsProps {
 export function QuickViewsRow({
   hideSingletons,
   singletonCount,
+  allIsolated = false,
   onApplyView,
   onToggleSingletons,
   onRelayout,
@@ -53,14 +56,17 @@ export function QuickViewsRow({
         </button>
       ))}
       <span className="ml-auto inline-flex items-center gap-2">
-        <label className="inline-flex items-center gap-1.5 cursor-pointer text-2xs text-fg-muted">
+        <label
+          className="inline-flex items-center gap-1.5 cursor-pointer text-2xs text-fg-muted whitespace-nowrap"
+          title={allIsolated && hideSingletons ? 'No item has a link yet, so all of them are shown.' : undefined}
+        >
           <input
             type="checkbox"
             checked={hideSingletons}
             onChange={(e) => onToggleSingletons(e.target.checked)}
             className="h-3 w-3 accent-brand"
           />
-          Hide isolated nodes{singletonCount > 0 ? ` (${singletonCount})` : ''}
+          Hide isolated nodes{singletonCount > 0 ? ` (${singletonCount})` : allIsolated && hideSingletons ? ' (none linked yet)' : ''}
         </label>
         <button
           type="button"
@@ -107,9 +113,12 @@ export function GraphFilterChips({
       <DisclosurePanel
         title="Node and edge types"
         trailing={
-          <span className="text-2xs font-normal text-fg-faint">
-            {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} node ·{' '}
-            {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length} edge
+          <span
+            className="text-2xs font-normal text-fg-faint whitespace-nowrap tabular-nums"
+            title="Node types shown · edge types shown"
+          >
+            {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} ·{' '}
+            {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length}
           </span>
         }
       >

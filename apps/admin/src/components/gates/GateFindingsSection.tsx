@@ -221,13 +221,14 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
             {findingsDisclosureLabel(g.open, shown.length)}
           </summary>
-          <div className="mt-2 flex flex-col gap-2">
+          <div className="mt-1 flex flex-col divide-y divide-edge-subtle">
             {shown.map((f) => {
               const caps = spendCapSuggestion(f)
               return (
                 <GateFindingCard
                   key={f.id}
                   f={f}
+                  inGroup
                   action={
                     <>
                       <CopyFixPromptButton finding={f} />

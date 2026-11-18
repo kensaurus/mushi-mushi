@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom'
 import { Btn, Card } from '../ui'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { Chip } from '../signal/Chip'
 import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import {
   CATEGORY_LABEL,
@@ -55,9 +56,7 @@ export function PluginCard({
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{p.name}</h3>
             {p.is_official ? (
-              <span className={`inline-flex rounded px-1.5 py-0.5 text-3xs ${CHIP_TONE.brandSubtle}`}>
-                Official
-              </span>
+              <Chip>Official</Chip>
             ) : null}
           </div>
           <p className="text-2xs text-fg-muted">
