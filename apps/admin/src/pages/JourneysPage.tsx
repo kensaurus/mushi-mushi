@@ -104,7 +104,7 @@ function JourneysBody({ projectId }: { projectId: string }) {
             <StatCard label="Visits" value={map.stats.sessions} detail={hasVisits ? `last ${data.days} days${map.stats.sampled ? ' (latest 20,000 page views)' : ''}` : 'SDK not sending visits'} />
             <StatCard label="Pages per visit" value={map.stats.avgPagesPerSession ?? '—'} detail={`${map.stats.pageViews} page views`} />
             <StatCard label="Leave after one page" value={percent(map.stats.bounceRate)} detail="visits that saw one page" />
-            <StatCard label="Pages" value={map.stats.pages} detail={hasScan ? `${data.mapScan!.pageCount} scanned` : 'not scanned yet'} />
+            <StatCard label="Pages" value={map.stats.pages} detail={hasScan ? `${data.mapScan!.pageCount} scanned` : 'from visits only'} />
           </div>
 
           {!hasVisits && (

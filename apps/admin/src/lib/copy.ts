@@ -1396,7 +1396,7 @@ const COPY: CopyRegistry = {
           'Forward critical bugs to Jira, Linear, or PagerDuty',
         ],
         howToUse:
-          'Use the Platform tab to paste keys and Test each card. Routing tab connects ticketing tools. Repo & index covers codebase indexing for auto-fix.',
+          'Each tile is one tool. Press it to open its settings: paste keys there and press Test. A tile that is not set up has its own Connect. The GitHub settings also hold codebase indexing for auto-fix.',
       },
     },
     '/integrations/config': {

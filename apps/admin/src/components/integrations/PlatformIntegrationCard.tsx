@@ -304,7 +304,7 @@ export function PlatformIntegrationCard({
                     else document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
                   }}
                 >
-                  Go to {dependencyLabel ?? 'GitHub'} card ↑
+                  {onDependencyJump ? `Open ${dependencyLabel ?? 'GitHub'} settings` : `Go to ${dependencyLabel ?? 'GitHub'} card ↑`}
                 </a>
               ) : null}
             </span>

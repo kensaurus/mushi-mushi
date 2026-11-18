@@ -208,8 +208,8 @@ export function SdkInstallKeyPanel({
                         <CodeInline className="min-w-0 break-all">{k.key_prefix}…</CodeInline>
                       </Tooltip>
                       {staleIds.has(k.id) && (
-                        <span className="shrink-0 text-3xs font-bold tracking-wider text-warn-foreground uppercase" title="Unused for over 7 days: the stale-key action revokes it">
-                          stale
+                        <span className="shrink-0 text-3xs font-bold text-warn-foreground" title="No app has used it for over 7 days: Revoke stale keys takes it">
+                          unused 7d+
                         </span>
                       )}
                       {k.label && (
@@ -265,7 +265,8 @@ export function SdkInstallKeyPanel({
             A key is shown in full once, when it is made or rotated. Healthy: the SDK authenticated with it in the
             last hour. Stale: no activity in the last hour (normal for a quiet app). Cold: nothing for
             over 7 days, so the deploy may have stopped shipping the SDK. Never used: minted, but no
-            app has authenticated with it yet.
+            app has authenticated with it yet. Revoke stale keys takes only the keys marked unused 7d+
+            (Cold, or never used and over 7 days old), never the one your app used last.
           </p>
         </Box>
       )}

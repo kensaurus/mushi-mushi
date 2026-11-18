@@ -121,8 +121,8 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
           title: 'Connect a GitHub repo first',
           status: 'recommended',
           description:
-            'The Deployment Readiness checklist becomes actionable once your project is linked to a GitHub repo. Open the GitHub integration card above to connect.',
-          ctaLabel: 'Go to the GitHub card',
+            'The Deployment Readiness checklist becomes actionable once your project is linked to a GitHub repo. Press the GitHub tile on this page to connect.',
+          ctaLabel: 'Open GitHub settings',
           ctaHref: null,
           ctaAnchorId: 'platform-card-github',
         },
