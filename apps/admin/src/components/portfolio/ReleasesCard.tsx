@@ -46,6 +46,7 @@ const STAGE: Record<string, { label: string; status: RunStatus; rank: number }> 
   unknown: { label: 'Not checked', status: 'idle', rank: 6 },
 }
 
+/** @internal Exported for ReleasesCard.test.tsx. */
 export function sortReleaseRows(rows: readonly ReleaseRow[]): ReleaseRow[] {
   const rank = (r: ReleaseRow) => (STAGE[r.stage] ?? STAGE.unknown).rank
   return [...rows].sort((a, b) => rank(a) - rank(b) || b.otaPending + b.mergedNotBuilt - (a.otaPending + a.mergedNotBuilt) || a.name.localeCompare(b.name))
