@@ -250,8 +250,11 @@ export async function executeNaturalLanguageQuery(
   }
 
   // §3a: BYOK-resolve Anthropic against the first project the user
-  // owns. Falls back to the env key if the project hasn't configured BYOK.
-  // Resolution failures are non-fatal — `resolved` is null and we use env.
+  // owns. Falls back to the platform key, which follows that project's
+  // organization's AI provider (ADR 0039 amendment). Resolution failures are
+  // non-fatal: `resolved` is null and the platform key is tried. With no
+  // project there is no organization to check, and this path has no OpenAI
+  // model, so it refuses.
   const resolved = projectIds.length > 0
     ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch((err) => {
         // Over budget rethrows: the env-key fallback below would bypass it.
@@ -259,8 +262,10 @@ export async function executeNaturalLanguageQuery(
         return null
       })
     : null
-  const apiKey = resolved?.key ?? (projectIds.length > 0 ? await platformAnthropicKey(db, projectIds[0]) : Deno.env.get('ANTHROPIC_API_KEY'))
-  if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
+  const apiKey = resolved?.key ?? (projectIds.length > 0 ? await platformAnthropicKey(db, projectIds[0]) : undefined)
+  if (!apiKey) {
+    throw new Error(projectIds.length > 0 ? 'No Anthropic key available (BYOK or env)' : 'No app to query, so no AI provider to check')
+  }
   // On the platform key the query is billed, so check the wallet first, as
   // withLlmFailover does for every other billed path.
   const onPlatformKey = !resolved?.key

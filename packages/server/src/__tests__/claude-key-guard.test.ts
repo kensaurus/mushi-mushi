@@ -13,7 +13,13 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 
-const anthropicCtor = vi.hoisted(() => vi.fn())
+const anthropicCtor = vi.hoisted(() => {
+  // The platform Claude key is set, so only the code keeps a caller off it.
+  ;(globalThis as { Deno?: unknown }).Deno = {
+    env: { get: (k: string) => (k === 'ANTHROPIC_API_KEY' ? 'sk-ant-platform' : undefined) },
+  }
+  return vi.fn()
+})
 vi.mock('../../supabase/functions/_shared/ai-sdk.ts', () => ({
   Anthropic: class {
     beta = { messages: { create: async () => ({ model: 'm', stop_reason: 'end_turn', content: [], usage: {} }) } }
@@ -24,6 +30,7 @@ vi.mock('../../supabase/functions/_shared/ai-sdk.ts', () => ({
 }))
 
 const { claudeGenerateText } = await import('../../supabase/functions/_shared/claude-messages.ts')
+const { executeNaturalLanguageQuery } = await import('../../supabase/functions/_shared/nl-query.ts')
 
 const FUNCTIONS_ROOT = resolve(__dirname, '../../supabase/functions')
 const read = (file: string) => readFileSync(resolve(FUNCTIONS_ROOT, file), 'utf8')
@@ -58,6 +65,13 @@ describe('ai-sdk createAnthropic', () => {
 describe('callers that held a Claude key past the switch', () => {
   it('ask-mushi never reads the env Claude key (with no project there is no organization to check)', () => {
     expect(read('api/routes/ask-mushi.ts')).not.toContain("Deno.env.get('ANTHROPIC_API_KEY')")
+  })
+
+  it('nl-query with no app refuses before any model call, though the env Claude key is set', async () => {
+    anthropicCtor.mockClear()
+    await expect(executeNaturalLanguageQuery({} as never, [], 'how many reports came in today?')).rejects.toThrow(/No app to query/)
+    expect(anthropicCtor).not.toHaveBeenCalled()
+    expect(read('_shared/nl-query.ts')).not.toContain("Deno.env.get('ANTHROPIC_API_KEY')")
   })
 
   it('mistake-summarizer checks the key before its Haiku fast path', () => {
