@@ -434,6 +434,7 @@ export function nextFreePriority(chain: readonly AiRoute[], meta: OpsMeta | null
 /**
  * Params that only one provider reads; upstream refuses them on any other
  * (kensaurus-ops.ts superRefine). Every other key in meta applies to all.
+ * The fallback for an upstream that does not send `meta.route_param_providers` yet.
  */
 const PARAM_PROVIDER: Record<string, string> = {
   reasoning_effort: 'openai',
@@ -443,7 +444,15 @@ const PARAM_PROVIDER: Record<string, string> = {
 
 /** The param keys meta lists that this provider takes, in meta's order. */
 export function paramFieldsFor(meta: OpsMeta | null, provider: string): string[] {
-  return Object.keys(meta?.route_params ?? {}).filter((k) => !PARAM_PROVIDER[k] || PARAM_PROVIDER[k] === provider)
+  const fromMeta = meta?.route_param_providers
+  const applies = (k: string): boolean => {
+    if (fromMeta) {
+      const list = fromMeta[k]
+      return !Array.isArray(list) || list.includes(provider)
+    }
+    return !PARAM_PROVIDER[k] || PARAM_PROVIDER[k] === provider
+  }
+  return Object.keys(meta?.route_params ?? {}).filter(applies)
 }
 
 /** The allowed values of an enum param from meta, or null for a free value. */
@@ -560,11 +569,14 @@ export function resolveProvidersTab(raw: string | null): ProvidersTab {
 /** One line for a refused write. */
 export function writeErrorText(error: { code: string; message: string; issues?: unknown[] } | undefined): string {
   if (!error) return 'Not saved.'
+  // Upstream sends a readable `message` on 409 and 422 (last_default_route, unpriced_model);
+  // the proxy fills `message` with the code when there is none. Read the real one when present.
+  const own = error.message && error.message !== error.code ? error.message : null
   switch (error.code) {
     case 'unpriced_model':
-      return 'No price for this model yet: add it in Kenji first'
+      return own ?? 'No price for this model yet: add it in Kenji first'
     case 'last_default_route':
-      return `${LAST_DEFAULT_HINT}: an app needs one enabled default route`
+      return own ?? `${LAST_DEFAULT_HINT}: an app needs one enabled default route`
     case 'validation_failed': {
       const issues = (error.issues ?? []).filter((i): i is string => typeof i === 'string')
       return `Not saved: ${issues.length > 0 ? issues.join('; ') : error.message}`

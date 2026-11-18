@@ -292,13 +292,21 @@ describe('routes', () => {
     expect(nextFreePriority([1, 2, 3, 4, 5, 6, 7, 8, 9].map((p) => rt('a', '*', p)), META)).toBeNull()
   })
 
-  it('lists provider-only params only for their provider, effort included when meta has it', () => {
+  it('without meta.route_param_providers (live upstream today), uses the built-in map', () => {
     expect(paramFieldsFor(META, 'openai')).toEqual(['max_output_tokens', 'temperature', 'reasoning_effort', 'secret_name'])
     expect(paramFieldsFor(META, 'anthropic')).toEqual(['max_output_tokens', 'temperature', 'thinking', 'secret_name'])
     const withEffort = { ...META, route_params: { ...META.route_params, effort: ['low', 'medium', 'high', 'xhigh', 'max'] } }
     expect(paramFieldsFor(withEffort, 'anthropic')).toContain('effort')
     expect(paramFieldsFor(withEffort, 'openai')).not.toContain('effort')
     expect(paramFieldsFor(withEffort, 'together')).toEqual(['max_output_tokens', 'temperature', 'secret_name'])
+  })
+
+  it('reads meta.route_param_providers when upstream sends it; a param not listed applies to any provider', () => {
+    const meta = { ...META, route_params: { ...META.route_params, effort: ['low', 'high'] }, route_param_providers: { reasoning_effort: ['openai', 'together'], effort: ['anthropic'] } }
+    // thinking is not listed in the map, so it now applies to every provider.
+    expect(paramFieldsFor(meta, 'together')).toEqual(['max_output_tokens', 'temperature', 'reasoning_effort', 'thinking', 'secret_name'])
+    expect(paramFieldsFor(meta, 'anthropic')).toEqual(['max_output_tokens', 'temperature', 'thinking', 'secret_name', 'effort'])
+    expect(paramFieldsFor(meta, 'openai')).not.toContain('effort')
   })
 
   it('renders params as short chips', () => {
@@ -349,7 +357,11 @@ describe('tabs and errors', () => {
   })
 
   it('maps refused writes to one line', () => {
-    expect(writeErrorText({ code: 'unpriced_model', message: 'x' })).toBe('No price for this model yet: add it in Kenji first')
+    // The proxy fills message with the code when upstream sent none: the console's own words then.
+    expect(writeErrorText({ code: 'unpriced_model', message: 'unpriced_model' })).toBe('No price for this model yet: add it in Kenji first')
+    // Upstream's message on 409 / 422 is the one the toast reads (contract confirmed 2026-11-18).
+    expect(writeErrorText({ code: 'unpriced_model', message: 'No price for gpt-6.1-sol on openai' })).toBe('No price for gpt-6.1-sol on openai')
+    expect(writeErrorText({ code: 'last_default_route', message: 'glot.it would have no default route for chat' })).toBe('glot.it would have no default route for chat')
     expect(writeErrorText({ code: 'validation_failed', message: 'validation_failed', issues: ['params.effort: unrecognized_keys'] })).toBe(
       'Not saved: params.effort: unrecognized_keys',
     )

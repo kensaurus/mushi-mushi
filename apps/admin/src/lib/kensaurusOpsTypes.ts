@@ -154,6 +154,13 @@ export interface OpsMeta {
   priority: { min: number; max: number }
   /** Each key → a description string, or the allowed values. */
   route_params: Record<string, unknown>
+  /**
+   * The providers each provider-specific param applies to, e.g.
+   * `{ reasoning_effort: ['openai'], thinking: ['anthropic'] }`; a param not listed applies to
+   * any provider. Newer upstreams only (yen-yen kensaurus-ops contract, 2026-11-18): absent
+   * means the console's built-in map (lib/providersView.ts PARAM_PROVIDER).
+   */
+  route_param_providers?: Record<string, string[]>
   threshold_keys: string[]
   actions: string[]
 }
