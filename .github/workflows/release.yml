@@ -467,6 +467,9 @@ jobs:
           SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
           JOB_STATUS: success
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL }}
+          MUSHI_FUNCTION_REGION: ${{ vars.MUSHI_FUNCTION_REGION }}
           WHAT: npm packages
         run: |
           DETAIL=$(echo "$PUBLISHED" | jq -r 'map("\(.name) \(.version)") | join(", ")')

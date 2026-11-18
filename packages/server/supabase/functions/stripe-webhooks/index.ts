@@ -416,6 +416,9 @@ async function notifyCheckoutCompleted(
   await notifyOperator({
     category: 'payments',
     title: 'New paid customer',
+    kind: 'payment.succeeded',
+    dedupeKey: typeof session.id === 'string' ? `stripe:${session.id}` : undefined,
+    ...(amountTotal != null ? { amountMinor: amountTotal, currency } : {}),
     body: `${maskEmail(email)} paid for ${planLabel}${amountTotal != null ? ` (${(amountTotal / 100).toFixed(2)} ${currency})` : ''}.`,
     level: 'info',
     fields,
@@ -436,6 +439,9 @@ async function notifySubscriptionDeleted(
   await notifyOperator({
     category: 'payments',
     title: 'Customer cancelled',
+    kind: 'subscription.cancelled',
+    dedupeKey: subId ? `stripe:${subId}:deleted` : undefined,
+    threadKey: subId ? `subscription:${subId}` : undefined,
     body: `Subscription \`${subId ?? '?'}\` ended. The team that bought it from app \`${projectName(meta)}\` has dropped to Free.`,
     level: 'warn',
     fields: [
@@ -489,6 +495,9 @@ async function notifyPaymentFailed(
   await notifyOperator({
     category: 'payments',
     title: 'Payment failed',
+    kind: 'payment.failed',
+    dedupeKey: invoiceId ? `stripe:${invoiceId}:failed:${attempt ?? 0}` : undefined,
+    threadKey: invoiceId ? `invoice:${invoiceId}` : undefined,
     body: `${maskEmail(customerEmail)}'s card was declined. Stripe will retry; their plan keeps working until the retries run out, so nothing to do yet unless it fails again.`,
     level: 'urgent',
     fields,
@@ -528,6 +537,10 @@ async function notifyPaymentRecovered(
   await notifyOperator({
     category: 'payments',
     title: 'Payment recovered',
+    kind: 'payment.recovered',
+    dedupeKey: typeof invoice.id === 'string' ? `stripe:${invoice.id}:recovered` : undefined,
+    threadKey: typeof invoice.id === 'string' ? `invoice:${invoice.id}` : undefined,
+    ...(amountPaid != null ? { amountMinor: amountPaid, currency } : {}),
     body: `${maskEmail(customerEmail)} paid the invoice that had failed. Their plan is active again.`,
     level: 'info',
     fields: [
@@ -613,6 +626,9 @@ const handler = async (req: Request): Promise<Response> => {
           await notifyOperator({
     category: 'payments',
             title: 'Cancellation scheduled',
+            kind: 'subscription.cancel_scheduled',
+            dedupeKey: `stripe:${event.id}`,
+            threadKey: typeof obj.id === 'string' ? `subscription:${obj.id}` : undefined,
             body: `A customer scheduled cancellation at period end. You have ~30 days to reach out.`,
             level: 'warn',
             fields: [

@@ -446,6 +446,9 @@ jobs:
           SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
           SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL }}
+          MUSHI_FUNCTION_REGION: ${{ vars.MUSHI_FUNCTION_REGION }}
           WHAT: Docs site
           VERSION: ${{ steps.version.outputs.docs_version }}
         run: node scripts/notify-slack-release.mjs

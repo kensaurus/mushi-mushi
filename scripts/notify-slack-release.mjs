@@ -8,7 +8,14 @@
  *            - job failed    → #alerts:   "Mushi Mushi · 🔴 Admin console deploy failed" + what that
  *              means + a button to the run
  *
+ * Route (2026-11-18): with MUSHI_OPS_KEY and MUSHI_API_URL set, the result goes to the Mushi
+ * Mushi Ops hub (POST /v1/ops/events), which posts it with the team's Slack bot: threads,
+ * buttons, and the record on the console's Ops page. Without them, or when the hub does not
+ * answer 2xx, it falls back to the channel's incoming webhook as before.
+ *
  * Env (from repo secrets; a missing one skips quietly):
+ *   MUSHI_OPS_KEY, MUSHI_API_URL  the app's ops:write key and the api base (…/functions/v1/api)
+ *   MUSHI_FUNCTION_REGION         optional: the database region, pins the function there
  *   SLACK_RELEASES_WEBHOOK_URL, SLACK_ALERTS_WEBHOOK_URL
  *   JOB_STATUS   ${{ job.status }}: success | failure | cancelled
  *   WHAT         what was deployed: "Admin console", "Edge functions", "Docs site", "npm packages"
@@ -38,6 +45,52 @@ export function buildReleaseMessage({ status, what, version, detail, commitSubje
   return null
 }
 
+/**
+ * @internal Exported for tests. The Ops hub event for one deploy result, or null. The app name
+ * comes from the key's project, so the title leaves it out. A retried run posts once.
+ */
+export function buildOpsEvent({ status, what, version, detail, commitSubject, runUrl, repo, runId, attempt }) {
+  const label = `${what}${version ? ` ${version}` : ''}`
+  const slug = String(what).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'deploy'
+  const base = {
+    url: runUrl && runUrl.startsWith('https://') ? runUrl : undefined,
+    thread_key: `deploy:${repo || 'repo'}:${slug}`.slice(0, 200),
+    dedupe_key: runId ? `deploy:${repo || 'repo'}:${slug}:${runId}:${attempt || '1'}:${status}`.slice(0, 200) : undefined,
+    facts: [{ label: 'Where', value: 'production · GitHub Actions' }],
+  }
+  if (status === 'success') {
+    return { ...base, category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `🚀 ${label} is live`.slice(0, 150), body: (detail || commitSubject || '').slice(0, 600) || undefined }
+  }
+  if (status === 'failure') {
+    const body = `Nothing new went live from this run; the previous version is still serving. Open the run to see which step failed.${commitSubject ? `\nCommit: ${commitSubject.slice(0, 200)}` : ''}`
+    return { ...base, category: 'alerts', severity: 'urgent', kind: 'deploy.failed', title: `${what} deploy failed`.slice(0, 150), body: body.slice(0, 600) }
+  }
+  return null
+}
+
+/** @internal Exported for tests. The events URL, pinned to the database region when one is given. */
+export function opsEventsUrl(apiUrl, region) {
+  const base = String(apiUrl || '').replace(/\/+$/, '')
+  if (!/^https:\/\//.test(base)) return null
+  const r = /^[a-z]{2}-[a-z]+-\d$/.test(region || '') ? `?forceFunctionRegion=${region}` : ''
+  return `${base}/v1/ops/events${r}`
+}
+
+/** True when the Ops hub took the event (202 created, or 200 duplicate on a retry). */
+async function sendToOpsHub(env, event) {
+  const key = (env.MUSHI_OPS_KEY || '').trim()
+  const url = opsEventsUrl(env.MUSHI_API_URL, env.MUSHI_FUNCTION_REGION)
+  if (!key || !url || !event) return false
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'X-Mushi-Api-Key': key }, body: JSON.stringify(event), signal: AbortSignal.timeout(10_000) })
+    console.log(`notify-slack-release: Ops hub answered ${res.status}`)
+    return res.ok
+  } catch (err) {
+    console.log(`::warning::notify-slack-release: Ops hub unreachable (${err instanceof Error ? err.name : 'error'}); using the webhook`)
+    return false
+  }
+}
+
 function payload(headline, body, color, runUrl) {
   const blocks = [{ type: 'section', text: { type: 'mrkdwn', text: `*${headline}*${body ? `\n${body}` : ''}` } }]
   blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'production · GitHub Actions' }] })
@@ -56,15 +109,18 @@ function commitSubject() {
 async function main() {
   const env = process.env
   const runUrl = env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY && env.GITHUB_RUN_ID ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` : ''
-  const msg = buildReleaseMessage({
+  const input = {
     status: env.JOB_STATUS,
     what: env.WHAT || 'Deploy',
     version: env.VERSION || '',
     detail: env.DETAIL || '',
     commitSubject: commitSubject(),
     runUrl,
-  })
+  }
+  const msg = buildReleaseMessage(input)
   if (!msg) return
+  const event = buildOpsEvent({ ...input, repo: env.GITHUB_REPOSITORY || '', runId: env.GITHUB_RUN_ID || '', attempt: env.GITHUB_RUN_ATTEMPT || '1' })
+  if (await sendToOpsHub(env, event)) return
   const url = (msg.channel === 'releases' ? env.SLACK_RELEASES_WEBHOOK_URL : env.SLACK_ALERTS_WEBHOOK_URL) || ''
   if (!url) {
     console.log(`notify-slack-release: no ${msg.channel} webhook set; skipped`)
