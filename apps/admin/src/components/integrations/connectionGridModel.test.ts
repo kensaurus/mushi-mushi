@@ -46,27 +46,49 @@ function input(over: Partial<ConnectionGridInput> = {}): ConnectionGridInput {
 describe('buildConnectionGrid', () => {
   // The row led with Sentry, a monitoring tool we never require (AGENTS.md;
   // first-time user test, 2026-10-28). GitHub and alerts lead; Sentry is last.
-  it('lists the tools in a fixed order, GitHub first and monitoring last', () => {
-    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual(['github', 'slack', 'discord', 'cursor_cloud', 'linear', 'sentry'])
+  // The tiles are the page (owner, 2026-11-18): every tool has one, set up or
+  // not, so Teams, Claude Code, the issue trackers and Langfuse stay reachable.
+  it('lists every tool in a fixed order, GitHub first and monitoring last', () => {
+    expect(buildConnectionGrid(input()).map((t) => t.id)).toEqual([
+      'github', 'slack', 'discord', 'teams', 'cursor_cloud', 'claude_code_agent',
+      'linear', 'jira', 'github_issues', 'pagerduty', 'sentry', 'langfuse',
+    ])
+  })
+
+  it('a paused issue tracker needs you; a saved one reads its check', () => {
+    const tiles = buildConnectionGrid(
+      input({
+        routing: [
+          { integration_type: 'jira', is_active: false },
+          { integration_type: 'github', is_active: true },
+        ],
+        history: [probe('sentry'), probe('github'), probe('github_issues')],
+      }),
+    )
+    const byId = Object.fromEntries(tiles.map((t) => [t.id, t]))
+    expect(byId.jira.view).toMatchObject({ state: 'attention', label: 'Paused' })
+    expect(byId.github_issues.view.state).toBe('working')
+    expect(byId.pagerduty.view.state).toBe('not_connected')
+    expect(brokenConnections(tiles).map((t) => t.id)).toEqual(['jira'])
   })
 
   // Mushi's own Langfuse (set in its environment) counted as one of the user's
   // connections: a new app read "2 connected" with nothing connected
   // (integrator's new-user walk, 2026-10-28).
-  it("leaves out Mushi's own Langfuse and counts the user's", () => {
+  it("reads Mushi's own Langfuse as not connected and counts the user's", () => {
     const viaEnv: PlatformResponse = {
       platform: { langfuse: { langfuse_host: 'https://us.cloud.langfuse.com', langfuse_public_key_ref: 'ref', langfuse_secret_key_ref: 'ref' } },
       sourceByField: { langfuse_host: 'env', langfuse_public_key_ref: 'env', langfuse_secret_key_ref: 'env' },
     }
     const envTiles = buildConnectionGrid(input({ platform: viaEnv, history: [probe('langfuse')] }))
-    expect(envTiles.map((t) => t.id)).not.toContain('langfuse')
+    expect(envTiles.find((t) => t.id === 'langfuse')?.view.state).toBe('not_connected')
     expect(connectionGridSentence(envTiles).sentence).toMatch(/^Nothing is connected yet/)
 
     const own: PlatformResponse = { ...viaEnv, sourceByField: { langfuse_host: 'project', langfuse_public_key_ref: 'project', langfuse_secret_key_ref: 'project' } }
-    expect(buildConnectionGrid(input({ platform: own, history: [probe('langfuse')] })).map((t) => t.id)).toContain('langfuse')
+    expect(buildConnectionGrid(input({ platform: own, history: [probe('langfuse')] })).find((t) => t.id === 'langfuse')?.view.state).toBe('working')
   })
 
-  it('shows Claude Code only once it is set up, so a failing agent is never hidden from the grid', () => {
+  it('a failing Claude Code agent is never hidden from the grid', () => {
     const withClaude: PlatformResponse = { ...platform, platform: { ...platform.platform, claude_code_agent: { claude_api_key_ref: 'ref' } } }
     const tiles = buildConnectionGrid(input({ platform: withClaude, history: [probe('sentry'), probe('github'), probe('claude_code_agent', 'down', 'HTTP 401')] }))
     expect(tiles.map((t) => t.id)).toContain('claude_code_agent')

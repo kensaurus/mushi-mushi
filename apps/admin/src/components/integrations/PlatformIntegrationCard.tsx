@@ -154,6 +154,8 @@ interface Props {
   dependencyLabel?: string
   /** Scroll-target ID to jump to the dependency card on the same page. */
   dependencyAnchorId?: string
+  /** Go to the dependency when its card is not on screen (Integrations opens it in a drawer). */
+  onDependencyJump?: () => void
   /** When provided, the overflow menu shows "Apply to all projects in org". */
   onApplyToAll?: () => void
   /** Whether the apply-to-all is in progress. */
@@ -192,6 +194,7 @@ export function PlatformIntegrationCard({
   dependencyOk = true,
   dependencyLabel,
   dependencyAnchorId,
+  onDependencyJump,
   onApplyToAll,
   applyingToAll,
   onRemoveKey,
@@ -297,7 +300,8 @@ export function PlatformIntegrationCard({
                   className="font-semibold underline hover:no-underline"
                   onClick={(e) => {
                     e.preventDefault()
-                    document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
+                    if (onDependencyJump) onDependencyJump()
+                    else document.getElementById(dependencyAnchorId)?.scrollIntoView({ behavior: 'smooth' })
                   }}
                 >
                   Go to {dependencyLabel ?? 'GitHub'} card ↑

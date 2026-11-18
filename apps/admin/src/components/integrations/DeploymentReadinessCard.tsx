@@ -37,6 +37,8 @@ interface Props {
   /** Vercel project slug for the deploy-preview shortcut. Optional --
    *  null falls back to a "Connect to Vercel" generic CTA. */
   vercelProjectSlug?: string | null
+  /** Go to an in-page target that may not be on screen (Integrations opens the GitHub drawer). */
+  onAnchorJump?: (anchorId: string) => void
 }
 
 interface CodebaseStatsLite {
@@ -83,7 +85,7 @@ interface ChecklistItem {
   snippet?: string
 }
 
-export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelProjectSlug }: Props) {
+export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelProjectSlug, onAnchorJump }: Props) {
   // The integrations page already loads platform credentials, so this
   // card only needs the lightweight `repo_url` to build deep links.
   // We fetch the codebase stats endpoint (already populated for any
@@ -258,7 +260,7 @@ export function DeploymentReadinessCard({ projectId, githubAppInstalled, vercelP
 
       <ul className="mt-3 space-y-2">
         {items.map((item) => (
-          <ReadinessItem key={item.key} item={item} />
+          <ReadinessItem key={item.key} item={item} onAnchorJump={onAnchorJump} />
         ))}
       </ul>
     </Card>
@@ -283,7 +285,7 @@ const STATUS_TONE: Record<ChecklistItem['status'], { dot: string; pill: string; 
   },
 }
 
-function ReadinessItem({ item }: { item: ChecklistItem }) {
+function ReadinessItem({ item, onAnchorJump }: { item: ChecklistItem; onAnchorJump?: (anchorId: string) => void }) {
   const tone = STATUS_TONE[item.status]
   return (
     <li className="rounded-sm border border-edge-subtle bg-surface-raised p-2.5">
@@ -304,6 +306,10 @@ function ReadinessItem({ item }: { item: ChecklistItem }) {
             variant="ghost"
             className="shrink-0"
             onClick={() => {
+              if (onAnchorJump) {
+                onAnchorJump(item.ctaAnchorId!)
+                return
+              }
               const el = document.getElementById(item.ctaAnchorId!)
               el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
               el?.querySelector<HTMLElement>('button, a, input')?.focus({ preventScroll: true })

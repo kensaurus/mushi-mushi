@@ -19,10 +19,22 @@ import { connectionFromProbe, type ConnectionView, type InboundDeliveryLike } fr
 import { platformRequiredOk } from '../../lib/platformIntegrationForm'
 import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import { slackCardConnection } from './slackConnection'
-import { PLATFORM_DEFS, type HealthRow, type Kind, type PlatformResponse } from './types'
+import { PLATFORM_DEFS, ROUTING_PROVIDERS, type HealthRow, type Kind, type PlatformResponse } from './types'
 import { GITHUB_ACCESS_LABEL, githubAccessMissingSentence, type GithubAccess } from '../../lib/githubAccess'
 
-type GridToolId = 'sentry' | 'github' | 'slack' | 'discord' | 'teams' | 'langfuse' | 'cursor_cloud' | 'claude_code_agent' | 'linear'
+export type GridToolId =
+  | 'sentry'
+  | 'github'
+  | 'slack'
+  | 'discord'
+  | 'teams'
+  | 'langfuse'
+  | 'cursor_cloud'
+  | 'claude_code_agent'
+  | 'linear'
+  | 'jira'
+  | 'github_issues'
+  | 'pagerduty'
 
 export interface GridTile {
   id: GridToolId
@@ -47,6 +59,8 @@ export interface ConnectionGridInput {
   discordConfigured?: boolean
   teamsConfigured?: boolean
   linearConnected: boolean
+  /** Saved issue-tracker routes (Jira, GitHub Issues, PagerDuty); a paused one needs you. */
+  routing?: ReadonlyArray<{ integration_type: string; is_active: boolean }>
   /**
    * The app's GitHub status from the dispatch preflight (lib/githubAccess.ts),
    * the one the GitHub card shows. Without it (still loading) the tile reads
@@ -198,19 +212,51 @@ export function buildConnectionGrid(input: ConnectionGridInput): GridTile[] {
     return source === 'project' || source === 'org'
   })
 
+  // Langfuse that is only Mushi Mushi's own default reads as not connected:
+  // the user's Langfuse is not (it still has a tile, so it can be set up).
+  const langfuse = langfuseOwn
+    ? platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')
+    : { ...platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse'), view: { state: 'not_connected' as const }, lastAt: null, lastLabel: null }
+
   // Same order as the page: what a solo builder needs first, monitoring last
-  // (AGENTS.md positioning; first-time user test, 2026-10-28).
+  // (AGENTS.md positioning; first-time user test, 2026-10-28). The tiles are
+  // the page now (owner, 2026-11-18), so every tool has one, set up or not.
   return [
     githubTile(input),
     slack,
     discord,
-    ...(teams.view.state === 'not_connected' ? [] : [teams]),
+    teams,
     platformTile(input, 'cursor_cloud', 'cursor_cloud', 'Cursor', 'cursor'),
-    ...(claude.view.state === 'not_connected' ? [] : [claude]),
+    claude,
     linear,
+    ...ROUTING_PROVIDERS.map((p) => routingTile(input, p.type, p.healthKind, p.label)),
     sentry,
-    ...(langfuseOwn ? [platformTile(input, 'langfuse', 'langfuse', 'Langfuse', 'langfuse')] : []),
+    langfuse,
   ]
+}
+
+/** Jira, GitHub Issues or PagerDuty, with the same verdict as its card (RoutingProviderCard). */
+function routingTile(
+  input: ConnectionGridInput,
+  type: 'jira' | 'github' | 'pagerduty',
+  healthKind: 'jira' | 'github_issues' | 'pagerduty',
+  label: string,
+): GridTile {
+  const saved = input.routing?.find((r) => r.integration_type === type)
+  const probe = latestProbe(input.history, healthKind)
+  const view: ConnectionView =
+    saved && !saved.is_active
+      ? { state: 'attention', label: 'Paused', detail: 'Paused: new reports are not forwarded here.' }
+      : connectionFromProbe({ configured: Boolean(saved), probe, now: input.now })
+  return {
+    id: healthKind,
+    label,
+    brand: type === 'github' ? 'github' : type,
+    anchor: `integrations-${healthKind}`,
+    view,
+    lastAt: saved ? (probe?.checked_at ?? null) : null,
+    lastLabel: saved && probe ? 'Checked' : null,
+  }
 }
 
 /** Tiles whose card asks for a fix, worst first. "Not connected" is a choice, not a problem. */

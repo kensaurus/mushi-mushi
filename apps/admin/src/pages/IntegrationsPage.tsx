@@ -8,11 +8,11 @@
  *          components/integrations/* so each provider can evolve in isolation.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { apiFetch } from '../lib/supabase'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { DisclosurePanel, Panel, PanelSectionLabel } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -49,7 +49,12 @@ import {
   type RoutingIntegration,
   type RoutingProviderDef,
 } from '../components/integrations/types'
-import { ConnectionGrid } from '../components/integrations/ConnectionGrid'
+import { CONNECTION_TONE, CONNECTION_WORD, ConnectionGrid, useConnectionTiles } from '../components/integrations/ConnectionGrid'
+import type { GridToolId } from '../components/integrations/connectionGridModel'
+import { integrationToolForHash } from '../lib/integrationAnchors'
+import { Drawer } from '../components/Drawer'
+import { BrandIcon } from '../components/ui/BrandIcon'
+import { StatusGlyph, TONE_INK } from '../components/signal/StatusGlyph'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { IntegrationsProvenanceReadout } from '../components/integrations/IntegrationsProvenanceReadout'
 import { usePageCopy } from '../lib/copy'
@@ -105,8 +110,6 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   /** Flat map: field name → where the effective value came from ('project'|'org'|'env'|null) */
   const sourceByField = platformQuery.data?.sourceByField ?? {}
-  // The user's own Langfuse (not Mushi's environment default) keeps its fold open.
-  const langfuseOwn = Object.entries(sourceByField).some(([field, source]) => field.startsWith('langfuse_') && (source === 'project' || source === 'org'))
   const organizationId = platformQuery.data?.organizationId ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
@@ -432,6 +435,52 @@ export function IntegrationsPage() {
     statsQuery.reload()
   }
 
+  // The grid is the page; each tool's settings open in a drawer (owner,
+  // 2026-11-18). One verdict per tile, from the same rules as its card.
+  const tiles = useConnectionTiles({
+    platform: platformQuery.data ?? null,
+    history,
+    slack: {
+      configured: settingsQuery.data ? Boolean(settingsQuery.data.slackConfigured) : null,
+      canPost: Boolean(settingsQuery.data?.slackCanPost),
+      channelId: settingsQuery.data?.slackChannelId ?? null,
+    },
+    discordConfigured: Boolean(settingsQuery.data?.discordConfigured),
+    teamsConfigured: Boolean(settingsQuery.data?.teamsConfigured),
+    linearConnected,
+    routing,
+    github: githubAccess,
+  })
+  const [openTool, setOpenTool] = useState<GridToolId | null>(null)
+  const openTile = openTool ? (tiles.find((t) => t.id === openTool) ?? null) : null
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // About forty links still point at the old card anchors
+  // (`#platform-card-github`, `#integrations-codebase`, …): open the drawer
+  // that holds the card; useScrollToHash then scrolls to it inside the drawer.
+  useEffect(() => {
+    const tool = integrationToolForHash(location.hash)
+    if (tool) setOpenTool(tool)
+  }, [location.key, location.hash])
+
+  const closeDrawer = () => {
+    // A confirm opened from inside the drawer (remove key, disconnect) is what
+    // Esc and the backdrop close; the drawer stays.
+    if (document.querySelectorAll('[aria-modal="true"]').length > 1) return
+    setOpenTool(null)
+    if (integrationToolForHash(location.hash)) navigate({ search: location.search, hash: '' }, { replace: true })
+  }
+
+  /** Open a tool ready to set up: its form in edit mode when it has one. */
+  const connectTool = (id: GridToolId) => {
+    const platformKind = PLATFORM_DEFS.find((d) => d.kind === id && d.kind !== 'github')?.kind
+    if (platformKind) startEdit(platformKind)
+    const provider = ROUTING_PROVIDERS.find((p) => p.healthKind === id)
+    if (provider) startRoutingEdit(provider)
+    setOpenTool(id)
+  }
+
   // Banner CTAs and deep links point at a card (#platform-card-sentry);
   // scroll there once the cards exist.
   useScrollToHash(!loading && !error)
@@ -439,90 +488,65 @@ export function IntegrationsPage() {
   if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
   if (error) return <PageLoadError error={error} resource={merged.failedLabel ?? 'integrations'} onRetry={merged.retry} />
 
-  return (
-    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-integrations">
-      <PageHeaderBar
-        title={copy?.title ?? 'Integrations'}
+  /** One platform card (GitHub token, Sentry, Langfuse, Cursor, Claude Code) with the page's handlers. */
+  const platformCard = (def: (typeof PLATFORM_DEFS)[number], extra: { dependency?: boolean } = {}) => (
+    <PlatformIntegrationCard
+      def={def}
+      config={platform?.[def.kind] ?? {}}
+      sourceByField={sourceByField}
+      latestProbe={latestByKind[def.kind]}
+      sparkline={sparklineByKind[def.kind] ?? []}
+      isEditing={editing === def.kind}
+      draft={drafts[def.kind] ?? {}}
+      saving={saving === def.kind}
+      testing={testing === def.kind}
+      onStartEdit={() => startEdit(def.kind)}
+      onCancelEdit={cancelEdit}
+      onChangeField={(name, value) => {
+        setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+        clearInlineError(def.kind)
+      }}
+      inlineError={inlineErrors[def.kind] ?? null}
+      onSave={() => void saveKind(def.kind)}
+      onTest={() => void testKind(def.kind)}
+      {...(extra.dependency
+        ? {
+            dependencyOk: githubConnected,
+            dependencyLabel: 'GitHub (code repo)',
+            dependencyAnchorId: 'platform-card-github',
+            onDependencyJump: () => setOpenTool('github'),
+          }
+        : {})}
+      onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
+      applyingToAll={applyingKind === def.kind}
+      onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
+      removingKey={removingKeyKind === def.kind}
+      canManage={canManage}
+    />
+  )
 
-        helpTitle={copy?.help?.title ?? 'About Integrations'}
-        helpWhatIsIt={
-          copy?.help?.whatIsIt ??
-          'Mushi Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
-        }
-        helpUseCases={
-          copy?.help?.useCases ?? [
-            'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
-            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi Mushi',
-            'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
-          ]
-        }
-        helpHowToUse={
-          copy?.help?.howToUse ?? [
-            'Step 1 — GitHub: paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
-            'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
-            'Step 3 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
-            'Step 4 — Sentry: paste your DSN and auth token. Mushi Mushi links Sentry issues to reports and surfaces them on the fix PR.',
-            'Step 5 — Test each card with the "Test" button — the health sparkline should turn green within a few seconds.',
-          ].join('\n')
-        }
-      />
+  /** Alert channels are owner/admin only on the server; a disabled fieldset locks the card. */
+  const channelCard = (card: ReactNode) => (
+    <>
+      {!canManage && <p className="text-xs text-fg-muted">{ADMIN_ONLY_HINT}</p>}
+      <fieldset disabled={!canManage} className="contents">
+        {card}
+      </fieldset>
+    </>
+  )
 
-      {/* Which tools are connected, what's broken, and the fix (Integrations page intent). */}
-      <PagePosture
-        slots={[
-          {
-            id: 'integrations-grid',
-            priority: POSTURE_PRIORITY.status,
-            show: setup.hasAnyProject,
-            children: (
-              <ConnectionGrid
-                platform={platformQuery.data ?? null}
-                history={history}
-                slack={{
-                  configured: settingsQuery.data ? Boolean(settingsQuery.data.slackConfigured) : null,
-                  canPost: Boolean(settingsQuery.data?.slackCanPost),
-                  channelId: settingsQuery.data?.slackChannelId ?? null,
-                }}
-                discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
-                teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
-                linearConnected={linearConnected}
-                github={githubAccess}
-              />
-            ),
-          },
-        ]}
-      />
-
-      {!setup.hasAnyProject && (
-        <NextStep
-          variant="inline"
-          requires={['project_created']}
-          emptyTitle="Create a project before wiring integrations"
-          emptyDescription="Integrations belong to an app. Once you have one, connect GitHub, your alerts and your issue tracker."
-          emptyIcon={<HeroPlugIntegration />}
-          blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
-        />
-      )}
-
-      {/* Positioning (AGENTS.md): no monitoring stack required. The page led
-          with Sentry and Langfuse as a "core platform" (integrator's walk and
-          the first-time user test, 2026-10-28). It now leads with what a solo
-          builder needs: GitHub, then alerts in Slack or Discord, then the fix
-          agent and their editor. Monitoring is an optional on-ramp at the foot. */}
-      <PanelSectionLabel>Your code</PanelSectionLabel>
-      <Panel className="mb-6" data-dav-anchor="integrations:decide">
-        <div className="p-4">
-          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-core-lede">
-            GitHub is the one Mushi Mushi needs: fixes arrive as pull requests on your repo.
-          </p>
-          <div className="space-y-2" id="integrations-required">
-            {/* Links to #platform-card-github land on Connect GitHub first. */}
-            <div id="platform-card-github" className="scroll-mt-chrome space-y-2">
+  /** The settings for one tool: its only home on the page. */
+  const toolSettings = (id: GridToolId): ReactNode => {
+    switch (id) {
+      case 'github':
+        // GitHub lives here once: Connect GitHub, the token fallback and code
+        // indexing (it showed three times down the page before 2026-11-18).
+        return (
+          <div id="platform-card-github" className="scroll-mt-chrome space-y-3">
             {activeProjectId && (
               <GitHubConnectCard projectId={activeProjectId} returnTo="integrations" access={githubAccess} onConnected={preflight.reload} />
             )}
-            {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind === 'github')
-              .map((def) => (
+            {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind === 'github').map((def) => (
               // The token form is the advanced path (self-hosted, or no App
               // install allowed). Open when a token is already set, so its
               // health stays visible.
@@ -532,53 +556,22 @@ export function IntegrationsPage() {
                 open={Boolean(sourceByField?.github_installation_token_ref) || editing === def.kind || !activeProjectId}
                 className="group"
               >
-                <summary className="cursor-pointer select-none text-2xs text-fg-muted hover:text-fg py-1">
+                <summary className="cursor-pointer select-none py-1 text-2xs text-fg-secondary hover:text-fg">
                   Use a GitHub token instead (self-hosted, or when the GitHub App is not an option)
                 </summary>
-                <PlatformIntegrationCard
-                  def={def}
-                  config={platform?.[def.kind] ?? {}}
-                  sourceByField={sourceByField}
-                  latestProbe={latestByKind[def.kind]}
-                  sparkline={sparklineByKind[def.kind] ?? []}
-                  isEditing={editing === def.kind}
-                  draft={drafts[def.kind] ?? {}}
-                  saving={saving === def.kind}
-                  testing={testing === def.kind}
-                  onStartEdit={() => startEdit(def.kind)}
-                  onCancelEdit={cancelEdit}
-                  onChangeField={(name, value) => {
-                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                    clearInlineError(def.kind)
-                  }}
-                  inlineError={inlineErrors[def.kind] ?? null}
-                  onSave={() => void saveKind(def.kind)}
-                  onTest={() => void testKind(def.kind)}
-                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                  applyingToAll={applyingKind === def.kind}
-                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
-                  removingKey={removingKeyKind === def.kind}
-                  canManage={canManage}
-                />
+                {platformCard(def)}
               </details>
             ))}
-            </div>
+            {activeProjectId && (
+              <div id="integrations-codebase" className="scroll-mt-chrome space-y-3" data-dav-anchor="integrations:verify">
+                <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} githubAccess={githubAccess} />
+                <DryRunPanel projectId={activeProjectId} />
+              </div>
+            )}
           </div>
-        </div>
-      </Panel>
-
-      <PanelSectionLabel>Alerts</PanelSectionLabel>
-      <Panel className="mb-6">
-        <p className="px-4 pt-3 pb-2 text-xs text-fg-muted border-b border-panel-border">
-          Where Mushi Mushi tells you about a new bug, a failing test or a merged fix. One channel is enough.
-        </p>
-        {!canManage && (
-          <p className="px-4 py-2 text-xs text-fg-muted border-b border-panel-border">{ADMIN_ONLY_HINT}</p>
-        )}
-        {/* Where alerts go is owner/admin only on the server; a disabled
-            fieldset locks every field and button in the three cards. */}
-        <fieldset disabled={!canManage} className="contents">
-        <div className="grid gap-4 p-4 md:grid-cols-2 2xl:grid-cols-3">
+        )
+      case 'slack':
+        return channelCard(
           <SlackIntegrationCard
             projectId={activeProjectId ?? null}
             slackConfigured={settingsQuery.data ? Boolean(settingsQuery.data.slackConfigured) : null}
@@ -588,115 +581,50 @@ export function IntegrationsPage() {
             latestProbe={latestByKind['slack']}
             sparkline={sparklineByKind['slack'] ?? []}
             onChanged={reloadChannels}
-          />
+          />,
+        )
+      case 'discord':
+        return channelCard(
           <DiscordIntegrationCard
             projectId={activeProjectId ?? null}
             discordConfigured={Boolean(settingsQuery.data?.discordConfigured)}
             latestProbe={latestByKind['discord']}
             sparkline={sparklineByKind['discord'] ?? []}
             onChanged={reloadChannels}
-          />
+          />,
+        )
+      case 'teams':
+        return channelCard(
           <TeamsIntegrationCard
             projectId={activeProjectId ?? null}
             teamsConfigured={Boolean(settingsQuery.data?.teamsConfigured)}
             latestProbe={latestByKind['teams']}
             onChanged={reloadChannels}
-          />
-        </div>
-        </fieldset>
-
-        {activeProjectId && (
-          <div id="alerts" className="border-t border-panel-border px-4 py-4 scroll-mt-chrome">
-            <h4 className="text-xs font-semibold text-fg-secondary mb-1">
-              Alert events
-            </h4>
-            <p className="text-2xs text-fg-muted mb-3 leading-snug">
-              Choose which events send an alert to every connected channel for this project.
+          />,
+        )
+      case 'cursor_cloud':
+      case 'claude_code_agent':
+        return (
+          <div id={`platform-card-${id}`} className="scroll-mt-chrome space-y-2">
+            <p className="text-2xs leading-snug text-fg-secondary">
+              Or fix bugs with the agent in your own editor from{' '}
+              <Link to="/mcp" className="text-accent-foreground underline-offset-2 hover:text-accent hover:underline">
+                Editor agents
+              </Link>
+              .
             </p>
-            <NotificationPrefsMatrix projectId={activeProjectId} />
-          </div>
-        )}
-      </Panel>
-
-      <PanelSectionLabel>Fix agent</PanelSectionLabel>
-      <Panel className="mb-6 divide-y divide-panel-border">
-        <div className="p-4">
-          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
-            Fix bugs with the agent in your own editor (Cursor, Claude Code, VS Code) from{' '}
-            <Link to="/mcp" className="text-accent-foreground hover:text-accent underline-offset-2 hover:underline">Editor agents</Link>, or connect a cloud agent here to write the fix and open the pull request.
-          </p>
-          <div className="space-y-2" id="integrations-fix-agent">
-            {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent').map((def) => (
-              <div key={def.kind} id={`platform-card-${def.kind}`}>
-                <PlatformIntegrationCard
-                  def={def}
-                  config={platform?.[def.kind] ?? {}}
-                  sourceByField={sourceByField}
-                  latestProbe={latestByKind[def.kind]}
-                  sparkline={sparklineByKind[def.kind] ?? []}
-                  isEditing={editing === def.kind}
-                  draft={drafts[def.kind] ?? {}}
-                  saving={saving === def.kind}
-                  testing={testing === def.kind}
-                  onStartEdit={() => startEdit(def.kind)}
-                  onCancelEdit={cancelEdit}
-                  onChangeField={(name, value) => {
-                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                    clearInlineError(def.kind)
-                  }}
-                  inlineError={inlineErrors[def.kind] ?? null}
-                  onSave={() => void saveKind(def.kind)}
-                  onTest={() => void testKind(def.kind)}
-                  dependencyOk={githubConnected}
-                  dependencyLabel="GitHub (code repo)"
-                  dependencyAnchorId="platform-card-github"
-                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                  applyingToAll={applyingKind === def.kind}
-                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
-                  removingKey={removingKeyKind === def.kind}
-                  canManage={canManage}
-                />
-              </div>
+            {PLATFORM_DEFS.filter((d) => d.group === 'fix-agent' && d.kind === id).map((def) => (
+              <div key={def.kind}>{platformCard(def, { dependency: true })}</div>
             ))}
           </div>
-        </div>
-
-        {activeProjectId && (
-          <div id="integrations-codebase" className="p-4 scroll-mt-chrome" data-dav-anchor="integrations:verify">
-            <CodebaseIndexCard projectId={activeProjectId} canManage={canManage} githubAccess={githubAccess} />
-            <DryRunPanel projectId={activeProjectId} />
-          </div>
-        )}
-
-        <div className="p-4">
-          <DisclosurePanel title="Deployment readiness">
-            <DeploymentReadinessCard
-              projectId={activeProjectId ?? null}
-              githubAppInstalled={githubConnected}
-              vercelProjectSlug={vercelSlug}
-            />
-          </DisclosurePanel>
-        </div>
-      </Panel>
-
-      <PanelSectionLabel>Issue trackers</PanelSectionLabel>
-      <Panel className="mb-6">
-        <p className="px-4 pt-3 pb-2 text-2xs text-fg-secondary border-b border-panel-border leading-snug">
-          Send triaged reports to the tracker or pager your team already uses. Linear also syncs status
-          back and can run Mushi Mushi as an agent inside Linear.
-        </p>
-        <div className="p-4">
+        )
+      case 'linear':
+        return (
           <LinearIntegrationCard
             projectId={activeProjectId ?? null}
             linearConnected={linearConnected}
-            workspaceName={
-              (platform?.linear as Record<string, string | null | undefined> | undefined)
-                ?.linear_workspace_name ?? null
-            }
-            teamId={
-              (platform?.linear as Record<string, string | null | undefined> | undefined)
-                ?.linear_team_id ?? null
-            }
+            workspaceName={(platform?.linear as Record<string, string | null | undefined> | undefined)?.linear_workspace_name ?? null}
+            teamId={(platform?.linear as Record<string, string | null | undefined> | undefined)?.linear_team_id ?? null}
             latestProbe={latestByKind['linear']}
             sparkline={sparklineByKind['linear'] ?? []}
             onReload={reloadAll}
@@ -704,13 +632,15 @@ export function IntegrationsPage() {
             testing={testing === 'linear'}
             canManage={canManage}
           />
-        </div>
-        <div id="integrations-routing" className="divide-y divide-panel-border border-t border-panel-border scroll-mt-chrome" data-dav-anchor="integrations:act">
-          {ROUTING_PROVIDERS.map((provider) => {
-            const existing = routing.find((r) => r.integration_type === provider.type)
-            return (
+        )
+      case 'jira':
+      case 'github_issues':
+      case 'pagerduty':
+        return ROUTING_PROVIDERS.filter((p) => p.healthKind === id).map((provider) => {
+          const existing = routing.find((r) => r.integration_type === provider.type)
+          return (
+            <div key={provider.type} id={`integrations-${provider.healthKind}`} className="scroll-mt-chrome" data-dav-anchor="integrations:act">
               <RoutingProviderCard
-                key={provider.type}
                 provider={provider}
                 existing={existing}
                 isEditing={routingEditing === provider.type}
@@ -733,91 +663,182 @@ export function IntegrationsPage() {
                 onDisconnect={() => void deleteRouting(provider)}
                 canManage={canManage}
               />
-            )
-          })}
-        </div>
-      </Panel>
-
-      <PanelSectionLabel>Errors you already catch (optional)</PanelSectionLabel>
-      <Panel className="mb-6">
-        <div className="p-4">
-          <p className="text-2xs text-fg-muted mb-2 pl-2 border-l-2 border-brand/30 leading-snug" data-testid="integrations-monitoring-lede">
-            Mushi Mushi works without a monitoring tool. If you already use Sentry, the errors it catches can become bugs here too.
-          </p>
-          <div className="space-y-2" id="integrations-monitoring">
-            {PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind !== 'github')
-              .map((def) => (
-              <div key={def.kind} id={`platform-card-${def.kind}`}>
-                <PlatformIntegrationCard
-                  def={def}
-                  config={platform?.[def.kind] ?? {}}
-                  sourceByField={sourceByField}
-                  latestProbe={latestByKind[def.kind]}
-                  sparkline={sparklineByKind[def.kind] ?? []}
-                  isEditing={editing === def.kind}
-                  draft={drafts[def.kind] ?? {}}
-                  saving={saving === def.kind}
-                  testing={testing === def.kind}
-                  onStartEdit={() => startEdit(def.kind)}
-                  onCancelEdit={cancelEdit}
-                  onChangeField={(name, value) => {
-                    setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                    clearInlineError(def.kind)
-                  }}
-                  inlineError={inlineErrors[def.kind] ?? null}
-                  onSave={() => void saveKind(def.kind)}
-                  onTest={() => void testKind(def.kind)}
-                  onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                  applyingToAll={applyingKind === def.kind}
-                  onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
-                  removingKey={removingKeyKind === def.kind}
-                  canManage={canManage}
-                />
+            </div>
+          )
+        })
+      case 'sentry':
+        return PLATFORM_DEFS.filter((d) => d.group === 'required' && d.kind !== 'github').map((def) => (
+          <div key={def.kind} id={`platform-card-${def.kind}`} className="scroll-mt-chrome">
+            {platformCard(def)}
+          </div>
+        ))
+      case 'langfuse':
+        return (
+          <div className="space-y-2">
+            <p className="text-2xs leading-snug text-fg-secondary">Advanced: trace Mushi Mushi&apos;s AI calls in your own Langfuse.</p>
+            {PLATFORM_DEFS.filter((d) => d.group === 'advanced').map((def) => (
+              <div key={def.kind} id={`platform-card-${def.kind}`} className="scroll-mt-chrome">
+                {platformCard(def)}
               </div>
             ))}
           </div>
+        )
+    }
+  }
+
+  return (
+    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-integrations">
+      <PageHeaderBar
+        title={copy?.title ?? 'Integrations'}
+
+        helpTitle={copy?.help?.title ?? 'About Integrations'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'Mushi Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
+        }
+        helpUseCases={
+          copy?.help?.useCases ?? [
+            'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
+            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi Mushi',
+            'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
+          ]
+        }
+        helpHowToUse={
+          copy?.help?.howToUse ?? [
+            'Step 1 — GitHub: press the GitHub tile, paste your repo URL (e.g. https://github.com/org/repo) and install the Mushi Mushi GitHub App so fix-worker can push draft PRs. No App = fix generated but never pushed.',
+            'Step 2 — Second repo: if your project has a frontend + backend (e.g. solo-boss-cloud), go to Repo → + Add repo and set role=backend with path_globs so fixes target the right codebase.',
+            'Step 3 — Verified identity: in your app call Mushi.identify({ userId, name, email }) and pass a signed JWT if you want the ✓ verified badge on reports.',
+            'Step 4 — Sentry: press the Sentry tile, paste your DSN and auth token. Mushi Mushi links Sentry issues to reports and surfaces them on the fix PR.',
+            'Step 5 — Test each tool with the "Test" button in its settings — the health sparkline should turn green within a few seconds.',
+          ].join('\n')
+        }
+      />
+
+      {/* Positioning (AGENTS.md): no monitoring stack required. The page leads
+          with what a solo builder needs: GitHub, then alerts in Slack or
+          Discord, then the fix agent and their editor. Monitoring is an
+          optional on-ramp at the end (integrator's walk and the first-time
+          user test, 2026-10-28). Each tile opens that tool's settings. */}
+      <PagePosture
+        slots={[
+          {
+            id: 'integrations-grid',
+            priority: POSTURE_PRIORITY.status,
+            show: setup.hasAnyProject,
+            children: (
+              <div data-dav-anchor="integrations:decide">
+                <ConnectionGrid
+                  tiles={tiles}
+                  onOpen={setOpenTool}
+                  onConnect={connectTool}
+                  groups={[
+                    {
+                      id: 'integrations-required',
+                      heading: <PanelSectionLabel>Your code</PanelSectionLabel>,
+                      lede: <span data-testid="integrations-core-lede">GitHub is the one Mushi Mushi needs: fixes arrive as pull requests on your repo.</span>,
+                      tools: ['github'],
+                    },
+                    {
+                      id: 'integrations-alert-channels',
+                      heading: <PanelSectionLabel>Alerts</PanelSectionLabel>,
+                      lede: 'Where Mushi Mushi tells you about a new bug, a failing test or a merged fix. One channel is enough.',
+                      tools: ['slack', 'discord', 'teams'],
+                    },
+                    {
+                      id: 'integrations-fix-agent',
+                      heading: <PanelSectionLabel>Fix agent</PanelSectionLabel>,
+                      lede: (
+                        <>
+                          A cloud agent writes the fix and opens the pull request. Or use the agent in your own editor from{' '}
+                          <Link to="/mcp" className="text-accent-foreground underline-offset-2 hover:text-accent hover:underline">
+                            Editor agents
+                          </Link>
+                          .
+                        </>
+                      ),
+                      tools: ['cursor_cloud', 'claude_code_agent'],
+                    },
+                    {
+                      id: 'integrations-routing',
+                      heading: <PanelSectionLabel>Issue trackers</PanelSectionLabel>,
+                      lede: 'Send triaged reports to the tracker or pager your team already uses. Linear also syncs status back.',
+                      tools: ['linear', 'jira', 'github_issues', 'pagerduty'],
+                    },
+                    {
+                      id: 'integrations-monitoring',
+                      heading: <PanelSectionLabel>Errors you already catch (optional)</PanelSectionLabel>,
+                      lede: (
+                        <span data-testid="integrations-monitoring-lede">
+                          Mushi Mushi works without a monitoring tool. If you already use Sentry, the errors it catches can become bugs here too.
+                        </span>
+                      ),
+                      tools: ['sentry', 'langfuse'],
+                    },
+                  ]}
+                />
+              </div>
+            ),
+          },
+        ]}
+      />
+
+      {!setup.hasAnyProject && (
+        <NextStep
+          variant="inline"
+          requires={['project_created']}
+          emptyTitle="Create a project before wiring integrations"
+          emptyDescription="Integrations belong to an app. Once you have one, connect GitHub, your alerts and your issue tracker."
+          emptyIcon={<HeroPlugIntegration />}
+          blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
+        />
+      )}
+
+      {/* What every alert channel sends: one matrix for all of them, so it stays on the page. */}
+      {activeProjectId && setup.hasAnyProject && (
+        <Panel>
+          <div id="alerts" className="scroll-mt-chrome px-4 py-3">
+            <h4 className="mb-1 text-xs font-semibold text-fg-secondary">Alert events</h4>
+            <p className="mb-3 text-2xs leading-snug text-fg-secondary">
+              Choose which events send an alert to every connected channel for this project.
+            </p>
+            <NotificationPrefsMatrix projectId={activeProjectId} />
+          </div>
+        </Panel>
+      )}
+
+      {setup.hasAnyProject && (
+        <DisclosurePanel title="Deployment readiness">
+          <DeploymentReadinessCard
+            projectId={activeProjectId ?? null}
+            githubAppInstalled={githubConnected}
+            vercelProjectSlug={vercelSlug}
+            onAnchorJump={(anchor) => setOpenTool(integrationToolForHash(anchor) ?? 'github')}
+          />
+        </DisclosurePanel>
+      )}
+
+      <Drawer
+        open={openTile != null}
+        onClose={closeDrawer}
+        width="lg"
+        ariaLabel={openTile ? `${openTile.label} settings` : 'Integration settings'}
+        title={
+          openTile ? (
+            <span className="flex min-w-0 items-center gap-2">
+              <BrandIcon brand={openTile.brand} size={16} decorative />
+              <h2 className="truncate text-sm font-bold text-fg">{openTile.label}</h2>
+              <StatusGlyph tone={CONNECTION_TONE[openTile.view.state]} />
+              <span className={`text-3xs font-bold tracking-wider uppercase ${TONE_INK[CONNECTION_TONE[openTile.view.state]]}`}>
+                {openTile.view.label ?? CONNECTION_WORD[openTile.view.state]}
+              </span>
+            </span>
+          ) : undefined
+        }
+      >
+        <div className="space-y-3 p-4" data-testid={openTile ? `integration-drawer-${openTile.id}` : undefined}>
+          {openTile ? toolSettings(openTile.id) : null}
         </div>
-        <div className="px-4 pb-4">
-          {/* Open when the user connected their own, so its grid tile's Fix lands on a visible card. */}
-          <DisclosurePanel
-            key={langfuseOwn ? 'langfuse-own' : 'langfuse-default'}
-            title="Advanced: trace Mushi Mushi's AI calls in your own Langfuse"
-            defaultOpen={langfuseOwn}
-          >
-            <div className="space-y-2" id="integrations-advanced">
-              {PLATFORM_DEFS.filter((d) => d.group === 'advanced').map((def) => (
-                <div key={def.kind} id={`platform-card-${def.kind}`}>
-                  <PlatformIntegrationCard
-                    def={def}
-                    config={platform?.[def.kind] ?? {}}
-                    sourceByField={sourceByField}
-                    latestProbe={latestByKind[def.kind]}
-                    sparkline={sparklineByKind[def.kind] ?? []}
-                    isEditing={editing === def.kind}
-                    draft={drafts[def.kind] ?? {}}
-                    saving={saving === def.kind}
-                    testing={testing === def.kind}
-                    onStartEdit={() => startEdit(def.kind)}
-                    onCancelEdit={cancelEdit}
-                    onChangeField={(name, value) => {
-                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                      clearInlineError(def.kind)
-                    }}
-                    inlineError={inlineErrors[def.kind] ?? null}
-                    onSave={() => void saveKind(def.kind)}
-                    onTest={() => void testKind(def.kind)}
-                    onApplyToAll={organizationId ? () => setPendingApplyKind(def.kind) : undefined}
-                    applyingToAll={applyingKind === def.kind}
-                    onRemoveKey={() => setPendingRemoveKeyKind(def.kind)}
-                    removingKey={removingKeyKind === def.kind}
-                    canManage={canManage}
-                  />
-                </div>
-              ))}
-            </div>
-          </DisclosurePanel>
-        </div>
-      </Panel>
+      </Drawer>
 
       {/* Where each credential comes from (project, team or server), at the foot. */}
       {activeProjectId && stats.projectId ? (
