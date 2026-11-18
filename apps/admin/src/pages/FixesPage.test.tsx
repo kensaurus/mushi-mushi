@@ -475,6 +475,34 @@ describe('FixesPage', () => {
       expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({ fixIds: ['pr1'] })
     })
 
+    it('draws the merge queue as a stage train, with a held reason as a plain-word chip (2026-11-18)', async () => {
+      mocks.fixes = [open(1)]
+      mocks.total = 1
+      const base = mocks.apiFetch.getMockImplementation()!
+      mocks.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
+        if (path.startsWith('/v1/admin/merge-queue?')) {
+          return {
+            ok: true,
+            data: {
+              rows: [
+                { id: 'q1', fix_attempt_id: 'pr1', project_id: 'p1', repo: 'o/r', pr_number: 1, state: 'blocked', detail: 'The follow-up Cursor key cannot be used here (key_used_up).', head_sha: null, queued_at: '2026-11-18T00:00:00Z', updated_at: '2026-11-18T00:00:00Z', merged_at: null, conflict_agents: 0 },
+                { id: 'q2', fix_attempt_id: 'pr2', project_id: 'p1', repo: 'o/r', pr_number: 2, state: 'queued', detail: null, head_sha: null, queued_at: '2026-11-18T00:00:00Z', updated_at: '2026-11-18T00:00:00Z', merged_at: null, conflict_agents: 0 },
+              ],
+              trains: [],
+              release: [],
+            },
+          }
+        }
+        return base(path, init)
+      })
+      await render('/fixes')
+      const train = document.querySelector('[data-testid="merge-queue-train"]')!
+      expect(train.querySelector('figcaption')!.textContent).toContain('Queued 1')
+      expect(train.querySelector('[data-testid="train-stage-held"]')!.getAttribute('data-tone')).toBe('warn')
+      expect(document.querySelector('[data-testid="merge-queue-row-q1-why"]')!.textContent).toBe('key used up')
+      expect(document.querySelector('section[aria-label="Merge queue"]')!.textContent).not.toContain('(key_used_up)')
+    })
+
     it('groups stopped reports by reason, with Retry beside a reason a retry can clear', async () => {
       mocks.fixes = [
         fix({ id: 'a', report_id: 'r1', failure_category: 'sandbox_timeout' } as Partial<FixAttempt>),
