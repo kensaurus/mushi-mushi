@@ -26,10 +26,10 @@ function worker(state = 'installing') {
   return { state, postMessage: vi.fn(), ...target() }
 }
 
-function setup(opts: { controlled?: boolean; waiting?: ReturnType<typeof worker> | null } = {}) {
+function setup(opts: { controlled?: boolean; waiting?: ReturnType<typeof worker> | null; installing?: ReturnType<typeof worker> | null } = {}) {
   const reg = {
     waiting: opts.waiting ?? null,
-    installing: null as ReturnType<typeof worker> | null,
+    installing: (opts.installing ?? null) as ReturnType<typeof worker> | null,
     update: vi.fn(() => Promise.resolve()),
     ...target(),
   }
@@ -76,6 +76,16 @@ describe('createSwUpdater', () => {
     first.reg.waiting = w2
     w2.fire('statechange')
     expect(first.onReady).not.toHaveBeenCalled()
+  })
+
+  it('announces a worker that was already installing before it started watching', () => {
+    const w = worker()
+    const s = setup({ installing: w })
+    expect(s.onReady).not.toHaveBeenCalled()
+    w.state = 'installed'
+    s.reg.waiting = w
+    w.fire('statechange')
+    expect(s.onReady).toHaveBeenCalledTimes(1)
   })
 
   it('on Reload posts SKIP_WAITING and reloads once when the new worker takes control', () => {

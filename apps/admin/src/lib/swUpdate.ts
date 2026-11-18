@@ -101,6 +101,9 @@ export function createSwUpdater(reg: SwRegistrationLike, deps: Deps): () => void
   }
 
   announce()
+  // The browser's update check can start before this runs: watch a worker
+  // already installing too, not only the next updatefound.
+  watchInstalling()
   reg.addEventListener('updatefound', watchInstalling)
   deps.container.addEventListener('controllerchange', onControllerChange)
   deps.doc.addEventListener('visibilitychange', onVisibility)
