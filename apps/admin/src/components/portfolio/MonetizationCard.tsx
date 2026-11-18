@@ -20,7 +20,7 @@
 
 import { useState } from 'react'
 import { Btn, Callout, CopyButton, DisclosurePanel, Loading, Section } from '../ui'
-import { KpiTile } from '../charts'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import { formatRelative } from '../ui/metrics'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
@@ -144,12 +144,30 @@ function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; bus
           <span role="status">{hub.read.reason}</span>
         </Callout>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="RevenueCat numbers" role="group" data-testid="payments-kpis">
-        {HEADLINE_METRICS.map((m) => {
-          const t = kpiTile(hub.metrics, m.id)
-          return <KpiTile key={m.id} label={m.label} value={t.value} sublabel={t.sublabel} />
-        })}
-      </div>
+      {(() => {
+        // 2026-11-18 (owner): four boxes of "0 · None yet" inside the card was a card in a card.
+        // The numbers sit on one row; when every one is zero, one line says so.
+        const tiles = HEADLINE_METRICS.map((m) => ({ ...m, ...kpiTile(hub.metrics, m.id) }))
+        if (tiles.every((t) => t.sublabel === 'None yet' || t.sublabel === 'No revenue yet')) {
+          return (
+            <p className="flex items-center gap-1.5 text-xs text-fg-secondary" data-testid="payments-kpis">
+              <StatusGlyph tone="off" />
+              No subscribers, trials or revenue yet.
+            </p>
+          )
+        }
+        return (
+          <dl className="flex flex-wrap gap-x-6 gap-y-1" aria-label="RevenueCat numbers" data-testid="payments-kpis">
+            {tiles.map((t) => (
+              <div key={t.id} className="flex items-baseline gap-1.5">
+                <dt className="text-2xs text-fg-muted">{t.label}</dt>
+                <dd className="text-sm font-semibold tabular-nums text-fg">{t.value}</dd>
+                {t.sublabel && <dd className="text-2xs text-fg-faint">{t.sublabel}</dd>}
+              </div>
+            ))}
+          </dl>
+        )
+      })()}
       {hub.metrics?.state === 'unknown' && <p className="text-2xs text-fg-muted">Numbers not read: {hub.metrics.reason}</p>}
       <CatalogLine catalog={hub.catalog} />
       <ul className="flex flex-col gap-1.5">

@@ -107,7 +107,7 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
         />
         <Btn
           size="sm"
-          variant="primary"
+          variant={file ? 'primary' : 'ghost'}
           type="button"
           onClick={() => void submit()}
           disabled={!file || busy}
