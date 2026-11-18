@@ -191,8 +191,9 @@ export function SpendLedgerCard({ orgId, projects, iconFor }: { orgId: string; p
                         missing={notConnectedCount(apps, 'ci')}
                         action={{ text: 'Connect GitHub', to: '/integrations' }}
                       />
-                      <ConnectHeader label="Supabase" missing={notConnectedCount(apps, 'supabase')} action={{ text: 'Connect Supabase', onClick: () => openImport('supabase') }} />
-                      <ConnectHeader label="Other bills" missing={notConnectedCount(apps, 'bills')} action={{ text: 'Import bills', onClick: () => openImport('vercel') }} />
+                      {/* Both lead to the bill import, which only owners and admins see. */}
+                      <ConnectHeader label="Supabase" missing={canManage === false ? 0 : notConnectedCount(apps, 'supabase')} action={{ text: 'Connect Supabase', onClick: () => openImport('supabase') }} />
+                      <ConnectHeader label="Other bills" missing={canManage === false ? 0 : notConnectedCount(apps, 'bills')} action={{ text: 'Import bills', onClick: () => openImport('vercel') }} />
                       <th scope="col" className="px-2 py-1 text-right align-bottom text-2xs font-semibold text-fg-secondary">Total</th>
                       <th scope="col" className="px-2 py-1 text-left align-bottom text-2xs font-semibold text-fg-secondary">Where it goes</th>
                     </tr>

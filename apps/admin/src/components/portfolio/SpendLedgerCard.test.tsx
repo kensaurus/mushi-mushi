@@ -297,6 +297,9 @@ describe('portfolio cards for a member (QA 177)', () => {
     const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
     expect(labels).not.toContain('Import')
     expect(labels).not.toContain('Remove')
+    // The header actions that lead to the import form go too; Connected sources stays open to members.
+    expect(labels).not.toContain('Connect Supabase')
+    expect(labels).not.toContain('Import bills')
     expect(container.textContent).toContain('Only team owners and admins can change this.')
   })
 

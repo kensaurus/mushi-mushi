@@ -66,7 +66,6 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
                       aria-expanded={isOpen}
                       onClick={() => setOpen(isOpen ? null : r.ruleId)}
                       className="flex w-full min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
-                      title={r.explanation}
                     >
                       <StatusMark status={sev.status} label={sev.word} />
                       <span className="truncate font-semibold text-fg">{r.title}</span>
