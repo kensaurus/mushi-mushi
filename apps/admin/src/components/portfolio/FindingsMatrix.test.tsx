@@ -17,6 +17,7 @@ import type { FindingGroup, PortfolioFindingsResponse } from '../../lib/portfoli
 import type { PageDataState } from '../../lib/usePageData'
 import { fixOnceRows } from '../../lib/groupAppFindings'
 import { FindingsMatrix } from './FindingsMatrix'
+import { mergeSameAppRows } from './portfolioView'
 import { PortfolioFindings } from './PortfolioFindings'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -76,9 +77,16 @@ describe('FindingsMatrix', () => {
     const cols = [...container.querySelectorAll('[data-testid^="fix-once-col-"]')]
     expect(cols.map((c) => c.getAttribute('data-testid'))).toEqual(['fix-once-col-d', 'fix-once-col-c', 'fix-once-col-b', 'fix-once-col-a'])
     expect(cols[0]!.getAttribute('title')).toBe('calm-app')
-    expect(cols[0]!.querySelector('.sr-only')!.textContent).toBe('calm-app')
-    // The favicon (initials in jsdom) sits in the header, not a printed name list.
-    expect(cols[0]!.children.length).toBeGreaterThan(1)
+    // Each column names its app (set vertically above the icon), never an avatar alone.
+    expect(cols[0]!.querySelector('[data-testid="fix-once-app-name"]')!.textContent).toBe('calm-app')
+    expect(cols.map((c) => c.textContent)).toEqual(expect.arrayContaining(['calm-app', 'twm', 'yen-yen', 'glot.it'].map((n) => expect.stringContaining(n))))
+  })
+
+  it('leads each problem with its open/close chevron, not a column of its own at the far end', async () => {
+    await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="fix-once-row-byok_key_invalid"] button[aria-expanded]')!
+    expect(toggle.firstElementChild!.getAttribute('data-testid')).toBe('fix-once-toggle-mark')
+    expect(toggle.getAttribute('title')).toBe('Show why')
   })
 
   it('draws a dot only in the cells of the apps a problem is open in', async () => {
@@ -113,6 +121,26 @@ describe('FindingsMatrix', () => {
     expect(container.querySelector('[data-testid="fix-once-detail-byok_key_invalid"]')!.textContent).toContain('Your anthropic key "main" is rejected by anthropic.')
     await act(async () => toggle.click())
     expect(container.querySelector('[data-testid="fix-once-detail-byok_key_invalid"]')).toBeNull()
+  })
+})
+
+describe('mergeSameAppRows', () => {
+  it('merges problems open in exactly the same apps with the same fix into one row', () => {
+    const rows = fixOnceRows(
+      [
+        group({ ruleId: 'provider_key_invalid', severity: 'error', projectIds: ['a', 'b', 'c'], suggestedFix: 'fix 1' }),
+        group({ ruleId: 'byok_key_invalid', severity: 'error', projectIds: ['c', 'b', 'a'], suggestedFix: 'fix 2' }),
+        group({ ruleId: 'spend_cap_unset', projectIds: ['a', 'b', 'c'] }),
+      ],
+      (g) => g.sampleMessage,
+    )
+    const merged = mergeSameAppRows(rows)
+    expect(merged.map((r) => [r.ruleId, r.title, r.projectIds.length])).toEqual([
+      ['provider_key_invalid+byok_key_invalid', 'A connected key stopped working · AI key rejected', 3],
+      // Same apps but another severity and action: its own row.
+      ['spend_cap_unset', expect.any(String), 3],
+    ])
+    expect(merged[0]!.fix).toBe('fix 1\n\nfix 2')
   })
 })
 

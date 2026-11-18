@@ -599,7 +599,7 @@ export function ProjectsPage() {
         icon={<IconProjects />}
         description={
           copy?.description ??
-          'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
+          'What each app needs, its SDK version and keys.'
         }
         helpTitle={copy?.help?.title ?? 'About managing apps'}
         helpWhatIsIt={
@@ -660,14 +660,8 @@ export function ProjectsPage() {
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
-              <ProjectsSnapshotStrip
-                stats={stats}
-                fetchedAt={fetchedAt}
-                isValidating={validating}
-                sectionTitle="PROJECTS SNAPSHOT"
-                hint={activeMeta.description}
-                activeProjectName={selectedProject?.name ?? null}
-              />
+              // Flat figures, no "Viewing" tile: the header switcher names the app (2026-11-18).
+              <ProjectsSnapshotStrip stats={stats} />
             ),
           },
           {

@@ -11,7 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PipelineGroup, PipelineItem } from '../../lib/pipeline'
-import { PipelineGroups } from './PipelineGroups'
+import { PipelineGroups, groupSignalTone } from './PipelineGroups'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -100,5 +100,26 @@ describe('PipelineGroups header row', () => {
     expect(side.contains(q(host, 'pipeline-group-review_changes-settings'))).toBe(true)
     expect(side.contains(q(host, 'pipeline-group-review_changes-re_review'))).toBe(true)
     expect(side.contains(q(host, 'pipeline-group-review_changes-more-actions'))).toBe(true)
+  })
+})
+
+describe('PipelineGroups marks', () => {
+  // ▲ only for what failed; a slow or waiting group takes ◆ (fresh-eyes review, 2026-11-18).
+  it('marks slow and waiting groups ◆ (warn) and failed ones ▲ (danger)', () => {
+    expect(groupSignalTone({ id: 'ci_slow', tone: 'stuck' })).toBe('warn')
+    expect(groupSignalTone({ id: 'agent_slow', tone: 'stuck' })).toBe('warn')
+    expect(groupSignalTone({ id: 'conflict_stuck', tone: 'stuck' })).toBe('warn')
+    expect(groupSignalTone({ id: 'ci_red', tone: 'stuck' })).toBe('danger')
+    expect(groupSignalTone({ id: 'held_ci_failed', tone: 'stuck' })).toBe('danger')
+    expect(groupSignalTone({ id: 'ci_running', tone: 'moving' })).toBe('info')
+    expect(groupSignalTone({ id: 'deployed', tone: 'done' })).toBe('ok')
+  })
+
+  it('draws the mark and the left edge in the same tone', () => {
+    const host = mount()
+    const card = q(host, 'pipeline-group-review_changes')!
+    expect(card.getAttribute('data-tone')).toBe('danger')
+    expect(card.className).toContain('border-l-danger')
+    expect(q(host, 'pipeline-group-review_changes-toggle')!.querySelector('svg[data-tone="danger"]')).not.toBeNull()
   })
 })

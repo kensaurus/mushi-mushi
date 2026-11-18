@@ -28,7 +28,7 @@
  *            />
  */
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 interface TabbedSubNavTab {
@@ -53,6 +53,23 @@ export interface TabbedSubNavProps {
 }
 
 export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
+  // A right-edge fade while more tabs sit past the edge (fresh-eyes 2026-11-18: "Digest" was
+  // cut off on a phone with no hint that the strip scrolls). Gone once the end is in view.
+  const listRef = useRef<HTMLUListElement>(null)
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const update = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 2)
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    ro?.observe(el)
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro?.disconnect()
+    }
+  }, [tabs.length])
   const location = useLocation()
   return (
     <nav
@@ -63,7 +80,7 @@ export function TabbedSubNav({ ariaLabel, tabs, trailing }: TabbedSubNavProps) {
       {/* overflow-x-auto alone also lets the strip scroll a pixel vertically (the active tab's -mb-px), which drew a stray scrollbar (2026-11-06). */}
       {/* At 390px "Speed and cost" wrapped to three lines, Settings was cut off and a native
           scrollbar with arrows showed (2026-11-07): tabs stay one line, the strip still swipes. */}
-      <ul className="flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+      <ul ref={listRef} data-more={more || undefined} className={`flex min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? '[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)]' : ''}`} role="tablist">
         {tabs.map((tab) => {
           const isActive = (tab.match ?? defaultMatch(tab.to))({
             pathname: location.pathname,

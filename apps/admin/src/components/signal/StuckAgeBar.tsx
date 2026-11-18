@@ -85,7 +85,7 @@ export function StuckAgeBar({ ages }: { ages: StuckAges }) {
       <figcaption className="mb-1 text-3xs font-bold tracking-wider text-fg-secondary uppercase">How long stuck work has waited in its stage</figcaption>
       <ul className="space-y-1.5">
         {anyNeed && <Row label="Need you" buckets={needYou} unaged={unaged.needYou} unlisted={unlisted.needYou} ramp={RED} testId="pipeline-age-need-you" />}
-        {anyWait && <Row label="Waiting for a fix" buckets={waiting} unaged={unaged.waiting} unlisted={unlisted.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
+        {anyWait && <Row label="Waiting over 3 d" buckets={waiting} unaged={unaged.waiting} unlisted={unlisted.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
       </ul>
     </figure>
   )

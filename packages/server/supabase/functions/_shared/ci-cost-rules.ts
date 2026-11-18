@@ -29,7 +29,7 @@
  * Pure apart from the YAML parser.
  */
 
-import { parse as parseYaml } from 'npm:yaml@2'
+import { parseWorkflowYaml as parseYaml } from './workflow-yaml.ts'
 import type { CiCostAutofix, CiOverviewAdvice } from './ci-overview-types.ts'
 import type { RepoVisibility } from './ci-compare-types.ts'
 import { isMushiAgentBranch } from './ci-billing.ts'

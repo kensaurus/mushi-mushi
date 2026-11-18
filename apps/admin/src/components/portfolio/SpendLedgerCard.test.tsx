@@ -71,7 +71,7 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { SpendLedgerCard } from './SpendLedgerCard'
-import { DigestCard } from './DigestCard'
+import { DigestCard, sendNowBlocker } from './DigestCard'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
@@ -178,7 +178,7 @@ describe('SpendLedgerCard', () => {
   it('the digest card saves a Teams channel and the weekly day with the rest of the settings', async () => {
     await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     expect(container.textContent).toContain('This week, glot.it')
-    const teams = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.closest('label')?.textContent?.includes('Teams webhook of'))!
+    const teams = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.getAttribute('aria-label') === "Teams: which app's Teams webhook")!
     await act(async () => {
       teams.value = P1
       teams.dispatchEvent(new Event('change', { bubbles: true }))
@@ -195,6 +195,23 @@ describe('SpendLedgerCard', () => {
       await flush()
     })
     expect(calls('PUT')[1].body).toMatchObject({ gtmWeekday: null })
+  })
+
+  it('the digest says what each channel picker sends to, and shows the preview as a quote, not a card', async () => {
+    await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
+    const slack = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.getAttribute('aria-label') === "Slack: which app's Slack channel")!
+    expect(Array.from(slack.options).map((o) => o.textContent)).toEqual(['Off', "glot.it's Slack channel"])
+    expect(container.textContent).not.toContain('Slack channel of')
+    const preview = container.querySelector('[data-testid="digest-preview"]')!
+    expect(preview.className).not.toMatch(/rounded|shadow/)
+    expect(preview.textContent).toContain('This week, glot.it')
+    // Send now can run: no reason shown.
+    expect(container.querySelector('[data-testid="digest-send-blocker"]')).toBeNull()
+  })
+
+  it('says inline why Send now is off', () => {
+    expect(sendNowBlocker({ enabled: false })).toBe('Turn on "Send the digest every day" first.')
+    expect(sendNowBlocker({ enabled: true })).toBeNull()
   })
 })
 

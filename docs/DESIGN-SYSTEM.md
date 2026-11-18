@@ -182,6 +182,10 @@ page uses the same ones. The CI runners page (`/ci`) is the reference build.
 
 Rules:
 
+- **Red means a failure, nothing else (2026-11-18).** On the light console `--color-brand`
+  is ink, so primary buttons, links, active tabs and crumbs are near-black. Selection (a
+  selected segment, an on switch, an unread dot) uses the violet `accent`. Vermillion stays
+  the docs, marketing and widget colour. A red element that is not a failure is a bug.
 - **Colour never works alone.** Every status has a shape or glyph too, so it
   reads without colour vision. Motion stops under `prefers-reduced-motion`.
 - **Say a state once.** If a mark shows it, no sentence repeats it. Group

@@ -49,8 +49,9 @@ export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId
                 <span className="wrap-anywhere font-mono text-xs text-fg">{repo.repo}</span>
                 {showApp && <Badge tone="neutral">{projectNames.get(repo.projectId) ?? 'app'}</Badge>}
                 <span className="inline-flex flex-wrap items-center gap-x-2 text-2xs tabular-nums text-fg-muted">
-                  <span className="inline-flex items-center gap-1 text-ok-foreground">
-                    <StatusMark status="passed" size={10} />
+                  {/* Zero merged is not a pass: it takes the idle mark, never the green ✓ (2026-11-18). */}
+                  <span className={`inline-flex items-center gap-1 ${repo.merged > 0 ? 'text-ok-foreground' : ''}`} data-testid={`pipeline-train-${repo.repo}-merged`}>
+                    <StatusMark status={repo.merged > 0 ? 'passed' : 'idle'} size={10} />
                     {repo.merged} merged
                   </span>
                   <span className={`inline-flex items-center gap-1 ${repo.failed > 0 ? 'font-medium text-danger-foreground' : ''}`}>

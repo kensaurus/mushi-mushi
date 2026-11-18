@@ -98,3 +98,23 @@ describe('upgradeJobSuperseded (2026-11-16: October jobs blocked the 0.24.7 upgr
     expect(upgradeJobSuperseded([{ package: '@mushi-mushi/react-native', to: '0.24.4' }], { ...project, sdk_latest_version: null })).toBe(false)
   })
 })
+
+describe('up-to-date rows (fresh-eyes review 2026-11-18: "Open PRs (9)" beside 7 apps behind)', () => {
+  it('hides Open PR on a row the catalog marks up to date and leaves it out of the count', () => {
+    hook.state = {}
+    const current: BulkUpgradeProject = { id: 'p-cur', name: 'Kensaurus', slug: 'k', hasRepo: true, sdk_version: '1.37.0', sdk_latest_version: '1.37.0', sdk_status: 'up-to-date' }
+    const behind: BulkUpgradeProject = { id: 'p-old', name: 'Lets', slug: 'l', hasRepo: true, sdk_version: '1.35.0', sdk_latest_version: '1.37.0', sdk_status: 'outdated' }
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(BulkSdkUpgradePanel, { projects: [current, behind] })))
+    })
+    const rowButtons = Array.from(container.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? '')
+    expect(rowButtons).toContain('Open SDK bump PR for Lets')
+    expect(rowButtons).not.toContain('Open SDK bump PR for Kensaurus')
+    expect(button(/Open PRs \(1\)/)).toBeTruthy()
+    act(() => root.unmount())
+    container.remove()
+  })
+})

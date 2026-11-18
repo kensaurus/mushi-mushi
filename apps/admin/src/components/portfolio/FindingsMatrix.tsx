@@ -43,11 +43,15 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
               Problem
             </th>
             {apps.map((id) => (
-              <th key={id} scope="col" className="w-7 px-0.5 py-1" title={nameOf(id)} data-testid={`fix-once-col-${id}`}>
-                <span className="inline-flex justify-center">
+              // The app's name, set vertically above its icon, so a column is never only an avatar
+              // (2026-11-18 sweep). The tooltip keeps the whole name when it is cut.
+              <th key={id} scope="col" className="w-7 px-0.5 py-1 align-bottom" title={nameOf(id)} data-testid={`fix-once-col-${id}`}>
+                <span className="flex flex-col items-center gap-1">
+                  <span className="max-h-24 truncate text-2xs font-semibold text-fg-secondary [writing-mode:vertical-rl] rotate-180" data-testid="fix-once-app-name">
+                    {nameOf(id)}
+                  </span>
                   <ProjectFavicon {...iconFor(id)} size={12} />
                 </span>
-                <span className="sr-only">{nameOf(id)}</span>
               </th>
             ))}
             <th scope="col" className="px-1.5 py-1 text-right">
@@ -69,7 +73,13 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
                       aria-expanded={isOpen}
                       onClick={() => setOpen(isOpen ? null : r.ruleId)}
                       className="flex w-full min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+                      title={isOpen ? 'Hide why' : 'Show why'}
                     >
+                      {/* The open/close chevron leads the row, like every other disclosure: at the
+                          far end it read as a column of its own (2026-11-18 sweep). */}
+                      <span className="shrink-0 text-fg-muted" aria-hidden="true" data-testid="fix-once-toggle-mark">
+                        {isOpen ? '▾' : '▸'}
+                      </span>
                       <StatusMark status={sev.status} label={sev.word} />
                       <span className="truncate font-semibold text-fg" title={r.fullTitle}>
                         {r.title}
@@ -77,9 +87,6 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
                       <span className={`shrink-0 font-mono text-2xs font-bold tabular-nums ${STATUS_INK[sev.status]}`} title={`${r.projectIds.length} apps`}>
                         {r.projectIds.length}
                         <span className="sr-only"> apps</span>
-                      </span>
-                      <span className="ml-auto shrink-0 text-fg-muted" aria-hidden="true">
-                        {isOpen ? '▾' : '▸'}
                       </span>
                     </button>
                   </th>

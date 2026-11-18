@@ -347,7 +347,10 @@ describe('PipelinePage', () => {
     expect(q('pipeline-stage-pr-openers')!.textContent).toBe('Apps that started a fix in 24 h: 1 of 2 (cloud 0, your worker 1)')
     // Each stage says what it means, and the pace line says how fast fixes land (2026-11-16).
     expect(q('pipeline-stage-ci-plain')!.textContent).toBe('Your tests run on the fix')
-    expect(q('pipeline-pace')!.textContent).toMatch(/^Pace: /)
+    // The pace is a row of labelled figures, not a paragraph (2026-11-18).
+    expect(q('pipeline-pace')!.textContent).toMatch(/^Pace/)
+    expect(q('pipeline-pace-merged')!.textContent).toBe('Merged, 7 d0')
+    expect(q('pipeline-pace-started')!.textContent).toBe('Fixes started, 24 h6(all by your own worker)')
     const glot = q('pipeline-opener-p1')!
     expect(glot.textContent).toContain('Server + local')
     expect(glot.textContent).toContain('On · 0 agent keys (1 off) · 0 in 24h · last 2 d ago')
@@ -638,5 +641,43 @@ describe('PipelinePage signals (2026-11-18)', () => {
     // A group with a single action has no More menu.
     expect(q('pipeline-group-hold-more-actions')).not.toBeNull()
     expect(q('pipeline-group-autofix_no_agent-more-actions')).toBeNull()
+  })
+
+  it('says "just now" under a minute, and the minutes after', async () => {
+    ;(state.data as PipelineData).generatedAt = '2026-10-26T11:59:40Z'
+    await render()
+    expect(q('pipeline-updated')!.textContent).toBe('Updated just now')
+    act(() => root.unmount())
+    root = createRoot(host)
+    ;(state.data as PipelineData).generatedAt = '2026-10-26T11:55:00Z'
+    await render()
+    expect(q('pipeline-updated')!.textContent).toBe('Updated 5 min ago')
+  })
+
+  it('a train repo with 0 merged takes the idle mark, never the green check', async () => {
+    ;(state.data as PipelineData).trains[0]!.merged = 0
+    await render()
+    const merged = q('pipeline-train-kensaurus/glot.it-merged')!
+    expect(merged.textContent).toBe('0 merged')
+    expect(merged.querySelector('[data-testid="status-mark"]')!.getAttribute('data-status')).toBe('idle')
+    expect(merged.className).not.toContain('text-ok-foreground')
+  })
+
+  it('folds the quiet apps into one line and keeps the ones with something to say', async () => {
+    const d = state.data as PipelineData
+    d.projects.push({ id: 'p2', name: 'quiet-a', lastDeploy: null }, { id: 'p3', name: 'quiet-b', lastDeploy: { at: '2026-10-26T09:00:00Z', ok: true, version: 'abc' } } as never)
+    d.intake = {
+      since: '2026-10-24',
+      apps: [{ projectId: 'p1', rejected: 2, byReason: [{ reason: 'x:invalid', count: 2 }], sdkPackages: [], lastAt: '2026-10-26T07:00:00Z' }],
+    }
+    await render()
+    const fold = q('pipeline-intake-quiet')!
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.querySelector('summary')!.textContent).toContain('2 apps: 0 rejected since Oct 24')
+    expect(fold.querySelector('summary')!.textContent).toContain('1 with a deploy seen')
+    expect(fold.contains(q('pipeline-intake-p2'))).toBe(true)
+    expect(fold.contains(q('pipeline-intake-p3'))).toBe(true)
+    expect(fold.contains(q('pipeline-intake-p1'))).toBe(false)
+    expect(q('pipeline-intake-p1-rejected')!.textContent).toContain('2 rejected')
   })
 })

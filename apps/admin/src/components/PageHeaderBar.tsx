@@ -209,18 +209,23 @@ export function PageHeaderBar({
             console journeys 2026-10-27): the explainer no longer takes a row
             of the page. */}
         {(children || showCopyLink || hasHelp) && (
-          <div className="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1.5">
+          // Phone (2026-11-18 fresh-eyes): the actions take the full row, left to right, with
+          // help and the link pinned to its end, instead of a right-aligned stack that wrapped
+          // into ragged rows ("now" alone, then ?/link on a third line).
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:ml-auto sm:w-auto sm:max-w-full sm:shrink-0 sm:justify-end">
             {children}
-            {hasHelp && helpTitle && helpWhatIsIt ? (
-              <PageHelpPopover
-                title={helpTitle}
-                whatIsIt={helpWhatIsIt}
-                useCases={helpUseCases}
-                howToUse={helpHowToUse}
-                flowPath={helpFlowPath}
-              />
-            ) : null}
-            {showCopyLink && <CopyViewLinkButton />}
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 sm:ml-0">
+              {hasHelp && helpTitle && helpWhatIsIt ? (
+                <PageHelpPopover
+                  title={helpTitle}
+                  whatIsIt={helpWhatIsIt}
+                  useCases={helpUseCases}
+                  howToUse={helpHowToUse}
+                  flowPath={helpFlowPath}
+                />
+              ) : null}
+              {showCopyLink && <CopyViewLinkButton />}
+            </span>
           </div>
         )}
       </div>

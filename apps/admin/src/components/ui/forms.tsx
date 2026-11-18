@@ -117,14 +117,14 @@ export function SegmentedControl<T extends string>({
             // tabs at 390px, 2026-10-25).
             className={`${SEGMENT_SIZE[size]} ${scrollable ? 'shrink-0 ' : ''}whitespace-nowrap rounded-sm motion-safe:transition-[transform,opacity] motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand-subtle text-brand-foreground font-medium ring-1 ring-inset ring-brand/40'
+                ? 'bg-accent-muted text-accent-foreground font-medium ring-1 ring-inset ring-accent/40'
                 : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
             {opt.label}
             {opt.count !== undefined && (
               // Full token: brand-foreground/80 on brand-subtle is 3.8:1 in light mode.
-              <span className={`ml-1 font-mono ${active ? 'text-brand-foreground' : 'text-fg-faint'}`}>
+              <span className={`ml-1 font-mono ${active ? 'text-accent-foreground' : 'text-fg-faint'}`}>
                 {opt.count}
               </span>
             )}
@@ -639,7 +639,7 @@ export function Toggle({ label, ariaLabel, checked, onChange, disabled, tooltip,
         aria-label={ariaLabel}
         onClick={() => onChange?.(!checked)}
         disabled={disabled}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-stamp motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60 shadow-brand-glow-sm' : 'bg-surface-raised border-edge hover:border-edge'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-[transform,opacity] motion-safe:duration-[var(--duration-fast)] motion-safe:ease-stamp motion-safe:active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-accent border-accent/60' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
           // On: the brand's own foreground on the brand track. A dark knob on

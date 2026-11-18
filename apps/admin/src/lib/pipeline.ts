@@ -165,6 +165,46 @@ export function pipelinePace(stages: readonly PipelineStage[], dispatchers: read
   return parts.join(' ')
 }
 
+/** The pace as figures for a short labelled row (2026-11-18): the same numbers as `pipelinePace`. */
+export interface PaceFigures {
+  merged7: number
+  /** "about 5 a day", "about one every 3 days", or null when nothing merged. */
+  rate: string | null
+  waiting: number
+  /** How long the waiting bugs take at this pace ("5 months"); null with nothing merged or nothing waiting. */
+  clears: string | null
+  /** Fixes started in the last 24 h; null when the server sent no dispatchers. */
+  started24h: number | null
+  /** Who started them, when any: "all by your own worker", "3 by your worker, 2 by cloud agents". */
+  startedBy: string | null
+  /** Apps with auto-fix on that started nothing in 24 h. */
+  quietApps: string[]
+}
+
+export function pipelinePaceFigures(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): PaceFigures | null {
+  if (stages.length === 0) return null
+  const merged7 = countOf(stages, 'merged') + countOf(stages, 'deployed')
+  const waiting = countOf(stages, 'triaged')
+  const perDay = merged7 / 7
+  const rate = merged7 === 0 ? null : perDay >= 1 ? `about ${Math.round(perDay)} a day` : `about one every ${Math.round(1 / perDay)} days`
+  let clears: string | null = null
+  if (waiting > 0 && perDay > 0) {
+    const days = waiting / perDay
+    clears = days < 14 ? `${Math.max(1, Math.round(days))} days` : days < 120 ? `${Math.round(days / 7)} weeks` : `${Math.round(days / 30)} months`
+  }
+  let started24h: number | null = null
+  let startedBy: string | null = null
+  let quietApps: string[] = []
+  if (dispatchers && dispatchers.length > 0) {
+    const local = dispatchers.reduce((n, d) => n + d.local.runs24h, 0)
+    const server = dispatchers.reduce((n, d) => n + d.server.dispatches24h, 0)
+    started24h = local + server
+    if (started24h > 0) startedBy = server === 0 ? 'all by your own worker' : local === 0 ? 'all by cloud agents' : `${local} by your worker, ${server} by cloud agents`
+    quietApps = dispatchers.filter((d) => d.autofixOn && d.server.dispatches24h === 0 && d.local.runs24h === 0).map((d) => d.name)
+  }
+  return { merged7, rate, waiting, clears, started24h, startedBy, quietApps }
+}
+
 /** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
 export function openerSummary(dispatchers: DispatcherStatus[]): { server: number; local: number; nobody: number; total: number } {
   let server = 0

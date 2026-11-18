@@ -8,12 +8,15 @@
  *       POST   /v1/admin/orgs/:orgId/connectors
  *       POST   /v1/admin/orgs/:orgId/connectors/:id/probe
  *       DELETE /v1/admin/orgs/:orgId/connectors/:id
+ *
+ * Sweep 2026-11-18: one mark per source (its state pill; the bound apps are icons with no
+ * second ✓), and two or more sources of one kind sit under one heading ("Google Play · 4").
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField, Textarea } from '../ui'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
-import { StatusMark } from '../signal/StatusMark'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { AppIconChips, type IconFor } from './AppIconChips'
 import { usePageData } from '../../lib/usePageData'
 import { ActionsCard } from './ActionsCard'
@@ -60,12 +63,30 @@ interface ConnectorsResponse {
   legacy: Array<{ kind: string; project_id: string; ok: boolean; error: string | null; observed_at: string }>
 }
 
-const STATUS: Record<Instance['status'], { label: string; tone: BadgeTone }> = {
-  connected: { label: 'Connected', tone: 'okSubtle' },
-  not_connected: { label: 'Not connected', tone: 'neutral' },
-  blocked: { label: 'Blocked', tone: 'warnSubtle' },
-  error: { label: 'Error', tone: 'dangerSubtle' },
-  unknown: { label: 'Not checked', tone: 'neutral' },
+const STATUS: Record<Instance['status'], { label: string; status: RunStatus }> = {
+  connected: { label: 'Connected', status: 'passed' },
+  not_connected: { label: 'Not connected', status: 'idle' },
+  blocked: { label: 'Blocked', status: 'slow' },
+  error: { label: 'Error', status: 'failed' },
+  unknown: { label: 'Not checked', status: 'idle' },
+}
+
+/**
+ * Sources in list order, two or more of one kind under one heading; a kind with one source
+ * stays a plain row. Inside a group the name drops the repeated "Google Play · " prefix.
+ * @internal Exported for ConnectorsCard.test.tsx.
+ */
+export function groupConnectors<T extends Pick<Instance, 'kind' | 'display_name'>>(instances: readonly T[], titleOf: (kind: string) => string): Array<{ kind: string; title: string; items: Array<{ instance: T; name: string }> }> {
+  const byKind = new Map<string, T[]>()
+  for (const i of instances) byKind.set(i.kind, [...(byKind.get(i.kind) ?? []), i])
+  return [...byKind.entries()].map(([kind, items]) => {
+    const title = titleOf(kind)
+    const strip = (n: string) => {
+      const rest = n.startsWith(`${title} · `) ? n.slice(title.length + 3).trim() : n
+      return rest || n
+    }
+    return { kind, title, items: items.map((instance) => ({ instance, name: items.length > 1 ? strip(instance.display_name) : instance.display_name })) }
+  })
 }
 
 /** What each addable kind needs in its config and binding, in plain words. */
@@ -165,7 +186,8 @@ export function ConnectorsCard({
             <p className="text-sm text-fg-muted">Nothing connected beyond each app's own GitHub, Supabase and Sentry settings.</p>
           ) : (
             <ul className="flex flex-col divide-y divide-edge-subtle">
-              {data.instances.map((i) => {
+              {groupConnectors(data.instances, (k) => data.available.find((a) => a.kind === k)?.title ?? k).flatMap((g) => {
+                const one = (i: Instance, shownName: string, nested: boolean) => {
                 const st = STATUS[i.status] ?? STATUS.unknown
                 const canAct = (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0
                 const copy = ACT_COPY[i.kind] ?? ACT_COPY.play_console
@@ -173,17 +195,17 @@ export function ConnectorsCard({
                 const panel = open?.id === i.id ? open.what : null
                 const bound = new Map(i.bindings.filter((b) => !hiddenIds?.has(b.projectId)).map((b) => [b.projectId, b.externalId]))
                 return (
-                  <li key={i.id} className="py-1.5" data-testid={`connector-${i.id}`}>
-                    {/* One line: the source, its state, the apps bound to it as icons (✓), and one More
+                  <li key={i.id} className={`py-1.5 ${nested ? 'pl-5' : ''}`} data-testid={`connector-${i.id}`}>
+                    {/* One line: the source, its state pill, the apps bound to it as icons, and one More
                         menu. The "glot.it → 6761582648 · …" string and the two big dropdowns are gone;
                         each app's id is its icon's tooltip (2026-11-18 preview). */}
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <BrandIcon brand={connectorBrand(i)} size={14} decorative />
-                      <span className="min-w-0 truncate text-xs font-semibold text-fg">{i.display_name}</span>
-                      <Badge tone={st.tone}>{st.label}</Badge>
+                      {!nested && <BrandIcon brand={connectorBrand(i)} size={14} decorative />}
+                      <span className="min-w-0 truncate text-xs font-semibold text-fg" title={i.display_name}>{shownName}</span>
+                      <StatusPill status={st.status} label={st.label} />
                       {bound.size > 0 && (
                         <span className="inline-flex min-w-0 items-center gap-1" data-testid="connector-bindings">
-                          <StatusMark status="passed" label={`${bound.size} ${bound.size === 1 ? 'app' : 'apps'} bound`} />
+                          <span className="sr-only">{`${bound.size} ${bound.size === 1 ? 'app' : 'apps'} bound:`}</span>
                           <AppIconChips projectIds={[...bound.keys()]} iconFor={iconOf} titleFor={(id) => `${nameOf(id)} → ${bound.get(id) ?? ''}`} />
                         </span>
                       )}
@@ -243,6 +265,16 @@ export function ConnectorsCard({
                     )}
                   </li>
                 )
+                }
+                if (g.items.length === 1) return [one(g.items[0]!.instance, g.items[0]!.name, false)]
+                return [
+                  <li key={`kind:${g.kind}`} className="flex items-center gap-2 py-1.5" data-testid={`connector-group-${g.kind}`}>
+                    <BrandIcon brand={connectorBrand(g.items[0]!.instance)} size={14} decorative />
+                    <span className="text-xs font-semibold text-fg">{g.title}</span>
+                    <span className="font-mono text-2xs font-bold tabular-nums text-fg-secondary">{g.items.length}</span>
+                  </li>,
+                  ...g.items.map((x) => one(x.instance, x.name, true)),
+                ]
               })}
             </ul>
           )}

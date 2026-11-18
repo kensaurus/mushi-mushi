@@ -63,6 +63,23 @@ export interface BulkUpgradeProject {
 const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running', 'awaiting_lockfile']
 
 /**
+ * The catalog says this app already runs the latest SDK: no row button, and not counted in
+ * "Open PRs (N)". Both read this one source, so the header count matches the rows marked
+ * behind (fresh-eyes review 2026-11-18: "Open PRs (9)" beside 7 apps behind).
+ * @internal Exported for tests only.
+ */
+export function catalogUpToDate(project: Pick<BulkUpgradeProject, 'sdk_version' | 'sdk_latest_version' | 'sdk_status'>): boolean {
+  return (
+    resolveSdkDisplay({
+      observedVersion: project.sdk_version ?? null,
+      latestVersion: project.sdk_latest_version ?? null,
+      backendStatus: project.sdk_status,
+      deprecated: project.sdk_status === 'deprecated',
+    }).kind === 'up-to-date'
+  )
+}
+
+/**
  * A finished job that did not bump this project's SDK to the latest release: it
  * belongs to an older version. Every row kept its October job and showed
  * "PR ready · Deploying…" with only Refresh PR, so a newer SDK (0.24.7, the
@@ -200,7 +217,9 @@ function FreshnessChip({
   return (
     <Tooltip content={<MetricTooltipContent data={tooltip} />} side="top" nowrap={false} portal>
       <span
-        className={`inline-flex cursor-help items-center gap-1 rounded-sm px-2 py-px text-2xs font-medium ${toneClass}`}
+        // Focusable, so a tap (or Tab) opens the details too: the tooltip opens on hover and focus.
+        tabIndex={0}
+        className={`inline-flex cursor-help items-center gap-1 rounded-sm px-2 py-px text-2xs font-medium whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${toneClass}`}
         aria-label={`Catalog freshness: ${text}`}
       >
         <span className="text-3xs font-semibold opacity-70">{prefix}</span>
@@ -304,6 +323,7 @@ function BulkUpgradeRow({
 
 
   const superseded = state.status === 'completed' && upgradeJobSuperseded(state.plan, project)
+  const upToDate = catalogUpToDate(project)
 
   // Report status up so the panel header can summarise progress. A superseded
   // job counts as not started, so "Open PRs (N)" includes the row.
@@ -343,8 +363,9 @@ function BulkUpgradeRow({
     lastRunToken.current = runToken
     if (state.status === 'completed' && state.prUrl && !superseded) return
     if (state.status !== 'idle' && state.status !== 'failed' && !superseded) return
+    if (upToDate) return
     void createUpgradePr()
-  }, [runToken, state.status, state.prUrl, createUpgradePr, superseded])
+  }, [runToken, state.status, state.prUrl, createUpgradePr, superseded, upToDate])
 
   // Panel-level Refresh all — sync CI / deploy for every open PR row.
   useEffect(() => {
@@ -365,7 +386,7 @@ function BulkUpgradeRow({
   const inFlight = IN_FLIGHT.includes(state.status)
   const signalConflict = catalogPrSignalsConflict(project, state.status)
   const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl) && !superseded
-  const showOpenAction = inFlight || state.status === 'idle' || state.status === 'failed' || superseded
+  const showOpenAction = inFlight || ((state.status === 'idle' || state.status === 'failed' || superseded) && !upToDate)
   const showRefreshAction = hasOpenPr && !inFlight
 
   return (
@@ -434,7 +455,7 @@ function BulkUpgradeRow({
           <p className="mt-1 cursor-help text-2xs leading-snug text-fg-muted">
             <span className="font-medium text-info">Two signals:</span> catalog shows a newer npm
             release, but no package.json bump PR was needed (often a{' '}
-            <CodeInline>workspace:*</CodeInline> monorepo). Hover chips for details.
+            <CodeInline>workspace:*</CodeInline> monorepo). Tap a version for details.
           </p>
         </Tooltip>
       )}
@@ -510,6 +531,7 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
   // Rows still worth bulk-opening: never run, idle, or failed — not rows that
   // already have an open PR (completed) or are up to date (completed_no_pr).
   const pendingRows = eligible.filter((p) => {
+    if (catalogUpToDate(p)) return false
     const s = statusMap[p.id]
     return !s || s === 'idle' || s === 'failed'
   })
@@ -558,8 +580,8 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
             </Tooltip>
           </div>
           <p className="mt-0.5 text-xs text-fg-muted">
-            Open bump PRs on GitHub, then refresh CI and merge when green. Hover chips for
-            version details.
+            Open bump PRs on GitHub, then refresh CI and merge when green. Tap a version for
+            details.
           </p>
           {(prCount > 0 || upToDateCount > 0 || failedCount > 0 || readyToMergeCount > 0) && (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="status" aria-live="polite">

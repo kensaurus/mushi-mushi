@@ -330,6 +330,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             emptyText="No app needs you right now."
             label="Apps that need you"
             testIdPrefix="portfolio"
+            // One card on a phone, so the tabs and their content are in view (fresh-eyes 2026-11-18).
+            narrowShown={1}
             keyLabel={(k) => names.get(k.replace(/^app:/, '')) ?? k}
           />
         )}

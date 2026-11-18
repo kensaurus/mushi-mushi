@@ -82,7 +82,8 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
 
   const summary = result ? describeCsvImport(result) : null
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-dashed border-edge-subtle p-3">
+    // A plain row under a hairline, not a dashed box inside the card (2026-11-18 sweep).
+    <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2.5" data-testid="resource-csv-import">
       <p className="text-xs text-fg-secondary">
         Import resources from a CSV with the columns <code className="font-mono">kind, external_id, project</code> and,
         optionally, <code className="font-mono">role</code>. <code className="font-mono">project</code> is a project&apos;s

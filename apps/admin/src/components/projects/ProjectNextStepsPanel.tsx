@@ -1,96 +1,142 @@
 /**
  * FILE: apps/admin/src/components/projects/ProjectNextStepsPanel.tsx
- * PURPOSE: "What does each project need from me?" — one row per project with
- *          a plain-English verdict and up to three linked actions. Renders on
- *          the Projects overview tab from data the page already fetched.
+ * PURPOSE: "What does each project need from me?" as one table (fresh-eyes review 2026-11-18;
+ *          it was one card per project, each repeating the same two sentences): app, SDK
+ *          version, stuck count as a bar, next step. Worst first (most stuck, `rankProjectNeeds`).
+ *          The SDK update link sits in the SDK cell; the other steps are links in the last column,
+ *          each with its reason as a title. Unknown is hatched, never 0. Renders on the Projects
+ *          overview tab from data the page already fetched.
  */
 
 import { Link } from 'react-router-dom'
 import type { Project } from './project-models'
-import { deriveProjectPlainStatus, type ProjectVerdictTone } from './projectNextSteps'
+import { rankProjectNeeds, type ProjectVerdictTone } from './projectNextSteps'
 import { ProjectFavicon } from '../ProjectFavicon'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { Card } from '../ui'
+import { BarCell } from '../signal/BarCell'
+import { Chip } from '../signal/Chip'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
+import { resolveSdkDisplay } from '../../lib/sdkVersionCompare'
 
-const TONE_CHIP: Record<ProjectVerdictTone, { label: string; className: string }> = {
-  ok: { label: 'Healthy', className: CHIP_TONE.okSubtle },
-  attention: { label: 'Needs you', className: CHIP_TONE.warnSubtle },
-  inactive: { label: 'Not connected', className: CHIP_TONE.neutral },
-  sample: { label: 'Sample data', className: CHIP_TONE.neutral },
+type SdkDisplayKind = ReturnType<typeof resolveSdkDisplay>['kind']
+
+const VERDICT: Record<ProjectVerdictTone, { tone: SignalTone; label: string }> = {
+  ok: { tone: 'ok', label: 'Healthy' },
+  attention: { tone: 'warn', label: 'Needs you' },
+  inactive: { tone: 'off', label: 'Not connected' },
+  sample: { tone: 'off', label: 'Sample data' },
+}
+
+const SDK_TONE: Record<SdkDisplayKind, SignalTone | null> = {
+  'up-to-date': 'ok',
+  'upgrade-available': 'warn',
+  deprecated: 'danger',
+  'catalog-ahead': 'info',
+  unknown: null,
+}
+
+// mushi-mushi-allowlist: app track shrinks; the bar column keeps a fixed width
+const ROW = 'grid grid-cols-2 items-center gap-x-3 gap-y-1 px-3 py-1.5 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_9rem_minmax(0,1.2fr)]'
+
+function NoData({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-2xs text-fg-muted">
+      <span className="ci-nodata inline-block h-2.5 w-6 rounded-xs border border-edge-subtle" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+function SdkCell({ project, updateTo }: { project: Project; updateTo: string | null }) {
+  const sdk = resolveSdkDisplay({
+    observedVersion: project.sdk_version ?? null,
+    latestVersion: project.sdk_latest_version ?? null,
+    backendStatus: project.sdk_status,
+    deprecated: project.sdk_status === 'deprecated',
+  })
+  const tone = SDK_TONE[sdk.kind]
+  if (!tone) return <NoData label="SDK version not checked" />
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span className="inline-flex items-center gap-1 font-mono text-2xs whitespace-nowrap text-fg tabular-nums" data-testid={`project-needs-sdk-${project.id}`}>
+        <StatusGlyph tone={tone} />
+        {sdk.upgradeTarget ? `${project.sdk_version} → ${sdk.upgradeTarget}` : project.sdk_version}
+      </span>
+      {updateTo && (
+        <Link to={updateTo} className="text-2xs font-medium whitespace-nowrap text-brand hover:underline" title="Opens a version-bump PR on your repo">
+          Update
+        </Link>
+      )}
+    </span>
+  )
 }
 
 export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
   if (projects.length === 0) return null
-
-  const rows = projects
-    .map((p) => ({ project: p, status: deriveProjectPlainStatus(p) }))
-    // Projects that need something float to the top; healthy ones collapse to
-    // a single reassuring line at the bottom, and the demo app sits last.
-    .sort(
-      (a, b) =>
-        Number(a.status.tone === 'sample') - Number(b.status.tone === 'sample') ||
-        Number(a.status.steps.length === 0) - Number(b.status.steps.length === 0),
-    )
+  const rows = rankProjectNeeds(projects)
+  const maxStuck = Math.max(1, ...rows.map((r) => r.stuck ?? 0))
 
   return (
-    <section
-      aria-label="What each project needs next"
-      // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-      className="rounded-lg border border-edge bg-surface-raised/40 p-4 space-y-3"
-    >
-      <div>
-        <h3 className="text-sm font-semibold text-fg">What needs you, per project</h3>
-        <p className="text-2xs text-fg-muted mt-0.5">
-          Plain-English status for every connected project, with the exact next step.
-        </p>
-      </div>
-      <ul className="space-y-2.5">
-        {rows.map(({ project, status }) => {
-          const chip = TONE_CHIP[status.tone]
-          return (
-            <li
-              key={project.id}
-              className="rounded-md border border-edge-subtle bg-surface-root/50 px-3 py-2.5"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <ProjectFavicon
-                  project_id={project.id}
-                  project_name={project.name}
-                  project_slug={project.slug}
-                  sdk_origin={
-                    project.api_keys.find((k) => k.last_seen_origin)?.last_seen_origin ?? null
-                  }
-                  repo_url={project.primary_repo?.repo_url ?? null}
-                  size={14}
-                />
-                <span className="text-xs font-medium text-fg">{project.name}</span>
-                <span
-                  className={`inline-flex items-center rounded-sm px-1.5 py-0.5 text-3xs font-medium ${chip.className}`}
-                >
-                  {chip.label}
+    <Card className="overflow-hidden p-0" data-testid="project-needs">
+      <h3 className="border-b border-edge-subtle px-3 py-2 text-sm font-semibold text-fg">What needs you, per project</h3>
+      <div role="table" aria-label="What needs you, per project" className="text-xs">
+        <div role="row" className={`${ROW} hidden border-b border-edge-subtle text-3xs font-semibold tracking-wide text-fg-secondary uppercase sm:grid`}>
+          <span role="columnheader">App</span>
+          <span role="columnheader">SDK</span>
+          <span role="columnheader">Stuck</span>
+          <span role="columnheader">Next step</span>
+        </div>
+        <div role="rowgroup" className="divide-y divide-edge-subtle">
+          {rows.map(({ project, status, stuck }) => {
+            const verdict = VERDICT[status.tone]
+            const upgrade = status.steps.find((s) => s.id === 'upgrade-sdk') ?? null
+            const others = status.steps.filter((s) => s.id !== 'upgrade-sdk')
+            return (
+              <div role="row" key={project.id} className={ROW} data-testid={`project-needs-row-${project.id}`}>
+                <span role="cell" className="flex min-w-0 items-center gap-1.5">
+                  <StatusGlyph tone={verdict.tone} label={verdict.label} />
+                  <ProjectFavicon
+                    project_id={project.id}
+                    project_name={project.name}
+                    project_slug={project.slug}
+                    sdk_origin={project.api_keys.find((k) => k.last_seen_origin)?.last_seen_origin ?? null}
+                    repo_url={project.primary_repo?.repo_url ?? null}
+                    size={14}
+                  />
+                  <span className="truncate font-medium text-fg" title={project.name}>
+                    {project.name}
+                  </span>
+                  {status.tone === 'sample' && <Chip className="shrink-0 whitespace-nowrap">sample data</Chip>}
                 </span>
-              </div>
-              <p className="mt-1 text-2xs text-fg-secondary">{status.verdict}</p>
-              {status.steps.length > 0 && (
-                <ol className="mt-1.5 space-y-1" aria-label={`Next steps for ${project.name}`}>
-                  {status.steps.map((step, i) => (
-                    <li key={step.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="text-2xs text-fg-faint tabular-nums">{i + 1}.</span>
-                      <span className="text-2xs font-medium text-fg-secondary">{step.title}</span>
-                      <span className="text-3xs text-fg-muted">{step.why}</span>
+                <span role="cell" className="min-w-0">
+                  {status.tone === 'sample' ? <span className="text-fg-faint">—</span> : <SdkCell project={project} updateTo={upgrade?.to ?? null} />}
+                </span>
+                <span role="cell" className="flex min-w-0 items-center gap-1.5" title={project.pdca_bottleneck_label ?? undefined} data-testid={`project-needs-stuck-${project.id}`}>
+                  <span className="text-3xs text-fg-muted sm:hidden">Stuck</span>
+                  {stuck == null ? <NoData label="Stuck count not known yet" /> : <BarCell value={stuck} max={maxStuck} tone={stuck > 0 ? 'danger' : 'neutral'} text={stuck} />}
+                </span>
+                <span role="cell" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+                  {others.length === 0 ? (
+                    <span className="text-fg-faint">—</span>
+                  ) : (
+                    others.map((step) => (
                       <Link
+                        key={step.id}
                         to={step.to}
-                        className="text-2xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity whitespace-nowrap"
+                        title={`${step.title}. ${step.why}`}
+                        className="text-2xs font-medium whitespace-nowrap text-brand hover:underline"
+                        data-testid={`project-needs-step-${project.id}-${step.id}`}
                       >
                         {step.ctaLabel} →
                       </Link>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </section>
+                    ))
+                  )}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Card>
   )
 }

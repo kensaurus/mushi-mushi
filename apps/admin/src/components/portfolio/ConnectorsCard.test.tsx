@@ -56,7 +56,7 @@ vi.mock('../../lib/usePageData', () => ({
   },
 }))
 
-import { ConnectorsCard } from './ConnectorsCard'
+import { ConnectorsCard, groupConnectors } from './ConnectorsCard'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
@@ -149,7 +149,10 @@ describe('ConnectorsCard', () => {
     const chips = row.querySelector('[data-testid="connector-bindings"] [data-testid="app-icon-chips"]')!
     expect(chips.getAttribute('data-count')).toBe('2')
     expect([...chips.querySelectorAll('li[data-app]')].map((li) => li.getAttribute('title'))).toEqual(['glot.it → com.glotit.app', 'lets-talk → us.kensaur.talk'])
-    expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')!.getAttribute('aria-label')).toBe('2 apps bound')
+    // One mark per source: its state pill, with no second ✓ beside the bound apps.
+    expect(row.querySelector('[data-testid="connector-bindings"] .sr-only')!.textContent).toBe('2 apps bound:')
+    expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')).toBeNull()
+    expect([...row.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.textContent)).toEqual(['Connected'])
     // No loose buttons or dropdowns on the row: Check, Bind, the write actions and Remove are in More.
     expect([...row.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['More'])
     expect(row.querySelector('select')).toBeNull()
@@ -157,12 +160,28 @@ describe('ConnectorsCard', () => {
     expect([...row.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Check', 'Bind another app…', 'Release actions (off)…', 'Remove'])
   })
 
+  it('puts two or more sources of one kind under one heading, without the repeated prefix', () => {
+    const groups = groupConnectors(
+      [
+        { kind: 'revenuecat', display_name: 'RevenueCat · kensaurus' },
+        { kind: 'play_console', display_name: 'Google Play · glot.it + lets-talk' },
+        { kind: 'play_console', display_name: 'Google Play · yen-yen' },
+        { kind: 'play_console', display_name: 'Google Play' },
+      ],
+      (k) => (k === 'play_console' ? 'Google Play' : 'RevenueCat'),
+    )
+    expect(groups.map((g) => [g.title, g.items.map((x) => x.name)])).toEqual([
+      ['RevenueCat', ['RevenueCat · kensaurus']],
+      ['Google Play', ['glot.it + lets-talk', 'yen-yen', 'Google Play']],
+    ])
+  })
+
   it('never draws a hidden app (the public demo) as a bound app', async () => {
     await render(new Set(['p-lt']))
     const row = container.querySelector('[data-testid="connector-c2"]')!
     const chips = row.querySelector('[data-testid="connector-bindings"] [data-testid="app-icon-chips"]')!
     expect(chips.getAttribute('data-count')).toBe('1')
-    expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')!.getAttribute('aria-label')).toBe('1 app bound')
+    expect(row.querySelector('[data-testid="connector-bindings"] .sr-only')!.textContent).toBe('1 app bound:')
   })
 
   it('opens the bind form inline when "Bind another app…" is chosen, listing only unbound apps', async () => {

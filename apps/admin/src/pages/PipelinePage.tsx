@@ -60,12 +60,13 @@ import {
   openerSplit,
   openerSummary,
   outcomeSummary,
-  pipelinePace,
+  pipelinePaceFigures,
   retryTrains,
   runPipelineAction,
   type ActionOutcome,
   type PipelineAction,
   type PipelineData,
+  type PaceFigures,
   type PipelineGroup,
 } from '../lib/pipeline'
 import { COUNT_HINTS } from '../lib/countDefinitions'
@@ -151,7 +152,7 @@ export function PipelinePage() {
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
   const openerParts = useMemo(() => (data?.dispatchers ? openerSplit(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
-  const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
+  const pace = useMemo(() => (data ? pipelinePaceFigures(data.stages, data.dispatchers) : null), [data])
   // How long the stuck work has waited; "Need you" adds up to the status line's count.
   const ages = useMemo(() => stuckAges(stages, now), [stages, now])
   // "Nothing is stuck" was false while no agent could open a fix (audit
@@ -223,6 +224,37 @@ export function PipelinePage() {
     }
   }, [trainAsk, reload, toast])
 
+  const rejectedOf = (projectId: string) => data?.intake?.apps.find((a) => a.projectId === projectId)?.rejected ?? 0
+  const sinceLabel = (since: string) => new Date(`${since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const intakeRow = (p: PipelineData['projects'][number]) => {
+    if (!data) return null
+    const rej = data.intake?.apps.find((a) => a.projectId === p.id)
+    return (
+      <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted" data-testid={`pipeline-intake-${p.id}`}>
+        <span className="text-fg-secondary">{p.name}:</span>
+        {data.intake &&
+          (rej && rej.rejected > 0 ? (
+            <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+              {rej.rejected} rejected ({rej.byReason.slice(0, 3).map((r) => `${r.reason} ×${r.count}`).join(', ')}
+              {rej.sdkPackages.length > 0 && `; sent by ${rej.sdkPackages.join(', ')}`}) ·
+            </span>
+          ) : (
+            <span className="text-ok-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+              0 rejected since {sinceLabel(data.intake.since)} ·
+            </span>
+          ))}
+        {p.lastDeploy ? (
+          <span>
+            last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
+            {!p.lastDeploy.ok && ' and it failed'}
+          </span>
+        ) : (
+          <span>no deploy recorded in 14 days</span>
+        )}
+      </li>
+    )
+  }
+
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-pipeline">
       <PageHeaderBar
@@ -231,12 +263,15 @@ export function PipelinePage() {
         description="Every bug from report to deploy, where it is stuck, and the fix."
         helpTitle="About the pipeline"
         helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
-        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. Open a stuck group to see its PRs with the failing checks or review findings; each group has one main fix, and More holds the rest (re-run, close with a reason). Every action asks first."
+        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. In the stuck groups, ▲ means something failed and ◆ means it is slow or waiting. Open a stuck group to see its PRs with the failing checks or review findings; each group has one main fix, and More holds the rest (re-run, close with a reason). Every action asks first."
       >
         {tab === 'workers' ? null : page.isValidating && !page.loading ? (
           <span className="text-2xs text-fg-muted">Updating…</span>
         ) : data ? (
-          <span className="text-2xs tabular-nums text-fg-muted" data-testid="pipeline-updated">Updated {ageLabel(data.generatedAt, now)} ago</span>
+          <span className="text-2xs tabular-nums text-fg-muted" data-testid="pipeline-updated">
+            {/* Under a minute reads "just now", never "0 min ago" (2026-11-18). */}
+            {now - Date.parse(data.generatedAt) < 60_000 ? 'Updated just now' : `Updated ${ageLabel(data.generatedAt, now)} ago`}
+          </span>
         ) : null}
         {tab === 'pipeline' && (
           <Btn size="sm" variant="ghost" onClick={reload} disabled={page.isValidating} data-testid="pipeline-refresh">
@@ -306,11 +341,7 @@ export function PipelinePage() {
             }
             data-testid="pipeline-status"
           />
-          {pace && (
-            <p className="-mt-1 px-1 text-xs text-fg-secondary" data-testid="pipeline-pace">
-              {pace}
-            </p>
-          )}
+          {pace && <PaceRow pace={pace} />}
 
           <section className="space-y-2" aria-label="Stages">
             <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
@@ -415,33 +446,29 @@ export function PipelinePage() {
                   SDK health →
                 </Link>
               </li>
-              {data.projects.map((p) => {
-                const rej = data.intake?.apps.find((a) => a.projectId === p.id)
+              {(() => {
+                // Only apps with something to say get their own line (2026-11-18): a rejection or a
+                // failed deploy. The quiet rest fold into one "N apps: 0 rejected" line.
+                const loud = data.intake ? data.projects.filter((p) => rejectedOf(p.id) > 0 || (p.lastDeploy != null && !p.lastDeploy.ok)) : data.projects
+                const quiet = data.intake ? data.projects.filter((p) => !loud.includes(p)) : []
+                if (quiet.length < 2) return data.projects.map(intakeRow)
+                const seen = quiet.filter((p) => p.lastDeploy).length
                 return (
-                <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted" data-testid={`pipeline-intake-${p.id}`}>
-                  <span className="text-fg-secondary">{p.name}:</span>
-                  {data.intake &&
-                    (rej && rej.rejected > 0 ? (
-                      <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
-                        {rej.rejected} rejected ({rej.byReason.slice(0, 3).map((r) => `${r.reason} ×${r.count}`).join(', ')}
-                        {rej.sdkPackages.length > 0 && `; sent by ${rej.sdkPackages.join(', ')}`}) ·
-                      </span>
-                    ) : (
-                      <span className="text-ok-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
-                        0 rejected since {new Date(`${data.intake.since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })} ·
-                      </span>
-                    ))}
-                  {p.lastDeploy ? (
-                    <span>
-                      last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
-                      {!p.lastDeploy.ok && ' and it failed'}
-                    </span>
-                  ) : (
-                    <span>no deploy recorded in 14 days</span>
-                  )}
-                </li>
+                  <>
+                    {loud.map(intakeRow)}
+                    <li>
+                      <details className="group" data-testid="pipeline-intake-quiet">
+                        <summary className="cursor-pointer list-none text-fg-secondary hover:text-fg">
+                          <span className="inline-block transition-transform group-open:rotate-90" aria-hidden="true">▸</span>{' '}
+                          {quiet.length} apps: 0 rejected since {sinceLabel(data.intake!.since)}
+                          <span className="text-fg-muted"> · {seen === 0 ? 'no deploy recorded in 14 days' : `${seen} with a deploy seen`}</span>
+                        </summary>
+                        <ul className="mt-1 space-y-1.5 pl-4">{quiet.map(intakeRow)}</ul>
+                      </details>
+                    </li>
+                  </>
                 )
-              })}
+              })()}
             </ul>
           </Section>
         </>
@@ -472,4 +499,33 @@ function topStuck(groups: PipelineGroup[]): { group: PipelineGroup; action: Pipe
   if (!group) return null
   const primary = groupPrimary(group)
   return primary ? { group, action: primary.action, ids: primary.ids } : { group, action: null, ids: [] }
+}
+
+/** One labelled figure in the pace row: a muted label, the number in mono, a short note. */
+function PaceFigure({ label, value, note, testId }: { label: string; value: string | number; note?: string | null; testId: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap" data-testid={testId}>
+      <span className="text-fg-muted">{label}</span>
+      <span className="font-mono font-bold tabular-nums text-fg">{value}</span>
+      {note && <span className="text-fg-muted">({note})</span>}
+    </span>
+  )
+}
+
+/** The pace as a short row of labelled figures, not a paragraph (2026-11-18). */
+function PaceRow({ pace }: { pace: PaceFigures }) {
+  const quiet = pace.quietApps
+  return (
+    <p className="-mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1 text-xs" data-testid="pipeline-pace">
+      <span className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Pace</span>
+      <PaceFigure label="Merged, 7 d" value={pace.merged7} note={pace.rate} testId="pipeline-pace-merged" />
+      {pace.clears && <PaceFigure label="Backlog clears in" value={`~${pace.clears}`} testId="pipeline-pace-clears" />}
+      {pace.started24h != null && <PaceFigure label="Fixes started, 24 h" value={pace.started24h} note={pace.startedBy} testId="pipeline-pace-started" />}
+      {quiet.length > 0 && (
+        <span className="text-fg-muted" title={quiet.join(', ')} data-testid="pipeline-pace-quiet">
+          none for {quiet.length > 3 ? `${quiet.slice(0, 3).join(', ')} +${quiet.length - 3}` : quiet.join(', ')}
+        </span>
+      )}
+    </p>
+  )
 }

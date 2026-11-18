@@ -175,6 +175,8 @@ export interface AlertCardsProps {
   label?: string
   /** Cards on a wide screen before "Show more". */
   maxShown?: number
+  /** Cards shown on a narrow screen before "Show N more" (default 3). */
+  narrowShown?: number
   /** Widest grid: 3 columns (most pages) or 6 (the CI page's full-width strip). */
   columns?: 3 | 6
   /** Prefix for data-testid: `<prefix>-alerts`, `<prefix>-alert-<id>`, `<prefix>-pinned`. */
@@ -190,6 +192,7 @@ export function AlertCards({
   emptyText,
   label = 'What needs attention',
   maxShown = 3,
+  narrowShown = SHOWN_NARROW,
   columns = 3,
   testIdPrefix = 'signal',
   keyLabel,
@@ -224,12 +227,12 @@ export function AlertCards({
           <div className="@container flex flex-col gap-2">
             <ul className={grid}>
               {shown.map((a, i) => (
-                <AlertCard key={a.id} alert={a} index={i} narrowHidden={!all && i >= SHOWN_NARROW} testIdPrefix={testIdPrefix} pinAlways={pinWithoutKeys} />
+                <AlertCard key={a.id} alert={a} index={i} narrowHidden={!all && i >= narrowShown} testIdPrefix={testIdPrefix} pinAlways={pinWithoutKeys} />
               ))}
             </ul>
-            {!all && alerts.length > SHOWN_NARROW && (
+            {!all && alerts.length > narrowShown && (
               <button type="button" className={`${MORE} @xl:hidden`} onClick={() => setAll(true)}>
-                Show {alerts.length - SHOWN_NARROW} more
+                Show {alerts.length - narrowShown} more
               </button>
             )}
             {!all && alerts.length > maxShown && (
@@ -237,7 +240,7 @@ export function AlertCards({
                 Show {alerts.length - maxShown} more
               </button>
             )}
-            {all && alerts.length > SHOWN_NARROW && (
+            {all && alerts.length > Math.min(narrowShown, maxShown) && (
               <button type="button" className={MORE} onClick={() => setAll(false)}>
                 Show the worst only
               </button>

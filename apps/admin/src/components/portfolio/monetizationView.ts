@@ -167,8 +167,13 @@ export interface MonetizationFindingGroup {
   targets: string[]
   /** One instruction for the row. */
   action: string
+  /** Products the store is still reviewing: a waiting state (◷), not a failure (✕). */
+  waiting: boolean
   findings: MonetizationFinding[]
 }
+
+/** Store states that wait on the store (review, processing), not on you. */
+const WAITING_STATE = /REVIEW|PENDING|PROCESSING/
 
 const SEV_RANK: Record<MonetizationFinding['severity'], number> = { error: 2, warn: 1, info: 0 }
 
@@ -195,7 +200,7 @@ export function groupMonetizationFindings(findings: readonly MonetizationFinding
       state = known?.storeState ?? /\bis ([A-Z][A-Z_]+)\b/.exec(f.message)?.[1] ?? null
     }
     const key = store ? `${f.ruleId}|${store}|${state ?? '?'}` : f.ruleId
-    const g = groups.get(key) ?? { key, ruleId: f.ruleId, severity: f.severity, title: '', targets: [], action: '', findings: [], store, state }
+    const g = groups.get(key) ?? { key, ruleId: f.ruleId, severity: f.severity, title: '', targets: [], action: '', waiting: false, findings: [], store, state }
     g.findings.push(f)
     if (f.target && !g.targets.includes(f.target)) g.targets.push(f.target)
     if (SEV_RANK[f.severity] > SEV_RANK[g.severity]) g.severity = f.severity
@@ -208,6 +213,7 @@ export function groupMonetizationFindings(findings: readonly MonetizationFinding
       const words = state ? state.toLowerCase().replace(/_/g, ' ') : 'not ready'
       g.title = `${n} product${n === 1 ? '' : 's'} ${words}`
       g.action = STORE_ACTION[store]
+      g.waiting = state != null && WAITING_STATE.test(state)
     } else if (n === 1) {
       g.title = g.findings[0]!.message
       g.action = g.findings[0]!.fix
@@ -219,6 +225,21 @@ export function groupMonetizationFindings(findings: readonly MonetizationFinding
     out.push(g)
   }
   return out.sort((a, b) => SEV_RANK[b.severity] - SEV_RANK[a.severity] || b.findings.length - a.findings.length)
+}
+
+/** How bad an app's payments are: something to fix, then could not check, partly checked, notes, every check passed. */
+function appRank(app: Pick<MonetizationAppView, 'rules' | 'findings'>): number {
+  if (app.findings.some((f) => f.severity !== 'info')) return 0
+  if (app.rules.some((r) => r.state === 'error')) return 1
+  if (app.rules.length === 0 || app.rules.some((r) => r.state === 'unknown')) return 2
+  if (app.findings.length > 0) return 3
+  return 4
+}
+
+/** Worst first: apps with something to fix lead (most first), "Every check passed" comes last. */
+export function sortAppsWorstFirst<T extends Pick<MonetizationAppView, 'rules' | 'findings' | 'name'>>(apps: readonly T[]): T[] {
+  const serious = (a: T) => a.findings.filter((f) => f.severity !== 'info').length
+  return [...apps].sort((a, b) => appRank(a) - appRank(b) || serious(b) - serious(a) || a.name.localeCompare(b.name))
 }
 
 /** Every product an app lists (entitlements and offering packages), for the grouping above. */

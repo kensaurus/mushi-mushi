@@ -20,7 +20,7 @@ import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import type { PageDataState } from '../../lib/usePageData'
 import type { PortfolioFindingsResponse, PortfolioReadError } from '../../lib/portfolioTypes'
 import { fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew } from '../../lib/groupAppFindings'
-import { findingGroupTitle } from './portfolioView'
+import { findingGroupTitle, mergeSameAppRows } from './portfolioView'
 import { FindingsMatrix } from './FindingsMatrix'
 import { AppIconChips, CopyFixButton, type IconFor } from './AppIconChips'
 
@@ -102,7 +102,8 @@ export function PortfolioFindings({
 }) {
   const data = findings.data
   const nameOf = (id: string) => iconFor(id).project_name
-  const matrix = useMemo(() => (data ? fixOnceRows(data.groups, findingGroupTitle) : []), [data])
+  // Rows open in the same apps with the same fix are one row ("stopped working · rejected", 9 apps).
+  const matrix = useMemo(() => (data ? mergeSameAppRows(fixOnceRows(data.groups, findingGroupTitle)) : []), [data])
   const across = useMemo(() => (data ? groupAcrossApps(data.crossProject, (id) => iconFor(id).project_name) : []), [data, iconFor])
   const sdk = useMemo(() => (data ? groupSdkSkew(data.sdkSkew) : []), [data])
   const holes = useMemo(() => (data ? groupHoles(data.holes) : []), [data])

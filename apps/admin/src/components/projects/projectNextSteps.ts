@@ -155,3 +155,32 @@ export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
     steps,
   }
 }
+
+/** One row of "What needs you, per project": the verdict, the stuck count and the SDK drift. */
+export interface ProjectNeedsRow {
+  project: Project
+  status: ProjectPlainStatus
+  /** Items stuck in the loop's waiting stage; null when the app sends nothing yet (unknown, never 0). */
+  stuck: number | null
+}
+
+/**
+ * Worst first (fresh-eyes review 2026-11-18: lets-talk with 9 stuck sat above solo-boss-cloud
+ * with 129): the most stuck first, then the most steps, then by name; the demo app last.
+ */
+export function rankProjectNeeds(projects: readonly Project[]): ProjectNeedsRow[] {
+  return projects
+    .map((project): ProjectNeedsRow => {
+      const status = deriveProjectPlainStatus(project)
+      const connected = status.tone !== 'inactive' && status.tone !== 'sample'
+      const stuck = connected ? (project.pdca_bottleneck_label ? Math.max(0, project.pdca_bottleneck_count ?? 0) : 0) : null
+      return { project, status, stuck }
+    })
+    .sort(
+      (a, b) =>
+        Number(a.status.tone === 'sample') - Number(b.status.tone === 'sample') ||
+        (b.stuck ?? 0) - (a.stuck ?? 0) ||
+        b.status.steps.length - a.status.steps.length ||
+        a.project.name.localeCompare(b.project.name),
+    )
+}

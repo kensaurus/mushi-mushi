@@ -8,6 +8,8 @@
  * instead of a "Live: … Native changes: 0 OTA: 36" line. The stage is a status
  * pill (shape + colour, in review pulses), the rollout is a bar, a zero count is
  * faint so the waiting work stands out, and apps with work waiting sort first.
+ * Sweep 2026-11-18: two or more apps in one stage share a group row ("In review · 3 apps");
+ * an app whose stage was not checked shows hatched "—" for its counts, never 0.
  *
  * Data: GET /v1/admin/orgs/:orgId/releases
  */
@@ -52,7 +54,24 @@ export function sortReleaseRows(rows: readonly ReleaseRow[]): ReleaseRow[] {
   return [...rows].sort((a, b) => rank(a) - rank(b) || b.otaPending + b.mergedNotBuilt - (a.otaPending + a.mergedNotBuilt) || a.name.localeCompare(b.name))
 }
 
-function Count({ n }: { n: number }) {
+/**
+ * Sorted rows cut into runs of one stage, for the group rows.
+ * @internal Exported for ReleasesCard.test.tsx.
+ */
+export function groupReleaseRows(rows: readonly ReleaseRow[]): Array<{ stage: string; rows: ReleaseRow[] }> {
+  const out: Array<{ stage: string; rows: ReleaseRow[] }> = []
+  for (const r of sortReleaseRows(rows)) {
+    const stage = STAGE[r.stage] ? r.stage : 'unknown'
+    const last = out[out.length - 1]
+    if (last && last.stage === stage) last.rows.push(r)
+    else out.push({ stage, rows: [r] })
+  }
+  return out
+}
+
+function Count({ n, unknown }: { n: number; unknown: boolean }) {
+  // Not checked is not zero: hatched "—", like every other cell with no data.
+  if (unknown) return <span className="text-fg-muted" title="Not checked">—</span>
   return <span className={`tabular-nums ${n > 0 ? 'font-semibold text-fg' : 'text-fg-faint'}`}>{n}</span>
 }
 
@@ -82,19 +101,30 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                   <th scope="col" className={`${TH} text-left`}>App</th>
                   <th scope="col" className={`${TH} text-left`}>Stage</th>
                   <th scope="col" className={`${TH} text-left`}>Live</th>
-                  <th scope="col" className={`${TH} text-right`} title="Native changes merged since the live build: they need a store build">Native</th>
-                  <th scope="col" className={`${TH} text-right`} title="JS-only changes that can ship as an over-the-air update">OTA</th>
+                  <th scope="col" className={`${TH} text-right`} title="Native changes merged since the live build: they need a store build">Native changes</th>
+                  <th scope="col" className={`${TH} text-right`} title="JS-only changes that can ship as an over-the-air update">OTA changes</th>
                 </tr>
               </thead>
               <tbody>
-                {sortReleaseRows(data.rows).map((r) => {
-                  const stage = STAGE[r.stage] ?? STAGE.unknown
-                  return (
+                {groupReleaseRows(data.rows).flatMap(({ stage: id, rows }) => {
+                  const stage = STAGE[id] ?? STAGE.unknown
+                  // Two or more apps in one stage share a group row instead of repeating the pill.
+                  const grouped = rows.length > 1
+                  const unknown = id === 'unknown'
+                  const head = grouped ? (
+                    <tr key={`stage:${id}`} className="border-b border-edge-subtle bg-surface-overlay/40" data-testid={`releases-stage-${id}`}>
+                      <th scope="colgroup" colSpan={5} className="px-2 py-1 text-left font-normal">
+                        <span className="flex items-center gap-2">
+                          <StatusPill status={stage.status} label={stage.label} />
+                          <span className="whitespace-nowrap text-2xs font-semibold text-fg-secondary">{rows.length} apps</span>
+                        </span>
+                      </th>
+                    </tr>
+                  ) : null
+                  const body = rows.map((r) => (
                     <tr key={r.projectId} className="border-b border-edge-subtle hover:bg-surface-overlay/60" data-stage={r.stage}>
-                      <td className="max-w-48 truncate px-2 py-1 font-semibold text-fg">{r.name}</td>
-                      <td className="px-2 py-1">
-                        <StatusPill status={stage.status} label={stage.label} />
-                      </td>
+                      <td className={`max-w-48 truncate px-2 py-1 font-semibold text-fg ${grouped ? 'pl-5' : ''}`}>{r.name}</td>
+                      <td className="px-2 py-1">{!grouped && <StatusPill status={stage.status} label={stage.label} />}</td>
                       <td className="px-2 py-1">
                         {r.live ? (
                           <span className="flex items-center gap-2">
@@ -107,14 +137,15 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                           <span className="text-fg-faint">not checked</span>
                         )}
                       </td>
-                      <td className="px-2 py-1 text-right">
-                        <Count n={r.mergedNotBuilt} />
+                      <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
+                        <Count n={r.mergedNotBuilt} unknown={unknown} />
                       </td>
-                      <td className="px-2 py-1 text-right">
-                        <Count n={r.otaPending} />
+                      <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
+                        <Count n={r.otaPending} unknown={unknown} />
                       </td>
                     </tr>
-                  )
+                  ))
+                  return head ? [head, ...body] : body
                 })}
               </tbody>
             </table>

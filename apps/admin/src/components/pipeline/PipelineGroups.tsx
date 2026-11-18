@@ -13,13 +13,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
-import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
+import { IconChevronDown, IconChevronRight, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
 import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { VitalText } from '../signal/VitalText'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import type { WorkerLane } from '../../lib/workers'
@@ -42,16 +43,26 @@ interface Props {
 /** Stages whose reports have no fix to keep yet: a local worker may take them. */
 const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
 
-const TONE_ICON = {
-  stuck: <span className="text-danger-foreground"><IconAlertTriangle size={14} /></span>,
-  moving: <span className="text-info-foreground"><IconClock size={14} /></span>,
-  done: <span className="text-ok-foreground"><IconCheck size={14} /></span>,
+/**
+ * Stuck groups that are slow or waiting, not failed (2026-11-18): an agent or CI still running,
+ * a conflict agent not started, a PR waiting on its base or a later train, a backlog report, a
+ * merged fix with no deploy yet. They take ◆; ▲ is only for what failed or needs a decision.
+ */
+export const SLOW_GROUP_IDS: ReadonlySet<string> = new Set(['agent_slow', 'ci_slow', 'conflict_stuck', 'base_red', 'after_red_train', 'no_fix_old', 'not_deployed'])
+
+/** The signal tone of a group's mark: ▲ failed, ◆ slow or waiting, ■ moving, ● done. */
+export function groupSignalTone(group: Pick<PipelineGroup, 'id' | 'tone'>): SignalTone {
+  if (group.tone === 'done') return 'ok'
+  if (group.tone === 'moving') return 'info'
+  return SLOW_GROUP_IDS.has(group.id) ? 'warn' : 'danger'
 }
 
-const TONE_BORDER = {
-  stuck: 'border-l-danger',
-  moving: 'border-l-info',
-  done: 'border-l-ok',
+const TONE_BORDER: Record<SignalTone, string> = {
+  danger: 'border-l-danger',
+  warn: 'border-l-warn',
+  info: 'border-l-info',
+  ok: 'border-l-ok',
+  off: 'border-l-edge',
 }
 
 const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
@@ -314,11 +325,12 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const apps = new Set(group.items.map((i) => i.projectId))
   const appId = apps.size === 1 ? [...apps][0]! : null
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
+  const signal = groupSignalTone(group)
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
     // On a phone the title takes its own line and the age + actions a row beneath, never a
     // one-letter-wide column (GROUP_HEAD, 2026-11-18).
-    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
+    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[signal]}`} data-testid={`pipeline-group-${group.id}`} data-tone={signal}>
       <div className={GROUP_HEAD} data-testid={`pipeline-group-${group.id}-head`}>
         <button
           type="button"
@@ -328,7 +340,7 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
           data-testid={`pipeline-group-${group.id}-toggle`}
         >
           {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-          {TONE_ICON[group.tone]}
+          <StatusGlyph tone={signal} />
           <span className="min-w-0 text-xs font-medium text-fg wrap-break-word">{group.label}</span>
         </button>
         <span className="flex flex-wrap items-center gap-2 pl-5.5 sm:justify-end sm:pl-0" data-testid={`pipeline-group-${group.id}-side`}>

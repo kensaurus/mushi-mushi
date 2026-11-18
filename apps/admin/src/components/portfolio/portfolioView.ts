@@ -12,6 +12,7 @@ import type { FindingGroup, PortfolioCard, PortfolioCardProblem, PortfolioRadarC
 import type { RecipeElementKey } from '../../lib/recipeTypes'
 import type { DetectorState } from '../../lib/radarTypes'
 import { isPublicDemo } from '../../lib/publicDemo'
+import type { FixOnceRow } from '../../lib/groupAppFindings'
 
 const COULD_NOT_READ = 'Could not read'
 
@@ -349,4 +350,34 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[], by: Portfoli
   return [...cards].sort(
     (a, b) => (rank.get(a) ?? 5) - (rank.get(b) ?? 5) || b.openReports - a.openReports || a.name.localeCompare(b.name),
   )
+}
+
+/**
+ * Fix once rows open in exactly the same apps, with the same severity and the same one action,
+ * as ONE row ("A connected key stopped working · AI key rejected", 9 apps): two rows with the
+ * same nine dots and the same "Fix key" said the same thing twice (2026-11-18 sweep). Order is
+ * kept (the first row of a merge holds its place); the fix prompts and explanations are joined.
+ */
+export function mergeSameAppRows(rows: readonly FixOnceRow[]): FixOnceRow[] {
+  const out: FixOnceRow[] = []
+  const at = new Map<string, number>()
+  for (const r of rows) {
+    const key = `${r.severity}|${r.action}|${[...r.projectIds].sort().join(',')}`
+    const i = at.get(key)
+    if (i === undefined) {
+      at.set(key, out.length)
+      out.push({ ...r, projectIds: [...r.projectIds] })
+      continue
+    }
+    const m = out[i]!
+    out[i] = {
+      ...m,
+      ruleId: `${m.ruleId}+${r.ruleId}`,
+      title: `${m.title} · ${r.title}`,
+      fullTitle: `${m.fullTitle}\n${r.fullTitle}`,
+      explanation: `${m.explanation} ${r.explanation}`,
+      fix: `${m.fix}\n\n${r.fix}`,
+    }
+  }
+  return out
 }
