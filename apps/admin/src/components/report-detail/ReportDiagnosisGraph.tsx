@@ -22,6 +22,7 @@ import { useMediaQuery } from '../../lib/useMediaQuery'
 import { buildDiagnosisGraph, initialDiagnosisSelection } from '../../lib/reportDiagnosisGraph'
 import { DIAGNOSIS_LANES, type DiagnosisGraph, type DiagnosisLane, type DiagnosisNode } from '../../lib/reportDiagnosisModel'
 import type { ReportDetail } from './types'
+import { VitalText } from '../reports/VitalText'
 
 // Checks are green (verification) and Fix is the brand colour (action);
 // red for Checks read as "error" on the first localhost pass.
@@ -145,7 +146,7 @@ function NodeButton({
       <span className="flex min-w-0 items-center gap-1.5">
         <StateChip node={node} />
         <span className="min-w-0 truncate font-mono text-3xs text-fg-muted" title={node.detail}>
-          {node.detail}
+          <VitalText text={node.detail} />
         </span>
       </span>
     </button>
@@ -226,7 +227,7 @@ function NodePanel({
       <h4 className="text-sm font-semibold leading-snug text-fg">{node.title}</h4>
       <div className="flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
         <StateChip node={node} />
-        <span className="font-mono">{node.detail}</span>
+        <span className="font-mono"><VitalText text={node.detail} /></span>
       </div>
       {/* The paragraph stays a paragraph. The box around it is a tab stop
           only while the reasoning actually overflows max-h-64. */}

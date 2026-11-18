@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { Badge, Btn, Callout, Card, SegmentedControl } from '../ui'
 import { IconCheck, IconFlag } from '../icons'
 import { apiFetchMutate } from '../../lib/supabase'
+import { VitalText } from '../reports/VitalText'
 import { foldSteps, problemLines, UX_PLAN_STEP_META, UX_STATUS_META, type UxIterationRow, type UxSurfaceRow, type UxViewport } from '../../lib/uxRuns'
 
 const OUTCOME: Record<UxIterationRow['outcome'], { label: string; tone: 'okSubtle' | 'dangerSubtle' | 'neutral' }> = {
@@ -280,7 +281,7 @@ export function UxSurfaceDetail({ projectId, runId, surface, iterations, working
         <h3 className="mb-1 text-xs font-semibold text-fg">Still measured on this screen</h3>
         {problems.length ? (
           <ul className="list-disc space-y-0.5 pl-5 text-xs text-fg-secondary">
-            {problems.map((p) => <li key={p}>{p}</li>)}
+            {problems.map((p) => <li key={p}><VitalText text={p} /></li>)}
           </ul>
         ) : (
           <p className="inline-flex items-center gap-1 text-xs text-ok-foreground"><IconCheck className="h-3.5 w-3.5" /> No accessibility, layout or console problems measured.</p>
