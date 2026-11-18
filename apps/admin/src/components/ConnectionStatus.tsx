@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from 'react'
 import { Btn } from './ui'
+import { STATUS_WORD, StatusMark, type RunStatus } from './signal/StatusMark'
 import {
   isCloudMode,
   RESOLVED_SUPABASE_URL as SUPABASE_URL,
@@ -108,20 +109,15 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
   const anyFailed = checks.some((c) => c.status === 'fail')
   const anyPending = checks.some((c) => c.status === 'pending')
 
-  const statusIcon = (status: Check['status']) => {
-    switch (status) {
-      case 'pass': return <span className="text-ok">✓</span>
-      case 'fail': return <span className="text-danger">✗</span>
-      case 'warn': return <span className="text-warn">!</span>
-      case 'running': return <span className="text-fg-faint animate-pulse">⋯</span>
-      default: return <span className="text-fg-faint">○</span>
-    }
-  }
+  // The console's status marks (2026-11-18): running pulses, ✓ pass, ✕ fail, ⧗ warn, ○ not run.
+  const CHECK_STATUS: Record<Check['status'], RunStatus> = { pass: 'passed', fail: 'failed', warn: 'slow', running: 'running', pending: 'idle' }
+  const statusIcon = (status: Check['status']) => <StatusMark status={CHECK_STATUS[status]} label={STATUS_WORD[CHECK_STATUS[status]]} />
+  const overall: RunStatus = running ? 'running' : anyPending ? 'idle' : allPassed ? 'passed' : anyFailed ? 'failed' : 'slow'
 
   if (compact) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
-        <span className={`inline-block w-2 h-2 rounded-full ${allPassed ? 'bg-ok' : anyFailed ? 'bg-danger' : anyPending ? 'bg-fg-faint' : 'bg-warn'}`} />
+        <StatusMark status={overall} />
         <span className="text-sm text-fg-secondary">
           {anyPending ? 'Not checked yet' : allPassed ? 'Working: every service answered' : 'Needs attention: a service did not answer'}
         </span>
