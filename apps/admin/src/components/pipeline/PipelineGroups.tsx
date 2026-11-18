@@ -292,12 +292,13 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
 }
 
 /**
- * A group's header row: one column (title, then age + actions beneath) until its card is 40rem
- * wide, then title | age + actions. On the header, inside the card's `@container`: a container
- * query never matches the container element itself.
+ * A group's header row: one column (title, then age + actions beneath) below 640 px, then
+ * title | age + actions. A viewport breakpoint, not a container query: `container-type` gives
+ * the card layout containment, a stacking context, so an open More menu would paint under
+ * the next card.
  */
 // mushi-mushi-allowlist: title track shrinks, the age + actions track keeps its content width
-const GROUP_HEAD = 'grid grid-cols-1 items-center gap-x-3 gap-y-1.5 p-2.5 @min-[40rem]:grid-cols-[minmax(0,1fr)_auto]'
+const GROUP_HEAD = 'grid grid-cols-1 items-center gap-x-3 gap-y-1.5 p-2.5 sm:grid-cols-[minmax(0,1fr)_auto]'
 
 /** Items shown per group before "Show more": the page scrolls, the group does not (2375c9c5). */
 const ITEMS_STEP = 20
@@ -315,9 +316,9 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
-    // The card is the container (GROUP_HEAD's @min-* classes sit on the header inside it): on a phone the
-    // title takes its own line and the age + actions a row beneath, never a one-letter-wide column (2026-11-18).
-    <li ref={ref} className={`@container scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
+    // On a phone the title takes its own line and the age + actions a row beneath, never a
+    // one-letter-wide column (GROUP_HEAD, 2026-11-18).
+    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
       <div className={GROUP_HEAD} data-testid={`pipeline-group-${group.id}-head`}>
         <button
           type="button"
@@ -330,7 +331,7 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
           {TONE_ICON[group.tone]}
           <span className="min-w-0 text-xs font-medium text-fg wrap-break-word">{group.label}</span>
         </button>
-        <span className="flex flex-wrap items-center gap-2 pl-5.5 @min-[40rem]:justify-end @min-[40rem]:pl-0" data-testid={`pipeline-group-${group.id}-side`}>
+        <span className="flex flex-wrap items-center gap-2 pl-5.5 sm:justify-end sm:pl-0" data-testid={`pipeline-group-${group.id}-side`}>
           {group.oldestAt && group.tone !== 'done' && (
             <span className="shrink-0 text-2xs tabular-nums text-fg-muted">oldest {ageLabel(group.oldestAt, props.now)}</span>
           )}

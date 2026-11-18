@@ -3,8 +3,8 @@
  *
  * A stuck group's header on a phone (preview of #1166 at 390 px, 2026-11-18): the title sat
  * beside its age and actions, one letter wide. The title is now its own full-width element and
- * the header is one column until its card is wide enough. jsdom cannot evaluate container
- * queries, so this pins the classes and the structure; the width itself is checked live.
+ * the header is one column below 640 px. jsdom applies no CSS, so this pins the classes and
+ * the structure; the width itself is checked live.
  */
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -77,14 +77,14 @@ function mount(): HTMLElement {
 const q = (host: HTMLElement, id: string) => host.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
 
 describe('PipelineGroups header row', () => {
-  it('stacks below the breakpoint: one column on the header, the card as its container', () => {
+  it('stacks below the breakpoint: one column on the header, two from sm up', () => {
     const host = mount()
     const card = q(host, 'pipeline-group-review_changes')!
     const head = q(host, 'pipeline-group-review_changes-head')!
-    // The container query sits on the card; the @min-* classes on a descendant, never the card itself.
-    expect(card.className.split(/\s+/)).toContain('@container')
     expect(head.parentElement).toBe(card)
-    expect(head.className.split(/\s+/)).toEqual(expect.arrayContaining(['grid', 'grid-cols-1', '@min-[40rem]:grid-cols-[minmax(0,1fr)_auto]']))
+    expect(head.className.split(/\s+/)).toEqual(expect.arrayContaining(['grid', 'grid-cols-1', 'sm:grid-cols-[minmax(0,1fr)_auto]']))
+    // No container on the card: its layout containment would stack an open More menu under the next card.
+    expect(card.className).not.toMatch(/@container/)
     expect(head.className).not.toMatch(/(^|\s)flex-1(\s|$)/)
   })
 
