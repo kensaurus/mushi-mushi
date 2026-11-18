@@ -7,24 +7,7 @@
  */
 
 import type { ProvidersAlert, ProvidersTab } from '../../lib/providersView'
-
-function SeverityMark({ critical }: { critical: boolean }) {
-  if (critical) {
-    return (
-      <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden="true">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-60 motion-safe:animate-ping" />
-        <svg viewBox="0 0 12 12" className="relative h-3 w-3 text-danger" fill="currentColor">
-          <path d="M6 1 11.5 11H.5z" />
-        </svg>
-      </span>
-    )
-  }
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3 shrink-0 text-warn" fill="currentColor" aria-hidden="true">
-      <path d="M6 .5 11.5 6 6 11.5.5 6z" />
-    </svg>
-  )
-}
+import { StatusGlyph } from '../signal/StatusGlyph'
 
 export function ProvidersAlerts({ alerts, onOpen }: { alerts: readonly ProvidersAlert[]; onOpen: (tab: ProvidersTab) => void }) {
   if (alerts.length === 0) return null
@@ -44,7 +27,7 @@ export function ProvidersAlerts({ alerts, onOpen }: { alerts: readonly Providers
           >
             <span className={`absolute inset-y-0 left-0 w-1 ${critical ? 'bg-danger' : 'bg-warn'}`} aria-hidden="true" />
             <span className="flex items-center gap-1.5">
-              <SeverityMark critical={critical} />
+              <StatusGlyph tone={critical ? 'danger' : 'warn'} pulse={critical} />
               <span className={`text-3xs font-bold tracking-wider uppercase ${critical ? 'text-danger-foreground' : 'text-warn-foreground'}`}>{a.label}</span>
             </span>
             <button

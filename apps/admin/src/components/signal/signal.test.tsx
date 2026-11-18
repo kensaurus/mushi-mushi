@@ -10,7 +10,8 @@ import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AlertCards, type SignalAlert } from './AlertCards'
-import { BarCell, barPct } from './BarCell'
+import { BarCell, ThresholdBar, barPct } from './BarCell'
+import { Chip } from './Chip'
 import { HeatGrid, columnMax, heatCellClass, type HeatColumn, type HeatRow } from './HeatGrid'
 import { HighlightProvider } from './linkedHighlight'
 import { StageTrain } from './StageTrain'
@@ -212,5 +213,20 @@ describe('StageTrain and StatusGlyph', () => {
     expect(named.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Passing')
     const plain = mount(createElement(StatusGlyph, { tone: 'warn' }))
     expect(plain.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('ThresholdBar and Chip', () => {
+  it('fills to the level colour with warn and crit ticks, the number as text', () => {
+    const host = mount(createElement(ThresholdBar, { fill: 0.85, warn: 0.7, crit: 0.9, level: 'warn', label: '85% used' }))
+    const bar = host.querySelector('[data-level]')!
+    expect(bar.getAttribute('data-level')).toBe('warn')
+    expect(bar.querySelector('.bg-st-slow')!.getAttribute('style')).toContain('85%')
+    expect(bar.textContent).toBe('85% used')
+  })
+
+  it('draws a problem chip in the failed colours', () => {
+    const host = mount(createElement(Chip, { tone: 'danger' }, 'tried last'))
+    expect(host.querySelector('span')!.className).toContain('text-st-failed-ink')
   })
 })

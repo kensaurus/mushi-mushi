@@ -20,6 +20,7 @@ import {
   paramChoices,
   paramFieldsFor,
   pricedModels,
+  PROVIDER_STATUS,
   routeKey,
   wouldDropLastDefault,
   type FeatureChain,
@@ -27,7 +28,8 @@ import {
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Btn, Toggle } from '../ui'
 import { IconTrash } from '../icons'
-import { Chip, PendingMark, ProviderStateMark } from './providerMarks'
+import { Chip } from '../signal/Chip'
+import { StatusMark } from '../signal/StatusMark'
 
 export const routePendingKey = (r: { app: string; feature: string; priority: number }) => `route:${routeKey(r)}`
 export const featurePendingKey = (app: string, feature: string) => `feature:${app}|${feature}`
@@ -245,10 +247,14 @@ function Candidate({
     >
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-2xs font-extrabold text-fg-secondary tabular-nums">#{route.priority}</span>
-        <ProviderStateMark state={route.provider_state} compact />
+        <StatusMark status={PROVIDER_STATUS[route.provider_state]} label={route.provider_state} />
         <Chip>{route.provider}</Chip>
         {down && <Chip tone="danger">tried last</Chip>}
-        {busy && <PendingMark />}
+        {busy && (
+          <span role="status" aria-label="Saving" data-testid="pending-mark">
+            <StatusMark status="running" />
+          </span>
+        )}
       </span>
       <span className={`truncate font-mono text-xs font-bold text-fg ${down ? 'line-through decoration-danger decoration-2' : ''}`} title={route.note ?? route.model}>
         {route.model}

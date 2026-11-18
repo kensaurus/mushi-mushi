@@ -7,7 +7,7 @@
 
 import type { HistoryRow } from '../../lib/providersView'
 import { ageLabel } from '../../lib/providersView'
-import { Chip } from './providerMarks'
+import { Chip } from '../signal/Chip'
 
 const OP_TONE: Record<HistoryRow['op'], string> = {
   INSERT: 'border-ok/50 bg-ok-muted text-ok-foreground',

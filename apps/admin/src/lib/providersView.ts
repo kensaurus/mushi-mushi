@@ -8,6 +8,7 @@
  *          No React; every rule here is unit tested (providersView.test.ts).
  */
 
+import type { RunStatus } from '../components/signal/StatusMark'
 import type {
   AiRoute,
   ModelPrice,
@@ -606,4 +607,23 @@ export function applyOptimistic(snapshot: OpsSnapshot | null, patch: OptimisticP
       return fits ? { ...snapshot, routes: applyReorder(snapshot.routes, patch.app, patch.feature, patch.order) } : snapshot
     }
   }
+}
+
+/**
+ * A provider's state as the console's run status (components/signal/StatusMark): down ✕,
+ * warn ⧗ (degraded), ok ✓, stale ◷ (no recent probe), unknown ○.
+ */
+export const PROVIDER_STATUS: Record<ProviderState, RunStatus> = {
+  down: 'failed',
+  warn: 'slow',
+  ok: 'passed',
+  stale: 'waiting',
+  unknown: 'idle',
+}
+
+/** A margin (0.12 = 12%) as the kit's change chip: "▲ +12%" is better, "▼ -8%" worse. */
+export function marginChange(value: number | null): { text: string; worse: boolean } | null {
+  if (value == null) return null
+  const pct = Math.round(value * 100)
+  return pct >= 0 ? { text: `▲ +${pct}%`, worse: false } : { text: `▼ ${pct}%`, worse: true }
 }

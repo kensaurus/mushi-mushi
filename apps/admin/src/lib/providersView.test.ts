@@ -17,11 +17,13 @@ import {
   diffFields,
   formatMicroUsd,
   groupRoutes,
+  marginChange,
   marginOf,
   nextFreePriority,
   paramChips,
   paramFieldsFor,
   pricedModels,
+  PROVIDER_STATUS,
   providerGauge,
   reorderPermutation,
   resolveProvidersTab,
@@ -353,5 +355,18 @@ describe('tabs and errors', () => {
     )
     expect(writeErrorText({ code: 'last_default_route', message: '' })).toContain('Enable another default first')
     expect(writeErrorText(undefined)).toBe('Not saved.')
+  })
+})
+
+describe('provider states and margins in the kit (2026-11-18)', () => {
+  it('maps each provider state to its own run status', () => {
+    expect(PROVIDER_STATUS).toEqual({ down: 'failed', warn: 'slow', ok: 'passed', stale: 'waiting', unknown: 'idle' })
+    expect(new Set(Object.values(PROVIDER_STATUS)).size).toBe(5)
+  })
+
+  it('writes a margin as the change chip, worse below zero', () => {
+    expect(marginChange(0.12)).toEqual({ text: '▲ +12%', worse: false })
+    expect(marginChange(-0.08)).toEqual({ text: '▼ -8%', worse: true })
+    expect(marginChange(null)).toBeNull()
   })
 })

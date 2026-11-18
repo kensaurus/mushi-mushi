@@ -78,3 +78,36 @@ export function BarCell({
     </span>
   )
 }
+
+/**
+ * A budget or quota bar with its warn and crit ticks (2026-11-18, moved from
+ * components/providers/providerMarks): `fill` is 0..1 of the limit, the ticks sit at their own
+ * fractions, and the fill takes the run-status colour of its level (✓ ok, ⧗ warn, ✕ crit). The
+ * visible label carries the number; the bar repeats it.
+ */
+export function ThresholdBar({
+  fill,
+  warn,
+  crit,
+  level,
+  label,
+}: {
+  fill: number
+  warn: number | null
+  crit: number | null
+  level: 'ok' | 'warn' | 'crit'
+  label: string
+}) {
+  const colour = level === 'crit' ? 'bg-st-failed' : level === 'warn' ? 'bg-st-slow' : 'bg-st-passed'
+  const pct = (v: number) => `${Math.max(0, Math.min(100, v * 100))}%`
+  return (
+    <span className="flex min-w-0 items-center gap-1.5" data-level={level}>
+      <span className="relative h-2 w-24 shrink-0 overflow-hidden rounded-xs bg-surface-overlay" aria-hidden="true">
+        <span className={`ci-grow-x absolute inset-y-0 left-0 ${colour}`} style={{ width: pct(fill) }} />
+        {warn != null && <span className="absolute inset-y-0 w-px bg-st-slow-ink" style={{ left: pct(warn) }} />}
+        {crit != null && <span className="absolute inset-y-0 w-px bg-st-failed-ink" style={{ left: pct(crit) }} />}
+      </span>
+      <span className="truncate font-mono text-2xs font-bold text-fg tabular-nums">{label}</span>
+    </span>
+  )
+}

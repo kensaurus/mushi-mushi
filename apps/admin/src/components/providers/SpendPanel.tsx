@@ -9,10 +9,18 @@
 
 import { useMemo, useState } from 'react'
 import type { OpsSnapshot } from '../../lib/kensaurusOpsTypes'
-import { buildHourlyBars, buildSpendGrid, cellKey, formatMicroUsd } from '../../lib/providersView'
+import { buildHourlyBars, buildSpendGrid, cellKey, formatMicroUsd, marginChange } from '../../lib/providersView'
 import { heatClass } from '../../lib/ciWeek'
 import { SegmentedControl } from '../ui'
-import { ChangeChip, Chip } from './providerMarks'
+import { Chip } from '../signal/Chip'
+import { ChangeChip } from '../signal/AgeChips'
+
+/** Margin as the kit's change chip; "—" when there is nothing to compare. */
+function MarginChip({ value }: { value: number | null }) {
+  const change = marginChange(value)
+  if (!change) return <span className="text-3xs text-fg-faint">—</span>
+  return <ChangeChip change={change} testId="margin-chip" />
+}
 
 type Window = '24h' | '30d'
 const WINDOWS = [
@@ -49,7 +57,7 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
         <div className="flex min-w-0 flex-col gap-0.5 rounded-md border border-edge bg-surface px-2.5 py-1.5">
           <span className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Margin</span>
           <span className="text-lg leading-none">
-            <ChangeChip value={t.margin} />
+            <MarginChip value={t.margin} />
           </span>
         </div>
         <Kpi label="Credits held" value={formatMicroUsd(digest?.liability_micro ?? 0)} testId="spend-liability" />
@@ -102,7 +110,7 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
                             )}
                           </span>
                           <span className="block px-1.5">
-                            <ChangeChip value={c.margin} />
+                            <MarginChip value={c.margin} />
                           </span>
                         </td>
                       )

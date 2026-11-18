@@ -8,10 +8,12 @@
  */
 
 import type { ProviderAccount } from '../../lib/kensaurusOpsTypes'
-import { ageLabel, dependentApps, providerGauge, providerState, type Gauge } from '../../lib/providersView'
+import { ageLabel, dependentApps, PROVIDER_STATUS, providerGauge, providerState, type Gauge } from '../../lib/providersView'
 import { Btn, Toggle } from '../ui'
 import { IconSliders } from '../icons'
-import { Chip, PendingMark, ProviderStateMark, ThresholdBar } from './providerMarks'
+import { Chip } from '../signal/Chip'
+import { ThresholdBar } from '../signal/BarCell'
+import { StatusMark, StatusPill } from '../signal/StatusMark'
 
 function GaugeCell({ gauge }: { gauge: Gauge | null }) {
   if (!gauge) return <span className="text-3xs text-fg-faint">no balance</span>
@@ -48,7 +50,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
             data-state={state}
           >
             <span className="md:w-32 md:shrink-0">
-              <ProviderStateMark state={state} since={ageLabel(p.status?.state_since, now)} />
+              <StatusPill status={PROVIDER_STATUS[state]} label={[state, ageLabel(p.status?.state_since, now)].filter(Boolean).join(' · ')} />
             </span>
             <span className="flex min-w-0 items-center gap-1.5 md:flex-1">
               <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? undefined}>
@@ -80,7 +82,11 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
               ))}
             </span>
             <span className="flex items-center justify-end gap-1.5 md:ml-auto">
-              {busy && <PendingMark />}
+              {busy && (
+                <span role="status" aria-label="Saving" data-testid="pending-mark">
+                  <StatusMark status="running" />
+                </span>
+              )}
               <Toggle
                 ariaLabel={`${p.enabled ? 'Turn off' : 'Turn on'} ${p.label}`}
                 checked={p.enabled}
