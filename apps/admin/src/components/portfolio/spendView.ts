@@ -28,6 +28,42 @@ export function ledgerTotal(app: Pick<LedgerApp, 'totalUsd' | 'complete'>): { te
   return { text: formatUsd(app.totalUsd), tone: null, title: undefined }
 }
 
+/** Most spend first; an unread total still sorts by what was read. */
+export function sortBySpend<T extends Pick<LedgerApp, 'totalUsd' | 'name'>>(apps: readonly T[]): T[] {
+  return [...apps].sort((a, b) => b.totalUsd - a.totalUsd || a.name.localeCompare(b.name))
+}
+
+export interface SpendPart {
+  key: 'mushi' | 'provider' | 'ci' | 'cloud'
+  label: string
+  usd: number
+}
+
+/** The four kinds of spend, in legend order (the stacked bar's segments). */
+export const SPEND_PARTS: ReadonlyArray<Omit<SpendPart, 'usd'>> = [
+  { key: 'mushi', label: 'Mushi Mushi AI' },
+  { key: 'provider', label: 'AI provider' },
+  { key: 'ci', label: 'CI' },
+  { key: 'cloud', label: 'Cloud bills' },
+]
+
+/** Where an app's money goes: only sources that were read; cloud = Supabase plus imported bills. */
+export function spendSplit(app: Pick<LedgerApp, 'mushiLlm' | 'providerLlm' | 'ci' | 'supabase' | 'bills'>): SpendPart[] {
+  const usd = (s: LedgerSource) => (s.state === 'ok' && s.usd != null ? s.usd : 0)
+  const by: Record<SpendPart['key'], number> = {
+    mushi: usd(app.mushiLlm),
+    provider: usd(app.providerLlm),
+    ci: usd(app.ci),
+    cloud: usd(app.supabase) + usd(app.bills),
+  }
+  return SPEND_PARTS.map((p) => ({ ...p, usd: by[p.key] }))
+}
+
+/** How many apps have nothing connected for a column (its header offers ONE connect action). */
+export function notConnectedCount(apps: ReadonlyArray<Pick<LedgerApp, 'providerLlm' | 'ci' | 'supabase' | 'bills'>>, column: 'providerLlm' | 'ci' | 'supabase' | 'bills'): number {
+  return apps.filter((a) => a[column].state === 'not_connected').length
+}
+
 const VENDOR_LABEL: Record<BillVendor, string> = { vercel: 'Vercel', aws: 'AWS', supabase: 'Supabase', other: 'Other' }
 
 export function vendorLabel(v: BillVendor): string {

@@ -28,20 +28,22 @@
  * read" (`card.unreadable`), never $0, "Not set" or "None yet".
  */
 
-import { Link, useSearchParams } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
-import { Badge, Btn, Callout, Card, CopyButton, EmptyState, FreshnessPill, Loading, PageStatus, Section, SegmentedControl } from '../components/ui'
+import { Btn, Card, EmptyState, FreshnessPill, Loading, PageStatus, SegmentedControl } from '../components/ui'
+import { TabbedSubNav } from '../components/TabbedSubNav'
 import { useActiveOrgId } from '../components/OrgSwitcher'
-import { usePageData, type PageDataState } from '../lib/usePageData'
+import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { findingGroupTitle, needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import type { PortfolioCard, PortfolioFindingsResponse, PortfolioResponse } from '../lib/portfolioTypes'
+import { needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { PortfolioFindings, ReadErrorsCallout } from '../components/portfolio/PortfolioFindings'
 import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
@@ -77,6 +79,23 @@ function readView(): PortfolioView {
   }
 }
 
+/**
+ * The page's sections are real tabs on `?tab=` (2026-11-18; they used to be anchor links over
+ * one endless scroll). Apps is the default and drops the param; an unknown value is Apps.
+ */
+const PORTFOLIO_TABS = [
+  { id: 'apps', label: 'Apps' },
+  { id: 'releases', label: 'Releases' },
+  { id: 'payments', label: 'Payments' },
+  { id: 'spend', label: 'Spend & accounts' },
+  { id: 'digest', label: 'Digest' },
+] as const
+type PortfolioTab = (typeof PORTFOLIO_TABS)[number]['id']
+
+function resolvePortfolioTab(param: string | null): PortfolioTab {
+  return PORTFOLIO_TABS.find((t) => t.id === param)?.id ?? 'apps'
+}
+
 function writeView(view: PortfolioView): void {
   try {
     localStorage.setItem(VIEW_STORAGE_KEY, view)
@@ -102,6 +121,16 @@ export function PortfolioPage() {
 
 function OrgPortfolio({ orgId }: { orgId: string }) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const tab = resolvePortfolioTab(searchParams.get('tab'))
+  // Links, not replace: each tab is a history entry, so back and forward move between them.
+  const tabHref = (id: PortfolioTab) => {
+    const next = new URLSearchParams(searchParams)
+    if (id === 'apps') next.delete('tab')
+    else next.set('tab', id)
+    const qs = next.toString()
+    return `${location.pathname}${qs ? `?${qs}` : ''}`
+  }
   const groups = useProjectGroups(orgId)
   const groupList = groups.data?.groups ?? []
   const requested = searchParams.get('group') ?? readActiveGroup()
@@ -189,14 +218,27 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   // Every app, the demo included: spend, connectors and the digest still name it.
   const appList = useMemo(() => (portfolio?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [portfolio])
-  const faviconFor = (card: PortfolioCard): ProjectFaviconSource => {
-    const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
-    const base = known
-      ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
-      : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
-    // The store icon from the portfolio read wins; the favicon and initials follow.
-    return card.iconUrl ? { ...base, icon_url: card.iconUrl } : base
-  }
+  const faviconFor = useCallback(
+    (card: PortfolioCard): ProjectFaviconSource => {
+      const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
+      const base = known
+        ? faviconSourceFromProject(known, snapshots.byId.get(card.projectId))
+        : { project_id: card.projectId, project_name: card.name, project_slug: card.slug ?? '' }
+      // The store icon from the portfolio read wins; the favicon and initials follow.
+      return card.iconUrl ? { ...base, icon_url: card.iconUrl } : base
+    },
+    [setup.data, snapshots.byId],
+  )
+  // An app's icon by id, for the grouped rows and matrices on every tab.
+  const cardById = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c])), [portfolio])
+  const iconFor = useCallback(
+    (projectId: string): ProjectFaviconSource => {
+      const c = cardById.get(projectId)
+      return c ? faviconFor(c) : { project_id: projectId, project_name: names.get(projectId) ?? projectId.slice(0, 8), project_slug: '' }
+    },
+    [cardById, faviconFor, names],
+  )
+  const appOrder = useMemo(() => rankedShown.map((r) => r.card.projectId), [rankedShown])
 
   return (
     <HighlightProvider>
@@ -205,7 +247,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           title="Apps"
           description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
           helpTitle="About apps"
-          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Below them are problems that show up in two or more apps, so you can fix them once."
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs."
           helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
           helpFlowPath="/portfolio"
         >
@@ -305,106 +347,115 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
         {cards.length > 0 && portfolio && (
           <>
-            <PortfolioSectionNav />
-            <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
-                <span className="ml-auto" />
-                <SegmentedControl
-                  value={view}
-                  onChange={setView}
-                  size="sm"
-                  ariaLabel="Show the apps as"
-                  options={[
-                    { id: 'table', label: 'Table' },
-                    { id: 'cards', label: 'Cards' },
-                  ]}
-                />
-                <SegmentedControl
-                  value={sortBy}
-                  onChange={setSortBy}
-                  size="sm"
-                  ariaLabel="Order the apps"
-                  options={[
-                    { id: 'worst', label: 'Worst first' },
-                    { id: 'name', label: 'A to Z' },
-                  ]}
-                />
-              </div>
-              <PanelErrorBoundary label="Portfolio cards">
-                {view === 'table' && (
-                  <Card className="px-2.5 py-2">
-                    <AppSignalGrid rows={rankedShown} now={now} />
-                  </Card>
-                )}
-                {view === 'cards' && attention.length > 0 && (
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {attention.map((card) => (
-                      <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
-                    ))}
-                  </div>
-                )}
-                {view === 'cards' && healthy.length > 0 && (
-                  <Card className="p-0">
-                    <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
-                      Nothing urgent ({healthy.length})
-                    </p>
-                    <ul className="divide-y divide-edge">
-                      {healthy.map((card) => (
-                        <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+            <TabbedSubNav
+              ariaLabel="Apps sections"
+              tabs={PORTFOLIO_TABS.map((t) => ({ to: tabHref(t.id), label: t.label, match: () => tab === t.id }))}
+            />
+            {tab === 'apps' && (
+              <section id="portfolio-apps" aria-label="Apps" className="space-y-3" data-testid="portfolio-tab-apps">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <SegmentedControl
+                    value={view}
+                    onChange={setView}
+                    size="sm"
+                    ariaLabel="Show the apps as"
+                    options={[
+                      { id: 'table', label: 'Table' },
+                      { id: 'cards', label: 'Cards' },
+                    ]}
+                  />
+                  <SegmentedControl
+                    value={sortBy}
+                    onChange={setSortBy}
+                    size="sm"
+                    ariaLabel="Order the apps"
+                    options={[
+                      { id: 'worst', label: 'Worst first' },
+                      { id: 'name', label: 'A to Z' },
+                    ]}
+                  />
+                </div>
+                <PanelErrorBoundary label="Portfolio cards">
+                  {view === 'table' && (
+                    <Card className="px-2.5 py-2">
+                      <AppSignalGrid rows={rankedShown} now={now} />
+                    </Card>
+                  )}
+                  {view === 'cards' && attention.length > 0 && (
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      {attention.map((card) => (
+                        <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
                       ))}
-                    </ul>
-                  </Card>
-                )}
-                {demo.length > 0 && <PublicDemoLine demo={demo} />}
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="Fix once">
-                <FindingsSections findings={findings} names={names} />
-              </PanelErrorBoundary>
-            </section>
+                    </div>
+                  )}
+                  {view === 'cards' && healthy.length > 0 && (
+                    <Card className="p-0">
+                      <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
+                        Nothing urgent ({healthy.length})
+                      </p>
+                      <ul className="divide-y divide-edge">
+                        {healthy.map((card) => (
+                          <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+                        ))}
+                      </ul>
+                    </Card>
+                  )}
+                  {demo.length > 0 && <PublicDemoLine demo={demo} />}
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Fix once">
+                  <PortfolioFindings findings={findings} iconFor={iconFor} appOrder={appOrder} />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-            <section id="portfolio-releases" aria-labelledby="portfolio-releases-title" className="scroll-mt-20 space-y-3">
-              <h2 id="portfolio-releases-title" className="text-sm font-semibold text-fg">Releases</h2>
-              <PanelErrorBoundary label="Releases">
-                <ReleasesCard orgId={orgId} />
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="Funnel across apps">
-                <FunnelCard orgId={orgId} />
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="CI runners">
-                <CiRunnersCard />
-              </PanelErrorBoundary>
-            </section>
+            {tab === 'releases' && (
+              <section id="portfolio-releases" aria-label="Releases" className="space-y-3" data-testid="portfolio-tab-releases">
+                <PanelErrorBoundary label="Releases">
+                  <ReleasesCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Funnel across apps">
+                  <FunnelCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="CI runners">
+                  <CiRunnersCard />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-            <section id="portfolio-payments" aria-labelledby="portfolio-payments-title" className="scroll-mt-20 space-y-3">
-              <h2 id="portfolio-payments-title" className="text-sm font-semibold text-fg">Payments</h2>
-              <PanelErrorBoundary label="Payments across apps">
-                <MonetizationCard orgId={orgId} />
-              </PanelErrorBoundary>
-            </section>
+            {tab === 'payments' && (
+              <section id="portfolio-payments" aria-label="Payments" className="space-y-3" data-testid="portfolio-tab-payments">
+                <PanelErrorBoundary label="Payments across apps">
+                  <MonetizationCard orgId={orgId} iconFor={iconFor} />
+                </PanelErrorBoundary>
+              </section>
+            )}
 
-            <section id="portfolio-spend" aria-labelledby="portfolio-spend-title" className="scroll-mt-20 space-y-3">
-              <h2 id="portfolio-spend-title" className="text-sm font-semibold text-fg">Spend & accounts</h2>
-              <PanelErrorBoundary label="Spend per app">
-                <SpendLedgerCard orgId={orgId} projects={appList} />
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="Accounts and resilience">
-                <AccountsRegisterCard orgId={orgId} />
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="Shared resources">
-                <SharedResourcesCard orgId={orgId} names={names} />
-              </PanelErrorBoundary>
-              <PanelErrorBoundary label="Connected sources">
-                <ConnectorsCard orgId={orgId} projects={appList} />
-              </PanelErrorBoundary>
-            </section>
+            {tab === 'spend' && (
+              <section id="portfolio-spend" aria-label="Spend and accounts" className="space-y-3" data-testid="portfolio-tab-spend">
+                <PanelErrorBoundary label="Spend per app">
+                  <SpendLedgerCard orgId={orgId} projects={appList} iconFor={iconFor} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Accounts and resilience">
+                  <AccountsRegisterCard orgId={orgId} />
+                </PanelErrorBoundary>
+                <PanelErrorBoundary label="Shared resources">
+                  <SharedResourcesCard orgId={orgId} iconFor={iconFor} />
+                </PanelErrorBoundary>
+                <div id="portfolio-connectors" className="scroll-mt-20">
+                  <PanelErrorBoundary label="Connected sources">
+                    <ConnectorsCard orgId={orgId} projects={appList} />
+                  </PanelErrorBoundary>
+                </div>
+              </section>
+            )}
 
-            <section id="portfolio-digest" aria-labelledby="portfolio-digest-title" className="scroll-mt-20 space-y-3">
-              <h2 id="portfolio-digest-title" className="text-sm font-semibold text-fg">Digest</h2>
-              <PanelErrorBoundary label="Daily digest">
-                <DigestCard orgId={orgId} projects={appList} />
-              </PanelErrorBoundary>
-            </section>
+            {tab === 'digest' && (
+              <section id="portfolio-digest" aria-label="Digest" className="space-y-3" data-testid="portfolio-tab-digest">
+                <PanelErrorBoundary label="Daily digest">
+                  <DigestCard orgId={orgId} projects={appList} />
+                </PanelErrorBoundary>
+              </section>
+            )}
           </>
         )}
       </div>
@@ -418,133 +469,5 @@ function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
     <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">
       {demo.length === 1 ? "Mushi Mushi's public demo" : `Mushi Mushi's public demos (${demo.length})`} (sample data) · powers the docs try-it page
     </p>
-  )
-}
-
-/** In-page sub-nav: the page is five sections long, so jump instead of scrolling. */
-const PORTFOLIO_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'portfolio-apps', label: 'Apps' },
-  { id: 'portfolio-releases', label: 'Releases' },
-  { id: 'portfolio-payments', label: 'Payments' },
-  { id: 'portfolio-spend', label: 'Spend & accounts' },
-  { id: 'portfolio-digest', label: 'Digest' },
-]
-
-function PortfolioSectionNav() {
-  return (
-    <nav aria-label="On this page" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-x-4 gap-y-1 border-b border-edge bg-surface-root/95 px-1 py-2 text-xs backdrop-blur">
-      {PORTFOLIO_SECTIONS.map((s) => (
-        <a key={s.id} href={`#${s.id}`} className="text-fg-muted hover:text-fg hover:underline">
-          {s.label}
-        </a>
-      ))}
-    </nav>
-  )
-}
-
-function FindingsSections({ findings, names }: { findings: PageDataState<PortfolioFindingsResponse>; names: Map<string, string> }) {
-  if (findings.loading && !findings.data) return <Loading text="Looking for problems shared across apps…" />
-  if (findings.error) {
-    return <PageLoadError error={findings.error} code={findings.errorCode} resource="shared problems" endpoint={findings.errorEndpoint} requestId={findings.requestId} onRetry={findings.reload} />
-  }
-  const data = findings.data
-  if (!data) return null
-  const name = (id: string) => names.get(id) ?? id.slice(0, 8)
-  const behind = data.sdkSkew.filter((e) => e.status !== 'current')
-  const failed = (part: PortfolioReadError['part']) => data.readErrors.find((e) => e.part === part && e.kind === 'failed')
-  const sdkFailed = failed('sdk')
-  const holesFailed = failed('integrations')
-  return (
-    <div className="flex flex-col gap-4">
-      {data.readErrors.length > 0 && <ReadErrorsCallout errors={data.readErrors} />}
-      <Section title="Fix once">
-        {data.groups.length === 0 ? (
-          <p className="text-sm text-fg-muted">No problem is open in two or more apps right now.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {data.groups.map((g) => (
-              <li key={g.ruleId} className="flex flex-col gap-2 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm font-medium text-fg" title={g.ruleId}>
-                    {findingGroupTitle(g)}
-                    <Badge tone={g.severity === 'error' ? 'dangerSubtle' : 'warnSubtle'} className="ml-2">
-                      {g.severity === 'error' ? 'Serious' : 'Look at'} · {g.projectIds.length} apps
-                    </Badge>
-                  </p>
-                  {g.title && g.sampleMessage && <p className="text-xs text-fg-secondary">{g.sampleMessage}</p>}
-                  <p className="text-xs text-fg-muted">
-                    {g.gateLabel ? `${g.gateLabel} · ` : ''}
-                    {g.projectIds.map(name).join(', ')}
-                  </p>
-                </div>
-                <CopyButton value={g.suggestedFix} label="Copy fix prompt" />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      {data.crossProject.length > 0 && (
-        <Section title="Across your apps">
-          <ul className="flex flex-col gap-2">
-            {data.crossProject.map((f) => (
-              <li key={f.id} className="flex flex-col gap-1 rounded-md border border-edge-subtle p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm text-fg">{f.message}</p>
-                  <p className="truncate text-xs text-fg-muted">{f.projectIds.map(name).join(', ')}</p>
-                </div>
-                {f.suggestedFix && <CopyButton value={`${f.message}\n\nFix: ${f.suggestedFix}`} label="Copy fix prompt" />}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-      <Section title="Mushi Mushi SDK versions">
-        {sdkFailed ? (
-          <p className="text-sm text-danger" role="status">{sdkFailed.message}</p>
-        ) : behind.length === 0 ? (
-          <p className="text-sm text-fg-muted">Every app that reported is on the latest Mushi Mushi SDK.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {behind.map((e) => (
-              <li key={`${e.projectId}:${e.package ?? 'none'}`} className="flex flex-wrap gap-2">
-                <span className="font-medium text-fg">{name(e.projectId)}</span>
-                {e.package && <code className="font-mono text-xs text-fg-muted">{e.package}</code>}
-                <span className="text-fg-muted">{e.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-      <Section title="Missing setups">
-        {holesFailed ? (
-          <p className="text-sm text-danger" role="status">{holesFailed.message}</p>
-        ) : data.holes.length === 0 ? (
-          <p className="text-sm text-fg-muted">No app is missing something most of your other apps have.</p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm">
-            {data.holes.map((h) => (
-              <li key={`${h.projectId}:${h.integration}`}>
-                <span className="font-medium text-fg">{name(h.projectId)}</span>{' '}
-                <span className="text-fg-muted">{h.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
-  )
-}
-
-/** Reads the server could not finish: their columns are unknown, not empty or zero. */
-function ReadErrorsCallout({ errors }: { errors: PortfolioReadError[] }) {
-  return (
-    <Callout tone="warn" label="Some of this could not be read">
-      <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs text-fg-secondary" role="status">
-        {errors.map((e) => (
-          <li key={`${e.part}:${e.kind}`}>{e.message}</li>
-        ))}
-      </ul>
-      <p className="mt-1 text-xs text-fg-muted">Cells that depend on these read "Could not read". Refresh in a minute.</p>
-    </Callout>
   )
 }

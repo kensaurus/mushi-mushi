@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, removalSummary, supabaseUsage } from './spendView'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, spendSplit, supabaseUsage } from './spendView'
 import { ratingLabel, pullSummary } from './storeReviewsView'
 
 describe('ledgerCell', () => {
@@ -31,6 +31,24 @@ describe('ledgerCell', () => {
     expect(removalSummary({ rowsRemoved: 3, rowsRestored: 0, restoredFrom: 0 })).toBe('Import removed. 3 rows left the ledger.')
     expect(removalSummary({ rowsRemoved: 0, rowsRestored: 1, restoredFrom: 1 })).toBe('Import removed. 1 row went back to the earlier import that had them.')
     expect(removalSummary({ rowsRemoved: 1, rowsRestored: 4, restoredFrom: 2 })).toBe('Import removed. 1 row left the ledger. 4 rows went back to 2 earlier imports that had them.')
+  })
+})
+
+describe('spend split and order', () => {
+  const ok = (usd: number) => ({ state: 'ok' as const, usd, detail: null })
+  const off = { state: 'not_connected' as const, usd: null, detail: null }
+  const bad = { state: 'error' as const, usd: null, detail: 'x' }
+
+  it('splits only what was read; cloud is Supabase plus imported bills', () => {
+    const parts = spendSplit({ mushiLlm: { ...ok(1), calls: 1 }, providerLlm: bad, ci: { ...off, minutes: null, runs: 0 }, supabase: { ...ok(4), usage: [] }, bills: { ...ok(6), byVendor: [] } })
+    expect(parts.map((p) => [p.key, p.usd])).toEqual([['mushi', 1], ['provider', 0], ['ci', 0], ['cloud', 10]])
+  })
+
+  it('sorts most spend first and counts the columns with nothing connected', () => {
+    expect(sortBySpend([{ name: 'b', totalUsd: 1 }, { name: 'a', totalUsd: 9 }, { name: 'c', totalUsd: 1 }]).map((a) => a.name)).toEqual(['a', 'b', 'c'])
+    const app = { providerLlm: off, ci: { ...ok(1), minutes: 1, runs: 1 }, supabase: { ...off, usage: [] }, bills: { ...bad, byVendor: [] } }
+    expect(notConnectedCount([app, app], 'providerLlm')).toBe(2)
+    expect(notConnectedCount([app], 'bills')).toBe(0)
   })
 })
 

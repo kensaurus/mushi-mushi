@@ -11,6 +11,7 @@
 import { ErrorAlert, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { ResourceCsvImport } from './ResourceCsvImport'
+import { AppIconChips, type IconFor } from './AppIconChips'
 
 interface ResourcesResponse {
   /** Absent on an older api; then the import stays hidden. */
@@ -24,7 +25,7 @@ const KIND_LABEL: Record<string, string> = {
   posthog_project: 'PostHog', sentry_project: 'Sentry project', repo: 'Repo', legacy_system: 'Other system', revenuecat_project: 'RevenueCat', account: 'Account',
 }
 
-export function SharedResourcesCard({ orgId, names }: { orgId: string; names: Map<string, string> }) {
+export function SharedResourcesCard({ orgId, iconFor }: { orgId: string; iconFor: IconFor }) {
   const path = `/v1/admin/orgs/${orgId}/portfolio/resources`
   const { data, loading, error, reload } = usePageData<ResourcesResponse>(path)
   const shared = (data?.resources ?? []).filter((r) => new Set(r.uses.map((u) => u.projectId)).size >= 2)
@@ -35,14 +36,21 @@ export function SharedResourcesCard({ orgId, names }: { orgId: string; names: Ma
       {data && (shared.length === 0 ? (
         <p className="text-sm text-fg-muted">No resource is used by two or more apps yet. {data.canImport ? 'Declare links in mushi.recipe.json, connect a source, or import a CSV below to see them.' : 'Declare links in mushi.recipe.json or connect a source to see them.'}</p>
       ) : (
-        <ul className="flex flex-col gap-1 text-sm">
-          {shared.map((r) => (
-            <li key={r.id} className="flex flex-wrap gap-2">
-              <span className="text-fg-muted">{KIND_LABEL[r.kind] ?? r.kind}</span>
-              <code className="font-mono text-xs text-fg">{r.externalId}</code>
-              <span className="text-fg-secondary">{[...new Set(r.uses.map((u) => names.get(u.projectId) ?? u.projectId.slice(0, 8)))].join(', ')}</span>
-            </li>
-          ))}
+        <ul className="flex flex-col divide-y divide-edge-subtle text-xs">
+          {shared.map((r) => {
+            const apps = [...new Set(r.uses.map((u) => u.projectId))]
+            return (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-1">
+                <span className="font-semibold text-fg-secondary">{KIND_LABEL[r.kind] ?? r.kind}</span>
+                <code className="font-mono text-fg">{r.externalId}</code>
+                <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums" title={`${apps.length} apps`}>
+                  {apps.length}
+                  <span className="sr-only"> apps</span>
+                </span>
+                <AppIconChips projectIds={apps} iconFor={iconFor} />
+              </li>
+            )
+          })}
         </ul>
       ))}
       {data?.canImport && (

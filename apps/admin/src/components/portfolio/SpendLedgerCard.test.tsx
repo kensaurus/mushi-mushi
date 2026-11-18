@@ -52,13 +52,13 @@ const DIGEST: DigestPreviewResponse = {
   preview: { title: 'Mushi daily digest for A', lines: ['This week, glot.it: 40 did signed_up, 9 reached activated (22.5%).'], text: '', hasContent: true },
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' } }))
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' }, ledger: { value: null as unknown } }))
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
     data: path?.endsWith('/spend')
-      ? LEDGER
+      ? mocks.ledger.value ?? LEDGER
       : path?.endsWith('/digest')
         ? DIGEST
         : path === '/v1/org'
@@ -128,7 +128,11 @@ describe('SpendLedgerCard', () => {
     await render(createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     const row = container.querySelector('[data-testid="spend-ledger-table"] tbody tr')!
     const cells = Array.from(row.querySelectorAll('td')).map((td) => td.textContent)
-    expect(cells).toEqual(['glot.it', '$1.75', '$42.10', "Couldn't read", 'Not connected', '$20.00', '$63.85+'])
+    // Not connected is a hatched dash with the reason as its tooltip; the split bar has no text.
+    expect(cells).toEqual(['glot.it', '$1.75', '$42.10', "Couldn't read", '—', '$20.00', '$63.85+', ''])
+    const supabase = row.querySelectorAll('td')[4]!
+    expect(supabase.className).toContain('ci-nodata')
+    expect(supabase.getAttribute('title')).toBe('Not connected. Import a Supabase usage or invoice CSV to see egress and invocations.')
     expect(container.textContent).toContain('some totals are a floor')
     expect(container.textContent).toContain('$7.50 of AI provider spend is not tied to any app')
   })
@@ -194,6 +198,75 @@ describe('SpendLedgerCard', () => {
   })
 })
 
+const app = (projectId: string, name: string, over: Partial<SpendLedgerResponse['apps'][number]>): SpendLedgerResponse['apps'][number] => ({
+  projectId,
+  name,
+  mushiLlm: { state: 'ok', usd: 0, calls: 0, detail: null },
+  providerLlm: { state: 'not_connected', usd: null, detail: 'Connect AI provider spend under Connected sources.' },
+  ci: { state: 'ok', usd: 0, minutes: 0, runs: 0, detail: null },
+  supabase: { state: 'not_connected', usd: null, usage: [], detail: 'Import a Supabase CSV.' },
+  bills: { state: 'not_connected', usd: null, byVendor: [], detail: 'Import a Vercel or AWS bill CSV.' },
+  totalUsd: 0,
+  complete: true,
+  ...over,
+})
+
+describe('SpendLedgerCard signals', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    mocks.apiFetch.mockReset()
+    mocks.ledger.value = {
+      ...LEDGER,
+      complete: true,
+      apps: [
+        app('s', 'small', { mushiLlm: { state: 'ok', usd: 2, calls: 4, detail: null }, totalUsd: 2 }),
+        app('b', 'big', { mushiLlm: { state: 'ok', usd: 10, calls: 9, detail: null }, providerLlm: { state: 'ok', usd: 30, detail: null }, ci: { state: 'ok', usd: 20, minutes: 3000, runs: 40, detail: null }, totalUsd: 60 }),
+        app('m', 'mid', { ci: { state: 'ok', usd: 15, minutes: 2500, runs: 30, detail: null }, totalUsd: 15 }),
+      ],
+    }
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    mocks.ledger.value = null
+  })
+
+  async function render(): Promise<void> {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(SpendLedgerCard, { orgId: ORG, projects: [] })))
+      await flush()
+    })
+  }
+
+  it('sorts apps by total, most first, with the total as a bar on one scale', async () => {
+    await render()
+    const rows = Array.from(container.querySelectorAll('[data-testid="spend-ledger-table"] tbody tr'))
+    expect(rows.map((r) => r.querySelector('td')!.textContent)).toEqual(['big', 'mid', 'small'])
+    const widths = rows.map((r) => (r.querySelector('[data-testid="spend-total"] [data-testid="bar-cell-fill"]') as HTMLElement).style.width)
+    expect(widths).toEqual(['100%', '25%', `${(2 / 60) * 100}%`])
+    // Where the money goes, per app, as a stacked bar named with its amounts.
+    const split = rows[0]!.querySelector('[data-testid="spend-split"]')!
+    expect(split.getAttribute('aria-label')).toBe('big spend: Mushi Mushi AI $10.00, AI provider $30.00, CI $20.00, Cloud bills $0.00')
+    expect(Array.from(split.querySelectorAll('[data-part]')).map((s) => s.getAttribute('data-part'))).toEqual(['mushi', 'provider', 'ci'])
+    expect(container.querySelectorAll('[data-testid="spend-legend"]')).toHaveLength(1)
+  })
+
+  it('never repeats "Not connected" per cell: a dash in the cells, one connect action per column', async () => {
+    await render()
+    const text = container.querySelector('[data-testid="spend-ledger-table"]')!.textContent ?? ''
+    expect(text).not.toContain('Not connected')
+    expect(container.querySelectorAll('td[data-state="not_connected"]')).toHaveLength(8)
+    const labels = Array.from(container.querySelectorAll('thead button, thead a')).map((b) => b.textContent)
+    expect(labels).toEqual(['Connect AI provider', 'Connect Supabase', 'Import bills'])
+  })
+})
+
 describe('portfolio cards for a member (QA 177)', () => {
   let container: HTMLDivElement
   let root: Root
@@ -224,6 +297,9 @@ describe('portfolio cards for a member (QA 177)', () => {
     const labels = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())
     expect(labels).not.toContain('Import')
     expect(labels).not.toContain('Remove')
+    // The header actions that lead to the import form go too; Connected sources stays open to members.
+    expect(labels).not.toContain('Connect Supabase')
+    expect(labels).not.toContain('Import bills')
     expect(container.textContent).toContain('Only team owners and admins can change this.')
   })
 
