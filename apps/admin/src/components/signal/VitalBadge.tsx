@@ -13,7 +13,7 @@ export type VitalName = 'LCP' | 'INP' | 'CLS' | 'FCP' | 'TTFB' | 'FID'
 export type VitalGrade = 'good' | 'needs-work' | 'poor'
 
 /** Google's thresholds: at or under `good` is good, over `poor` is poor. ms, except CLS (unitless). */
-export const VITAL_THRESHOLDS: Record<VitalName, { good: number; poor: number }> = {
+const VITAL_THRESHOLDS: Record<VitalName, { good: number; poor: number }> = {
   LCP: { good: 2500, poor: 4000 },
   INP: { good: 200, poor: 500 },
   FID: { good: 100, poor: 300 },
@@ -22,6 +22,7 @@ export const VITAL_THRESHOLDS: Record<VitalName, { good: number; poor: number }>
   TTFB: { good: 800, poor: 1800 },
 }
 
+/** @internal Exported for tests. */
 export function gradeVital(name: VitalName, value: number): VitalGrade {
   const t = VITAL_THRESHOLDS[name]
   if (value <= t.good) return 'good'
@@ -37,7 +38,7 @@ const GRADE_BOX: Record<VitalGrade, string> = {
   poor: 'border-danger/55 bg-danger-muted',
 }
 
-/** "7.4 s", "180 ms", "0.31". */
+/** @internal "7.4 s", "180 ms", "0.31". Exported for tests. */
 export function formatVital(name: VitalName, value: number): string {
   if (name === 'CLS') return value.toFixed(2)
   if (value >= 1000) return `${(value / 1000).toFixed(1)} s`

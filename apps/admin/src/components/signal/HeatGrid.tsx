@@ -21,7 +21,7 @@ import { useLinked, type HighlightKey } from './linkedHighlight'
 import { badnessClass, heatClass } from './scale'
 import { StatusGlyph, TONE_CHAR, type SignalTone } from './StatusGlyph'
 
-export type HeatScaleKind = 'heat' | 'bad' | 'state'
+type HeatScaleKind = 'heat' | 'bad' | 'state'
 
 export interface HeatColumn {
   id: string
@@ -159,11 +159,11 @@ export function HeatGrid({
           <caption className="pb-1 text-left text-3xs font-bold tracking-wider text-fg uppercase">{caption}</caption>
           <thead>
             <tr>
-              <th scope="col" className="pr-2 pb-1 text-left text-3xs font-semibold text-fg-secondary">
+              <th scope="col" className="pr-2 pb-1 text-left text-2xs font-semibold text-fg-secondary">
                 {rowHeader}
               </th>
               {columns.map((c) => (
-                <th key={c.id} scope="col" className="px-0.5 pb-1 text-center text-3xs leading-tight font-semibold text-fg-secondary" title={c.hint}>
+                <th key={c.id} scope="col" className="px-0.5 pb-1 text-center text-2xs leading-tight font-semibold text-fg-secondary" title={c.hint}>
                   {c.label}
                 </th>
               ))}

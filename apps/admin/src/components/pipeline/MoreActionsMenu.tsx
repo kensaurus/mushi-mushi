@@ -59,7 +59,7 @@ export function MoreActionsMenu({ actions, label, testId }: { actions: readonly 
         aria-expanded={open}
         aria-label={`${label}: ${actions.length} more ${actions.length === 1 ? 'action' : 'actions'}`}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-7 items-center gap-0.5 rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        className="inline-flex h-7 items-center gap-0.5 rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg hover:border-accent hover:text-accent focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
         data-testid={testId}
       >
         {busy ? 'Working…' : 'More'}

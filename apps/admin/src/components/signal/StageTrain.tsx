@@ -55,11 +55,11 @@ function Stage({ stage, index }: { stage: TrainStage; index: number }) {
       )}
       {stage.to ? (
         stage.to.startsWith('#') ? (
-          <a href={stage.to} className={`${cls} flex-1 hover:border-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none`}>
+          <a href={stage.to} className={`${cls} flex-1 hover:border-accent focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none`}>
             {body}
           </a>
         ) : (
-          <Link to={stage.to} className={`${cls} flex-1 hover:border-accent focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none`}>
+          <Link to={stage.to} className={`${cls} flex-1 hover:border-accent focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none`}>
             {body}
           </Link>
         )

@@ -55,7 +55,7 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
                 aria-pressed={active}
                 data-testid={`pipeline-stage-${s.id}`}
                 title={STAGE_PLAIN[s.id]}
-                className={`ci-rise flex h-full w-full flex-col gap-0.5 px-2 py-1.5 text-left motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${
+                className={`ci-rise flex h-full w-full flex-col gap-0.5 px-2 py-1.5 text-left motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${
                   active ? 'bg-accent-muted ring-2 ring-accent ring-inset' : `${(tone && CELL[tone]) || 'bg-surface-raised'} hover:bg-surface-overlay`
                 }`}
                 style={{ animationDelay: `${i * 40}ms` }}

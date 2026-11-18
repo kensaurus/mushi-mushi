@@ -10,8 +10,6 @@
  * diverging = against a target (red below, blue above, grey on target).
  */
 
-export type HeatScale = 'heat' | 'fail'
-
 /** The heat class for a count on a 0..max scale: `ci-cell-0` for none, `ci-heat-1..6` above. */
 export function heatClass(value: number | null, max: number, steps = 6, prefix = 'ci-heat'): string {
   if (value == null) return 'ci-nodata'

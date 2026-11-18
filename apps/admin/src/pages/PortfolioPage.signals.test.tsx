@@ -19,6 +19,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PortfolioCard, PortfolioResponse } from '../lib/portfolioTypes'
+import type { PortfolioPage as PortfolioPageType } from './PortfolioPage'
 
 const NOW = Date.now()
 const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString()
@@ -64,7 +65,7 @@ const CARDS = [
 ]
 
 const state = vi.hoisted(() => ({
-  portfolioReload: null as null | ReturnType<typeof import('vitest').vi.fn>,
+  portfolioReload: null as null | ReturnType<typeof vi.fn>,
   data: null as unknown,
 }))
 
@@ -112,7 +113,7 @@ for (const m of ['ReleasesCard', 'FunnelCard', 'CiRunnersCard', 'MonetizationCar
 
 let container: HTMLDivElement
 let root: Root
-let PortfolioPage: typeof import('./PortfolioPage').PortfolioPage
+let PortfolioPage: typeof PortfolioPageType
 
 beforeEach(async () => {
   state.portfolioReload = vi.fn()

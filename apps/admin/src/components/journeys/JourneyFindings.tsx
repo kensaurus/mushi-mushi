@@ -105,6 +105,7 @@ export function FlowsSection({ flows, totalSessions }: { flows: Array<{ pages: s
           {ranked.map((f, i) => (
             <li
               key={f.pages.join('>')}
+              // mushi-mushi-allowlist: rank number column / path column; the rank fits two digits
               className="ci-rise grid grid-cols-[1.25rem_minmax(0,1fr)] items-start gap-x-1.5 gap-y-0.5"
               style={{ animationDelay: `${i * 40}ms` }}
             >

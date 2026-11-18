@@ -20,9 +20,9 @@ import { IconArrowRight, IconCheck, IconClose, IconExternalLink } from '../icons
 import { useLinked, usePinned, type HighlightKey } from './linkedHighlight'
 import { StatusGlyph } from './StatusGlyph'
 
-export type SignalSeverity = 'critical' | 'serious'
+type SignalSeverity = 'critical' | 'serious'
 
-export interface SignalAlertAction {
+interface SignalAlertAction {
   label: string
   /** In-app route (react-router). */
   to?: string
@@ -60,12 +60,12 @@ const MORE = 'self-start text-2xs font-medium text-fg-secondary underline decora
 export const SIGNAL_ICON_LINK =
   'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-edge bg-surface-raised text-fg-secondary ' +
   'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
-  'active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+  'active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
 
 const ACTION =
   'inline-flex h-7 items-center rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg ' +
   'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
 
 function ActionLink({ action }: { action: SignalAlertAction }) {
   if (action.to) {

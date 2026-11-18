@@ -5,20 +5,12 @@
  *          module keeps the CI names and adds the CI-specific keys (app, job, machine).
  */
 
-import {
-  HighlightProvider,
-  useLinked,
-  usePinned,
-  type HighlightKey,
-  type LinkedProps,
-} from '../components/signal/linkedHighlight'
+import { HighlightProvider, useLinked, type HighlightKey } from '../components/signal/linkedHighlight'
 
 export type CiKey = HighlightKey
-export type CiLinkProps = LinkedProps
 
 export const CiHighlightProvider = HighlightProvider
 export const useCiLink = useLinked
-export const useCiPinned = usePinned
 
 /** The keys of one job: its app (repo), the job type, and the runner it ran on. */
 export function ciJobKeys(job: { repo: string; jobName: string; runnerName?: string | null }): CiKey[] {

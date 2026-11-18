@@ -62,7 +62,7 @@ const TILE_BOX: Record<ConnectionState, string> = {
 const CONNECT =
   'inline-flex h-6 items-center rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg ' +
   'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
 
 /** "12 min ago", "5 h ago", "3 d ago" as the alert card's big number. */
 function ageMetric(iso: string | null, now = Date.now()): { value: string; unit: string } {
@@ -75,7 +75,7 @@ function ageMetric(iso: string | null, now = Date.now()): { value: string; unit:
   return { value: String(Math.round(h / 24)), unit: 'd since check' }
 }
 
-/** @internal One group of tiles (exported for tests; the page passes them inline). */
+/** One group of tiles. */
 export interface ConnectionGroup {
   /** Anchor id on the group, for links that point at a whole section. */
   id?: string
@@ -200,7 +200,7 @@ function ConnectionTile({
         aria-label={`${tile.label}: ${word}. Open its settings.`}
         data-state={state}
         title={tile.view.detail ?? undefined}
-        className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+        className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
       >
         <span className="flex min-w-0 items-center gap-1.5">
           <BrandIcon brand={tile.brand} size={16} decorative />
