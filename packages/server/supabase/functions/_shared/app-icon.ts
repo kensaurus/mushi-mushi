@@ -68,6 +68,9 @@ export function storeIdsFromSnapshots(rows: ReadonlyArray<{ kind: string; snapsh
   return { appleIds: [...appleIds], packages: [...packages] }
 }
 
+/** Storefronts asked in order; '' is the bare lookup (Apple's stale default), kept last. */
+export const APP_STORE_STOREFRONTS = ['us', 'jp', ''] as const
+
 /**
  * The first store icon found: App Store ids first, then Play packages.
  * `complete` is false when a store could not be read (network error or a
@@ -77,14 +80,19 @@ export async function resolveStoreIcon(ids: StoreIds, fetcher: ProbeFetcher): Pr
   let complete = true
   const transient = (status: number) => status === 429 || status >= 500
   for (const id of ids.appleIds) {
-    try {
-      const res = await fetcher(`https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}`)
-      if (transient(res.status)) complete = false
-      const url = res.status === 200 ? parseItunesLookup(res.text)?.iconUrl : null
-      if (isStoreIconUrl(url)) return { icon: { url, source: 'app_store' }, complete: true }
-    } catch (err) {
-      complete = false
-      log.warn('App Store lookup failed', { appleId: id, err: String(err).slice(0, 160) })
+    // A lookup without `country` answers from a stale cache: on 2026-11-18 it still gave
+    // lets-talk 1.3.2 and its old icon while the us and jp storefronts gave 1.4.0. Ask a
+    // storefront first; the bare lookup is the last try for an app sold elsewhere.
+    for (const storefront of APP_STORE_STOREFRONTS) {
+      try {
+        const res = await fetcher(`https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}${storefront ? `&country=${storefront}` : ''}`)
+        if (transient(res.status)) complete = false
+        const url = res.status === 200 ? parseItunesLookup(res.text)?.iconUrl : null
+        if (isStoreIconUrl(url)) return { icon: { url, source: 'app_store' }, complete: true }
+      } catch (err) {
+        complete = false
+        log.warn('App Store lookup failed', { appleId: id, storefront, err: String(err).slice(0, 160) })
+      }
     }
   }
   for (const pkg of ids.packages) {

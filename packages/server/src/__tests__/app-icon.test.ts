@@ -54,6 +54,26 @@ describe('resolveStoreIcon', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('asks a storefront first: the bare lookup is a stale cache (lets-talk 1.3.2 vs 1.4.0, 2026-11-18)', async () => {
+    const urls: string[] = []
+    const fetcher = async (url: string) => {
+      urls.push(url)
+      return url.includes('country=') ? res(200, ITUNES(APPLE_ICON)) : res(200, ITUNES('https://is1-ssl.mzstatic.com/old.png'))
+    }
+    await expect(resolveStoreIcon({ appleIds: ['6799392790'], packages: [] }, fetcher)).resolves.toEqual({ icon: { url: APPLE_ICON, source: 'app_store' }, complete: true })
+    expect(urls).toEqual(['https://itunes.apple.com/lookup?id=6799392790&country=us'])
+  })
+
+  it('tries jp, then the bare lookup, for an app the us storefront does not sell', async () => {
+    const urls: string[] = []
+    const fetcher = async (url: string) => {
+      urls.push(url)
+      return url.endsWith('country=us') || url.endsWith('country=jp') ? res(200, '{"resultCount":0,"results":[]}') : res(200, ITUNES(APPLE_ICON))
+    }
+    await expect(resolveStoreIcon({ appleIds: ['1'], packages: [] }, fetcher)).resolves.toMatchObject({ icon: { url: APPLE_ICON } })
+    expect(urls).toEqual(['https://itunes.apple.com/lookup?id=1&country=us', 'https://itunes.apple.com/lookup?id=1&country=jp', 'https://itunes.apple.com/lookup?id=1'])
+  })
+
   it('falls back to the Play icon, and never trusts a non-store host', async () => {
     const fetcher = async (url: string) => (url.includes('itunes') ? res(200, ITUNES('https://evil.example/x.png')) : res(200, PLAY(PLAY_ICON)))
     await expect(resolveStoreIcon({ appleIds: ['1'], packages: ['p.q'] }, fetcher)).resolves.toEqual({
