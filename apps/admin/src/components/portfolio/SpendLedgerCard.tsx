@@ -15,7 +15,7 @@
  *              days go back to the next newest import that has them)
  */
 
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Btn, Callout, Loading, Section } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
@@ -25,7 +25,7 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { PageLoadError } from '../PageLoadError'
 import type { BillImportResult, BillRemovalResult, BillVendor, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
 import { formatUsd } from './portfolioView'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, SPEND_PARTS, spendSplit, supabaseUsage, vendorLabel, type SpendPart } from './spendView'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, SPEND_PARTS, spendSplit, supabaseUsage, vendorLabel, withoutPublicDemo, type SpendPart } from './spendView'
 import { BarCell } from '../signal/BarCell'
 import { ProjectFavicon } from '../ProjectFavicon'
 import type { IconFor } from './AppIconChips'
@@ -85,9 +85,24 @@ function ConnectHeader({ label, title, missing, action }: { label: string; title
   )
 }
 
-export function SpendLedgerCard({ orgId, projects, iconFor }: { orgId: string; projects: Array<{ projectId: string; name: string }>; iconFor?: IconFor }) {
+const NO_IDS: ReadonlySet<string> = new Set()
+
+export function SpendLedgerCard({
+  orgId,
+  projects,
+  iconFor,
+  demoIds = NO_IDS,
+}: {
+  orgId: string
+  projects: Array<{ projectId: string; name: string }>
+  iconFor?: IconFor
+  /** The public demo app(s): kept out of the rows and the footer (withoutPublicDemo). */
+  demoIds?: ReadonlySet<string>
+}) {
   const path = `/v1/admin/orgs/${orgId}/spend`
-  const { data, loading, error, reload } = usePageData<SpendLedgerResponse>(path)
+  const ledger = usePageData<SpendLedgerResponse>(path)
+  const { loading, error, reload } = ledger
+  const data = useMemo(() => (ledger.data ? withoutPublicDemo(ledger.data, demoIds) : null), [ledger.data, demoIds])
   const [vendor, setVendor] = useState<BillVendor>('vercel')
   const [target, setTarget] = useState('')
   const [busy, setBusy] = useState(false)

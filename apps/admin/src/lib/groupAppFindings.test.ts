@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { FindingGroup, PortfolioFindingsResponse } from './portfolioTypes'
-import { clipWords, crossFindingAction, fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, normaliseAppSentence } from './groupAppFindings'
+import { clipWords, crossFindingAction, fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, normaliseAppSentence, withoutApps } from './groupAppFindings'
 
 type Cross = PortfolioFindingsResponse['crossProject'][number]
 
@@ -128,5 +128,38 @@ describe('fixOnceRows', () => {
   it('an unknown rule takes its gate’s action and a six-word clip of its title', () => {
     const [row] = fixOnceRows([group({ ruleId: 'workflow_no_timeout', gate: 'ci_drift', sampleMessage: 'The deploy workflow has no timeout on its build job, so a hang bills.' })], (g) => g.sampleMessage)
     expect(row).toMatchObject({ title: 'The deploy workflow has no timeout…', action: 'Fix CI', explanation: 'The deploy workflow has no timeout on its build job, so a hang bills.' })
+  })
+})
+
+describe('withoutApps (the public demo, keep-but-hide)', () => {
+  const g = (ruleId: string, projectIds: string[]): FindingGroup => ({
+    ruleId, title: null, gate: 'radar', gateLabel: null, severity: 'warn', projectIds, findingCount: projectIds.length, sampleMessage: '', suggestedFix: '',
+  })
+  const data: PortfolioFindingsResponse = {
+    organizationId: 'o',
+    generatedAt: '',
+    groups: [g('spend_cap_unset', ['yen', 'glot', 'demo']), g('index_stale', ['glot', 'demo'])],
+    crossProject: [probe('yen'), { ...probe('glot'), id: 'x', projectIds: ['demo'] }],
+    sdkSkew: [
+      { projectId: 'demo', package: null, version: null, latest: null, status: 'unknown', reason: 'No Mushi SDK has reported from this project yet.' },
+      { projectId: 'yen', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.1.0', status: 'behind', reason: '' },
+    ],
+    holes: [
+      { projectId: 'demo', integration: 'supabase', siblingsWith: 3, reason: '' },
+      { projectId: 'glot', integration: 'supabase', siblingsWith: 3, reason: '' },
+    ],
+    readErrors: [],
+  }
+
+  it('drops the hidden app from every per-app list, and a Fix once group left in one app', () => {
+    const out = withoutApps(data, new Set(['demo']))
+    expect(out.groups.map((x) => [x.ruleId, x.projectIds])).toEqual([['spend_cap_unset', ['yen', 'glot']]])
+    expect(out.crossProject.map((f) => f.projectIds)).toEqual([['yen']])
+    expect(out.sdkSkew.map((e) => e.projectId)).toEqual(['yen'])
+    expect(out.holes.map((h) => h.projectId)).toEqual(['glot'])
+  })
+
+  it('returns the data as it is when nothing is hidden', () => {
+    expect(withoutApps(data, new Set())).toBe(data)
   })
 })

@@ -66,6 +66,8 @@ import { HighlightProvider } from '../components/signal/linkedHighlight'
 import { AlertCards } from '../components/signal/AlertCards'
 import { AppSignalGrid } from '../components/portfolio/AppSignalGrid'
 import { appAlerts, lastCheckIns, rankApps, rankingSentence } from '../lib/appSignals'
+import { withoutApps } from '../lib/groupAppFindings'
+import { isPublicDemo } from '../lib/publicDemo'
 
 /** Table (the heat grid) or Cards: remembered per browser. */
 type PortfolioView = 'table' | 'cards'
@@ -187,6 +189,15 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const fetchedAt = freshWins ? refreshed.at : page.lastFetchedAt
   // The public demo stays out of the cards and every count ("All 10 apps need you").
   const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
+  // Keep-but-hide (2026-11-18): the demo's id from the portfolio or, earlier, from the team's
+  // project list. Every per-app list on the tabs drops it here, once: Fix once, SDK versions,
+  // Missing setups, Across your apps and the Spend table.
+  const demoIds = useMemo(
+    () => new Set([...demo.map((c) => c.projectId), ...teamApps.filter((a) => isPublicDemo({ name: a.name, slug: null })).map((a) => a.projectId)]),
+    [demo, teamApps],
+  )
+  const ownFindingsData = useMemo(() => (findings.data ? withoutApps(findings.data, demoIds) : null), [findings.data, demoIds])
+  const ownFindings = { ...findings, data: ownFindingsData }
   const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
   // Names from the team's project list until the portfolio read lands, so the other tabs can draw first.
   const names = useMemo(
@@ -226,6 +237,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // Every app, the demo included: spend, connectors and the digest still name it.
   // The team's project list stands in until the portfolio read lands.
   const appList = useMemo(() => (portfolio ? portfolio.cards.map((c) => ({ projectId: c.projectId, name: c.name })) : teamApps), [portfolio, teamApps])
+  // The bill import picks among the team's own apps; the demo has no bills.
+  const ownAppList = useMemo(() => appList.filter((a) => !demoIds.has(a.projectId)), [appList, demoIds])
   // Only a finished read that holds no app hides the tabs; while it runs, every tab but Apps draws.
   const knownEmpty = portfolio != null && cards.length === 0
   const faviconFor = useCallback(
@@ -280,7 +293,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                   metrics={[
                     { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
                     { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                    { label: 'Fix once', value: portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                    { label: 'Fix once', value: ownFindings.data?.groups.length ?? portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
                   ]}
                   action={
                     status.first && firstReason ? (
@@ -412,10 +425,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                       </ul>
                     </Card>
                   )}
-                  {demo.length > 0 && <PublicDemoLine demo={demo} />}
                 </PanelErrorBoundary>
                 <PanelErrorBoundary label="Fix once">
-                  <PortfolioFindings findings={findings} iconFor={iconFor} appOrder={appOrder} />
+                  <PortfolioFindings findings={ownFindings} iconFor={iconFor} appOrder={appOrder} />
                 </PanelErrorBoundary>
               </section>
             )}
@@ -445,7 +457,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             {tab === 'spend' && (
               <section id="portfolio-spend" aria-label="Spend and accounts" className="space-y-3" data-testid="portfolio-tab-spend">
                 <PanelErrorBoundary label="Spend per app">
-                  <SpendLedgerCard orgId={orgId} projects={appList} iconFor={iconFor} />
+                  <SpendLedgerCard orgId={orgId} projects={ownAppList} iconFor={iconFor} demoIds={demoIds} />
                 </PanelErrorBoundary>
                 <PanelErrorBoundary label="Accounts and resilience">
                   <AccountsRegisterCard orgId={orgId} />
@@ -475,7 +487,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   )
 }
 
-/** The public demo: one muted line, not a card that "needs you". */
+/** The public demo on an otherwise empty page: one muted line, not a card that "needs you". */
 function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
   return (
     <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">

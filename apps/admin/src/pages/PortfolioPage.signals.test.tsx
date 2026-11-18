@@ -67,13 +67,16 @@ const CARDS = [
 const state = vi.hoisted(() => ({
   portfolioReload: null as null | ReturnType<typeof vi.fn>,
   data: null as unknown,
+  findings: null as unknown,
 }))
+
+const NO_FINDINGS = { organizationId: 'o1', generatedAt: '', groups: [], sdkSkew: [], holes: [], crossProject: [], readErrors: [] }
 
 vi.mock('../lib/usePageData', () => ({
   usePageData: (path: string | null) => {
     const base = { error: null, errorCode: null, errorEndpoint: null, requestId: null, reload: vi.fn(), lastFetchedAt: null, isValidating: false, loading: false }
     if (path === '/v1/admin/orgs/o1/portfolio') return { ...base, reload: state.portfolioReload, lastFetchedAt: new Date(NOW - 60_000).toISOString(), data: state.data }
-    if (path === '/v1/admin/orgs/o1/portfolio/findings') return { ...base, data: { organizationId: 'o1', generatedAt: '', groups: [], sdkSkew: [], holes: [], crossProject: [], readErrors: [] } }
+    if (path === '/v1/admin/orgs/o1/portfolio/findings') return { ...base, data: state.findings }
     if (path === '/v1/admin/setup') {
       return {
         ...base,
@@ -118,6 +121,7 @@ let PortfolioPage: typeof PortfolioPageType
 beforeEach(async () => {
   state.portfolioReload = vi.fn()
   state.data = portfolio(CARDS)
+  state.findings = NO_FINDINGS
   apiFetch.mockReset()
   try {
     localStorage.clear()
@@ -254,6 +258,41 @@ describe('Apps signals', () => {
     const cardsBtn = [...container.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Cards') as HTMLElement
     await act(async () => cardsBtn.click())
     expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+  })
+})
+
+describe('the public demo (keep-but-hide)', () => {
+  const DEMO = card({ projectId: 'demo', name: 'Mushi demo (sample data)', slug: 'mushi-demo', openReports: 4 })
+  const group = (ruleId: string, projectIds: string[]) => ({
+    ruleId, title: null, gate: 'radar', gateLabel: null, severity: 'warn' as const, projectIds, findingCount: projectIds.length, sampleMessage: 'x', suggestedFix: 'y',
+  })
+
+  it('is in no per-app list on the Apps tab, and leaves no loose line under the grid', async () => {
+    state.data = portfolio([...CARDS, DEMO])
+    state.findings = {
+      ...NO_FINDINGS,
+      groups: [group('spend_cap_unset', ['glot', 'yen', 'demo']), group('key_unused_90d', ['twm', 'demo'])],
+      sdkSkew: [
+        { projectId: 'demo', package: null, version: null, latest: null, status: 'unknown', reason: 'No Mushi SDK has reported from this project yet.' },
+        { projectId: 'yen', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.1.0', status: 'behind', reason: '' },
+      ],
+      holes: [{ projectId: 'demo', integration: 'github', siblingsWith: 5, reason: '' }, { projectId: 'demo', integration: 'sentry', siblingsWith: 5, reason: '' }, { projectId: 'twm', integration: 'sentry', siblingsWith: 5, reason: '' }],
+    }
+    await render()
+    expect(container.querySelector('[data-testid="heat-row-demo"]')).toBeNull()
+    expect(container.querySelector('[data-testid="portfolio-public-demo"]')).toBeNull()
+    expect(container.textContent).not.toContain('powers the docs')
+    // Fix once: no demo column or dot, and a problem left in one app is not "fix once".
+    expect(container.querySelector('[data-testid="fix-once-col-demo"]')).toBeNull()
+    expect(container.querySelector('[data-app="demo"]')).toBeNull()
+    expect(container.querySelector('[data-testid="fix-once-item-key_unused_90d"]')).toBeNull()
+    expect(container.querySelector('[data-testid="fix-once-item-spend_cap_unset"]')).not.toBeNull()
+    // SDK versions and Missing setups: no row that only the demo had.
+    expect(container.querySelector('[data-testid="sdk-row-unknown"]')).toBeNull()
+    expect(container.querySelector('[data-testid="hole-row-github"]')).toBeNull()
+    expect(container.querySelector('[data-testid="hole-row-sentry"] [data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('1')
+    // The header's Fix once count follows what the page shows, not the server's raw count.
+    expect(container.querySelector('[data-testid="page-status"]')!.textContent).toContain('Fix once1')
   })
 })
 

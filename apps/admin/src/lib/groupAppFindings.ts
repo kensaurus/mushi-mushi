@@ -177,6 +177,24 @@ export function groupSdkSkew(entries: readonly SdkSkewEntry[]): Array<{ key: str
   return [...out.values()].sort((a, b) => (a.status === 'behind' ? 0 : 1) - (b.status === 'behind' ? 0 : 1) || b.apps.length - a.apps.length)
 }
 
+/**
+ * The findings without some apps (the public demo, 2026-11-18: keep-but-hide). Every list the
+ * Apps tab draws per app goes through here once: a Fix once group left in fewer than two apps
+ * is not "fix once" any more and goes; a per-app finding, SDK row or missing setup of a hidden
+ * app goes.
+ */
+export function withoutApps(data: PortfolioFindingsResponse, hidden: ReadonlySet<string>): PortfolioFindingsResponse {
+  if (hidden.size === 0) return data
+  const keep = (id: string) => !hidden.has(id)
+  return {
+    ...data,
+    groups: data.groups.map((g) => ({ ...g, projectIds: g.projectIds.filter(keep) })).filter((g) => new Set(g.projectIds).size >= 2),
+    crossProject: data.crossProject.map((f) => ({ ...f, projectIds: f.projectIds.filter(keep) })).filter((f) => f.projectIds.length > 0),
+    sdkSkew: data.sdkSkew.filter((e) => keep(e.projectId)),
+    holes: data.holes.filter((h) => keep(h.projectId)),
+  }
+}
+
 // ── Fix once ─────────────────────────────────────────────────────────────────
 
 /**
