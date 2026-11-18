@@ -223,6 +223,16 @@ describe('Apps signals', () => {
     expect(action.getAttribute('href')).toMatch(/^\/reports\?.*project=yen/)
     expect(container.textContent).toContain('Worst first: glot.it (4 CI jobs failed today, 3 open bugs) · yen-yen (12 open bugs, 2 serious risks) · twm (2 open bugs) · 1 more needs you.')
     expect(container.textContent).not.toMatch(/All \d+ apps need you/)
+    // The headline is chips (icon, name, open bugs) and "+1 more"; the sentence is for screen readers only.
+    const head = container.querySelector('[data-testid="portfolio-worst-first"]')!
+    expect(head.querySelector('.sr-only')!.textContent).toContain('Worst first: glot.it (4 CI jobs failed today')
+    const chips = head.querySelector('[aria-hidden="true"]')!
+    expect([...chips.querySelectorAll('[data-testid^="worst-chip-"]')].map((c) => c.getAttribute('data-testid'))).toEqual(['worst-chip-glot', 'worst-chip-yen', 'worst-chip-twm'])
+    const yen = chips.querySelector('[data-testid="worst-chip-yen"]')!
+    expect(yen.querySelector('.truncate')!.textContent).toBe('yen-yen')
+    expect(yen.querySelector('.font-mono')!.textContent).toBe('12')
+    expect(chips.textContent).toContain('+1 more')
+    expect(chips.textContent).not.toContain('open bugs')
   })
 
   it('lights an app across the alert, the grid row and its card', async () => {

@@ -223,9 +223,19 @@ function named(r: AppSignals): string {
 /**
  * The page's headline: a ranking, not a count ("All 10 apps need you" said
  * nothing about which one first). Expects `rankApps(…, 'worst')`.
+ * `sentence` is the screen-reader text; the page draws `top` as chips (icon,
+ * name, open bugs) and `more` as "+N more" (2026-11-18: no prose headline).
  */
-export function rankingSentence(ranked: readonly AppSignals[]): { sentence: string; tone: 'ok' | 'warn' | 'danger' | 'neutral'; first: AppSignals | null } {
-  if (ranked.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null }
+export function rankingSentence(ranked: readonly AppSignals[]): {
+  sentence: string
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  first: AppSignals | null
+  /** The worst apps that need you, at most three; empty when none does. */
+  top: AppSignals[]
+  /** How many more need you beyond `top`. */
+  more: number
+} {
+  if (ranked.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null, top: [], more: 0 }
   const needing = appsNeedingYou(ranked)
   if (needing.length === 0) {
     const chores = ranked.filter((r) => r.reasons.length > 0).length
@@ -233,13 +243,15 @@ export function rankingSentence(ranked: readonly AppSignals[]): { sentence: stri
       sentence: chores > 0 ? `No app needs you right now. ${plural(chores, 'app has', 'apps have')} small chores, like an SDK update.` : ranked.length === 1 ? `${ranked[0].card.name} is clear.` : `All ${ranked.length} apps are clear.`,
       tone: 'ok',
       first: null,
+      top: [],
+      more: 0,
     }
   }
-  const top = needing.slice(0, 3).map(named).join(' · ')
-  const rest = needing.length - 3
+  const top = needing.slice(0, 3)
+  const rest = needing.length - top.length
   const first = needing[0]
   const tone = first.tier === 0 || (first.ciFailsToday?.value ?? 0) > 0 ? 'danger' : 'warn'
-  return { sentence: `Worst first: ${top}${rest > 0 ? ` · ${rest} more ${rest === 1 ? 'needs' : 'need'} you` : ''}.`, tone, first }
+  return { sentence: `Worst first: ${top.map(named).join(' · ')}${rest > 0 ? ` · ${rest} more ${rest === 1 ? 'needs' : 'need'} you` : ''}.`, tone, first, top, more: rest }
 }
 
 /** The highlight key of an app: its heat row, alert card and app card share it. */

@@ -106,12 +106,16 @@ describe('rankingSentence', () => {
     expect(out.sentence).toBe('Worst first: b (1 CI job failed today, 2 open bugs) · c (9 open bugs) · d (3 open bugs) · 1 more needs you.')
     expect(out.tone).toBe('danger')
     expect(out.first?.card.name).toBe('b')
+    // The page draws these as chips; the sentence above is its screen-reader text.
+    expect(out.top.map((r) => r.card.name)).toEqual(['b', 'c', 'd'])
+    expect(out.more).toBe(1)
   })
 
   it('never says an app needs you when only chores are left', () => {
     const chores = rankApps([card({ name: 'a', sdk: [{ projectId: 'a', package: 'x', version: '1', latest: '2', status: 'behind', reason: '' }] }), card({ name: 'b' })], NONE, NOW)
     const out = rankingSentence(chores)
     expect(out.first).toBeNull()
+    expect(out.top).toEqual([])
     expect(out.tone).toBe('ok')
     expect(out.sentence).toBe('No app needs you right now. 1 app has small chores, like an SDK update.')
   })

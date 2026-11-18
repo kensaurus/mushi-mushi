@@ -60,6 +60,7 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
+import { ProjectFavicon } from '../components/ProjectFavicon'
 import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
 import { HighlightProvider } from '../components/signal/linkedHighlight'
@@ -287,7 +288,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               show: cards.length > 0,
               children: portfolio ? (
                 <PageStatus
-                  sentence={status.sentence}
+                  sentence={status.top.length > 0 ? <WorstFirstChips status={status} faviconFor={faviconFor} /> : status.sentence}
                   tone={status.tone}
                   ariaLabel="Apps status"
                   metrics={[
@@ -484,6 +485,38 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         )}
       </div>
     </HighlightProvider>
+  )
+}
+
+/**
+ * The headline as chips, not prose (2026-11-18): each of the worst apps as its icon, name and
+ * open bugs (a mono number), then "+N more". The sentence stays for screen readers; the chips
+ * are hidden from them, so nothing is read twice.
+ */
+function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof rankingSentence>; faviconFor: (card: PortfolioCard) => ProjectFaviconSource }) {
+  return (
+    <span data-testid="portfolio-worst-first">
+      <span className="sr-only">{status.sentence}</span>
+      <span aria-hidden="true" className="inline-flex flex-wrap items-center gap-1">
+        <span className="mr-0.5 text-2xs font-semibold text-fg-secondary">Worst first</span>
+        {status.top.map((r) => {
+          const bugs = `${r.openBugs.value}${r.openBugs.atLeast ? '+' : ''}`
+          return (
+            <span
+              key={r.card.projectId}
+              className="inline-flex max-w-48 items-center gap-1 rounded-sm border border-edge bg-surface-root px-1 py-0.5 text-xs"
+              title={r.reasons.map((x) => x.short).join(' · ')}
+              data-testid={`worst-chip-${r.card.projectId}`}
+            >
+              <ProjectFavicon {...faviconFor(r.card)} size={12} />
+              <span className="truncate font-semibold text-fg">{r.card.name}</span>
+              {r.openBugs.value > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">{bugs}</span>}
+            </span>
+          )
+        })}
+        {status.more > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">+{status.more} more</span>}
+      </span>
+    </span>
   )
 }
 
