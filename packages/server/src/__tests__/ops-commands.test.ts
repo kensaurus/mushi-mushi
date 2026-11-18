@@ -79,6 +79,14 @@ describe('answers', () => {
     expect(body).toContain('<https://glot.it|Site down>')
   })
 
+  it("another app's resolve on the same thread key closes nothing (2026-11-18)", () => {
+    const rows = [
+      { id: 'a', project_id: 'p1', severity: 'urgent', thread_key: 'deploy:r:production', acked_at: null, occurred_at: '2026-11-18T01:00:00Z' },
+      { id: 'b', project_id: 'p2', severity: 'resolved', thread_key: 'deploy:r:production', acked_at: null, occurred_at: '2026-11-18T02:00:00Z' },
+    ]
+    expect(cmds.openAlerts(rows as never).map((a) => a.id)).toEqual(['a'])
+  })
+
   it('bugs: newest per app, linked to the console', () => {
     const r = cmds.answerBugs([{ id: 'abcdef12-0000-4000-8000-000000000000', project_id: 'p1', title: 'Checkout button dead', summary: null, severity: 'high', created_at: '2026-11-17T04:00:00Z' }], apps, NOW, 'https://kensaur.us/admin')
     expect(text(r)).toContain('<https://kensaur.us/admin/reports/abcdef12-0000-4000-8000-000000000000?project=p1|`abcdef12`>')

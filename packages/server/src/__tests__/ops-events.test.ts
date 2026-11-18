@@ -26,6 +26,7 @@ const { makeFakeDb } = await import('./__stubs__/fake-supabase.ts')
 const ORG = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const OTHER_ORG = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const P1 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+const P2 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 const NOW = new Date('2026-11-17T05:00:00Z')
 
 function settings(over: Record<string, unknown> = {}) {
@@ -59,7 +60,7 @@ function setup(seed: Record<string, Record<string, unknown>[]> = {}) {
     },
     {
       autoId: true,
-      partialUniques: { ops_events: { keys: ['organization_id', 'dedupe_key'], where: (r) => r.dedupe_key != null } },
+      partialUniques: { ops_events: { keys: ['organization_id', 'project_id', 'dedupe_key'], where: (r) => r.dedupe_key != null } },
       rpc: (fn, args) => (fn === 'vault_get_secret' ? (VAULT[String(args.secret_id)] ?? null) : null),
     },
   )
@@ -89,6 +90,18 @@ describe('recordOpsEvent', () => {
     expect(b.status).toBe('duplicate')
     expect(b.status !== 'error' && a.status !== 'error' && b.event.id).toBe(a.status !== 'error' && a.event.id)
     expect(db.table('ops_events')).toHaveLength(1)
+  })
+
+  it('two apps sending the same dedupe key both store, and never thread into each other (2026-11-18)', async () => {
+    // Every app of an owner is in one org: yen-yen's `sales.daily:<date>` goes out under each app's key.
+    const { db, deps } = setup()
+    const a = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P1, input: event({ dedupeKey: 'sales.daily:2026-11-18', threadKey: 'deploy:o/r:production' }) }, deps)
+    const b = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P2, input: event({ dedupeKey: 'sales.daily:2026-11-18', threadKey: 'deploy:o/r:production' }) }, deps)
+    if (a.status !== 'created' || b.status !== 'created') throw new Error(`expected two created, got ${a.status}/${b.status}`)
+    expect(b.event.id).not.toBe(a.event.id)
+    expect(b.event.parent_id).toBeNull()
+    const again = await recordOpsEvent(db as never, { organizationId: ORG, projectId: P2, input: event({ dedupeKey: 'sales.daily:2026-11-18' }) }, deps)
+    expect(again.status).toBe('duplicate')
   })
 
   it('links a follow-up to the first event of its thread in the same category only', async () => {

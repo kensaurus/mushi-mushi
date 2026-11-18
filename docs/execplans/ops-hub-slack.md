@@ -37,7 +37,7 @@ the command name. The owner's bot is called `kensaurus`.
   - `acked_by text`, `acked_at timestamptz`, `created_at`
 
   Indexes:
-  - `unique (organization_id, dedupe_key) where dedupe_key is not null`, so a retried webhook posts once;
+  - `unique (organization_id, project_id, dedupe_key) nulls not distinct where dedupe_key is not null`, so a retried webhook posts once and two apps never dedupe into each other (per app since 2026-11-18; it was per organization, which dropped every app's `sales.daily:<date>` but the first);
   - `(organization_id, occurred_at desc)`;
   - `(organization_id, thread_key)`;
   - `(project_id, category, occurred_at desc)`.
@@ -95,7 +95,7 @@ the command name. The owner's bot is called `kensaurus`.
   - Actions: Acknowledge, Mute 24h and Open (event `url`), plus "Open in Mushi Mushi" (the console feed).
   - `text` fallback: `<app> · <title>`.
   - Emoji: 💳 payment, ↩️ refund, ⚠️ warn, 🔴 urgent, 🚀 release, ✅ resolved.
-- **Threads.** If an earlier event in the org has the same `thread_key`, post as a reply (`thread_ts`).
+- **Threads.** If an earlier event of the same app has the same `thread_key`, post as a reply (`thread_ts`).
   - A `resolved` event is broadcast to the channel (`reply_broadcast`) and also edits the parent with `chat.update`. Example: "✅ fixed by the next deploy · <time>".
   - Example thread keys:
     - `deploy:<repo>:<env>`: a failed deploy, then the next good one
