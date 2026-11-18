@@ -8,7 +8,6 @@ import {
   kindLabel,
   needsALook,
   openReportsText,
-  portfolioStatusSentence,
   radarLabel,
   groupRadarDetectors,
   radarErrorSentence,
@@ -227,19 +226,6 @@ describe('appUrgency', () => {
   })
 })
 
-describe('portfolioStatusSentence', () => {
-  it('says how many apps need you and which one first', () => {
-    const cards = sortPortfolioCards([card({ name: 'calm', needsLook: [SETUP_CHORE] }), card({ name: 'yen-yen', openReports: 29, needsLook: [] })])
-    expect(portfolioStatusSentence(cards)).toMatchObject({ sentence: '1 of 2 apps need you. Start with yen-yen: 29 open bugs.', tone: 'warn' })
-  })
-
-  it('never says an app needs you when only chores are left', () => {
-    const out = portfolioStatusSentence([card({ name: 'a', needsLook: [SETUP_CHORE] }), card({ name: 'b', needsLook: [] })])
-    expect(out.first).toBeNull()
-    expect(out.sentence).toMatch(/^No app needs you right now\./)
-  })
-})
-
 describe('splitPublicDemo', () => {
   // Owner, 2026-11-17: "All 10 apps need you" counted the docs demo.
   it('keeps the public demo out of the cards and the "need you" count', () => {
@@ -249,7 +235,7 @@ describe('splitPublicDemo', () => {
     const { apps, demo: demos } = splitPublicDemo([demo, mine, lookalike])
     expect(demos.map((c) => c.projectId)).toEqual(['demo'])
     expect(apps.map((c) => c.projectId)).toEqual(['mine', 'demo-app'])
-    expect(portfolioStatusSentence(sortPortfolioCards(apps)).sentence).toMatch(/^All 2 apps need you/)
+    expect(apps.filter(needsALook)).toHaveLength(2)
   })
 
   it('matches the demo by its "(sample data)" name when the slug differs', () => {

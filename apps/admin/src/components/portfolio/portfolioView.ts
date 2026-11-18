@@ -309,6 +309,16 @@ export function appUrgency(card: PortfolioCard): AppUrgency {
   return { level: 'clear', chip: { text: 'All clear', tone: 'okSubtle' }, short: 'all clear', next: null }
 }
 
+/** The app's own problems: its needsLook list without Mushi Mushi's setup chores. */
+export function appProblems(card: Pick<PortfolioCard, 'needsLook'>): PortfolioCardProblem[] {
+  return (card.needsLook ?? []).filter((p) => !isMushiSetupChore(p))
+}
+
+/** The Worst-first order's first key: 0 broken, 1 bugs, 2 a part to fix, 3 SDK behind, 4 chores, 5 clear. */
+export function urgencyRank(card: PortfolioCard): number {
+  return URGENCY_RANK[appUrgency(card).level]
+}
+
 /** Does this app need its owner? Broken, bugs waiting, or a part to fix. Chores and SDK updates do not. */
 export function needsALook(card: PortfolioCard): boolean {
   return URGENCY_RANK[appUrgency(card).level] <= URGENCY_RANK.fix
@@ -339,24 +349,4 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[], by: Portfoli
   return [...cards].sort(
     (a, b) => (rank.get(a) ?? 5) - (rank.get(b) ?? 5) || b.openReports - a.openReports || a.name.localeCompare(b.name),
   )
-}
-
-/** The page's one status sentence: how many apps need you, and which one first. */
-export function portfolioStatusSentence(sorted: readonly PortfolioCard[]): { sentence: string; tone: 'ok' | 'warn' | 'danger' | 'neutral'; first: PortfolioCard | null } {
-  if (sorted.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null }
-  const needing = sorted.filter(needsALook)
-  if (needing.length === 0) {
-    const chores = sorted.filter((c) => appUrgency(c).level !== 'clear').length
-    return {
-      sentence: chores > 0 ? `No app needs you right now. ${plural(chores, 'app has', 'apps have')} small chores, like an SDK update.` : sorted.length === 1 ? `${sorted[0].name} is clear.` : `All ${sorted.length} apps are clear.`,
-      tone: 'ok',
-      first: null,
-    }
-  }
-  const first = needing[0]
-  const u = appUrgency(first)
-  const tone = u.level === 'broken' ? 'danger' : 'warn'
-  if (sorted.length === 1) return { sentence: `${first.name} needs you: ${u.short}.`, tone, first }
-  const count = needing.length === sorted.length ? `All ${sorted.length} apps need you` : `${needing.length} of ${sorted.length} apps need you`
-  return { sentence: `${count}. Start with ${first.name}: ${u.short}.`, tone, first }
 }

@@ -11,6 +11,8 @@
  *            so eight cards no longer all read "Needs attention";
  *          - a muted footer: links into the app's pages and when the checks ran.
  *          Healthy apps render as a compact row (`PortfolioCompactRow`).
+ *          Both carry the app's highlight key (2026-11-18): pointing at one
+ *          lights its heat-grid row and alert card on the Apps page.
  */
 
 import { Link } from 'react-router-dom'
@@ -20,6 +22,8 @@ import { appLink, openApp } from '../../lib/openApp'
 import type { PortfolioCard } from '../../lib/portfolioTypes'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectFavicon } from '../ProjectFavicon'
+import { useLinked } from '../signal/linkedHighlight'
+import { appKey } from '../../lib/appSignals'
 import { appUrgency, budgetText, cardStatusChips, kindLabel, spendText, type CardStatusChip } from './portfolioView'
 
 interface Props {
@@ -57,80 +61,84 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
   const chips = cardStatusChips(card)
   const urgency = appUrgency(card)
   const next = urgency.next
+  const key = appKey(card.projectId)
+  const lit = useLinked([key], key)
   return (
-    <Card className="flex min-w-0 flex-col gap-3 p-4">
-      <div className="flex items-start gap-3">
-        <ProjectFavicon {...favicon} size={32} className="shrink-0" />
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-fg">
-            <Link to={link('/recipe')} onClick={open} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
-              {card.name}
-            </Link>
-          </h3>
-          <p className="mt-0.5 truncate text-2xs text-fg-faint">
-            {kindLabel(card)}
-            {card.latestRelease?.publishedAt ? (
-              <>
-                {' · shipped '}
-                <RelativeTime value={card.latestRelease.publishedAt} />
-              </>
-            ) : null}
-          </p>
+    <div {...lit} className={`${lit.className} flex min-w-0 rounded-md`} data-testid={`portfolio-card-${card.projectId}`}>
+      <Card className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+        <div className="flex items-start gap-3">
+          <ProjectFavicon {...favicon} size={32} className="shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-semibold text-fg">
+              <Link to={link('/recipe')} onClick={open} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand">
+                {card.name}
+              </Link>
+            </h3>
+            <p className="mt-0.5 truncate text-2xs text-fg-faint">
+              {kindLabel(card)}
+              {card.latestRelease?.publishedAt ? (
+                <>
+                  {' · shipped '}
+                  <RelativeTime value={card.latestRelease.publishedAt} />
+                </>
+              ) : null}
+            </p>
+          </div>
+          <Badge tone={urgency.chip.tone} className="shrink-0">
+            {urgency.chip.text}
+          </Badge>
         </div>
-        <Badge tone={urgency.chip.tone} className="shrink-0">
-          {urgency.chip.text}
-        </Badge>
-      </div>
 
-      {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
+        {card.error && <p className="text-xs text-danger" role="status">{card.error}</p>}
 
-      <div className="flex flex-wrap gap-1.5" aria-label="Status">
-        {chips.map((chip) => (
-          <StatusChip key={chip.key} chip={chip} projectId={card.projectId} />
-        ))}
-      </div>
+        <div className="flex flex-wrap gap-1.5" aria-label="Status">
+          {chips.map((chip) => (
+            <StatusChip key={chip.key} chip={chip} projectId={card.projectId} />
+          ))}
+        </div>
 
-      {next && (
-        // Neutral text: red is for errors, and this is a suggestion. A plain
-        // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
-        // the line, which pushed the card wider than a phone screen.
-        <Link
-          to={link(next.to)}
-          onClick={open}
-          title={next.more > 0 ? `${next.text} (+${next.more} more on the App blueprint page)` : next.text}
-          className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
-          data-testid="portfolio-next-step"
-        >
-          <span className="font-medium text-fg">Next step:</span> {next.text} →
-        </Link>
-      )}
-
-      {showSpend && (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs text-fg-muted">
-          <dt>Mushi Mushi AI spend (30 days)</dt>
-          <dd className="text-right text-fg">{spendText(card)}</dd>
-          <dt>Monthly AI budget</dt>
-          <dd className="text-right text-fg">{budgetText(card)}</dd>
-        </dl>
-      )}
-
-      <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-edge pt-2 text-2xs text-fg-muted">
-        {APP_LINKS.map((l) => (
-          <Link key={l.to} to={link(l.to)} onClick={open} className="hover:text-fg hover:underline">
-            {l.label}
+        {next && (
+          // Neutral text: red is for errors, and this is a suggestion. A plain
+          // title, not <Tooltip>: its inline anchor stops `truncate` shrinking
+          // the line, which pushed the card wider than a phone screen.
+          <Link
+            to={link(next.to)}
+            onClick={open}
+            title={next.more > 0 ? `${next.text} (+${next.more} more on the App blueprint page)` : next.text}
+            className="block min-w-0 truncate text-xs text-fg-secondary hover:text-fg hover:underline"
+            data-testid="portfolio-next-step"
+          >
+            <span className="font-medium text-fg">Next step:</span> {next.text} →
           </Link>
-        ))}
-        <span className="ml-auto text-fg-faint">
-          {card.radar.checkedAt ? (
-            <>
-              Checked <RelativeTime value={card.radar.checkedAt} />
-            </>
-          ) : (
-            'Not checked yet'
-          )}
-        </span>
-      </div>
-    </Card>
+        )}
+
+        {showSpend && (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs text-fg-muted">
+            <dt>Mushi Mushi AI spend (30 days)</dt>
+            <dd className="text-right text-fg">{spendText(card)}</dd>
+            <dt>Monthly AI budget</dt>
+            <dd className="text-right text-fg">{budgetText(card)}</dd>
+          </dl>
+        )}
+
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-edge pt-2 text-2xs text-fg-muted">
+          {APP_LINKS.map((l) => (
+            <Link key={l.to} to={link(l.to)} onClick={open} className="hover:text-fg hover:underline">
+              {l.label}
+            </Link>
+          ))}
+          <span className="ml-auto text-fg-faint">
+            {card.radar.checkedAt ? (
+              <>
+                Checked <RelativeTime value={card.radar.checkedAt} />
+              </>
+            ) : (
+              'Not checked yet'
+            )}
+          </span>
+        </div>
+      </Card>
+    </div>
   )
 }
 
@@ -138,8 +146,10 @@ export function PortfolioCardTile({ card, favicon, showSpend }: Props) {
 export function PortfolioCompactRow({ card, favicon }: Omit<Props, 'showSpend'>) {
   const open = () => openApp(card.projectId)
   const urgency = appUrgency(card)
+  const key = appKey(card.projectId)
+  const lit = useLinked([key], key)
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
+    <li {...lit} className={`${lit.className} flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2`} data-testid={`portfolio-row-${card.projectId}`}>
       <ProjectFavicon {...favicon} size={20} className="shrink-0" />
       <Link to={appLink('/recipe', card.projectId)} onClick={open} className="min-w-0 truncate text-sm font-medium text-fg hover:underline">
         {card.name}

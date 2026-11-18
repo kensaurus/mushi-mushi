@@ -168,3 +168,81 @@ describe('Apps Refresh', () => {
     expect(state.portfolioReload).toHaveBeenCalledTimes(1)
   })
 })
+
+const text = (sel: string) => container.querySelector(sel)?.textContent ?? ''
+
+describe('Apps signals', () => {
+  it('ranks the apps in a heat grid, worst first, with every signal as text', async () => {
+    await render()
+    const rows = [...container.querySelectorAll('[data-testid^="heat-row-"]')].map((r) => r.getAttribute('data-testid'))
+    // glot.it: CI failed 4 times today; yen-yen: 12 bugs and 2 serious risks.
+    expect(rows).toEqual(['heat-row-glot', 'heat-row-yen', 'heat-row-twm', 'heat-row-calm'])
+    const glot = container.querySelector('[data-testid="heat-row-glot"]')!
+    const cell = (col: string) => glot.querySelector(`[data-col="${col}"]`)!
+    expect(cell('ci').textContent).toBe('4')
+    expect(cell('ci').className).toContain('ci-fail-5')
+    expect(cell('sdk').textContent).toBe('latest')
+    expect(cell('release').textContent).toBe('3d')
+    // Checked in 12 minutes ago: live, with the ok shape.
+    expect(cell('checkin').textContent).toBe('12m')
+    expect(cell('checkin').querySelector('svg[data-tone="ok"]')).not.toBeNull()
+    // yen-yen went silent 10 days ago; twm is not in the setup list, so its check-in is unknown, not "never".
+    expect(container.querySelector('[data-testid="heat-row-yen"] [data-col="checkin"] svg[data-tone="danger"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="heat-row-twm"] [data-col="checkin"]')!.className).toContain('ci-nodata')
+    expect(text('[data-testid="portfolio-signal-grid-legend"]')).toContain('no data')
+  })
+
+  it('leads with alert cards for the worst three, one action each, and a ranking headline', async () => {
+    await render()
+    const cards = [...container.querySelectorAll('[data-testid^="portfolio-alert-"]')]
+    expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['portfolio-alert-glot', 'portfolio-alert-yen', 'portfolio-alert-twm'])
+    expect(cards[0]!.getAttribute('data-severity')).toBe('critical')
+    expect(cards[0]!.textContent).toContain('CI failed 4× today')
+    const action = cards[1]!.querySelector('a')!
+    expect(action.textContent).toBe('Open bugs')
+    expect(action.getAttribute('href')).toMatch(/^\/reports\?.*project=yen/)
+    expect(container.textContent).toContain('Worst first: glot.it (CI failed 4× today, 3 open bugs) · yen-yen (12 open bugs, 2 serious risks) · twm (2 open bugs) · 1 more need you.')
+    expect(container.textContent).not.toMatch(/All \d+ apps need you/)
+  })
+
+  it('lights an app across the alert, the grid row and its card', async () => {
+    await render()
+    const alert = container.querySelector('[data-testid="portfolio-alert-yen"]') as HTMLElement
+    act(() => alert.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+    expect(container.querySelector('[data-testid="heat-row-yen"]')!.getAttribute('data-hl')).toBe('on')
+    expect(container.querySelector('[data-testid="heat-row-glot"]')!.getAttribute('data-hl')).toBe('dim')
+    act(() => alert.click())
+    expect(text('[data-testid="portfolio-pinned"]')).toContain('yen-yen')
+  })
+
+  it('switches to cards, remembers it, and the cards light with the rest', async () => {
+    await render()
+    const cardsBtn = [...container.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Cards') as HTMLElement
+    await act(async () => cardsBtn.click())
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+    expect(container.querySelector('[data-testid="portfolio-card-glot"]')).not.toBeNull()
+    expect(localStorage.getItem('mushi:portfolio:view')).toBe('cards')
+    const alert = container.querySelector('[data-testid="portfolio-alert-glot"]') as HTMLElement
+    act(() => alert.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })))
+    expect(container.querySelector('[data-testid="portfolio-card-glot"]')!.getAttribute('data-hl')).toBe('on')
+
+    act(() => root.unmount())
+    root = createRoot(container)
+    await render()
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+  })
+
+  it('still works when storage throws', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked')
+    })
+    await render()
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).not.toBeNull()
+    const cardsBtn = [...container.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Cards') as HTMLElement
+    await act(async () => cardsBtn.click())
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+  })
+})

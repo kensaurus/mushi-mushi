@@ -8,6 +8,12 @@
  * grid: problems open in 2+ projects ("fix once"), SDK versions, and
  * integrations most siblings have but one lacks.
  *
+ * Signal pass (2026-11-18, the CI page's visual language): the headline is a
+ * ranking (lib/appSignals), the worst three apps lead as alert cards, and an
+ * apps × signals heat grid ("Table", the default) or the cards ("Cards", the
+ * choice kept in localStorage) follow. One HighlightProvider lights an app's
+ * alert, grid row and card together (key `app:<projectId>`).
+ *
  * Data: GET /v1/admin/orgs/:orgId/portfolio → PortfolioResponse
  *       GET /v1/admin/orgs/:orgId/portfolio/findings → PortfolioFindingsResponse
  *       GET /v1/admin/orgs/:orgId/releases (ReleasesCard)
@@ -35,7 +41,7 @@ import { apiFetch } from '../lib/supabase'
 import { useAdminMode } from '../lib/mode'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type { PortfolioCard, PortfolioFindingsResponse, PortfolioReadError, PortfolioResponse } from '../lib/portfolioTypes'
-import { appUrgency, findingGroupTitle, needsALook, portfolioStatusSentence, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
+import { findingGroupTitle, needsALook, sortPortfolioCards, splitPublicDemo, type PortfolioSort } from '../components/portfolio/portfolioView'
 import { appLink, openApp } from '../lib/openApp'
 import { DigestCard } from '../components/portfolio/DigestCard'
 import { ConnectorsCard } from '../components/portfolio/ConnectorsCard'
@@ -54,6 +60,30 @@ import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
 import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
+import { HighlightProvider } from '../components/signal/linkedHighlight'
+import { AlertCards } from '../components/signal/AlertCards'
+import { AppSignalGrid } from '../components/portfolio/AppSignalGrid'
+import { appAlerts, lastCheckIns, rankApps, rankingSentence } from '../lib/appSignals'
+
+/** Table (the heat grid) or Cards: remembered per browser. */
+type PortfolioView = 'table' | 'cards'
+const VIEW_STORAGE_KEY = 'mushi:portfolio:view'
+
+function readView(): PortfolioView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'cards' ? 'cards' : 'table'
+  } catch {
+    return 'table'
+  }
+}
+
+function writeView(view: PortfolioView): void {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view)
+  } catch {
+    /* Storage off (private window, blocked): the choice lasts this visit. */
+  }
+}
 
 export function PortfolioPage() {
   const orgId = useActiveOrgId()
@@ -127,11 +157,25 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
   const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
   const names = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c.name])), [portfolio])
-  const status = useMemo(() => portfolioStatusSentence(cards), [cards])
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
-  const firstNext = status.first ? appUrgency(status.first).next : null
+  // App icons and SDK check-ins: the team's project list knows each app's SDK origin, repo and last call.
+  const setup = useSetupStatus()
+  const snapshots = useProjectSnapshots()
+  const checkIns = useMemo(() => lastCheckIns(setup.data?.projects), [setup.data])
+  // Ages are measured from when the server answered (also the CI column's "today"), so render stays pure.
+  const now = portfolio ? Date.parse(portfolio.generatedAt) || 0 : 0
+  // The ranking behind the headline, the alert cards and the heat grid (lib/appSignals).
+  const ranked = useMemo(() => rankApps(cards, checkIns, now), [cards, checkIns, now])
+  const status = useMemo(() => rankingSentence(ranked), [ranked])
+  const firstReason = status.first?.reasons[0] ?? null
+  const alerts = useMemo(() => appAlerts(ranked, openApp), [ranked])
+  const [view, setViewState] = useState<PortfolioView>(readView)
+  const setView = (next: PortfolioView) => {
+    setViewState(next)
+    writeView(next)
+  }
   // Apps that need a look get a full card; the rest collapse to one row each.
-  // The status sentence always names the worst app; the cards follow the toggle.
+  // The status sentence always names the worst app; the grid and cards follow the toggle.
   const sortBy: PortfolioSort = searchParams.get('sort') === 'name' ? 'name' : 'worst'
   const setSortBy = (next: PortfolioSort) => {
     const params = new URLSearchParams(searchParams)
@@ -139,14 +183,12 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
     else params.delete('sort')
     setSearchParams(params, { replace: true })
   }
-  const shown = useMemo(() => sortPortfolioCards(cards, sortBy), [cards, sortBy])
+  const rankedShown = useMemo(() => (sortBy === 'worst' ? ranked : rankApps(cards, checkIns, now, 'name')), [sortBy, ranked, cards, checkIns, now])
+  const shown = useMemo(() => rankedShown.map((r) => r.card), [rankedShown])
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   // Every app, the demo included: spend, connectors and the digest still name it.
   const appList = useMemo(() => (portfolio?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [portfolio])
-  // App icons: the team's project list knows each app's SDK origin and repo.
-  const setup = useSetupStatus()
-  const snapshots = useProjectSnapshots()
   const faviconFor = (card: PortfolioCard): ProjectFaviconSource => {
     const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
     const base = known
@@ -157,188 +199,216 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   }
 
   return (
-    <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
-      <PageHeaderBar
-        title="Apps"
-        description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
-        helpTitle="About apps"
-        helpWhatIsIt="Each card is one app at a glance: what needs attention and why, its open reports, its Mushi Mushi SDK version and its risk checks. Below the cards are problems that show up in two or more apps, so you can fix them once."
-        helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
-        helpFlowPath="/portfolio"
-      >
-        <FreshnessPill at={fetchedAt} isValidating={page.isValidating} />
-        <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
-          Refresh
-        </Btn>
-      </PageHeaderBar>
+    <HighlightProvider>
+      <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-portfolio">
+        <PageHeaderBar
+          title="Apps"
+          description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
+          helpTitle="About apps"
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Below them are problems that show up in two or more apps, so you can fix them once."
+          helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
+          helpFlowPath="/portfolio"
+        >
+          <FreshnessPill at={fetchedAt} isValidating={page.isValidating} />
+          <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
+            Refresh
+          </Btn>
+        </PageHeaderBar>
 
-      <PagePosture
-        slots={[
-          {
-            priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: cards.length > 0,
-            children: portfolio ? (
-              <PageStatus
-                sentence={status.sentence}
-                tone={status.tone}
-                ariaLabel="Apps status"
-                metrics={[
-                  { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
-                  { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                  { label: 'Fix once', value: portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
-                ]}
-                action={
-                  status.first && firstNext ? (
-                    <Btn size="sm" variant="primary" to={appLink(firstNext.to, status.first.projectId)} onClick={() => openApp(status.first!.projectId)}>
-                      Fix {status.first.name}
-                    </Btn>
-                  ) : undefined
-                }
-              />
-            ) : null,
-          },
-        ]}
-      />
-
-      {groups.data && (
-        <ProjectGroupsBar
-          orgId={orgId}
-          groups={groupList}
-          apps={teamApps}
-          active={group}
-          onSelect={selectGroup}
-          onChanged={() => {
-            groups.reload()
-            page.reload()
-            findings.reload()
-          }}
+        <PagePosture
+          slots={[
+            {
+              priority: POSTURE_PRIORITY.heroOrSnapshot,
+              show: cards.length > 0,
+              children: portfolio ? (
+                <PageStatus
+                  sentence={status.sentence}
+                  tone={status.tone}
+                  ariaLabel="Apps status"
+                  metrics={[
+                    { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
+                    { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
+                    { label: 'Fix once', value: portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                  ]}
+                  action={
+                    status.first && firstReason ? (
+                      <Btn size="sm" variant="primary" to={appLink(firstReason.to, status.first.card.projectId)} onClick={() => openApp(status.first!.card.projectId)}>
+                        Fix {status.first.card.name}
+                      </Btn>
+                    ) : undefined
+                  }
+                />
+              ) : null,
+            },
+          ]}
         />
-      )}
 
-      {/* The apps are known before their details: list them at once instead of
-          a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
-      {page.loading && !portfolio ? (
-        teamApps.length > 0 ? (
-          <Card className="px-3 py-1">
-            <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
-              {teamApps.map((app) => (
-                <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
-                  <span className="font-medium text-fg">{app.name}</span>
-                  <span className="text-2xs text-fg-faint">Checking…</span>
-                </li>
-              ))}
-            </ul>
+        {groups.data && (
+          <ProjectGroupsBar
+            orgId={orgId}
+            groups={groupList}
+            apps={teamApps}
+            active={group}
+            onSelect={selectGroup}
+            onChanged={() => {
+              groups.reload()
+              page.reload()
+              findings.reload()
+            }}
+          />
+        )}
+
+        {portfolio && cards.length > 0 && (
+          <AlertCards
+            alerts={alerts}
+            emptyText="No app needs you right now."
+            label="Apps that need you"
+            testIdPrefix="portfolio"
+            keyLabel={(k) => names.get(k.replace(/^app:/, '')) ?? k}
+          />
+        )}
+
+        {/* The apps are known before their details: list them at once instead of
+            a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
+        {page.loading && !portfolio ? (
+          teamApps.length > 0 ? (
+            <Card className="px-3 py-1">
+              <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
+                {teamApps.map((app) => (
+                  <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
+                    <span className="font-medium text-fg">{app.name}</span>
+                    <span className="text-2xs text-fg-faint">Checking…</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : (
+            <Loading text="Checking each app…" />
+          )
+        ) : null}
+        {page.error && (
+          <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
+        )}
+        {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
+        {portfolio && cards.length === 0 && (
+          <Card className="px-4 py-8 text-center text-sm text-fg-faint">
+            <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
+            <p className="mt-1 text-xs">
+              {group ? (
+                'Open Manage groups above to choose its apps.'
+              ) : (
+                <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
+              )}
+            </p>
           </Card>
-        ) : (
-          <Loading text="Checking each app…" />
-        )
-      ) : null}
-      {page.error && (
-        <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
-      )}
-      {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
-      {portfolio && cards.length === 0 && (
-        <Card className="px-4 py-8 text-center text-sm text-fg-faint">
-          <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
-          <p className="mt-1 text-xs">
-            {group ? (
-              'Open Manage groups above to choose its apps.'
-            ) : (
-              <Link to="/onboarding" className="text-brand hover:underline">Connect your first app →</Link>
-            )}
-          </p>
-        </Card>
-      )}
-      {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
-      {cards.length > 0 && portfolio && (
-        <>
-          <PortfolioSectionNav />
-          <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
-              <SegmentedControl
-                value={sortBy}
-                onChange={setSortBy}
-                size="sm"
-                ariaLabel="Order the apps"
-                options={[
-                  { id: 'worst', label: 'Worst first' },
-                  { id: 'name', label: 'A to Z' },
-                ]}
-              />
-            </div>
-            <PanelErrorBoundary label="Portfolio cards">
-              {attention.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {attention.map((card) => (
-                    <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
-                  ))}
-                </div>
-              )}
-              {healthy.length > 0 && (
-                <Card className="p-0">
-                  <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
-                    Nothing urgent ({healthy.length})
-                  </p>
-                  <ul className="divide-y divide-edge">
-                    {healthy.map((card) => (
-                      <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+        )}
+        {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
+        {cards.length > 0 && portfolio && (
+          <>
+            <PortfolioSectionNav />
+            <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 id="portfolio-apps-title" className="text-sm font-semibold text-fg">Apps</h2>
+                <span className="ml-auto" />
+                <SegmentedControl
+                  value={view}
+                  onChange={setView}
+                  size="sm"
+                  ariaLabel="Show the apps as"
+                  options={[
+                    { id: 'table', label: 'Table' },
+                    { id: 'cards', label: 'Cards' },
+                  ]}
+                />
+                <SegmentedControl
+                  value={sortBy}
+                  onChange={setSortBy}
+                  size="sm"
+                  ariaLabel="Order the apps"
+                  options={[
+                    { id: 'worst', label: 'Worst first' },
+                    { id: 'name', label: 'A to Z' },
+                  ]}
+                />
+              </div>
+              <PanelErrorBoundary label="Portfolio cards">
+                {view === 'table' && (
+                  <Card className="px-2.5 py-2">
+                    <AppSignalGrid rows={rankedShown} now={now} />
+                  </Card>
+                )}
+                {view === 'cards' && attention.length > 0 && (
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {attention.map((card) => (
+                      <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
                     ))}
-                  </ul>
-                </Card>
-              )}
-              {demo.length > 0 && <PublicDemoLine demo={demo} />}
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Fix once">
-              <FindingsSections findings={findings} names={names} />
-            </PanelErrorBoundary>
-          </section>
+                  </div>
+                )}
+                {view === 'cards' && healthy.length > 0 && (
+                  <Card className="p-0">
+                    <p className="border-b border-edge px-3 py-2 text-2xs font-semibold text-fg-secondary">
+                      Nothing urgent ({healthy.length})
+                    </p>
+                    <ul className="divide-y divide-edge">
+                      {healthy.map((card) => (
+                        <PortfolioCompactRow key={card.projectId} card={card} favicon={faviconFor(card)} />
+                      ))}
+                    </ul>
+                  </Card>
+                )}
+                {demo.length > 0 && <PublicDemoLine demo={demo} />}
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="Fix once">
+                <FindingsSections findings={findings} names={names} />
+              </PanelErrorBoundary>
+            </section>
 
-          <section id="portfolio-releases" aria-labelledby="portfolio-releases-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-releases-title" className="text-sm font-semibold text-fg">Releases</h2>
-            <PanelErrorBoundary label="Releases">
-              <ReleasesCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Funnel across apps">
-              <FunnelCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="CI runners">
-              <CiRunnersCard />
-            </PanelErrorBoundary>
-          </section>
+            <section id="portfolio-releases" aria-labelledby="portfolio-releases-title" className="scroll-mt-20 space-y-3">
+              <h2 id="portfolio-releases-title" className="text-sm font-semibold text-fg">Releases</h2>
+              <PanelErrorBoundary label="Releases">
+                <ReleasesCard orgId={orgId} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="Funnel across apps">
+                <FunnelCard orgId={orgId} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="CI runners">
+                <CiRunnersCard />
+              </PanelErrorBoundary>
+            </section>
 
-          <section id="portfolio-payments" aria-labelledby="portfolio-payments-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-payments-title" className="text-sm font-semibold text-fg">Payments</h2>
-            <PanelErrorBoundary label="Payments across apps">
-              <MonetizationCard orgId={orgId} />
-            </PanelErrorBoundary>
-          </section>
+            <section id="portfolio-payments" aria-labelledby="portfolio-payments-title" className="scroll-mt-20 space-y-3">
+              <h2 id="portfolio-payments-title" className="text-sm font-semibold text-fg">Payments</h2>
+              <PanelErrorBoundary label="Payments across apps">
+                <MonetizationCard orgId={orgId} />
+              </PanelErrorBoundary>
+            </section>
 
-          <section id="portfolio-spend" aria-labelledby="portfolio-spend-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-spend-title" className="text-sm font-semibold text-fg">Spend & accounts</h2>
-            <PanelErrorBoundary label="Spend per app">
-              <SpendLedgerCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Accounts and resilience">
-              <AccountsRegisterCard orgId={orgId} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Shared resources">
-              <SharedResourcesCard orgId={orgId} names={names} />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary label="Connected sources">
-              <ConnectorsCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-          </section>
+            <section id="portfolio-spend" aria-labelledby="portfolio-spend-title" className="scroll-mt-20 space-y-3">
+              <h2 id="portfolio-spend-title" className="text-sm font-semibold text-fg">Spend & accounts</h2>
+              <PanelErrorBoundary label="Spend per app">
+                <SpendLedgerCard orgId={orgId} projects={appList} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="Accounts and resilience">
+                <AccountsRegisterCard orgId={orgId} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="Shared resources">
+                <SharedResourcesCard orgId={orgId} names={names} />
+              </PanelErrorBoundary>
+              <PanelErrorBoundary label="Connected sources">
+                <ConnectorsCard orgId={orgId} projects={appList} />
+              </PanelErrorBoundary>
+            </section>
 
-          <section id="portfolio-digest" aria-labelledby="portfolio-digest-title" className="scroll-mt-20 space-y-3">
-            <h2 id="portfolio-digest-title" className="text-sm font-semibold text-fg">Digest</h2>
-            <PanelErrorBoundary label="Daily digest">
-              <DigestCard orgId={orgId} projects={appList} />
-            </PanelErrorBoundary>
-          </section>
-        </>
-      )}
-    </div>
+            <section id="portfolio-digest" aria-labelledby="portfolio-digest-title" className="scroll-mt-20 space-y-3">
+              <h2 id="portfolio-digest-title" className="text-sm font-semibold text-fg">Digest</h2>
+              <PanelErrorBoundary label="Daily digest">
+                <DigestCard orgId={orgId} projects={appList} />
+              </PanelErrorBoundary>
+            </section>
+          </>
+        )}
+      </div>
+    </HighlightProvider>
   )
 }
 
