@@ -143,9 +143,11 @@ export function SpendPanel({ snapshot }: { snapshot: OpsSnapshot }) {
         </div>
         {hourly.providers.length === 0 && <p className="text-xs text-fg-muted">No calls in the last 48 hours.</p>}
         {hourly.providers.map((p) => (
-          <div key={p} className="grid grid-cols-[6rem_1fr] items-end gap-2">
-            <Chip>{p}</Chip>
-            <div className="flex h-8 items-end gap-px" role="img" aria-label={`${p}: cost per hour`}>
+          <div key={p} className="flex items-end gap-2">
+            <span className="w-24 shrink-0">
+              <Chip>{p}</Chip>
+            </span>
+            <div className="flex h-8 flex-1 items-end gap-px" role="img" aria-label={`${p}: cost per hour`}>
               {hourly.bars.get(p)!.map((b) => (
                 <span key={b.hour} className="relative flex h-full flex-1 flex-col-reverse" title={`${b.hour.slice(5, 13)}h · ${formatMicroUsd(b.cost)} · ${b.calls} calls · ${b.errors} errors`}>
                   {b.segments.map((s) => (

@@ -43,23 +43,27 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         return (
           <li
             key={p.id}
-            className={`grid grid-cols-1 items-center gap-x-3 gap-y-1 bg-surface px-2.5 py-1.5 hover:bg-surface-hover md:grid-cols-[9rem_minmax(10rem,1.3fr)_minmax(8rem,1fr)_3.5rem_4rem_minmax(6rem,1fr)_auto] ${p.enabled ? '' : 'opacity-60'}`}
+            className={`flex flex-col gap-x-3 gap-y-1 bg-surface px-2.5 py-1.5 hover:bg-surface-hover md:flex-row md:items-center ${p.enabled ? '' : 'opacity-60'}`}
             data-testid={`provider-row-${p.id}`}
             data-state={state}
           >
-            <ProviderStateMark state={state} since={ageLabel(p.status?.state_since, now)} />
-            <span className="flex min-w-0 items-center gap-1.5">
+            <span className="md:w-32 md:shrink-0">
+              <ProviderStateMark state={state} since={ageLabel(p.status?.state_since, now)} />
+            </span>
+            <span className="flex min-w-0 items-center gap-1.5 md:flex-1">
               <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? undefined}>
                 {p.label}
               </span>
               <Chip>{p.provider}</Chip>
               {p.is_test && <Chip>test</Chip>}
             </span>
-            <GaugeCell gauge={providerGauge(p)} />
-            <span className="font-mono text-2xs text-fg-secondary tabular-nums" title="Last probe">
+            <span className="md:w-44 md:shrink-0">
+              <GaugeCell gauge={providerGauge(p)} />
+            </span>
+            <span className="font-mono text-2xs text-fg-secondary tabular-nums md:w-12 md:shrink-0" title="Last probe">
               {ageLabel(p.status?.last_probe_at, now) ?? '—'}
             </span>
-            <span>
+            <span className="md:w-14 md:shrink-0">
               {inc ? (
                 <Chip tone={inc.crit > 0 ? 'danger' : 'neutral'} title={`${inc.total} open incident${inc.total === 1 ? '' : 's'}`}>
                   ▲ {inc.total}
@@ -68,14 +72,14 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
                 <span className="text-3xs text-fg-faint">—</span>
               )}
             </span>
-            <span className="flex min-w-0 flex-wrap gap-1" aria-label="Apps that use it">
+            <span className="flex min-w-0 flex-wrap gap-1 md:w-48 md:shrink-0" aria-label="Apps that use it">
               {apps.map((a) => (
                 <Chip key={a} tone="strong">
                   {a}
                 </Chip>
               ))}
             </span>
-            <span className="flex items-center justify-end gap-1.5">
+            <span className="flex items-center justify-end gap-1.5 md:ml-auto">
               {busy && <PendingMark />}
               <Toggle
                 ariaLabel={`${p.enabled ? 'Turn off' : 'Turn on'} ${p.label}`}
