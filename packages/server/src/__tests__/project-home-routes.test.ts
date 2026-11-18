@@ -215,6 +215,16 @@ describe('GET /v1/admin/projects/:id/home', () => {
     // Labels and last use only: never a key, prefix or hash.
     expect(JSON.stringify(d.access.data.keys)).not.toMatch(/key_prefix|hash|mushi_/)
     expect(d.week.data.find((r: { id: string }) => r.id === 'reports')).toMatchObject({ thisWeek: 4, lastWeek: 1 })
+    // The sparkline: 14 UTC days from 2026-10-14, the same rows as the counts (the sample report left out).
+    const week = Object.fromEntries((d.week.data as Array<{ id: string; daily?: number[]; thisWeek: number; lastWeek: number }>).map((r) => [r.id, r]))
+    expect(week.reports.daily).toEqual([0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 3, 1])
+    expect(week.critical.daily).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    expect(week.merged.daily![13]).toBe(1)
+    for (const r of Object.values(week)) {
+      const sum = (a: number[]) => a.reduce((n, x) => n + x, 0)
+      expect(sum(r.daily!.slice(7))).toBe(r.thisWeek)
+      expect(sum(r.daily!.slice(0, 7))).toBe(r.lastWeek)
+    }
     expect((d.activity.data as Array<{ text: string }>).map((l) => l.text)).toContain('1 fix merged today')
     expect(d.sitemap.status).toBe('ok')
     expect(JSON.stringify(d.sitemap.data)).not.toContain('/login')
