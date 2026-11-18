@@ -6,8 +6,9 @@
  *          backlog is on the neutral teal ramp, because it is not a person's to-do (2026-11-16).
  *          Each segment prints its count when it has room, the legend always does, and the bar
  *          has an aria-label, so the split never depends on colour. Stuck items with no time in
- *          a stage (intake rejections) are counted beside the bar, so the total still matches
- *          "Need you". Buckets: lib/pipelineSignals.ts `stuckAges`.
+ *          a stage (intake rejections), and the newer rest of a cut list from a server that sent
+ *          no buckets, are counted beside the bar, so the total still matches "Need you".
+ *          Buckets: lib/pipelineSignals.ts `stuckAges`.
  */
 
 import { AGE_BUCKET_LABELS, type AgeBuckets, type StuckAges } from '../../lib/pipelineSignals'
@@ -16,10 +17,12 @@ import { AGE_BUCKET_LABELS, type AgeBuckets, type StuckAges } from '../../lib/pi
 const RED = ['ci-fail-1', 'ci-fail-2', 'ci-fail-4', 'ci-fail-5'] as const
 const TEAL = ['ci-heat-2', 'ci-heat-3', 'ci-heat-5', 'ci-heat-6'] as const
 
-function Row({ label, buckets, unaged, ramp, testId }: { label: string; buckets: AgeBuckets; unaged: number; ramp: readonly string[]; testId: string }) {
+function Row({ label, buckets, unaged, unlisted, ramp, testId }: { label: string; buckets: AgeBuckets; unaged: number; unlisted: number; ramp: readonly string[]; testId: string }) {
   const aged = buckets.reduce((a, b) => a + b, 0)
-  const total = aged + unaged
-  const extra = unaged > 0 ? `; ${unaged} more with no time in a stage, such as reports rejected at intake` : ''
+  const total = aged + unaged + unlisted
+  const extra =
+    (unlisted > 0 ? `; ${unlisted} newer ones not listed, so not split by age` : '') +
+    (unaged > 0 ? `; ${unaged} more with no time in a stage, such as reports rejected at intake` : '')
   const summary = buckets.map((n, i) => `${AGE_BUCKET_LABELS[i]} ${n}`).join(', ') + extra
   return (
     <li className="grid min-w-0 grid-cols-1 items-center gap-x-3 gap-y-1 @lg:grid-cols-[9rem_1fr]" data-testid={testId}>
@@ -53,6 +56,11 @@ function Row({ label, buckets, unaged, ramp, testId }: { label: string; buckets:
               <span className={`font-mono font-bold tabular-nums ${n === 0 ? 'text-fg-faint' : 'text-fg'}`}>{n}</span>
             </span>
           ))}
+          {unlisted > 0 && (
+            <span className="inline-flex items-center gap-1" data-testid={`${testId}-unlisted`}>
+              +<span className="font-mono font-bold tabular-nums text-fg">{unlisted}</span> newer, not listed
+            </span>
+          )}
           {unaged > 0 && (
             <span className="inline-flex items-center gap-1" data-testid={`${testId}-unaged`}>
               +<span className="font-mono font-bold tabular-nums text-fg">{unaged}</span> with no time in a stage (e.g. rejected at intake)
@@ -65,16 +73,16 @@ function Row({ label, buckets, unaged, ramp, testId }: { label: string; buckets:
 }
 
 export function StuckAgeBar({ ages }: { ages: StuckAges }) {
-  const { needYou, waiting, unaged } = ages
-  const anyNeed = needYou.some((n) => n > 0) || unaged.needYou > 0
-  const anyWait = waiting.some((n) => n > 0) || unaged.waiting > 0
+  const { needYou, waiting, unaged, unlisted } = ages
+  const anyNeed = needYou.some((n) => n > 0) || unaged.needYou > 0 || unlisted.needYou > 0
+  const anyWait = waiting.some((n) => n > 0) || unaged.waiting > 0 || unlisted.waiting > 0
   if (!anyNeed && !anyWait) return null
   return (
     <figure className="@container min-w-0" data-testid="pipeline-age-bar">
       <figcaption className="mb-1 text-3xs font-bold tracking-wider text-fg-secondary uppercase">How long stuck work has waited in its stage</figcaption>
       <ul className="space-y-1.5">
-        {anyNeed && <Row label="Need you" buckets={needYou} unaged={unaged.needYou} ramp={RED} testId="pipeline-age-need-you" />}
-        {anyWait && <Row label="Waiting for a fix" buckets={waiting} unaged={unaged.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
+        {anyNeed && <Row label="Need you" buckets={needYou} unaged={unaged.needYou} unlisted={unlisted.needYou} ramp={RED} testId="pipeline-age-need-you" />}
+        {anyWait && <Row label="Waiting for a fix" buckets={waiting} unaged={unaged.waiting} unlisted={unlisted.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
       </ul>
     </figure>
   )

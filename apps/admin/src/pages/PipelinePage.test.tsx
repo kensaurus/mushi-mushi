@@ -592,6 +592,20 @@ describe('PipelinePage signals (2026-11-18)', () => {
     expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('0–3 d 5')
   })
 
+  it('a cut backlog from a server without ages fills the bar from the listed oldest and counts the rest as newer, not "no time in a stage"', async () => {
+    const data = state.data as PipelineData
+    const triaged = data.stages.find((s) => s.id === 'triaged')!
+    const listed = Array.from({ length: 100 }, (_, i) => item(`t${i}`, { prUrl: null, prNumber: null, since: '2026-09-01T00:00:00Z' }))
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '765 reports: triaged over 3 days ago, no fix started', count: 765, oldestAt: '2026-09-01T00:00:00Z', actions: [], settings: null, items: listed }]
+    triaged.count = 765
+    triaged.stuck = 765
+    await render()
+    expect(q('pipeline-age-waiting-total')!.textContent).toBe('765')
+    expect(q('pipeline-age-waiting-unlisted')!.textContent).toContain('665')
+    expect(q('pipeline-age-waiting-unaged')).toBeNull()
+    expect(q('pipeline-age-waiting')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('30 d+ 100')
+  })
+
   it('reads a reason code in a held PR as a plain-word chip', async () => {
     const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
     ci.items = [item('f1', { queueDetail: 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).' }), item('f2')]

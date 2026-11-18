@@ -81,9 +81,36 @@ describe('stuckAges', () => {
       stage('reported', 37, [group({ stage: 'reported', id: 'intake_rejected', count: 37, items: [item('intake:p1', { since: ago(100) })] })]),
       stage('ci', 1, [group({ count: 1, items: [item('b', { since: ago(1) })] })]),
     ]
-    const { needYou, unaged } = stuckAges(stages, NOW)
+    const { needYou, unaged, unlisted } = stuckAges(stages, NOW)
     expect(needYou).toEqual([1, 0, 0, 0])
     expect(unaged.needYou).toBe(37)
+    expect(unlisted.needYou).toBe(0)
+  })
+
+  it('buckets the triaged backlog ("Waiting for a fix") from the server ages, by the same time the stage card reads', () => {
+    // 765 reports triaged over 3 days ago; the server lists the oldest 100 and buckets all 765.
+    const listed = Array.from({ length: 100 }, (_, i) => item(`r${i}`, { prUrl: null, prNumber: null, since: ago(58 - i * 0.3) }))
+    const stages = [stage('triaged', 765, [group({ stage: 'triaged', id: 'no_fix_old', count: 765, oldestAt: ago(58), items: listed, ages: [0, 300, 400, 65] })])]
+    const { waiting, needYou, unaged, unlisted } = stuckAges(stages, NOW)
+    expect(waiting).toEqual([0, 300, 400, 65])
+    expect(waiting.reduce((a, b) => a + b, 0)).toBe(765)
+    expect(needYou).toEqual([0, 0, 0, 0])
+    expect(unaged).toEqual({ needYou: 0, waiting: 0 })
+    expect(unlisted).toEqual({ needYou: 0, waiting: 0 })
+  })
+
+  it('a cut triaged list from a server without ages: buckets the listed oldest, counts the rest as unlisted, never "no time in a stage"', () => {
+    // Live preview of #1166: "0–3 d 0 … + 765 with no time in a stage" beside "765 waiting over 3 days, oldest 58 d".
+    const listed = [
+      ...Array.from({ length: 60 }, (_, i) => item(`old${i}`, { prUrl: null, since: ago(58 - i * 0.1) })),
+      ...Array.from({ length: 40 }, (_, i) => item(`mid${i}`, { prUrl: null, since: ago(20 - i * 0.1) })),
+    ]
+    const stages = [stage('triaged', 765, [group({ stage: 'triaged', id: 'no_fix_old', count: 765, oldestAt: ago(58), items: listed })])]
+    const { waiting, unaged, unlisted } = stuckAges(stages, NOW)
+    expect(waiting).toEqual([0, 0, 40, 60])
+    expect(unlisted.waiting).toBe(665)
+    expect(unaged.waiting).toBe(0)
+    expect(waiting.reduce((a, b) => a + b, 0) + unlisted.waiting).toBe(765)
   })
 })
 
