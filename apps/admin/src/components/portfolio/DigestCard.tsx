@@ -35,6 +35,8 @@ function ProjectChannel({ label, none, value, projects, onChange }: { label: str
       <select className={SELECT} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
         <option value="">{none}</option>
         {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+        {/* A channel already set on a hidden app (the public demo) stays selectable, unnamed. */}
+        {value && !projects.some((p) => p.projectId === value) && <option value={value}>Hidden app</option>}
       </select>
     </label>
   )

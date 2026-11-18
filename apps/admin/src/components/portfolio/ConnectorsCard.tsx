@@ -83,7 +83,18 @@ const ACT_COPY: Record<string, { name: string; note: string; label: string; done
   revenuecat: { name: 'Payment actions', note: 'Attaching products to a package, or granting a support entitlement, needs a separate RevenueCat v2 secret key with write permissions (project_configuration:packages:read_write, customer_information:customers:read_write). Each one still needs approval below.', label: 'Write key (v2 secret key)', done: 'Payment actions are on. Each one still needs approval.' },
 }
 
-export function ConnectorsCard({ orgId, projects, iconFor }: { orgId: string; projects: Array<{ projectId: string; name: string }>; iconFor?: IconFor }) {
+export function ConnectorsCard({
+  orgId,
+  projects,
+  iconFor,
+  hiddenIds,
+}: {
+  orgId: string
+  projects: Array<{ projectId: string; name: string }>
+  iconFor?: IconFor
+  /** Apps kept but hidden (the public demo): never drawn as a bound app or offered to bind. */
+  hiddenIds?: ReadonlySet<string>
+}) {
   const path = `/v1/admin/orgs/${orgId}/connectors`
   const { data, loading, error, reload } = usePageData<ConnectorsResponse>(path)
   const [busy, setBusy] = useState(false)
@@ -160,7 +171,7 @@ export function ConnectorsCard({ orgId, projects, iconFor }: { orgId: string; pr
                 const copy = ACT_COPY[i.kind] ?? ACT_COPY.play_console
                 const actOn = i.enabled_capabilities.includes('act')
                 const panel = open?.id === i.id ? open.what : null
-                const bound = new Map(i.bindings.map((b) => [b.projectId, b.externalId]))
+                const bound = new Map(i.bindings.filter((b) => !hiddenIds?.has(b.projectId)).map((b) => [b.projectId, b.externalId]))
                 return (
                   <li key={i.id} className="py-1.5" data-testid={`connector-${i.id}`}>
                     {/* One line: the source, its state, the apps bound to it as icons (✓), and one More
@@ -170,9 +181,9 @@ export function ConnectorsCard({ orgId, projects, iconFor }: { orgId: string; pr
                       <BrandIcon brand={connectorBrand(i)} size={14} decorative />
                       <span className="min-w-0 truncate text-xs font-semibold text-fg">{i.display_name}</span>
                       <Badge tone={st.tone}>{st.label}</Badge>
-                      {i.bindings.length > 0 && (
+                      {bound.size > 0 && (
                         <span className="inline-flex min-w-0 items-center gap-1" data-testid="connector-bindings">
-                          <StatusMark status="passed" label={`${i.bindings.length} ${i.bindings.length === 1 ? 'app' : 'apps'} bound`} />
+                          <StatusMark status="passed" label={`${bound.size} ${bound.size === 1 ? 'app' : 'apps'} bound`} />
                           <AppIconChips projectIds={[...bound.keys()]} iconFor={iconOf} titleFor={(id) => `${nameOf(id)} → ${bound.get(id) ?? ''}`} />
                         </span>
                       )}

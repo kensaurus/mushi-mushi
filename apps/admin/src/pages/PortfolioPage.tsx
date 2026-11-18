@@ -235,7 +235,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const shown = useMemo(() => rankedShown.map((r) => r.card), [rankedShown])
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
-  // Every app, the demo included: spend, connectors and the digest still name it.
+  // Every app the team can see; the per-app lists below use ownAppList (the demo kept but hidden).
   // The team's project list stands in until the portfolio read lands.
   const appList = useMemo(() => (portfolio ? portfolio.cards.map((c) => ({ projectId: c.projectId, name: c.name })) : teamApps), [portfolio, teamApps])
   // The bill import picks among the team's own apps; the demo has no bills.
@@ -468,7 +468,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 </PanelErrorBoundary>
                 <div id="portfolio-connectors" className="scroll-mt-20">
                   <PanelErrorBoundary label="Connected sources">
-                    <ConnectorsCard orgId={orgId} projects={appList} iconFor={iconFor} />
+                    <ConnectorsCard orgId={orgId} projects={ownAppList} iconFor={iconFor} hiddenIds={demoIds} />
                   </PanelErrorBoundary>
                 </div>
               </section>
@@ -477,7 +477,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             {tab === 'digest' && (
               <section id="portfolio-digest" aria-label="Digest" className="space-y-3" data-testid="portfolio-tab-digest">
                 <PanelErrorBoundary label="Daily digest">
-                  <DigestCard orgId={orgId} projects={appList} />
+                  <DigestCard orgId={orgId} projects={ownAppList} />
                 </PanelErrorBoundary>
               </section>
             )}

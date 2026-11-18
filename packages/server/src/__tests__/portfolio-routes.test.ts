@@ -227,6 +227,18 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     expect(db.rpcCalls.filter((r) => r.fn === 'billing_llm_cost_by_project')).toHaveLength(1)
   })
 
+  it('leaves the public demo app out of the Fix once count', async () => {
+    const run = (id: string, project: number) => ({ id, project_id: pid(project), gate: 'code_health', status: 'fail', summary: {}, started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:00:00Z' })
+    const finding = (runId: string, project: number, rule: string) => ({ gate_run_id: runId, project_id: pid(project), rule_id: rule, severity: 'warn', message: rule, allowlisted: false })
+    const db = seed({
+      gate_runs: [run('r1', 1), run('r2', 2), run('r7', 7)],
+      // god_file: glot.it and solo-boss-cloud, a real repeat. demo_only: glot.it and the demo only.
+      gate_findings: [finding('r1', 1, 'god_file'), finding('r2', 2, 'god_file'), finding('r1', 1, 'demo_only'), finding('r7', 7, 'demo_only')],
+    })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.body.data.repeatedGroups).toBe(1)
+  })
+
   it('times each read part in a Server-Timing header', async () => {
     const res = await harness(seed()).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const parts = res.headers['Server-Timing']!.split(', ').map((p) => p.split(';')[0])

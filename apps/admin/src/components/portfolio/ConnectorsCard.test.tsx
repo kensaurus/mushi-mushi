@@ -89,9 +89,9 @@ describe('ConnectorsCard', () => {
     mocks.error.value = null
   })
 
-  async function render(): Promise<void> {
+  async function render(hiddenIds?: ReadonlySet<string>): Promise<void> {
     await act(async () => {
-      root.render(createElement(MemoryRouter, null, createElement(ConnectorsCard, { orgId: ORG, projects: [{ projectId: 'p-glot', name: 'glot.it' }, { projectId: 'p-lt', name: 'lets-talk' }, { projectId: 'p-yen', name: 'yen-yen' }] })))
+      root.render(createElement(MemoryRouter, null, createElement(ConnectorsCard, { orgId: ORG, projects: [{ projectId: 'p-glot', name: 'glot.it' }, { projectId: 'p-lt', name: 'lets-talk' }, { projectId: 'p-yen', name: 'yen-yen' }], hiddenIds })))
       await flush()
     })
   }
@@ -155,6 +155,14 @@ describe('ConnectorsCard', () => {
     expect(row.querySelector('select')).toBeNull()
     await openMore('c2')
     expect([...row.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Check', 'Bind another app…', 'Release actions (off)…', 'Remove'])
+  })
+
+  it('never draws a hidden app (the public demo) as a bound app', async () => {
+    await render(new Set(['p-lt']))
+    const row = container.querySelector('[data-testid="connector-c2"]')!
+    const chips = row.querySelector('[data-testid="connector-bindings"] [data-testid="app-icon-chips"]')!
+    expect(chips.getAttribute('data-count')).toBe('1')
+    expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')!.getAttribute('aria-label')).toBe('1 app bound')
   })
 
   it('opens the bind form inline when "Bind another app…" is chosen, listing only unbound apps', async () => {

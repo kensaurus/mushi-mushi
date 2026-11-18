@@ -667,7 +667,9 @@ export async function buildPortfolio(
     pageSize: PORTFOLIO_PAGE_SIZE,
     totalProjects: projects.length,
     cards,
-    repeatedGroups: groupRepeatedFindings(findings).length,
+    // The public demo app is kept but hidden (apps/admin lib/publicDemo.ts, the same rule):
+    // never part of the header's Fix once count.
+    repeatedGroups: groupRepeatedFindings(findings.filter((f) => !projects.some((p) => p.id === f.project_id && (p.slug === 'mushi-demo' || /\(sample data\)\s*$/i.test(p.name ?? ''))))).length,
     holes: presence ? integrationHoles(presence).length : null,
     readErrors: errs,
   }
