@@ -38,7 +38,7 @@ import { MembersReadout } from '../components/members/MembersReadout'
 import { MembersSnapshotStrip } from '../components/members/MembersSnapshotStrip'
 import { OrgRoleGuideCard } from '../components/members/OrgRoleGuideCard'
 import { SeatBillingCallout } from '../components/members/SeatBillingCallout'
-import { orgRoleDefinition } from '../lib/orgRoleGuide'
+import { membersSeatCalloutHasNews, orgRoleDefinition } from '../lib/orgRoleGuide'
 import {
   EMPTY_MEMBERS_STATS,
   type MembersStats,
@@ -709,13 +709,22 @@ export function OrganizationSettingsPage() {
         scrollable
       />
 
-      <SeatBillingCallout
-        planDisplayName={stats.planDisplayName}
-        planId={stats.planId}
-        seatLimit={stats.seatLimit}
-        seatsUsed={stats.seatsUsed}
-        teamsEnabled={teamsEnabled}
-      />
+      {/* The Seats tile already says 3/5; the card only speaks near the cap (owner, 2026-11-18). */}
+      {membersSeatCalloutHasNews({
+        planDisplayName: stats.planDisplayName,
+        planId: stats.planId,
+        seatLimit: stats.seatLimit,
+        seatsUsed: stats.seatsUsed,
+        teamsEnabled,
+      }) && (
+        <SeatBillingCallout
+          planDisplayName={stats.planDisplayName}
+          planId={stats.planId}
+          seatLimit={stats.seatLimit}
+          seatsUsed={stats.seatsUsed}
+          teamsEnabled={teamsEnabled}
+        />
+      )}
 
       {(activeTab === 'setup' || !teamsEnabled) && (
         <UpgradeBanner

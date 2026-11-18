@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { orgRoleDefinition, seatBillingExplainer } from './orgRoleGuide'
+import { membersSeatCalloutHasNews, orgRoleDefinition, seatBillingExplainer } from './orgRoleGuide'
 
 describe('orgRoleGuide', () => {
   it('defines all four roles', () => {
@@ -41,5 +41,15 @@ describe('orgRoleGuide', () => {
     expect(onBilling.body).not.toMatch(/on Billing/)
     expect(onBilling.body).toMatch(/under Plans/)
     expect(onBilling.billingLink).toBe(false)
+  })
+
+  // Owner 2026-11-18: the Members "Seat usage" card repeated 3/5 beside the
+  // Seats tile. It shows only near the cap; Teams-off has the upgrade banner.
+  it('keeps the Members seat card for news only', () => {
+    const base = { planDisplayName: 'Studio', planId: 'pro', teamsEnabled: true }
+    expect(membersSeatCalloutHasNews({ ...base, seatLimit: 5, seatsUsed: 3 })).toBe(false)
+    expect(membersSeatCalloutHasNews({ ...base, seatLimit: 5, seatsUsed: 4 })).toBe(true)
+    expect(membersSeatCalloutHasNews({ ...base, seatLimit: null, seatsUsed: 9 })).toBe(false)
+    expect(membersSeatCalloutHasNews({ ...base, teamsEnabled: false, seatLimit: 1, seatsUsed: 1 })).toBe(false)
   })
 })
