@@ -160,7 +160,7 @@ export function StatusPill({
   const text = label ?? STATUS_WORD[status]
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-2xs leading-tight font-bold ${STATUS_SOFT[status]} ${STATUS_INK[status]} ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-sm border px-1.5 py-px text-2xs leading-tight font-bold whitespace-nowrap ${STATUS_SOFT[status]} ${STATUS_INK[status]} ${className}`}
       title={title}
       data-status={status}
       data-testid="status-pill"
