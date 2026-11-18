@@ -315,7 +315,7 @@ export function PipelinePage() {
           <section className="space-y-2" aria-label="Stages">
             <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
             <FunnelLegend />
-            <StuckAgeBar needYou={ages.needYou} waiting={ages.waiting} />
+            <StuckAgeBar ages={ages} />
           </section>
 
           {!data.ciReadable && (

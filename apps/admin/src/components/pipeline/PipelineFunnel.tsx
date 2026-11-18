@@ -137,7 +137,7 @@ export function FunnelLegend() {
         </span>
         darker part = stuck
       </span>
-      <span>Bar width: items in the stage. Click a stage to see only its groups.</span>
+      <span>Bar width: items in the stage (square-root scale). Click a stage to see only its groups.</span>
     </p>
   )
 }

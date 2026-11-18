@@ -47,9 +47,12 @@ const group = (over: Partial<PipelineGroup>): PipelineGroup => ({
 const stage = (id: PipelineStage['id'], stuck: number, groups: PipelineGroup[] = []): PipelineStage => ({ id, label: id, count: stuck, stuck, oldestAt: null, groups })
 
 describe('stageTones', () => {
-  it('colours only the bottleneck and a stage holding at least half as much', () => {
-    const tones = stageTones([stage('reported', 1), stage('triaged', 900), stage('pr', 12), stage('review', 6), stage('ci', 5), stage('train', 1), stage('merged', 0)])
+  it('colours only the bottleneck and at most one runner-up holding at least half as much', () => {
+    const tones = stageTones([stage('reported', 1), stage('triaged', 900), stage('pr', 12), stage('review', 6), stage('ci', 6), stage('train', 1), stage('merged', 0)])
     expect(tones).toEqual({ pr: 'danger', review: 'warn' })
+    // Single-digit counts must not paint most of the bar: 2, 2, 1 colours two stages, not three.
+    expect(stageTones([stage('pr', 2), stage('review', 1), stage('ci', 2)])).toEqual({ pr: 'danger', ci: 'warn' })
+    expect(stageTones([stage('pr', 12), stage('review', 5)])).toEqual({ pr: 'danger' })
   })
 
   it('never colours the triaged backlog, and colours nothing when nothing needs you', () => {
@@ -66,10 +69,21 @@ describe('stuckAges', () => {
       stage('ci', 3, [group({ count: 3, items: [item('b', { since: ago(1) }), item('c', { since: ago(5) }), item('d', { since: ago(45) })] })]),
       stage('train', 0, [group({ stage: 'train', tone: 'moving', count: 9, ages: [9, 0, 0, 0] })]),
     ]
-    const { needYou, waiting } = stuckAges(stages, NOW)
+    const { needYou, waiting, unaged } = stuckAges(stages, NOW)
     expect(needYou).toEqual([101, 31, 15, 6])
     expect(needYou.reduce((a, b) => a + b, 0)).toBe(150 + 3)
     expect(waiting).toEqual([0, 10, 20, 10])
+    expect(unaged).toEqual({ needYou: 0, waiting: 0 })
+  })
+
+  it('counts a group with no ages and a cut list (intake: one item per app, counting reports) apart, never bucketed wrong', () => {
+    const stages = [
+      stage('reported', 37, [group({ stage: 'reported', id: 'intake_rejected', count: 37, items: [item('intake:p1', { since: ago(100) })] })]),
+      stage('ci', 1, [group({ count: 1, items: [item('b', { since: ago(1) })] })]),
+    ]
+    const { needYou, unaged } = stuckAges(stages, NOW)
+    expect(needYou).toEqual([1, 0, 0, 0])
+    expect(unaged.needYou).toBe(37)
   })
 })
 

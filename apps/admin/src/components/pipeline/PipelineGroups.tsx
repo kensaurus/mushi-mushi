@@ -16,6 +16,7 @@ import { Badge, Btn } from '../ui'
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
 import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
+import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from './MoreActionsMenu'
 import { SendToWorkerButton } from './SendToWorkerButton'
@@ -183,6 +184,8 @@ export function BlockedReasons({ item, actions, testIdPrefix }: { item: Pipeline
 function Evidence({ item }: { item: PipelineItem }) {
   const verdict = item.review?.verdict ?? null
   const showReview = !!verdict && verdict !== 'merge'
+  const note = item.lastError ?? item.queueDetail
+  const why = note && withoutReasonCode(note) !== note ? heldReasonOf(note) : null
   return (
     <div className="space-y-1 text-2xs text-fg-muted">
       {item.failingChecks.length > 0 && (
@@ -208,7 +211,21 @@ function Evidence({ item }: { item: PipelineItem }) {
           )}
         </div>
       )}
-      {(item.lastError ?? item.queueDetail) && <p className="wrap-break-word">{item.lastError ?? item.queueDetail}</p>}
+      {note && (
+        <p className="wrap-break-word">
+          {why && (
+            // A reason code in the server's sentence ("(key_used_up)") reads as a plain-word chip (2026-11-18).
+            <span
+              className="mr-1 inline-flex items-center rounded-sm border border-warn/55 bg-warn-muted px-1 text-3xs font-bold text-warn-foreground"
+              title={note}
+              data-testid={`pipeline-item-${item.id}-why`}
+            >
+              {why}
+            </span>
+          )}
+          {why ? withoutReasonCode(note) : note}
+        </p>
+      )}
     </div>
   )
 }

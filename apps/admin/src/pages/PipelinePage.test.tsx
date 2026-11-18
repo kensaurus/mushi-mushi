@@ -537,6 +537,9 @@ describe('PipelinePage signals (2026-11-18)', () => {
     expect(q('pipeline-funnel')!.querySelectorAll('li').length).toBe(8)
     const tone = (id: string) => q(`pipeline-stage-${id}`)!.closest('li')!.getAttribute('data-tone')
     expect(tone('pr')).toBe('danger')
+    // pr 2, ci 2, review 1: the bottleneck and one runner-up, never three of four.
+    expect(tone('ci')).toBe('warn')
+    expect(tone('review')).toBe('neutral')
     expect(tone('triaged')).toBe('neutral')
     expect(tone('train')).toBe('neutral')
     expect(tone('merged')).toBe('neutral')
@@ -569,6 +572,31 @@ describe('PipelinePage signals (2026-11-18)', () => {
     ci.ages = [0, 0, 1, 1]
     await render()
     expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Need you, 5 by time in stage: 0–3 d 3, 3–7 d 0, 7–30 d 1, 30 d+ 1')
+  })
+
+  it('counts intake rejections beside the age bar, so it still adds up to "Need you"', async () => {
+    const data = state.data as PipelineData
+    const reported = data.stages.find((s) => s.id === 'reported')!
+    reported.groups = [
+      { id: 'intake_rejected', stage: 'reported', tone: 'stuck', label: '37 reports: rejected at intake (400) in 7 days', count: 37, oldestAt: null, actions: [], settings: null, items: [item('intake:p1', { reportId: null, prUrl: null, prNumber: null, since: '2026-10-26T07:00:00Z' })] },
+    ]
+    reported.count = 37
+    reported.stuck = 37
+    await render()
+    expect(q('pipeline-status')!.textContent).toContain('42 items need you')
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('42')
+    expect(q('pipeline-age-need-you-unaged')!.textContent).toContain('37')
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('0–3 d 5')
+  })
+
+  it('reads a reason code in a held PR as a plain-word chip', async () => {
+    const ci = (state.data as PipelineData).stages.find((s) => s.id === 'ci')!.groups[0]
+    ci.items = [item('f1', { queueDetail: 'Merge conflict. The follow-up Cursor key cannot be used here (key_used_up).' }), item('f2')]
+    await render()
+    await click(q('pipeline-group-ci_red_queued-toggle'))
+    expect(q('pipeline-item-f1-why')!.textContent).toBe('key used up')
+    expect(q('pipeline-item-f1')!.textContent).not.toContain('key_used_up')
+    expect(q('pipeline-item-f2-why')).toBeNull()
   })
 
   it('gives each stuck group one primary button and puts the rest in More', async () => {

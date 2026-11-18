@@ -4,14 +4,17 @@
  *          colour said nothing. These pure rules decide what earns a colour and a picture:
  *
  *  - stageTones: only the jam takes a colour. The stage holding the most stuck work that
- *    needs a person is the bottleneck (▲ red); another stage is ◆ amber only when it holds
- *    at least half as much. Triaged is never coloured: its "stuck" items are the backlog
+ *    needs a person is the bottleneck (▲ red; the earlier stage wins a tie); at most ONE
+ *    runner-up is ◆ amber, and only when it holds at least half as much, so single-digit
+ *    counts never paint most of the bar again. Triaged is never coloured: its "stuck" items are the backlog
  *    waiting for a fix, not a person's to-do (owner's fresh-user review, 2026-11-16).
  *    Every other stage prints its stuck number in neutral ink.
  *  - stuckAges: the age bar for stuck work, [0–3 d, 3–7 d, 7–30 d, 30 d+], from the server's
  *    per-group `ages` (counted before the item list is cut) or, on an older server or a group
- *    built without them, from the listed items. "Need you" leaves the backlog out, so its
- *    total matches the status line's "Need you".
+ *    built without them, from the listed items when they are all listed. A group with neither
+ *    (intake rejections: one item per app, counting reports) has no time in a stage, so its
+ *    count is reported apart as `unaged` instead of being bucketed wrong. "Need you" leaves
+ *    the backlog out, so buckets + unaged match the status line's "Need you".
  *  - primaryAction: each group or item gets ONE button; the rest go in a "More" menu. The
  *    primary is the first action the server would take for at least one item that does not
  *    close or remove anything; closing is never the one-click default.
@@ -42,19 +45,32 @@ function add(a: AgeBuckets, b: readonly number[]): AgeBuckets {
   return [a[0] + (b[0] ?? 0), a[1] + (b[1] ?? 0), a[2] + (b[2] ?? 0), a[3] + (b[3] ?? 0)]
 }
 
+export interface StuckAges {
+  needYou: AgeBuckets
+  waiting: AgeBuckets
+  /** Stuck items with no time in a stage (intake rejections), counted apart. */
+  unaged: { needYou: number; waiting: number }
+}
+
 /** Stuck work by age: what needs a person, and the backlog waiting for a fix. */
-export function stuckAges(stages: readonly PipelineStage[], now: number): { needYou: AgeBuckets; waiting: AgeBuckets } {
+export function stuckAges(stages: readonly PipelineStage[], now: number): StuckAges {
   let needYou: AgeBuckets = [0, 0, 0, 0]
   let waiting: AgeBuckets = [0, 0, 0, 0]
+  const unaged = { needYou: 0, waiting: 0 }
   for (const s of stages) {
+    const side = s.id === 'triaged' ? 'waiting' : 'needYou'
     for (const g of s.groups) {
       if (g.tone !== 'stuck') continue
-      const buckets = Array.isArray(g.ages) && g.ages.length === 4 ? g.ages : bucketItems(g.items, now)
-      if (s.id === 'triaged') waiting = add(waiting, buckets)
+      const buckets = Array.isArray(g.ages) && g.ages.length === 4 ? g.ages : g.items.length === g.count ? bucketItems(g.items, now) : null
+      if (!buckets) {
+        unaged[side] += g.count
+        continue
+      }
+      if (side === 'waiting') waiting = add(waiting, buckets)
       else needYou = add(needYou, buckets)
     }
   }
-  return { needYou, waiting }
+  return { needYou, waiting, unaged }
 }
 
 /** The colour each stage earns: the bottleneck danger, a near-equal second warn, the rest none. */
@@ -63,15 +79,9 @@ export function stageTones(stages: readonly PipelineStage[]): Partial<Record<Pip
   const worst = Math.max(0, ...counted.map((s) => s.stuck))
   const out: Partial<Record<PipelineStage['id'], SignalTone>> = {}
   if (worst === 0) return out
-  let bottleneck = false
-  for (const s of [...counted].sort((a, b) => b.stuck - a.stuck)) {
-    if (!bottleneck) {
-      out[s.id] = 'danger'
-      bottleneck = true
-    } else if (s.stuck * 2 >= worst) {
-      out[s.id] = 'warn'
-    }
-  }
+  const [first, second] = [...counted].sort((a, b) => b.stuck - a.stuck)
+  if (first) out[first.id] = 'danger'
+  if (second && second.stuck * 2 >= worst) out[second.id] = 'warn'
   return out
 }
 
