@@ -13,7 +13,7 @@ export type BarTone = 'neutral' | 'heat' | 'danger' | 'warn' | 'ok' | 'info' | '
 
 const FILL: Record<BarTone, string> = {
   neutral: 'bg-fg-secondary',
-  heat: 'bg-viz-heat-4',
+  heat: 'ci-heat-4',
   danger: 'bg-danger',
   warn: 'bg-warn',
   ok: 'bg-ok',

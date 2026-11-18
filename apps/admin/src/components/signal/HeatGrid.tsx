@@ -114,7 +114,7 @@ function Row({
         return (
           <td key={col.id} className="p-0.5 align-middle">
             <span
-              className={`ci-heatcell ci-pop flex h-6 min-w-12 items-center justify-center gap-1 rounded-xs px-1 font-mono text-2xs font-bold tabular-nums ${cls}`}
+              className={`sig-cell ci-pop flex h-6 min-w-12 items-center justify-center gap-1 rounded-xs px-1 font-mono text-2xs font-bold tabular-nums ${cls}`}
               style={{ animationDelay: `${index * 30 + ci * 15}ms` }}
               title={cell?.title ?? `${col.label}: ${typeof shown === 'string' ? shown : (cell?.value ?? 'no data')}`}
               data-col={col.id}

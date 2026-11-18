@@ -94,19 +94,22 @@ function AlertCard({
   index,
   narrowHidden,
   testIdPrefix,
+  pinAlways,
 }: {
   alert: SignalAlert
   index: number
   narrowHidden: boolean
   testIdPrefix: string
+  pinAlways: boolean
 }) {
   const keys = alert.keys ?? []
-  const link = useLinked(keys, keys[0] ?? alert.id, keys.length > 0)
+  const pinnable = pinAlways || keys.length > 0
+  const link = useLinked(keys, keys[0] ?? alert.id, pinnable)
   const critical = alert.severity === 'critical'
   return (
     <li
       {...link}
-      className={`${link.className} ci-rise group relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-md border py-2 pr-2.5 pl-3.5 motion-safe:hover:-translate-y-0.5 ${keys.length > 0 ? 'cursor-pointer' : ''} ${narrowHidden ? 'hidden @xl:flex' : ''} ${
+      className={`${link.className} ci-rise group relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-md border py-2 pr-2.5 pl-3.5 motion-safe:hover:-translate-y-0.5 ${pinnable ? 'cursor-pointer' : ''} ${narrowHidden ? 'hidden @xl:flex' : ''} ${
         critical ? 'border-danger/55 bg-danger-muted' : 'border-warn/55 bg-warn-muted'
       }`}
       style={{ animationDelay: `${index * 60}ms` }}
@@ -121,7 +124,7 @@ function AlertCard({
         </span>
         {alert.app && <span className="ml-auto truncate text-3xs font-medium text-fg-secondary">{alert.app}</span>}
       </span>
-      {keys.length > 0 ? (
+      {pinnable ? (
         <button
           type="button"
           className="text-left text-sm leading-snug font-bold text-fg focus-visible:outline-none focus-visible:underline"
@@ -178,6 +181,8 @@ export interface AlertCardsProps {
   testIdPrefix?: string
   /** A readable name for a pinned highlight key (the "Pinned" trail). */
   keyLabel?: (key: HighlightKey) => string
+  /** Let a card with no keys pin by its id (the CI page's behaviour before the kit). */
+  pinWithoutKeys?: boolean
 }
 
 export function AlertCards({
@@ -188,6 +193,7 @@ export function AlertCards({
   columns = 3,
   testIdPrefix = 'signal',
   keyLabel,
+  pinWithoutKeys = false,
 }: AlertCardsProps) {
   const [all, setAll] = useState(false)
   const { pinned, clear } = usePinned()
@@ -218,7 +224,7 @@ export function AlertCards({
           <div className="@container flex flex-col gap-2">
             <ul className={grid}>
               {shown.map((a, i) => (
-                <AlertCard key={a.id} alert={a} index={i} narrowHidden={!all && i >= SHOWN_NARROW} testIdPrefix={testIdPrefix} />
+                <AlertCard key={a.id} alert={a} index={i} narrowHidden={!all && i >= SHOWN_NARROW} testIdPrefix={testIdPrefix} pinAlways={pinWithoutKeys} />
               ))}
             </ul>
             {!all && alerts.length > SHOWN_NARROW && (

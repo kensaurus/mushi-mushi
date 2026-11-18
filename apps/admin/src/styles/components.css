@@ -2383,6 +2383,9 @@ html[data-theme="light"] .report-path-code {
 }
 .ci-heatcell { transition: transform 120ms ease-out; }
 .ci-heatcell:hover { transform: scale(1.5); position: relative; z-index: 2; outline: 2px solid var(--color-fg); }
+/* Signal kit (components/signal/HeatGrid): numeric cells are wide, so hover
+   outlines the cell instead of scaling it over its neighbours' numbers. */
+.sig-cell:hover { outline: 2px solid var(--color-fg); outline-offset: -2px; }
 
 @keyframes ci-rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes ci-grow-x { from { transform: scaleX(0); } }

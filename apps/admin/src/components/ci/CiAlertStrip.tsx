@@ -47,6 +47,7 @@ export function CiAlertStrip({ overview, status, now }: { overview: CiOverview; 
       maxShown={ALERTS_SHOWN}
       columns={6}
       testIdPrefix="ci"
+      pinWithoutKeys
       keyLabel={(key) => keyLabel(overview, key)}
     />
   )
