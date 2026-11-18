@@ -138,6 +138,31 @@ describe('CiPage', () => {
     for (const t of ['Runner map', 'Speed it up', 'Slow jobs', 'Stopped by the test machine', 'Where CI runs']) expect(hasHeading(t)).toBe(false)
   })
 
+  it('lists waiting jobs under one header per label they need, not the label on every row', async () => {
+    await render()
+    const nuc = q('ci-waiting-group-nuc')!
+    expect(nuc.textContent).toBe('2 waiting fornuc')
+    expect(nuc.querySelectorAll('[data-testid="ci-waiting-label"]')).toHaveLength(1)
+    for (const id of ['j2', 'j3']) {
+      const row = q(`ci-waiting-${id}`)!
+      expect(row.querySelector('[data-testid="ci-waiting-label"]')).toBeNull()
+      // The job's rows sit right under their header.
+      expect(nuc.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    expect(q('ci-waiting-group-cloud')!.textContent).toBe('1 waiting for a machine')
+  })
+
+  it('draws the waiting card as label chips and keeps its sentence for screen readers', async () => {
+    await render()
+    const chips = q('ci-alert-wait-labels')!
+    expect(chips.getAttribute('aria-hidden')).toBe('true')
+    expect(Array.from(chips.querySelectorAll('[data-testid="ci-alert-needs"]')).map((e) => e.textContent)).toEqual(['nuc'])
+    const has = Array.from(chips.querySelectorAll('[data-status="passed"]')).map((e) => e.textContent)
+    expect(has.length).toBeGreaterThan(0)
+    expect(chips.previousElementSibling!.className).toBe('sr-only')
+    expect(chips.previousElementSibling!.textContent!.length).toBeGreaterThan(10)
+  })
+
   it('puts each section in its view, with a tab per view and the active one marked', async () => {
     const views: Array<[string, string[]]> = [
       ['machines', ['Machines', 'Runner map (advanced)', 'Stopped by the test machine']],
