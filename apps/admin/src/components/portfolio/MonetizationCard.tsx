@@ -33,7 +33,7 @@ import {
   type MonetizationResponse,
 } from './monetizationView'
 
-export function MonetizationCard({ orgId }: { orgId: string }) {
+export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: IconFor }) {
   const path = `/v1/admin/orgs/${orgId}/monetization`
   const { data, loading, error, reload } = usePageData<MonetizationResponse>(path)
   const [busy, setBusy] = useState<string | null>(null)

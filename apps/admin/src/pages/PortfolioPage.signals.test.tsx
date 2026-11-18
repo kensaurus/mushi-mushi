@@ -16,7 +16,7 @@
 
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PortfolioCard, PortfolioResponse } from '../lib/portfolioTypes'
 import type { PortfolioPage as PortfolioPageType } from './PortfolioPage'
@@ -106,7 +106,7 @@ vi.mock('../components/PageHeaderBar', () => ({
 }))
 // The other sections read their own routes; they are not under test here.
 for (const m of ['ReleasesCard', 'FunnelCard', 'CiRunnersCard', 'MonetizationCard', 'SpendLedgerCard', 'AccountsRegisterCard', 'SharedResourcesCard', 'ConnectorsCard', 'DigestCard']) {
-  vi.doMock(`../components/portfolio/${m}`, () => ({ [m]: () => null }))
+  vi.doMock(`../components/portfolio/${m}`, () => ({ [m]: () => createElement('div', { 'data-testid': `mock-${m}` }) }))
 }
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -136,9 +136,18 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function render() {
+/** Shows the router's location, and keeps its navigate for back/forward. */
+const nav = { go: null as null | ((delta: number) => void) }
+function LocationProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  nav.go = (delta) => navigate(delta)
+  return createElement('output', { 'data-testid': 'location' }, `${location.pathname}${location.search}`)
+}
+
+async function render(entry = '/portfolio') {
   await act(async () => {
-    root.render(createElement(MemoryRouter, null, createElement(PortfolioPage)))
+    root.render(createElement(MemoryRouter, { initialEntries: [entry] }, createElement(PortfolioPage), createElement(LocationProbe)))
   })
 }
 
@@ -245,5 +254,57 @@ describe('Apps signals', () => {
     const cardsBtn = [...container.querySelectorAll('[role="radio"]')].find((b) => b.textContent === 'Cards') as HTMLElement
     await act(async () => cardsBtn.click())
     expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+  })
+})
+
+describe('Apps tabs', () => {
+  const shown = () => [...container.querySelectorAll('[data-testid^="portfolio-tab-"]')].map((el) => el.getAttribute('data-testid'))
+  const tabLink = (label: string) => [...container.querySelectorAll<HTMLAnchorElement>('[role="tab"]')].find((a) => a.textContent === label)!
+  const location = () => text('[data-testid="location"]')
+
+  it('shows one section at a time, Apps by default', async () => {
+    await render()
+    expect(shown()).toEqual(['portfolio-tab-apps'])
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="mock-MonetizationCard"]')).toBeNull()
+    expect(tabLink('Apps').getAttribute('aria-selected')).toBe('true')
+    // The alerts and the ranking stay above the tabs.
+    expect(container.querySelector('[data-testid="portfolio-alert-glot"]')).not.toBeNull()
+  })
+
+  it('?tab=payments shows only Payments, and every tab keeps the other params', async () => {
+    await render('/portfolio?group=work&tab=payments')
+    expect(shown()).toEqual(['portfolio-tab-payments'])
+    expect(container.querySelector('[data-testid="mock-MonetizationCard"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
+    expect(container.querySelector('[data-testid="mock-SpendLedgerCard"]')).toBeNull()
+    expect(tabLink('Payments').getAttribute('aria-selected')).toBe('true')
+    expect(tabLink('Releases').getAttribute('href')).toBe('/portfolio?group=work&tab=releases')
+    // Apps is the default: its link drops the param instead of spelling it.
+    expect(tabLink('Apps').getAttribute('href')).toBe('/portfolio?group=work')
+  })
+
+  it('an unknown tab falls back to Apps', async () => {
+    await render('/portfolio?tab=nope')
+    expect(shown()).toEqual(['portfolio-tab-apps'])
+    expect(tabLink('Apps').getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('clicking a tab updates the URL, and back returns to the tab before', async () => {
+    await render()
+    await act(async () => tabLink('Spend & accounts').click())
+    expect(location()).toBe('/portfolio?tab=spend')
+    expect(shown()).toEqual(['portfolio-tab-spend'])
+    expect(container.querySelector('[data-testid="mock-SpendLedgerCard"]')).not.toBeNull()
+    await act(async () => tabLink('Digest').click())
+    expect(shown()).toEqual(['portfolio-tab-digest'])
+    await act(async () => nav.go!(-1))
+    expect(location()).toBe('/portfolio?tab=spend')
+    expect(shown()).toEqual(['portfolio-tab-spend'])
+    await act(async () => nav.go!(-1))
+    expect(location()).toBe('/portfolio')
+    expect(shown()).toEqual(['portfolio-tab-apps'])
+    await act(async () => nav.go!(1))
+    expect(shown()).toEqual(['portfolio-tab-spend'])
   })
 })

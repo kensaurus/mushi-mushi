@@ -31,7 +31,7 @@ function Cell({ source, title }: { source: LedgerSource; title?: string }) {
   return <td className={`px-2 py-1.5 text-right tabular-nums ${tone}`} title={title ?? c.title}>{c.text}</td>
 }
 
-export function SpendLedgerCard({ orgId, projects }: { orgId: string; projects: Array<{ projectId: string; name: string }> }) {
+export function SpendLedgerCard({ orgId, projects, iconFor }: { orgId: string; projects: Array<{ projectId: string; name: string }>; iconFor?: IconFor }) {
   const path = `/v1/admin/orgs/${orgId}/spend`
   const { data, loading, error, reload } = usePageData<SpendLedgerResponse>(path)
   const [vendor, setVendor] = useState<BillVendor>('vercel')
