@@ -9,7 +9,7 @@
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { ReporterUpdateFunnel, funnelPct, funnelSentence } from './ReporterUpdateFunnel'
+import { ReporterUpdateFunnel, funnelPct, funnelScope, funnelSentence } from './ReporterUpdateFunnel'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -46,5 +46,16 @@ describe('ReporterUpdateFunnel', () => {
     act(() => root.render(createElement(ReporterUpdateFunnel, { funnel: { told: 40, opened: 10, replied: 2 } })))
     const rows = Array.from(host.querySelectorAll('dl > div')).map((d) => d.textContent)
     expect(rows).toEqual(['Told40', 'Opened10(25%)', 'Replied2(5%)'])
+  })
+
+  // Fresh-eyes 2026-11-18: "over your latest 500 updates" with 2 sent, and
+  // "2 not opened" said by the banner, the status and the funnel.
+  it('says what it counts over and leaves the not-opened count to the banner', () => {
+    expect(funnelScope(2)).toBe('over all 2 updates')
+    expect(funnelScope(800)).toBe('over your latest 500 updates')
+    expect(funnelScope(undefined)).toBe('over your latest 500 updates')
+    act(() => root.render(createElement(ReporterUpdateFunnel, { funnel: { told: 2, opened: 0, replied: 0 }, totalUpdates: 2, unopenedShownAbove: true })))
+    expect(host.textContent).toContain('over all 2 updates')
+    expect(host.textContent).not.toContain('have not opened')
   })
 })

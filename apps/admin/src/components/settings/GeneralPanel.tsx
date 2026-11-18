@@ -325,7 +325,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Error tracking" description="Bring errors your monitoring already catches into the same bug list.">
+      <SettingsList id="error-tracking" title="Error tracking" description="Bring errors your monitoring already catches into the same bug list.">
         <SettingsRow
           icon={<BrandIcon brand="sentry" size={18} decorative />}
           title="Sentry"
@@ -347,13 +347,13 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             helpId="settings.general.sentry_webhook_secret"
             value={settings.sentry_webhook_secret ?? ''}
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
-            placeholder={
-              saved.sentry_webhook_secret_set
-                ? 'Saved. Paste a new secret to replace it.'
-                : 'From Sentry → Settings → Integrations → your integration → Client Secret'
-            }
+            placeholder={saved.sentry_webhook_secret_set ? 'Saved. Paste a new secret to replace it.' : 'Client Secret'}
             validate={token({ minLength: 16 })}
           />
+          {/* Where it comes from, as helper text: as a placeholder it was cut to "From Sentry → Settings → Integra" on a phone. */}
+          {!saved.sentry_webhook_secret_set && (
+            <p className="-mt-1 text-2xs text-fg-muted">In Sentry: Settings → Integrations → your integration → Client Secret.</p>
+          )}
           <SettingsChangeHint current={settings.sentry_webhook_secret ?? ''} saved={saved.sentry_webhook_secret ?? ''} kind="secret" />
           <StoredSecretStatus
             column="sentry_webhook_secret"
@@ -410,7 +410,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
+      <SettingsList id="bug-sorting" title="Bug sorting" description="How the AI scores, groups and fixes incoming bugs.">
         <SettingsRow
           icon={<IconJudge size={16} />}
           title="AI models"
@@ -561,6 +561,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
       </SettingsList>
 
       <SettingsList
+        id="daily-limits"
         title="Daily limits"
         description="Caps on automatic work each day. When one is reached, new runs wait until midnight UTC instead of running up a bill."
       >
@@ -629,7 +630,8 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
             value={brandFooterToChoice(settings.widget_brand_footer)}
             onChange={(e) => update({ widget_brand_footer: choiceToBrandFooter(e.target.value as BrandFooterChoice) })}
           >
-            <option value="default">Plan default (on for Free, off for paid and self-host)</option>
+            {/* The row's purpose says what the plan default is; the long label was cut off on a phone. */}
+            <option value="default">Plan default</option>
             <option value="on">Always show</option>
             <option value="off">Never show</option>
           </SelectField>

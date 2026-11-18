@@ -7,7 +7,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Badge, Btn, EmptyState, RelativeTime, Section } from '../ui'
+import { Badge, Btn, RelativeTime, Section } from '../ui'
 import { fixesForReportPath } from '../../lib/fixDeepLink'
 import { ActionPill, ActionPillRow } from '../report-detail/ReportSurface'
 import { IconExternalLink, IconMic } from '../icons'
@@ -40,15 +40,15 @@ export function VoiceSessionsList({ sessions, onConfirm, onCancel, pendingId, in
   return (
     <Section title="Recent voice requests" icon={<IconMic className="h-4 w-4" />}>
       {sessions.length === 0 ? (
-        <EmptyState
-          title="No voice requests yet"
-          description={
-            intakeEnabled
-              ? "Tap to talk above, share a voice memo into the app, or send a voice note to the project's Telegram bot."
-              : 'Turn on voice intake first. Then tap to talk, share a voice memo into the app, or send a voice note to the Telegram bot.'
-          }
-          hints={['The first transcript shows up here with a Confirm button', 'Draft PRs link back from this list once the agent finishes']}
-        />
+        // Plain lines in the section, not a dashed box inside the card.
+        <div className="space-y-1" data-testid="voice-sessions-empty">
+          <p className="text-sm text-fg-secondary">No voice requests yet.</p>
+          <p className="text-2xs text-fg-muted">
+            {intakeEnabled
+              ? "Tap to talk above, share a voice memo into the app, or send a voice note to the project's Telegram bot. The first transcript shows up here with a Confirm button."
+              : 'Turn on voice intake first. Then tap to talk, share a voice memo into the app, or send a voice note to the Telegram bot.'}
+          </p>
+        </div>
       ) : (
         <ul className="divide-y divide-edge-subtle" data-testid="voice-sessions">
           {sessions.map((s) => {

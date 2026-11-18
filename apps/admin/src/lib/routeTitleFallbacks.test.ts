@@ -25,6 +25,10 @@ describe('routeFallbackTitle', () => {
     expect(routeFallbackTitle('/totally-unknown-route')).toBeNull()
   })
 
+  it('does not name super-admin pages, which answer everyone else with a 404', () => {
+    expect(routeFallbackTitle('/users')).toBeNull()
+  })
+
   it('buildRouteTitleMatchers covers every registry base path', () => {
     const matchers = buildRouteTitleMatchers()
     expect(matchers.length).toBeGreaterThan(40)

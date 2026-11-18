@@ -339,7 +339,7 @@ export function ConnectPage() {
                 Problems that stop bug reports from arriving, each with a fix.
               </SectionDescription>
               {project ? (
-                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} />
+                <SdkHealthPanel projectId={project.id} nativeApp={isNativeProject(project)} bare />
               ) : (
                 <ProjectFallbackNote
                   card
@@ -380,10 +380,13 @@ export function ConnectPage() {
                 </HelpBanner>
               ) : null}
               {project ? (
+                // Embedded: the section is the one card; the SDK card and the
+                // key box inside it drew two more frames (fresh-eyes 2026-11-18).
                 <SdkInstallCard
                   projectId={project.id}
                   projectSlug={project.slug}
                   compact
+                  embedded
                 />
               ) : (
                 <ProjectFallbackNote

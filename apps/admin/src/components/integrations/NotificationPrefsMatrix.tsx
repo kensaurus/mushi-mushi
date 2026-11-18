@@ -172,9 +172,9 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
 
   if (loading) {
     return (
-      <div className="overflow-hidden rounded-md border border-edge-subtle divide-y divide-edge-subtle">
+      <div className="divide-y divide-edge-subtle">
         {EVENTS.map((e) => (
-          <div key={e.key} className="h-14 bg-surface-overlay motion-safe:animate-pulse" />
+          <div key={e.key} className="h-12 bg-surface-overlay motion-safe:animate-pulse" />
         ))}
       </div>
     )
@@ -201,11 +201,12 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-md border border-edge-subtle bg-surface-raised divide-y divide-edge-subtle">
+      {/* Rows only: the Alert events panel is the card (no bordered box inside it). */}
+      <div className="divide-y divide-edge-subtle" data-testid="notification-prefs-rows">
         {EVENTS.map((event) => (
           <div
             key={event.key}
-            className="flex items-start justify-between gap-4 px-3 py-3 min-h-11"
+            className="flex items-start justify-between gap-4 py-2.5 min-h-11"
           >
             <div className="min-w-0 flex-1 pt-0.5">
               <p className="text-xs font-semibold text-fg">{event.label}</p>

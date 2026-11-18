@@ -46,6 +46,17 @@ describe('MembersSnapshotStrip', () => {
 
   it('says so when every seat is used', () => {
     render({ memberCount: 5, seatLimit: 5, seatsUsed: 5, seatsRemaining: 0, atSeatCap: true })
-    expect(container.textContent).toContain('all 5 seats are used')
+    expect(container.textContent).toContain('All 5 seats are used')
+  })
+
+  it('does not repeat the member count the Members tile shows', () => {
+    render({ memberCount: 3, seatLimit: 5, seatsUsed: 3, seatsRemaining: 2 })
+    expect(container.textContent).not.toContain('3 members')
+  })
+
+  it('does not claim invites were accepted for a team of one', () => {
+    render({ memberCount: 1 })
+    expect(container.textContent).toContain('Just you so far.')
+    expect(container.textContent).not.toContain('Everyone you invited')
   })
 })

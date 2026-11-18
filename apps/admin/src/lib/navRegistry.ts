@@ -1101,7 +1101,7 @@ const EXTRA_ROUTE_TITLE_MATCHERS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/reports\/[^/]+$/, 'Report'],
   [/^\/content\/[^/]+$/, 'Content checks'],
   [/^\/projects\/[^/]+\/qa-coverage\/[^/]+$/, 'Scheduled tests'],
-  [/^\/rewards\/tester-review$/, 'Rewards'],
+  [/^\/rewards\/tester-review$/, 'Tester rewards'],
   [/^\/integrations$/, 'Integrations'],
   [/^\/fine-tuning$/, 'AI prompts'],
   [/^\/console$/, 'Home'],
@@ -1128,6 +1128,10 @@ export function buildRouteTitleMatchers(): ReadonlyArray<readonly [RegExp, strin
 
   const byBase = new Map<string, string>()
   for (const entry of NAV_REGISTRY) {
+    // A super-admin page answers everyone else with a look-alike 404
+    // (UsersPage). Naming it in the breadcrumb or tab title gave that away
+    // ("Account › All users" over "We can't find that page").
+    if (entry.superAdmin) continue
     const base = entry.path.split('?')[0]
     if (!byBase.has(base)) byBase.set(base, entry.label)
   }

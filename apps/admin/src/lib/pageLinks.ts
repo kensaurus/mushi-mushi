@@ -163,9 +163,12 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/reports', label: 'Bugs', blurb: 'Pin evidence to a bug' },
     { to: '/lessons', label: 'Lessons', blurb: 'Turn evidence into a rule' },
   ],
+  // The Integrations page had its own second "Related:" row; its links live here now.
   integrations: [
     { to: '/mcp', label: 'Editor agents', blurb: 'Connect your editor' },
+    { to: '/skills', label: 'Agent skills', blurb: 'Skills your agent can run' },
     { to: '/notifications', label: 'Reporter updates', blurb: 'What reporters see' },
+    { to: '/marketplace', label: 'Plugins', blurb: 'More connections' },
     { to: '/health', label: 'Mushi Mushi health', blurb: 'Probe history' },
   ],
   mcp: [

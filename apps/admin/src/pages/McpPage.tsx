@@ -431,6 +431,8 @@ export function McpPage() {
           isValidating={isValidating}
           onOpenExamples={() => setTab('examples')}
           onOpenSetup={() => setTab('setup')}
+          hideEmptyEditors={!ux.hideMcpSnapshot}
+          keyMixShown={stats.topPriority === 'report_only_keys'}
         />
       )}
 

@@ -35,7 +35,7 @@ vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({ data: path === '/v1/admin/work/lanes' ? mocks.lanes : null, loading: false, error: null, isValidating: false, reload: () => {}, lastFetchedAt: null }),
 }))
 
-import { SkillRunsCard } from './SkillRunsCard'
+import { SkillRunsCard, groupFinishedRuns } from './SkillRunsCard'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -173,5 +173,30 @@ describe('SkillRunsCard run on a local lane (ADR 0042 amendment)', () => {
   it('shows no choice without a lane, and runs in the cloud', async () => {
     await render(`/credits?project=${GLOT}`)
     expect(host.querySelector('[data-testid="skill-run-on"]')).toBeNull()
+  })
+})
+
+// Fresh-eyes 2026-11-18: twenty finished rows repeating "closed without merging".
+describe('SkillRunsCard finished runs', () => {
+  it('folds finished runs by outcome, larger group first, running runs open', async () => {
+    const stopped = (id: string) => ({ ...run(id, GLOT), status: 'stopped' as const, stop_reason: 'The pull request was closed without merging.' })
+    const active = { ...run('r-live', LETS), status: 'active' as const }
+    expect(groupFinishedRuns([run('d1', LETS), stopped('s1'), stopped('s2'), active]).map((g) => [g.status, g.runs.length])).toEqual([
+      ['stopped', 2],
+      ['done', 1],
+    ])
+    mocks.loadSkillRuns.mockResolvedValue({
+      ok: true,
+      data: { skills: [{ slug: 'audit-accessibility', label: 'Accessibility', measure: 'axe violations', inCatalog: true }], runs: [active, stopped('s1'), stopped('s2'), run('d1', LETS)] },
+    })
+    await render('/credits')
+    const stoppedGroup = host.querySelector<HTMLDetailsElement>('[data-testid="skill-runs-stopped"]')!
+    expect(stoppedGroup.open).toBe(false)
+    expect(stoppedGroup.querySelector('summary')!.textContent).toBe('Stopped2')
+    expect(host.querySelector('[data-testid="skill-runs-done"] summary')!.textContent).toBe('Done1')
+    // The running one is outside the folds, with its Stop button.
+    const live = Array.from(host.querySelectorAll('[data-testid="skill-runs"] > ul li'))
+    expect(live).toHaveLength(1)
+    expect(live[0].textContent).toContain('Stop')
   })
 })

@@ -20,26 +20,37 @@ export interface McpOverviewPanelProps {
   isValidating: boolean
   onOpenExamples: () => void
   onOpenSetup: () => void
+  /** The page status above already says no editor has called: skip the empty card. */
+  hideEmptyEditors?: boolean
+  /** The banner above already gives the key mix: keep only the Manage keys link. */
+  keyMixShown?: boolean
 }
 
 /** How many prompts to show before "See all". */
 const PROMPTS_SHOWN = 5
 
-export function McpOverviewPanel({ stats, keys, lastFetchedAt, isValidating, onOpenExamples, onOpenSetup }: McpOverviewPanelProps) {
+export function McpOverviewPanel({
+  stats,
+  keys,
+  lastFetchedAt,
+  isValidating,
+  onOpenExamples,
+  onOpenSetup,
+  hideEmptyEditors = false,
+  keyMixShown = false,
+}: McpOverviewPanelProps) {
   const editors = connectedEditors(keys ?? [])
+  const showEditors = !(hideEmptyEditors && keys != null && editors.length === 0)
   return (
     <div className="space-y-4">
+      {showEditors && (
       <Card className="p-0" data-testid="mcp-connected-editors">
         <h3 className="border-b border-edge-subtle px-3 py-2 text-xs font-semibold text-fg">Connected editors</h3>
         {keys == null ? (
           <p className="px-3 py-3 text-xs text-fg-muted">Reading your keys…</p>
         ) : editors.length === 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3">
-            <p className="text-xs text-fg-muted">No editor has called Mushi Mushi from this app yet.</p>
-            <Btn size="sm" variant="primary" to="/connect">
-              Connect an editor
-            </Btn>
-          </div>
+          // The page header carries the one "Connect an editor" button.
+          <p className="px-3 py-3 text-xs text-fg-muted">No editor has called Mushi Mushi from this app yet.</p>
         ) : (
           <ul aria-label="Connected editors" className="divide-y divide-edge-subtle">
             {editors.map((e) => (
@@ -53,6 +64,7 @@ export function McpOverviewPanel({ stats, keys, lastFetchedAt, isValidating, onO
           </ul>
         )}
       </Card>
+      )}
 
       <Card className="px-4 py-3">
         <p className="mb-2 text-xs font-semibold text-fg">Paste one of these into your editor</p>
@@ -73,7 +85,7 @@ export function McpOverviewPanel({ stats, keys, lastFetchedAt, isValidating, onO
       </Card>
 
       <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted" data-testid="mcp-key-health">
-        <span>{keyHealthLine(stats)}</span>
+        {keyMixShown ? null : <span>{keyHealthLine(stats)}</span>}
         <Btn type="button" size="sm" variant="ghost" onClick={onOpenSetup} className="!px-0 !py-0 text-2xs">
           Manage keys →
         </Btn>

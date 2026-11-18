@@ -4,7 +4,7 @@
  * role, so a split frontend/backend project reads as one app.
  */
 
-import { Card, Btn, Badge } from '../ui'
+import { Btn, Badge } from '../ui'
 import { StatusPill } from '../signal/StatusMark'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconArrowRight, IconIntegrations } from '../icons'
@@ -59,9 +59,10 @@ export function GithubConnectionCard({
     )
   }
 
+  // The GitHub section on Connect is the card; a second frame here was card in card.
   return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-3 p-4">
+    <div>
+      <div className="flex flex-wrap items-center gap-3 py-1">
         <BrandIcon brand="github" size={20} decorative className="text-fg" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-fg">
@@ -120,6 +121,6 @@ export function GithubConnectionCard({
             </Btn>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

@@ -148,12 +148,8 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
         </HelpBanner>
       )}
 
-      {/* State line — one sentence about where the upgrade stands. */}
-      {view.mode === 'up_to_date' && (
-        <p className="flex items-center gap-1.5 text-xs" data-testid="update-center-up-to-date">
-          <StatusPill status="passed" label="Up to date" />
-        </p>
-      )}
+      {/* State line — one sentence about where the upgrade stands. "Up to
+          date" needs none: each version row already carries that mark. */}
       {view.mode === 'repo_current' && (
         <p className="text-xs text-fg-muted">
           {state.error ?? 'Your repo already uses the latest @mushi-mushi/* versions.'}

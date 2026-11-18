@@ -96,6 +96,8 @@ export interface SdkHealthSummaryProps {
   /** Compact mode strips the headline + chrome so the card slots into a
    *  page that already has a hero (e.g. ProjectsPage row). */
   compact?: boolean
+  /** No frame of its own: the caller's Section is the card (Setup copilot step 3). */
+  bare?: boolean
   /** Called after a successful "Send test report" so the parent can refetch
    *  and the new ingest immediately appears. */
   onTestReportSent?: () => void
@@ -663,6 +665,7 @@ export function SdkHealthSummary({
   adminHost,
   reportCount,
   compact = false,
+  bare = false,
   onTestReportSent,
   hideTestCta = false,
 }: SdkHealthSummaryProps) {
@@ -693,6 +696,9 @@ export function SdkHealthSummary({
   const playbook = buildPlaybook(envVars, projectSlug)[status]
   const activeKeys = activeSdkKeys(apiKeys)
   const freshest = freshestHeartbeatKey(activeKeys)
+  // Editor, CI and ops keys are left out on purpose (not the app's SDK); say
+  // so, or the list reads one short of Connect's "Active API keys".
+  const otherKeyCount = apiKeys.filter((k) => k.is_active).length - activeKeys.length
 
   async function sendTestReport() {
     setSending(true)
@@ -836,6 +842,11 @@ export function SdkHealthSummary({
           </div>
         )
       )}
+      {otherKeyCount > 0 && (
+        <p className="px-3 pt-1.5 text-2xs text-fg-muted" data-testid="sdk-health-other-keys">
+          {otherKeyCount} other {otherKeyCount === 1 ? 'key is' : 'keys are'} not listed: editor, CI or ops keys, not the app&apos;s SDK.
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-edge-subtle/40 px-3 py-2.5">
         {playbook.cta && !hideTestCta && (
@@ -936,6 +947,8 @@ export function SdkHealthSummary({
       </ContainedBlock>
     )
   }
+
+  if (bare) return <div className="overflow-hidden">{inner}</div>
 
   return <Card className="overflow-hidden p-0">{inner}</Card>
 }

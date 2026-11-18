@@ -249,6 +249,22 @@ describe('CreditsPage', () => {
   })
 })
 
+// Fresh-eyes 2026-11-18: an app with no address was a block of empty fields each.
+describe('Firecrawl apps not set up on /credits', () => {
+  it('folds apps with no address and nothing on into one Add address row', async () => {
+    state.watches = { ...state.watches, p3: { watch: null, openPages: [], suggestedUrl: null, firecrawlReady: true } }
+    await render()
+    const rows = host.querySelectorAll('[aria-label="Site watch per app"] > li')
+    // p1 and p2 are set up; p3 sits in the one folded row.
+    expect(rows).toHaveLength(3)
+    const fold = host.querySelector('[data-testid="firecrawl-not-set-up"] details') as HTMLDetailsElement
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')!.textContent).toContain('1 app has no live site address')
+    expect(fold.querySelector('summary')!.textContent).toContain('Add address')
+    expect(fold.querySelector('input[type="url"]')).not.toBeNull()
+  })
+})
+
 describe('expiry countdown on /credits', () => {
   it('opens on one card per expiring key, soonest first, and turns spend-down on from the status line', async () => {
     await render()
@@ -358,8 +374,12 @@ describe('skill runs on /credits', () => {
 describe('search rank on /credits', () => {
   it('shows each keyword\'s rank and its change, and saves edited keywords', async () => {
     await render()
-    expect(host.textContent).toContain('嬬恋 車中泊 (JP): #2 (was #5)')
-    expect(host.textContent).toContain('Tsumagoi camping: not in the top 20')
+    // Each keyword is a chip: rank, move since last check; the sentence is its label.
+    const chips = Array.from(host.querySelectorAll('[data-testid="search-rank-chip"]'))
+    expect(chips.map((c) => c.getAttribute('aria-label'))).toEqual(['嬬恋 車中泊 (JP): #2 (was #5)', 'Tsumagoi camping: not in the top 20'])
+    expect(chips[0].textContent).toContain('#2')
+    expect(chips[0].textContent).toContain('↑3')
+    expect(chips[1].textContent).toContain('20+')
     const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
     const edit = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent === 'Edit keywords')!
     await act(async () => edit.click())

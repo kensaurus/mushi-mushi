@@ -16,7 +16,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { DisclosurePanel, Section } from '../ui'
+import { DisclosurePanel, InfoHint, Section } from '../ui'
 import { ConnectionStatus, type ConnectionState } from '../ui/ConnectionStatus'
 import { usePersistentState } from '../../lib/usePersistentState'
 
@@ -101,13 +101,37 @@ export function SettingsRow({
         ) : null}
         <div className="min-w-0 flex-1 basis-56">
           <h3 className="text-sm font-medium text-fg">{title}</h3>
-          {purpose ? <p className="mt-0.5 text-sm text-fg-muted">{purpose}</p> : null}
+          {purpose ? <RowPurpose purpose={purpose} /> : null}
           {statusNode ? <div className="mt-1.5">{statusNode}</div> : null}
         </div>
         {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
       </div>
       {children ? <div className={`mt-3 space-y-3 ${icon ? 'sm:pl-11' : ''}`}>{children}</div> : null}
     </div>
+  )
+}
+
+/**
+ * A row's purpose, one short line. Settings ran to 4,477px because many rows
+ * carried two or three sentences; a longer purpose now shows its first
+ * sentence and keeps the rest behind an (i) (fresh-eyes 2026-11-18).
+ */
+export function splitPurpose(purpose: string): { lead: string; more: string | null } {
+  const text = purpose.trim()
+  // A sentence ends at . ! ? followed by a capital or digit, so "e.g. the" does not split.
+  const m = /^(.+?[.!?])\s+([A-Z0-9"“(][\s\S]*)$/.exec(text)
+  if (!m || text.length <= 90) return { lead: text, more: null }
+  return { lead: m[1], more: m[2] }
+}
+
+function RowPurpose({ purpose }: { purpose: ReactNode }) {
+  if (typeof purpose !== 'string') return <p className="mt-0.5 text-sm text-fg-muted">{purpose}</p>
+  const { lead, more } = splitPurpose(purpose)
+  return (
+    <p className="mt-0.5 flex items-start gap-1 text-sm text-fg-muted" data-testid="settings-row-purpose">
+      <span className="min-w-0">{lead}</span>
+      {more ? <span className="mt-0.5 shrink-0"><InfoHint content={more} /></span> : null}
+    </p>
   )
 }
 
@@ -131,7 +155,8 @@ export function DeveloperDetails({
   return (
     <DisclosurePanel
       title={<span>Developer details</span>}
-      trailing={<span className="text-xs font-normal text-fg-muted">Endpoints and raw values</span>}
+      // The hint hides on a phone: next to the title it centred and wrapped onto 3 lines (2026-11-18).
+      trailing={<span className="hidden text-xs font-normal text-fg-muted sm:inline">Endpoints and raw values</span>}
       open={open}
       onOpenChange={setOpen}
     >

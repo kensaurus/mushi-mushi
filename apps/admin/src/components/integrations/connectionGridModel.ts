@@ -325,6 +325,13 @@ export function brokenConnections(tiles: readonly GridTile[]): GridTile[] {
 }
 
 /** The page's one status sentence. */
+/** Connected tools: checked and working vs never checked yet. */
+export function connectionTally(tiles: readonly GridTile[]): { working: number; unchecked: number } {
+  const connected = tiles.filter((t) => t.view.state !== 'not_connected')
+  const unchecked = connected.filter((t) => t.view.state === 'checking').length
+  return { working: connected.length - unchecked, unchecked }
+}
+
 export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: string; tone: 'ok' | 'warn' | 'neutral' } {
   const broken = brokenConnections(tiles)
   const connected = tiles.filter((t) => t.view.state !== 'not_connected')

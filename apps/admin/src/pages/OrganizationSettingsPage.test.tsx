@@ -183,36 +183,34 @@ function rosterTable(): HTMLTableElement {
 }
 
 describe('team roster at phone width', () => {
-  it('keeps Active in the table and wraps a long email in Member', () => {
+  // 2026-11-18 (fresh eyes, 390px): the wrapped email broke mid-word
+  // ("test@mushim / ushi.dev") and Actions had no header. Below 480px each
+  // member is a stacked row: email on one line with an ellipsis (full address
+  // in the title), then role, Active and remove. From 480px it is a table.
+  it('stacks each member below 480px, email on one line, and names every column', () => {
     render()
     const table = rosterTable()
-    expect(classTokens(table.className)).toContain('table-fixed')
+    expect(classTokens(table.className)).toContain('block')
+    expect(table.className).toContain('min-[480px]:table')
+    expect(table.className).toContain('min-[480px]:table-fixed')
 
     const headers = Array.from(table.querySelectorAll('th'))
     expect(headers.map((th) => th.textContent?.trim())).toEqual(['Member', 'Role', 'Active', 'Actions'])
-    for (const th of headers) {
-      expect(classTokens(th.className)).not.toContain('hidden')
-    }
+    expect(table.querySelector('thead')?.className).toContain('min-[480px]:table-header-group')
+    expect(headers[3].querySelector('.sr-only')).toBeNull()
 
     const neverSeen = Array.from(table.querySelectorAll('td')).find((td) => td.textContent?.includes('Never seen'))
     expect(neverSeen).toBeTruthy()
     expect(classTokens(neverSeen?.className)).not.toContain('hidden')
 
-    const email = Array.from(table.querySelectorAll('td span')).find((el) => el.textContent === LONG_EMAIL)
+    const email = Array.from(table.querySelectorAll('td span')).find((el) => el.textContent?.trim() === LONG_EMAIL)
     expect(email).toBeTruthy()
-    expect(classTokens(email?.className)).toContain('wrap-break-word')
-    expect(classTokens(email?.className)).toContain('min-w-0')
-
-    const actions = headers[3]
-    expect(classTokens(actions?.className)).toContain('w-14')
-    expect(classTokens(actions?.className)).not.toContain('w-24')
-    // w-24 is the sm width, present as a variant, not the phone width.
-    expect(actions?.className).toContain('sm:w-24')
-    // "Actions" is wider than this column. It stays available to assistive
-    // tech and is shown from sm, where the column is wide enough.
-    const actionsLabel = actions?.querySelector('span')
-    expect(classTokens(actionsLabel?.className)).toContain('sr-only')
-    expect(actionsLabel?.className).toContain('sm:not-sr-only')
+    expect(classTokens(email?.className)).toContain('truncate')
+    expect(classTokens(email?.className)).toContain('whitespace-nowrap')
+    expect(classTokens(email?.className)).not.toContain('wrap-break-word')
+    expect(email?.getAttribute('title')).toBe(LONG_EMAIL)
+    // The email cell takes the whole first line of the stacked row.
+    expect(classTokens(email?.closest('td')?.className)).toContain('basis-full')
 
     expect(table.querySelector('button[aria-label="Leave this team"]')).toBeTruthy()
     expect(table.querySelector(`button[aria-label="Remove ${LONG_EMAIL}"]`)).toBeTruthy()

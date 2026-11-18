@@ -65,6 +65,8 @@ describe('NotificationPrefsMatrix', () => {
     expect(toggles).toHaveLength(8)
     expect(toggles.every((t) => t.getAttribute('aria-checked') === 'true')).toBe(true)
     expect(container.textContent).not.toContain("Couldn't load")
+    // The Alert events panel is the card: the rows draw no second bordered box.
+    expect(container.querySelector('[data-testid="notification-prefs-rows"]')!.className).not.toMatch(/\bborder\b|rounded/)
   })
 
   it('reflects saved prefs, defaulting the keys a project never set', async () => {

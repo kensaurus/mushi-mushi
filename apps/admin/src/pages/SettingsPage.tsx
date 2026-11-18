@@ -43,6 +43,8 @@ import { DisplayPreferences } from '../components/DisplayPreferences';
 import { useFocusMode } from '../lib/focusMode';
 import { SettingsIntegrationsReadout } from '../components/settings/SettingsIntegrationsReadout';
 import { SettingsStatusBanner } from '../components/settings/SettingsStatusBanner';
+import { SettingsSectionJump } from '../components/settings/SettingsSectionJump';
+import { savedFixBranchInvalid } from '../components/settings/fixBranchField';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
 import { ByokPoolProvider, useByokPool } from '../components/settings/ByokPoolContext';
 import { hasWorkingPoolKey, summarizeKeys, type KeySummary } from '../components/settings/keyStatus';
@@ -170,6 +172,11 @@ function SettingsPageBody({
   // the cards below it wait for it, so its growth never pushes them.
   const generalSettings = usePageData<unknown>(active === 'general' ? '/v1/admin/settings' : null);
   const generalLoaded = !generalSettings.loading;
+  // A saved fix-branch pattern the rule no longer allows: the banner says so
+  // with the keys, instead of only the field halfway down General.
+  const branchPatternInvalid = savedFixBranchInvalid(
+    (generalSettings.data as { fix_branch_template?: string | null } | null | undefined)?.fix_branch_template,
+  );
 
   const pool = useByokPool(byokEnabled);
   // Same Sentry verdict as the Integrations card and the Error tracking row.
@@ -327,6 +334,8 @@ function SettingsPageBody({
                 sentry={sentryConn.view}
                 onTab={setActive}
                 plainBanner={ux.plainBanner}
+                branchPatternInvalid={branchPatternInvalid}
+                onFixBranch={() => document.getElementById('fix-branch')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
               />
             ),
           },
@@ -334,13 +343,20 @@ function SettingsPageBody({
       />
 
       {!ux.hideTabs && (
-        <SegmentedControl
-          value={active}
-          onChange={setActive}
-          options={tabOptions}
-          ariaLabel="Settings sections"
-          scrollable
-        />
+        // On a phone the strip scrolls: no raw scrollbar, and the right edge
+        // fades so a clipped "SDK & co…" reads as more tabs, not a cut word.
+        <div
+          className="[&>div::-webkit-scrollbar]:hidden [&>div]:[scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%_-_1.5rem),transparent)] sm:[mask-image:none]"
+          data-testid="settings-tab-strip"
+        >
+          <SegmentedControl
+            value={active}
+            onChange={setActive}
+            options={tabOptions}
+            ariaLabel="Settings sections"
+            scrollable
+          />
+        </div>
       )}
 
       <div
@@ -351,6 +367,7 @@ function SettingsPageBody({
       >
         {active === 'general' && (
           <>
+            <SettingsSectionJump />
             <GeneralPanel slackCanPost={stats.slackCanPost} />
             {/* The General panel grows from a ~320px skeleton to ~3,600px when
                 its settings land; cards rendered below it were pushed off

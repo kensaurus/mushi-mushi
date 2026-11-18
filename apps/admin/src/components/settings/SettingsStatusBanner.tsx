@@ -34,7 +34,16 @@ interface Props {
   sentry?: ConnectionView | null
   onTab?: (tab: SettingsTabId) => void
   plainBanner?: boolean
+  /**
+   * The saved fix-branch pattern breaks the current rule (fixes fall back to
+   * the default). It sat halfway down General; it now leads with the keys.
+   */
+  branchPatternInvalid?: boolean
+  /** Scroll to the Fix branch names row. */
+  onFixBranch?: () => void
 }
+
+const BRANCH_LINE = 'Your saved fix branch pattern is no longer allowed, so fixes use the default.'
 
 type BannerPriority =
   | 'keys_attention'
@@ -82,6 +91,8 @@ export function SettingsStatusBanner({
   hasAnthropicKey = stats.byokAnthropicConfigured,
   sentry = null,
   onTab,
+  branchPatternInvalid = false,
+  onFixBranch,
 }: Props) {
   const copy = usePageCopy('/settings')
   const actions = copy?.actionLabels ?? {}
@@ -93,6 +104,38 @@ export function SettingsStatusBanner({
         {label}
       </Btn>
     ) : null
+  const fixBranch = onFixBranch ? (
+    <Btn size="sm" variant="ghost" onClick={onFixBranch} className="whitespace-nowrap" data-testid="settings-banner-fix-branch">
+      Fix pattern
+    </Btn>
+  ) : null
+
+  // Problems first. A broken pattern only falls back to the default, so a
+  // bigger problem (keys, the widget off) keeps the banner and the pattern
+  // rides along as a second line; below those, the pattern leads.
+  const withBranch = (main: string) =>
+    branchPatternInvalid ? (
+      <>
+        <span className="block">{main}</span>
+        <span className="mt-1 flex flex-wrap items-center gap-x-2" data-testid="settings-banner-branch">
+          <span>{BRANCH_LINE}</span>
+          {fixBranch}
+        </span>
+      </>
+    ) : (
+      main
+    )
+  const carriesBranch = priority === 'keys_attention' || priority === 'keys_expiring' || priority === 'sdk_off'
+  if (branchPatternInvalid && !carriesBranch) {
+    return (
+      <StatusBannerShell
+        tone="warn"
+        title="Fix branch pattern no longer allowed"
+        subtitle="Fixes use the default pattern until you reset or edit it. Other settings still save."
+        action={fixBranch}
+      />
+    )
+  }
 
   switch (priority) {
     case 'keys_attention': {
@@ -101,7 +144,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="danger"
           title={`${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`}
-          subtitle="Rejected, out of quota, expired or replaced. Each one says what to do in AI keys."
+          subtitle={withBranch('Rejected, out of quota, expired or replaced. Each one says what to do in AI keys.')}
           action={go('byok', actions.byok ?? 'Fix keys')}
         />
       )
@@ -112,7 +155,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title={`${plural(n, 'key')} ${n === 1 ? 'expires' : 'expire'} within a week`}
-          subtitle="Create a new key at the provider and add it before the old one stops working."
+          subtitle={withBranch('Create a new key at the provider and add it before the old one stops working.')}
           action={go('byok', 'Replace keys')}
         />
       )
@@ -131,7 +174,7 @@ export function SettingsStatusBanner({
         <StatusBannerShell
           tone="warn"
           title="The bug widget is off"
-          subtitle={`People using ${projectLabel} can't send bug reports until it is turned on.`}
+          subtitle={withBranch(`People using ${projectLabel} can't send bug reports until it is turned on.`)}
           action={go('sdk', actions.sdk ?? 'Open SDK & connection')}
         />
       )

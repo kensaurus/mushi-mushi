@@ -127,7 +127,7 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged, 
       />
       {notice && <ResultChip tone={notice.ok ? 'success' : 'error'}>{notice.message}</ResultChip>}
       <ul aria-label="Credits by expiry date" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((c) => (
+        {liveFirst(cards).map((c) => (
           <li key={c.id} className="min-w-0">
             <CountdownCard card={c} />
           </li>
@@ -140,8 +140,36 @@ export function CreditCountdowns({ keys, balance, canManageOrg, now, onChanged, 
   )
 }
 
+/** An expired key's credits are gone: nothing to count against. */
+function isExpired(card: CreditCountdown): boolean {
+  return card.verb === 'expires' && card.daysLeft === 0
+}
+
+/**
+ * @internal Exported for tests. Live keys first, expired ones after them, each
+ * keeping its order: an expired key led the row with "0 days" and an empty bar.
+ */
+export function liveFirst<T extends CreditCountdown>(cards: readonly T[]): T[] {
+  return [...cards.filter((c) => !isExpired(c)), ...cards.filter(isExpired)]
+}
+
 function CountdownCard({ card }: { card: CreditCountdown }) {
   const pct = card.of && card.of > 0 ? Math.min(100, Math.round((card.used / card.of) * 100)) : 0
+  if (isExpired(card)) {
+    // Expired: say so, hatch the bar (nothing left to measure), no "0 of 100 fixes sent today".
+    return (
+      <Card className="h-full p-3" data-testid="credit-countdown-expired">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <p className="min-w-0 truncate text-sm font-medium text-fg-secondary" title={card.name}>
+            {card.name}
+          </p>
+          <p className="shrink-0 text-sm font-semibold text-fg-secondary">Expired</p>
+        </div>
+        <div aria-hidden="true" className="ci-nodata mt-2 h-1.5 w-full rounded-full border border-edge-subtle" />
+        <p className="mt-1.5 text-xs text-fg-muted">{card.leftLine}</p>
+      </Card>
+    )
+  }
   return (
     <Card className="h-full p-3">
       <div className="flex min-w-0 items-start justify-between gap-3">

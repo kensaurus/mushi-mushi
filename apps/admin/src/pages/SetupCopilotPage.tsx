@@ -2,7 +2,7 @@
  * Setup Copilot — guided ingest + dispatch verification with copy-paste CLI blocks.
  */
 
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Link, useSearchParams } from 'react-router-dom'
 import { humanizeApiError } from '../lib/humanizeApiError'
@@ -22,6 +22,30 @@ import { mushiEnvVarsForProjectSlug, isExpoReporterProject } from '../lib/projec
 import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotReadout'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { usePublishPageContext } from '../lib/pageContext'
+import { StatusGlyph } from '../components/signal/StatusGlyph'
+
+/**
+ * One setup step. When the whole setup passes, every step is a ● row you can
+ * open, inside one card, instead of five open cards under "All checks pass".
+ */
+/** @internal Exported for tests. */
+export function Step({ title, done, children }: { title: string; done: boolean; children: ReactNode }) {
+  if (!done) return <Section title={title}>{children}</Section>
+  return (
+    <details className="group border-b border-edge-subtle last:border-b-0" data-testid="copilot-step-done">
+      <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand">
+        <StatusGlyph tone="ok" />
+        <span className="min-w-0 flex-1 truncate">{title}</span>
+        <span className="shrink-0 text-2xs text-fg-muted">Done</span>
+      </summary>
+      <div className="space-y-3 px-3 pb-3 pt-1">{children}</div>
+    </details>
+  )
+}
+
+function Steps({ collapsed, children }: { collapsed: boolean; children: ReactNode }) {
+  return collapsed ? <Card className="overflow-hidden p-0">{children}</Card> : <>{children}</>
+}
 
 /**
  * One row of GET /v1/admin/projects. The API returns the admin host once at
@@ -105,6 +129,14 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
     }
     return parts.join(' · ')
   }, [projectId, setup.selectors, projectRow])
+
+  // Every required step done and the SDK heard from: the steps fold to ● rows.
+  const allPass = Boolean(
+    projectRow &&
+      setup.selectors.required_total > 0 &&
+      setup.selectors.required_complete === setup.selectors.required_total &&
+      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
+  )
 
   usePublishPageContext({
     route: '/setup-copilot',
@@ -208,7 +240,8 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
             ]}
           />
 
-          <Section title="1 · Connect credentials">
+          <Steps collapsed={allPass}>
+          <Step title="1 · Connect credentials" done={allPass}>
             <p className="text-xs text-fg-muted mb-3">Save keys locally and wait for the SDK heartbeat.</p>
             {/* Section already renders a Card — an inner Card here made every
                 step a box inside a box, three frames deep once the tinted
@@ -227,9 +260,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                 Or run <CodeInline>mushi init</CodeInline> / <CodeInline>mushi upgrade</CodeInline> in the consumer repo after installing the snippet.
               </p>
             </div>
-          </Section>
+          </Step>
 
-          <Section title="2 · Install snippet">
+          <Step title="2 · Install snippet" done={allPass}>
             <p className="text-xs text-fg-muted mb-3">
               Use the canonical{' '}
               <Link to={`/onboarding?tab=sdk&project=${projectId}`} className={LINK_ACCENT}>
@@ -242,15 +275,16 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
             <Btn variant="primary" size="sm" to={`/onboarding?tab=sdk&project=${projectId}`}>
               Open SDK install wizard →
             </Btn>
-          </Section>
+          </Step>
 
-          <Section title="2b · CI &amp; store builds">
+          <Step title="2b · CI & store builds" done={allPass}>
             <p className="text-xs text-fg-muted mb-3">
               Reporter SDK keys for TestFlight / Play builds vs Code Health ingest — different secrets.
             </p>
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <ContainedBlock tone="ok">
+                {/* A category, not a state: neutral like its neighbour (it was a green "ok" box). */}
+                <ContainedBlock tone="muted">
                   <p className="text-xs font-semibold text-fg mb-2">Reporter (in-app feedback band)</p>
                   <ul className="text-2xs text-fg-muted space-y-1.5 list-disc pl-4">
                     <li>
@@ -302,9 +336,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                 </ContainedBlock>
               ) : null}
             </div>
-          </Section>
+          </Step>
 
-          <Section title="3 · SDK health">
+          <Step title="3 · SDK health" done={allPass}>
             <p className="text-xs text-fg-muted mb-3">Heartbeat vs admin host — catches wrong-endpoint installs.</p>
             <SdkHealthSummary
               projectId={projectId}
@@ -315,6 +349,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
               adminHost={adminHost}
               reportCount={projectRow.report_count}
               onTestReportSent={() => void reload()}
+              bare
             />
             {projectRow.sdk_status && projectRow.sdk_version && (
               <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -335,16 +370,19 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                 />
               </div>
             )}
-          </Section>
+          </Step>
 
-          <Section title="4 · Verify both tracks">
+          <Step title="4 · Verify both tracks" done={allPass}>
             <p className="text-xs text-fg-muted mb-3">Reports coming in and fixes going out pass different checks. Each list below shows its own count.</p>
+            {/* Embedded: the step's Section is the card (three frames deep before). */}
             <VerifySetupPanel
               projectId={projectId}
               projectName={projectRow.name}
               adminHost={adminHost}
+              embedded
             />
-          </Section>
+          </Step>
+          </Steps>
         </>
       )}
     </div>

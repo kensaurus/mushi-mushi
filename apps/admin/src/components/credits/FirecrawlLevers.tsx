@@ -8,6 +8,7 @@
  */
 
 import { Link } from 'react-router-dom'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import { useEffect, useState } from 'react'
 import { Btn, Input, ResultChip, Toggle } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
@@ -112,30 +113,14 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
   const pace = firecrawlPace({ remaining: balance?.remaining ?? null, periodEnd: balance?.periodEnd ?? null, watches, audits, rankKeywords, now })
   const resets = expiryLabel(balance?.periodEnd, now, 'resets')
 
-  return (
-    <div className="space-y-3">
-      {balance ? (
-        <p className="text-sm text-fg">
-          <span className="tabular-nums">{balance.remaining?.toLocaleString() ?? '?'}</span>
-          {balance.limit != null && <span className="text-fg-muted"> of {balance.limit.toLocaleString()}</span>} credits left
-          {resets && <span className="text-fg-muted"> · {resets}; unused credits do not roll over</span>}
-        </p>
-      ) : (
-        <p className="text-sm text-fg-muted">
-          No Firecrawl key yet.{' '}
-          <Link className="text-brand underline underline-offset-2" to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
-        </p>
-      )}
-      {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
+  /** No watch, no audit, no keywords and no address to suggest: nothing to show but an empty field. */
+  const notSetUp = (a: AppWatch): boolean => !a.watch && !a.audit && a.ranks.length === 0 && !a.suggestedUrl
 
-      {!apps && <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>}
-      {apps && (
-        <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
-          {apps.map((a) => {
-            const w = a.watch
-            const url = urls[a.projectId] ?? w?.base_url ?? a.suggestedUrl ?? ''
-            return (
-              <li key={a.projectId} className="space-y-1.5 py-2">
+  const appBlock = (a: AppWatch) => {
+    const w = a.watch
+    const url = urls[a.projectId] ?? w?.base_url ?? a.suggestedUrl ?? ''
+    return (
+      <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm text-fg">{a.name}</p>
                   <Toggle
@@ -196,9 +181,56 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                     if (m.ok) setReloadKey((n) => n + 1)
                   }}
                 />
-              </li>
-            )
-          })}
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {balance ? (
+        <p className="text-sm text-fg">
+          <span className="tabular-nums">{balance.remaining?.toLocaleString() ?? '?'}</span>
+          {balance.limit != null && <span className="text-fg-muted"> of {balance.limit.toLocaleString()}</span>} credits left
+          {resets && <span className="text-fg-muted"> · {resets}; unused credits do not roll over</span>}
+        </p>
+      ) : (
+        <p className="text-sm text-fg-muted">
+          No Firecrawl key yet.{' '}
+          <Link className="text-brand underline underline-offset-2" to="/settings?tab=tools">Add one in Settings → Web tools</Link>.
+        </p>
+      )}
+      {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
+
+      {!apps && <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>}
+      {apps && (
+        <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
+          {apps.filter((a) => !notSetUp(a)).map((a) => (
+            <li key={a.projectId} className="space-y-1.5 py-2">
+              {appBlock(a)}
+            </li>
+          ))}
+          {/* Apps with no address and nothing on: one "Add address" row, not a block each. */}
+          {apps.some(notSetUp) && (
+            <li className="py-2" data-testid="firecrawl-not-set-up">
+              <details className="group">
+                <summary className="flex cursor-pointer select-none flex-wrap items-center gap-x-1.5 text-xs text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
+                  <StatusGlyph tone="off" />
+                  <span className="font-semibold">
+                    {apps.filter(notSetUp).length} {apps.filter(notSetUp).length === 1 ? 'app has' : 'apps have'} no live site address
+                  </span>
+                  <span className="min-w-0 truncate text-fg-secondary">({apps.filter(notSetUp).map((a) => a.name).join(', ')})</span>
+                  <span className="font-medium text-brand underline underline-offset-2">Add address</span>
+                </summary>
+                <div className="mt-2 divide-y divide-edge-subtle">
+                  {apps.filter(notSetUp).map((a) => (
+                    <div key={a.projectId} className="space-y-1.5 py-2">
+                      {appBlock(a)}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </li>
+          )}
         </ul>
       )}
       <p className="text-xs text-fg-muted">

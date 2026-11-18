@@ -857,16 +857,7 @@ export function IntegrationsPage() {
         />
       ) : null}
 
-      <p className="text-2xs text-fg-muted">
-        Related:{' '}
-        <Link to="/mcp" className="text-accent-foreground hover:underline">Editor agents</Link>
-        {' · '}
-        <Link to="/skills" className="text-accent-foreground hover:underline">Agent skills</Link>
-        {' · '}
-        <Link to="/notifications" className="text-accent-foreground hover:underline">Reporter updates</Link>
-        {' · '}
-        <Link to="/marketplace" className="text-accent-foreground hover:underline">Plugins</Link>
-      </p>
+      {/* Related links: the page-help row (lib/pageLinks.ts) is the one row. */}
 
       {pendingDeleteRouting && (
         <ConfirmDialog

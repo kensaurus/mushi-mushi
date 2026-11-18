@@ -149,10 +149,12 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
     tooltip: 'Created this organization. Has been here since day one.',
     tone: CHIP_TONE.warnSubtle,
   },
+  // "Invited" in a status colour beside "Active 22 hours ago" read as a
+  // pending invite. It is how they joined: a plain word, no status colour.
   invitation: {
-    label: 'Invited',
+    label: 'Via invite',
     tooltip: 'Joined by accepting an email invitation.',
-    tone: CHIP_TONE.brand,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
   sso: {
     label: 'SSO',
@@ -1114,10 +1116,10 @@ export function OrganizationSettingsPage() {
       <OrgRoleGuideCard />
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs text-fg-secondary font-semibold">
+          {/* The Members tile and the Roster tab already count everyone; the
+              caption speaks only while the inactive filter is on. */}
           <span>
-            {showInactiveOnly
-              ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
-              : `${totalVisibleMembers} member${totalVisibleMembers === 1 ? '' : 's'}`}
+            {showInactiveOnly ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)` : 'Members'}
           </span>
           {totalVisibleMembers >= 3 && (
             <label className="inline-flex cursor-pointer items-center gap-1.5 normal-case tracking-normal">
@@ -1140,8 +1142,10 @@ export function OrganizationSettingsPage() {
             long email plus the role control pushed Remove outside overflow-hidden.
             Role, Active and Actions keep a fixed share so the email wraps in
             what is left and every column stays on screen. */}
-        <table className="w-full table-fixed text-sm">
-          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs text-fg-secondary font-semibold">
+        {/* Below 480px each member is a stacked row (email on its own line,
+            then role, Active and remove), so the email never breaks mid-word. */}
+        <table className="block w-full text-sm min-[480px]:table min-[480px]:table-fixed" data-testid="org-roster-table">
+          <thead className="hidden border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs text-fg-secondary font-semibold min-[480px]:table-header-group">
             <tr>
               <th className="px-2 py-2 sm:px-3">Member</th>
               <th className="w-24 px-1 py-2 sm:w-36 sm:px-3">
@@ -1150,12 +1154,10 @@ export function OrganizationSettingsPage() {
                 </Tooltip>
               </th>
               <th className="w-24 px-1 py-2 sm:w-32 sm:px-3">Active</th>
-              <th className="w-14 px-0.5 py-2 text-right sm:w-24 sm:px-3">
-                <span className="sr-only sm:not-sr-only">Actions</span>
-              </th>
+              <th className="w-16 px-1 py-2 text-right sm:w-24 sm:px-3">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-edge-subtle">
+          <tbody className="block divide-y divide-edge-subtle min-[480px]:table-row-group">
             {sortedMembers.length === 0 && showInactiveOnly && (
               <tr>
                 <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
@@ -1186,14 +1188,16 @@ export function OrganizationSettingsPage() {
               })
               const memberLabel = member.email ?? 'this teammate'
               return (
-                <tr key={member.user_id}>
-                  <td className="min-w-0 px-2 py-2 sm:px-3">
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span className="min-w-0 max-w-full font-medium wrap-break-word text-fg">{member.email ?? 'Unknown email'}</span>
-                      {isSelf && <Badge className="bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
+                <tr key={member.user_id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-2 min-[480px]:table-row min-[480px]:p-0">
+                  <td className="block min-w-0 basis-full min-[480px]:table-cell min-[480px]:px-2 min-[480px]:py-2 sm:px-3">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate whitespace-nowrap font-medium text-fg" title={member.email ?? undefined}>
+                        {member.email ?? 'Unknown email'}
+                      </span>
+                      {isSelf && <Badge className="shrink-0 whitespace-nowrap bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
-                          <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
+                          <Badge className={`${joinedMeta.tone} shrink-0 whitespace-nowrap text-2xs`}>{joinedMeta.label}</Badge>
                         </Tooltip>
                       )}
                     </div>
@@ -1203,7 +1207,7 @@ export function OrganizationSettingsPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-1 py-2 sm:px-3">
+                  <td className="block w-28 min-[480px]:table-cell min-[480px]:w-auto min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {perms.roleOptions.length > 0 ? (
                       <select
                         value={member.role}
@@ -1233,7 +1237,7 @@ export function OrganizationSettingsPage() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-1 py-2 text-xs whitespace-nowrap sm:px-3">
+                  <td className="block text-xs whitespace-nowrap min-[480px]:table-cell min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {isNeverActive ? (
                       <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
                         <span className="text-warn">Never seen</span>
@@ -1244,7 +1248,7 @@ export function OrganizationSettingsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-0.5 py-2 text-right sm:px-3">
+                  <td className="ml-auto block text-right min-[480px]:table-cell min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {perms.removeAction === 'leave' ? (
                       <Btn
                         size="sm"

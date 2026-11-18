@@ -83,11 +83,22 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/projects')).toBe('account')
     expect(allAppsSupportFor('/org/acme/settings/members')).toBe('account')
     expect(allAppsSupportFor('/providers')).toBe('account')
+    expect(allAppsSupportFor('/users')).toBe('account')
+    expect(allAppsSupportFor('/docs-bridge')).toBe('account')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
     expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')
     expect(allAppsSupportFor('/fixes')).toBe('single')
     expect(allAppsSupportFor('/cinema')).toBe('single')
+  })
+
+  // /org/:slug/settings/members lands on /team?view=members: the team's
+  // members are never one app's, but billing and AI spend still read one.
+  it('treats the Team members view as account-wide, the other Team views as one app', () => {
+    expect(allAppsSupportFor('/team', '?view=members&org=o1')).toBe('account')
+    expect(allAppsSupportFor('/team', '?view=billing')).toBe('single')
+    // The hub drops ?view= for its first view, Members.
+    expect(allAppsSupportFor('/team', '')).toBe('account')
   })
 })
 

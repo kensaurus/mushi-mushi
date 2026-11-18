@@ -20,7 +20,8 @@ function updatesSentence(stats: NotificationStats): string {
   if (!stats.notificationsEnabled) return 'Reporter updates are off: the people who report bugs do not hear back.'
   if (stats.total === 0) return 'No updates sent to reporters yet.'
   const last = stats.lastNotificationAt ? `, the last ${formatRelative(stats.lastNotificationAt)}` : ''
-  const unopened = stats.unread > 0 ? `; ${stats.unread} not opened yet` : '; all opened'
+  // The Unread number and the banner carry the not-opened count; the sentence does not say it a third time.
+  const unopened = stats.unread > 0 ? '' : '; all opened'
   return `${pluralizeWithCount(stats.total, 'update')} sent to reporters${last}${unopened}.`
 }
 

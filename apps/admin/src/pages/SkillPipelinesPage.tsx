@@ -257,7 +257,8 @@ export function SkillPipelinesPage() {
         ]}
         helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
       >
-        {projectId ? (
+        {/* The snapshot strip carries the freshness; only show it here when the strip is hidden (fresh-eyes 2026-11-18: "now" twice). */}
+        {projectId && ux.hideSkillsSnapshot ? (
           <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         ) : null}
       </PageHeaderBar>

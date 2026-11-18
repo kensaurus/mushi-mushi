@@ -13,7 +13,34 @@
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout } from '../ui'
 import { usePageData } from '../../lib/usePageData'
-import { LANES_PATH, laneTaking, type WorkLanesData } from '../../lib/workers'
+import { LANES_PATH, laneTaking, type WorkerLane, type WorkLanesData } from '../../lib/workers'
+import { StatusGlyph } from '../signal/StatusGlyph'
+
+type LaneNow = 'taking' | 'paused' | 'offline'
+const NOW_WORD: Record<LaneNow, string> = { taking: 'taking reports', paused: 'paused or draining', offline: 'offline' }
+
+/**
+ * @internal Exported for tests. Offline lanes grouped by machine: 19 rows that
+ * all said "offline" with the same model are one "▲ 19 lanes offline
+ * (alienwarex16)" line, opened per app (fresh-eyes 2026-11-18).
+ */
+export function groupOfflineLanes(
+  lanes: readonly WorkerLane[],
+  nowOf: (l: WorkerLane) => LaneNow,
+  hostName: (hostId: string) => string,
+): { live: WorkerLane[]; offline: Array<{ host: string; lanes: WorkerLane[] }> } {
+  const live: WorkerLane[] = []
+  const byHost = new Map<string, WorkerLane[]>()
+  for (const l of lanes) {
+    if (nowOf(l) !== 'offline') {
+      live.push(l)
+      continue
+    }
+    const host = hostName(l.hostId)
+    byHost.set(host, [...(byHost.get(host) ?? []), l])
+  }
+  return { live, offline: [...byHost.entries()].map(([host, ls]) => ({ host, lanes: ls })) }
+}
 
 export function LocalWorkerModels() {
   const page = usePageData<WorkLanesData>(LANES_PATH, { scope: 'enumeration' })
@@ -33,6 +60,9 @@ export function LocalWorkerModels() {
     )
   }
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
+  const nowOf = (l: WorkerLane): LaneNow =>
+    laneTaking(l, hosts.get(l.hostId)) ? 'taking' : hosts.get(l.hostId)?.online ? 'paused' : 'offline'
+  const { live, offline } = groupOfflineLanes(data.lanes, nowOf, (id) => hosts.get(id)?.hostname ?? 'unknown machine')
   // The out-of-credits flag (id credits_out) is shown at the top of the page with its remedy.
   const idle = (data.flags ?? []).find((f) => f.kind === 'credits_idle' && f.id !== 'credits_out')
   return (
@@ -53,36 +83,56 @@ export function LocalWorkerModels() {
           </div>
         </Callout>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-120 text-left text-xs">
-          <thead className="text-2xs text-fg-muted">
-            <tr className="border-b border-edge-subtle">
-              <th className="py-1.5 pr-3 font-medium">App</th>
-              <th className="py-1.5 pr-3 font-medium">Lane</th>
-              <th className="py-1.5 pr-3 font-medium">Model</th>
-              <th className="py-1.5 pr-3 font-medium">Now</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-edge-subtle">
-            {data.lanes.map((l) => {
-              const taking = laneTaking(l, hosts.get(l.hostId))
-              return (
-                <tr key={l.id} data-testid={`credits-worker-model-${l.id}`}>
-                  <td className="py-1.5 pr-3 text-fg">{l.projectName}</td>
-                  <td className="py-1.5 pr-3 font-mono text-fg-secondary">{l.name}</td>
-                  <td className="py-1.5 pr-3 font-mono text-fg-secondary">{l.config.model ?? 'agent default'}</td>
-                  <td className="py-1.5 pr-3">
-                    <Badge tone={taking ? 'ok' : 'neutral'}>{taking ? 'taking reports' : hosts.get(l.hostId)?.online ? 'paused or draining' : 'offline'}</Badge>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* Problems first: each machine's offline lanes are one line, opened per app. */}
+      {offline.map((g) => (
+        <details key={g.host} className="group rounded-sm" data-testid="credits-offline-lanes">
+          <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 text-xs text-fg hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
+            <StatusGlyph tone="danger" />
+            <span className="font-semibold">
+              {g.lanes.length} {g.lanes.length === 1 ? 'lane' : 'lanes'} offline
+            </span>
+            <span className="min-w-0 truncate font-mono text-2xs text-fg-secondary">({g.host})</span>
+          </summary>
+          <LaneTable lanes={g.lanes} nowOf={nowOf} />
+        </details>
+      ))}
+      {live.length > 0 && <LaneTable lanes={live} nowOf={nowOf} />}
       <Link className="text-2xs font-medium text-brand underline underline-offset-2" to="/pipeline?tab=workers">
         Change models and lanes on the Workers tab →
       </Link>
+    </div>
+  )
+}
+
+function LaneTable({ lanes, nowOf }: { lanes: readonly WorkerLane[]; nowOf: (l: WorkerLane) => LaneNow }) {
+  return (
+    <div className="overflow-x-auto">
+      {/* Model drops out on a phone so "Now" stays on screen (it was cut off at 390px). */}
+      <table className="w-full text-left text-xs sm:min-w-120">
+        <thead className="text-2xs text-fg-muted">
+          <tr className="border-b border-edge-subtle">
+            <th className="py-1.5 pr-3 font-medium">App</th>
+            <th className="py-1.5 pr-3 font-medium">Lane</th>
+            <th className="hidden py-1.5 pr-3 font-medium sm:table-cell">Model</th>
+            <th className="py-1.5 pr-3 font-medium">Now</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-edge-subtle">
+          {lanes.map((l) => {
+            const now = nowOf(l)
+            return (
+              <tr key={l.id} data-testid={`credits-worker-model-${l.id}`}>
+                <td className="py-1.5 pr-3 text-fg">{l.projectName}</td>
+                <td className="py-1.5 pr-3 font-mono text-fg-secondary">{l.name}</td>
+                <td className="hidden py-1.5 pr-3 font-mono text-fg-secondary sm:table-cell">{l.config.model ?? 'agent default'}</td>
+                <td className="py-1.5 pr-3">
+                  <Badge tone={now === 'taking' ? 'ok' : 'neutral'} className="whitespace-nowrap">{NOW_WORD[now]}</Badge>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

@@ -21,6 +21,7 @@ import { NOT_FOUND_GUIDE } from './lib/fieldGuide'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
+import { mcpManualRedirectTarget } from './lib/mcpManualRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
 import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
@@ -185,11 +186,12 @@ function SetupCopilotRedirect() {
 
 /**
  * McpManualRedirect — legacy alias from Connect unification; canonical MCP
- * console lives at /mcp (sidebar "Agent help").
+ * console lives at /mcp (sidebar "Agent help"). "Manual" is the copy-paste
+ * config, so it opens the Setup tab, not Summary.
  */
 function McpManualRedirect() {
   const { search } = useLocation()
-  return <Navigate to={`/mcp${search}`} replace />
+  return <Navigate to={mcpManualRedirectTarget(search)} replace />
 }
 /**
  * QaCoverageRedirect — handles legacy Slack notification URLs that used the

@@ -236,14 +236,28 @@ export function VoicePage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 items-start">
         <div className={`space-y-4 min-w-0 ${intakeEnabled ? 'lg:col-span-3' : 'lg:col-span-5'}`}>
-          <VoiceRecorderCard
-            onFile={(file) => void submitFile(file)}
-            onTranscript={(text) => void submitText(text)}
-            busyStage={busyStage}
-            disabled={settingsKnown && !intakeEnabled}
-            initialText={sharedText}
-            pendingFile={sharedFile}
-          />
+          {settingsKnown && !intakeEnabled ? (
+            // Off: the recorder only refuses, so it waits behind a closed disclosure.
+            <DisclosurePanel title="Talk (works once voice intake is on)">
+              <VoiceRecorderCard
+                onFile={(file) => void submitFile(file)}
+                onTranscript={(text) => void submitText(text)}
+                busyStage={busyStage}
+                disabled
+                initialText={sharedText}
+                pendingFile={sharedFile}
+              />
+            </DisclosurePanel>
+          ) : (
+            <VoiceRecorderCard
+              onFile={(file) => void submitFile(file)}
+              onTranscript={(text) => void submitText(text)}
+              busyStage={busyStage}
+              disabled={false}
+              initialText={sharedText}
+              pendingFile={sharedFile}
+            />
+          )}
           {current && <VoiceSessionResult session={current} pending={pendingId === current.id} onConfirm={() => void confirm(current)} onCancel={() => void cancel(current)} />}
         </div>
         {/* Pushes only matter once requests can be sent. */}

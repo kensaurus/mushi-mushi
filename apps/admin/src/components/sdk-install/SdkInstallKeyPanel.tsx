@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
 import { RevealedKeyCard } from '../RevealedKeyCard'
-import { Btn, Tooltip, CopyButton, RelativeTime } from '../ui'
+import { Btn, Tooltip, CopyButton, RelativeTime, InfoHint } from '../ui'
 import { CodeInline } from '../CodePanel'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
 import { diagnoseKey, type SdkHealthApiKey } from '../SdkHealthSummary'
@@ -20,6 +20,12 @@ import { staleKeysToRevoke } from '../../lib/staleKeys'
  * is the recently-used one, so recency sorts first and the tail collapses.
  */
 const VISIBLE_KEY_LIMIT = 4
+
+/** What each key mark means, behind the (i) beside the list. */
+const KEY_LEGEND =
+  'Healthy: the SDK used this key in the last hour. Stale: no activity in the last hour (normal for a quiet app). ' +
+  'Cold: nothing for over 7 days, so the deploy may have stopped shipping the SDK. Never used: no app has used it yet. ' +
+  'Revoke stale keys takes only the keys marked unused 7d+, never the one your app used last.'
 
 /** A key's health as a status mark (2026-11-18): ✓ live, ✕ wrong endpoint, ⧗ quiet, ○ never used, ⊘ off. */
 const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
@@ -195,33 +201,39 @@ export function SdkInstallKeyPanel({
               </Tooltip>
             </div>
           </div>
-          <ul className="space-y-1.5" aria-label="Active API keys">
+          <ul className={flat ? 'divide-y divide-edge-subtle' : 'space-y-1.5'} aria-label="Active API keys">
             {visibleKeys.map((k) => {
               const diag = k.created_at ? diagnoseKey(k, null) : null
               return (
                 <li key={k.id}>
-                  <div className="flex items-center justify-between gap-2 rounded-sm border border-edge-subtle/80 bg-surface-root/50 px-2 py-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  {/* The key chip never wraps (at 390px it broke one character
+                      per line). Prefix and label share the first line; on a
+                      phone the status and buttons move to a second one. */}
+                  <div
+                    className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1 ${
+                      flat ? 'py-1.5' : 'rounded-sm border border-edge-subtle/80 bg-surface-root/50 px-2 py-1.5'
+                    }`}
+                    data-testid="sdk-key-row"
+                  >
+                    <div className="flex min-w-0 flex-1 basis-full items-center gap-1.5 sm:basis-0">
                       <Tooltip
                         content={`Prefix ${k.key_prefix} — full secret shown once at mint or rotate`}
                         side="top"
                       >
-                        <CodeInline className="min-w-0 break-all">{k.key_prefix}…</CodeInline>
+                        <CodeInline className="w-32 shrink-0 truncate whitespace-nowrap">{k.key_prefix}…</CodeInline>
                       </Tooltip>
                       {staleIds.has(k.id) && (
-                        <span className="shrink-0 text-3xs font-bold text-warn-foreground" title="No app has used it for over 7 days: Revoke stale keys takes it">
+                        <span className="shrink-0 whitespace-nowrap text-3xs font-bold text-warn-foreground" title="No app has used it for over 7 days: Revoke stale keys takes it">
                           unused 7d+
                         </span>
                       )}
                       {k.label && (
-                        <span
-                          className="shrink-0 text-3xs text-fg-muted truncate max-w-40"
-                          title={k.label}
-                        >
+                        <span className="min-w-0 truncate whitespace-nowrap text-3xs text-fg-muted" title={k.label}>
                           {k.label}
                         </span>
                       )}
                     </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
                     {diag && (
                       <Tooltip content={diag.description} side="top">
                         <span className="shrink-0" data-key-status={diag.status}>
@@ -245,6 +257,7 @@ export function SdkInstallKeyPanel({
                       </Tooltip>
                     )}
                     <CopyButton value={k.key_prefix} label="Copy prefix" copiedLabel="Copied" size="sm" />
+                    </div>
                   </div>
                 </li>
               )
@@ -260,12 +273,10 @@ export function SdkInstallKeyPanel({
               Show fewer
             </Btn>
           )}
-          <p className="text-2xs text-fg-muted">
-            A key is shown in full once, when it is made or rotated. Healthy: the SDK authenticated with it in the
-            last hour. Stale: no activity in the last hour (normal for a quiet app). Cold: nothing for
-            over 7 days, so the deploy may have stopped shipping the SDK. Never used: minted, but no
-            app has authenticated with it yet. Revoke stale keys takes only the keys marked unused 7d+
-            (Cold, or never used and over 7 days old), never the one your app used last.
+          {/* One line; what each mark means sits behind the (i). */}
+          <p className="flex items-center gap-1.5 text-2xs text-fg-muted" data-testid="sdk-key-legend">
+            <span>A key is shown in full once, when it is made or rotated.</span>
+            <InfoHint content={KEY_LEGEND} />
           </p>
         </Box>
       )}

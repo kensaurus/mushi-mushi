@@ -386,10 +386,7 @@ export function NotificationsPage() {
         ]}
       />
 
-      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
-        <ReporterUpdateFunnel funnel={stats.funnel} />
-      ) : null}
-
+      {/* Tabs above the summary: they sat under the funnel, so the page read as content first, then its own tabs. */}
       {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
@@ -400,6 +397,10 @@ export function NotificationsPage() {
         scrollable
       />
       )}
+
+      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
+        <ReporterUpdateFunnel funnel={stats.funnel} totalUpdates={stats.total} unopenedShownAbove={stats.unread > 0} />
+      ) : null}
 
       {activeTab === 'overview' && stats.projectId ? (
         <NotificationsReadout stats={stats} fetchedAt={fetchedAt} isValidating={validating} />

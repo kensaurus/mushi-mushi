@@ -6,6 +6,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import type { McpStats, McpTabId } from './types'
 
 /**
@@ -69,18 +70,24 @@ export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
   }
 
   if (priority === 'report_only_keys') {
+    // SDK keys are normal: they send bug reports. Not a failure, so a plain
+    // ○ line, not a coloured banner ("4 SDK keys — no MCP scope" in red).
+    const n = stats.reportOnlyKeyCount
     return (
-      <StatusBannerShell
-        tone="brand"
-        title={`${stats.reportOnlyKeyCount} SDK key${stats.reportOnlyKeyCount === 1 ? '' : 's'} — no MCP scope`}
-        subtitle={
-          label ??
-          `report:write keys capture bugs but cannot list tools — mint an MCP key for ${projectLabel}.`
-        }
-        action={
-          <Btn to={mintMcpKeyHref(stats.projectId)} size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
-        }
-      />
+      <div
+        className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-xs text-fg-secondary"
+        data-testid="mcp-sdk-keys-line"
+      >
+        <p className="flex min-w-0 items-center gap-2">
+          <StatusGlyph tone="off" />
+          <span className="min-w-0">
+            {n} SDK {n === 1 ? 'key sends' : 'keys send'} bug reports. Editors need an MCP key.
+          </span>
+        </p>
+        <Btn to={mintMcpKeyHref(stats.projectId)} size="sm" variant="ghost" className="shrink-0 whitespace-nowrap">
+          {actions.mint ?? 'Mint MCP key'}
+        </Btn>
+      </div>
     )
   }
 

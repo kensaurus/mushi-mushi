@@ -99,6 +99,21 @@ describe('SdkInstallKeyPanel rotation', () => {
     expect(onRotatedKeyChange).toHaveBeenLastCalledWith('mushi_newkey0000')
   })
 
+  // At 390px the key chip broke one character per line and the legend was a
+  // paragraph (fresh-eyes 2026-11-18).
+  it('keeps each key chip on one line and the legend behind an (i)', async () => {
+    await mount()
+    const chips = Array.from(container.querySelectorAll('[data-testid="sdk-key-row"] code'))
+    expect(chips).toHaveLength(2)
+    for (const c of chips) {
+      expect(c.className).toContain('whitespace-nowrap')
+      expect(c.className).toContain('truncate')
+      expect(c.className).not.toContain('break-all')
+    }
+    const legend = container.querySelector('[data-testid="sdk-key-legend"]')!
+    expect(legend.textContent).not.toContain('Cold: nothing')
+  })
+
   it('has no project-wide "Rotate key" button, only one Rotate per key', async () => {
     await mount()
     expect(buttons().some((b) => b.textContent === 'Rotate key')).toBe(false)

@@ -116,8 +116,12 @@ describe('ConnectionGrid', () => {
   it('a connected tool nobody has checked reads connected with a passed mark and a Check now beside it', () => {
     const { onCheck, onOpen } = render([])
     const tile = host.querySelector('[data-testid="integration-tile-github"]')!
-    expect(tile.textContent).toContain('Connected · not checked yet')
+    // The short word shows (the long one truncated to "CONNECTED · NOT …"); the full one is the tooltip.
+    expect(tile.textContent).toContain('Not checked')
+    expect(tile.querySelector('[data-state]')?.getAttribute('aria-label')).toContain('Connected · not checked yet')
     expect(tile.textContent).not.toContain('Nothing yet')
+    // Nothing broken: the status is the counts as marks, not a sentence.
+    expect(host.querySelector('[data-testid="integrations-tally"]')?.textContent).toContain('1 not checked')
     expect(tile.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('passed')
     const check = host.querySelector<HTMLButtonElement>('[data-testid="integration-check-github"]')!
     expect(check.textContent).toBe('Check now')
@@ -155,6 +159,17 @@ describe('ConnectionGrid', () => {
     expect(onOpen).not.toHaveBeenCalled()
     // A tile that is connected has no Connect.
     expect(host.querySelector('button[aria-label="Connect GitHub"]')).toBeNull()
+  })
+
+  it('puts the tools not set up in one compact row per group, apart from the connected tiles', () => {
+    render(history)
+    const alerts = host.querySelectorAll('[data-testid="integrations-group"]')[1]
+    const row = alerts.querySelector('ul[aria-label^="Not connected"]')!
+    expect(row.getAttribute('aria-label')).toBe('Not connected: Slack, Discord, Teams')
+    expect(row.querySelectorAll('li')).toHaveLength(3)
+    for (const li of Array.from(row.querySelectorAll('li'))) expect(li.className).toContain('whitespace-nowrap')
+    // GitHub is connected: a tile, not a chip.
+    expect(host.querySelector('[data-testid="integration-tile-github"]')?.closest('ul[aria-label^="Not connected"]')).toBeNull()
   })
 
   it('puts an alert card per broken connection when more than one needs you', () => {

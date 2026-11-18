@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Callout, Card, CopyButton } from './ui'
 import { ConfirmDialog } from './ConfirmDialog'
+import { StatusGlyph } from './signal/StatusGlyph'
 import { IconCheck, IconExternalLink, IconRefresh } from './icons'
 import { usePageData } from '../lib/usePageData'
 import { LINK_ACCENT } from '../lib/chipTone'
@@ -143,8 +144,16 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
               ? !health.data
                 ? ''
                 : notes.length > 0
-                  ? // Never "all good" while a check could not run.
-                    `No problems in the checks that ran, but ${notes.length} ${notes.length === 1 ? 'check' : 'checks'} could not run (below).`
+                  ? // Never "all good" while a check could not run: unknown is ○, not a pass.
+                    (
+                      <span className="inline-flex flex-wrap items-center gap-x-1.5" data-testid="sdk-health-tally">
+                        <StatusGlyph tone="ok" />
+                        <span>0 problems</span>
+                        <span aria-hidden="true">·</span>
+                        <StatusGlyph tone="off" />
+                        <span>{notes.length} not checked</span>
+                      </span>
+                    )
                   : 'No SDK problems found.'
               : settingUp
                 ? `${problems.length} ${problems.length === 1 ? 'step' : 'steps'} left before this app sends bug reports.`

@@ -279,11 +279,10 @@ export function SdkInstallCard({
         <p className="text-2xs text-fg-muted" data-testid="sdk-stack-note">
           Matched to <span className="font-mono text-fg-secondary">{stackRepo}</span>:{' '}
           {framework === 'react' && detectedBundler === 'vite'
-            ? 'React on Vite, so the snippet reads your key from .env.local.'
+            ? 'React on Vite (key from .env.local).'
             : framework === 'react' && detectedBundler === 'next'
-              ? 'React on Next.js, so the snippet reads your key from .env.local.'
-              : `the ${framework} tab is selected from its package.json.`}{' '}
-          Pick another tab or setup if that is wrong.
+              ? 'React on Next.js (key from .env.local).'
+              : `${framework}, from its package.json.`}
         </p>
       )}
 
@@ -301,7 +300,6 @@ export function SdkInstallCard({
           </span>
           <CodeValue value="npx mushi-mushi" inline />
         </p>
-        <p className="text-fg-muted">Or do it by hand with the code below.</p>
       </div>
 
       <div className="@container/sdk">
