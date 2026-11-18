@@ -10,7 +10,7 @@
 import type { PromptLabStats } from './PromptLabStatsTypes'
 import type { PromptVersion } from './types'
 
-export interface PromptTestCounts {
+interface PromptTestCounts {
   /** Versions in use (one per step). */
   inUse: number
   /** Steps with a test version (the scoreboard rows that show one). */
@@ -23,6 +23,7 @@ export interface PromptTestCounts {
   noGrades: boolean
 }
 
+/** @internal Exported for tests. */
 export function promptTestCounts(prompts: readonly PromptVersion[]): PromptTestCounts {
   const byStage = new Map<string, PromptVersion[]>()
   for (const p of prompts) {

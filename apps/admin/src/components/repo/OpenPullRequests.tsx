@@ -92,7 +92,7 @@ const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
 ]
 
-/** How many open PRs can merge now: the page's status line leads with it. */
+/** How many open PRs can merge now: the page's status line leads with it. @internal Exported for tests. */
 export function countMergeable(prs: ReadonlyArray<Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>>): number {
   return prs.filter((pr) => openPrGroup(pr) === 'mergeable').length
 }

@@ -29,7 +29,7 @@ export interface ProjectNextStep {
 
 export type ProjectVerdictTone = 'ok' | 'attention' | 'inactive' | 'sample'
 
-export interface ProjectPlainStatus {
+interface ProjectPlainStatus {
   tone: ProjectVerdictTone
   /** One plain-English sentence: how this project is doing. */
   verdict: string
@@ -115,7 +115,7 @@ export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
   return steps.slice(0, MAX_STEPS)
 }
 
-/** One-sentence layman verdict + the steps, for a project card. */
+/** One-sentence layman verdict + the steps, for a project card. @internal Exported for tests. */
 export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
   // A demo has no repo or real users on purpose: never "Needs you" (2026-11-16, the owner: "what is it about?").
   if (isPublicDemo(p)) {

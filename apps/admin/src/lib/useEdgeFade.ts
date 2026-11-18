@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-export const EDGE_FADE_CLASS = '[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)]'
+const EDGE_FADE_CLASS = '[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)]'
 
 export function useEdgeFade<T extends HTMLElement>(dep: unknown = null): { ref: React.RefObject<T | null>; more: boolean; className: string } {
   const ref = useRef<T | null>(null)

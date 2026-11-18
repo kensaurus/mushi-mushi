@@ -132,6 +132,7 @@ function countOf(stages: readonly PipelineStage[], id: PipelineStageId): number 
  * waiting for a fix take at that pace, and who started fixes in the last day.
  * Null with no stages. The owner (2026-11-16): "I don't know what is the bottleneck
  * or what is running well, and what I can estimate".
+ * @internal Exported for tests.
  */
 export function pipelinePace(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): string | null {
   if (stages.length === 0) return null

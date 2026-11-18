@@ -49,7 +49,7 @@ function ProjectChannel({ label, what, value, projects, onChange }: { label: str
   )
 }
 
-/** Why Send now cannot run, in a few words; null when it can. */
+/** Why Send now cannot run, in a few words; null when it can. @internal Exported for tests. */
 export function sendNowBlocker(s: Pick<DigestSettingsView, 'enabled'>): string | null {
   return s.enabled ? null : 'Turn on "Send the digest every day" first.'
 }

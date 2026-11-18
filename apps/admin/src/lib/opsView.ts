@@ -96,7 +96,7 @@ export function buildCoverageRows(data: OpsCoverageResponse, now: number): Cover
   return rows.sort((a, b) => Number(b.silent) - Number(a.silent) || opsAppName(a.app).localeCompare(opsAppName(b.app)))
 }
 
-export interface ThreadView {
+interface ThreadView {
   event: OpsEvent
   replies: OpsEvent[]
 }
@@ -172,7 +172,7 @@ export function needsAck(e: Pick<OpsEvent, 'severity' | 'acked_at'>): boolean {
   return e.severity !== 'resolved' && !e.acked_at
 }
 
-/** A thread still waiting for someone: an unacknowledged urgent or warning that no later resolve closed. */
+/** A thread still waiting for someone: an unacknowledged urgent or warning that no later resolve closed. @internal Exported for tests. */
 export function needsLook(t: ThreadView): boolean {
   const e = t.event
   return (e.severity === 'urgent' || e.severity === 'warn') && needsAck(e) && !t.replies.some((r) => r.severity === 'resolved')
@@ -193,7 +193,7 @@ export interface FeedGroupItem {
   items: FeedThreadItem[]
 }
 
-export type FeedItem = FeedThreadItem | FeedGroupItem
+type FeedItem = FeedThreadItem | FeedGroupItem
 
 export interface ArrangedFeed {
   /** Unacknowledged urgent, then warning rows, newest first within each: pinned on top. */

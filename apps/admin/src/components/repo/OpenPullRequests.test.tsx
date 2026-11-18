@@ -162,7 +162,7 @@ describe('OpenPullRequests', () => {
 })
 
 describe('ready-to-merge in the status line', () => {
-  const stats = (over: Partial<RepoStats>) => ({ prOpen: 0, ciPassing: 0, ciFailed: 0, merged: 0 }) as RepoStats & typeof over
+  const stats = (_over: Partial<RepoStats>) => ({ prOpen: 0, ciPassing: 0, ciFailed: 0, merged: 0 }) as RepoStats & typeof _over
   it('counts only PRs whose required checks passed', () => {
     expect(countMergeable([pr(1, [check('ci', 'success')]), pr(2, [check('ci', 'failure')]), pr(3, [check('ci', null)])])).toBe(1)
   })

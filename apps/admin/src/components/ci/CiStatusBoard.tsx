@@ -403,7 +403,10 @@ function AppTimeCard({ a, maxWait, maxRun, showDelay }: { a: CiStatus['apps'][nu
         )}
         {showDelay && <StatusPill status={d.status} label={d.word} className={pass == null ? 'ml-auto' : ''} />}
       </span>
-      <span className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary">
+      <span
+        // mushi-mushi-allowlist: label / bar columns (auto + the rest of the row)
+        className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary"
+      >
         <span>Wait (1 in 20)</span>
         <WaitBar a={a} maxWait={maxWait} />
         <span>Usual run</span>

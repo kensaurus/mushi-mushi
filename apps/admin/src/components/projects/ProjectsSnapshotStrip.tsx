@@ -20,6 +20,7 @@ interface Figure {
   hint: string
 }
 
+/** @internal Exported for tests. */
 export function projectsSnapshotFigures(stats: ProjectsStats): Figure[] {
   return [
     { label: 'Projects', value: stats.projectCount, hint: 'Apps or environments tracked' },

@@ -32,7 +32,11 @@ export function ClassificationFields({ report, showInternals = false }: { report
   const showSummary = Boolean(report.summary) && summaryPlace(report) === 'classification'
   return (
     <>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 text-xs" data-testid="classification-rows">
+      <dl
+        // mushi-mushi-allowlist: label / value rows, the value column may shrink to 0
+        className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 text-xs"
+        data-testid="classification-rows"
+      >
         <ClassRow label="Category" hint="Coarse-grained type assigned by the Stage-1 classifier.">
           <Badge className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}>{categoryLabel}</Badge>
         </ClassRow>

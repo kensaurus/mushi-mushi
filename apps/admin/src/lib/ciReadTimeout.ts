@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 /** How long a CI read may take before its panel says "Not checked". */
-export const CI_READ_TIMEOUT_MS = 20_000
+const CI_READ_TIMEOUT_MS = 20_000
 
 export function useReadTimedOut(loading: boolean, ms = CI_READ_TIMEOUT_MS): { timedOut: boolean; restart: () => void } {
   const [timedOut, setTimedOut] = useState(false)

@@ -42,6 +42,7 @@ function compareFixFirst(a: FixFirstInput, b: FixFirstInput): number {
  * Open reports with no fix on the way, best to fix first; newest wins a tie.
  * One per duplicate group: three Sentry imports of the same timeout filled
  * the top three rows (sweep 2026-10-29).
+ * @internal Exported for tests.
  */
 export function fixFirstOrder<T extends FixFirstInput>(reports: readonly T[], max = 5): T[] {
   const seen = new Set<string>()

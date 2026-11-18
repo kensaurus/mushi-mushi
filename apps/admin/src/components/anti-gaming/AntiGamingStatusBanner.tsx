@@ -39,6 +39,7 @@ export function AntiGamingStatusBanner({ stats, onTab, onRefresh, refreshing }: 
     return (
       <div
         data-testid="anti-gaming-not-checked"
+        // mushi-mushi-allowlist: one status row (role/aria on the element), not a card in a card; Card takes no role
         className="flex flex-col gap-2 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex min-w-0 items-start gap-2">

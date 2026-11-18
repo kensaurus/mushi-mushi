@@ -53,6 +53,7 @@ export function NoFixesLine({ openBugs }: { openBugs: number | null }) {
     <div
       role="status"
       aria-label="Fixes status"
+      // mushi-mushi-allowlist: one status row with role="status"; Card takes no role or aria-label
       className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2 text-sm text-fg-secondary"
       data-testid="fixes-none-yet"
     >

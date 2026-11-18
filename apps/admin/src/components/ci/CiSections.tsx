@@ -263,7 +263,7 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
   return (
     <div data-testid="ci-infra-failures">
       {/* The reason once, for every row below (it repeated on all seven, 2026-11-18). */}
-      <p className="mb-1.5 max-w-[80ch] text-xs text-fg-secondary">
+      <p className="mb-1.5 max-w-prose text-xs text-fg-secondary">
         The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
         tested. They are not code failures: re-run them on GitHub.
       </p>

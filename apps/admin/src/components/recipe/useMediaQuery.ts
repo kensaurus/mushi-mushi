@@ -11,6 +11,7 @@ import { useMediaQuery } from '../../lib/useMediaQuery'
  * the list instead of cutting "What is live" and the Runtime lane off at the right (2026-11-18).
  * Kept here, not read from recipeFlow.data.ts, so the list path never loads @xyflow/react;
  * recipeFlow.data.test.ts pins it to recipeDiagramBounds().
+ * @internal Exported for tests.
  */
 export const RECIPE_DIAGRAM_MIN_WIDTH = 1168
 

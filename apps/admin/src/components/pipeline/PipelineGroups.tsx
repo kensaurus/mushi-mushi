@@ -48,9 +48,9 @@ const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
  * a conflict agent not started, a PR waiting on its base or a later train, a backlog report, a
  * merged fix with no deploy yet. They take ◆; ▲ is only for what failed or needs a decision.
  */
-export const SLOW_GROUP_IDS: ReadonlySet<string> = new Set(['agent_slow', 'ci_slow', 'conflict_stuck', 'base_red', 'after_red_train', 'no_fix_old', 'not_deployed'])
+const SLOW_GROUP_IDS: ReadonlySet<string> = new Set(['agent_slow', 'ci_slow', 'conflict_stuck', 'base_red', 'after_red_train', 'no_fix_old', 'not_deployed'])
 
-/** The signal tone of a group's mark: ▲ failed, ◆ slow or waiting, ■ moving, ● done. */
+/** The signal tone of a group's mark: ▲ failed, ◆ slow or waiting, ■ moving, ● done. @internal Exported for tests. */
 export function groupSignalTone(group: Pick<PipelineGroup, 'id' | 'tone'>): SignalTone {
   if (group.tone === 'done') return 'ok'
   if (group.tone === 'moving') return 'info'

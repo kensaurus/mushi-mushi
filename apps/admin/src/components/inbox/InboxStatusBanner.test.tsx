@@ -45,7 +45,7 @@ describe('inbox banner', () => {
 
 describe('MetaChip', () => {
   it('reads "Page: Reports queue" on one line, with no box of its own', () => {
-    act(() => root.render(createElement(MemoryRouter, null, createElement(MetaChip, { label: 'Page' }, 'Reports queue'))))
+    act(() => root.render(createElement(MemoryRouter, null, createElement(MetaChip, { label: 'Page', children: 'Reports queue' }))))
     const chip = container.firstElementChild as HTMLElement
     expect(chip.textContent).toBe('Page:Reports queue')
     expect(chip.className).toContain('inline-flex')
