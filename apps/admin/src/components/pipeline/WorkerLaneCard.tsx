@@ -16,6 +16,9 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Card, Input, SelectField, Toggle } from '../ui'
 import { IconChevronDown, IconChevronUp, IconClose, IconExternalLink } from '../icons'
+import { StatusPill } from '../signal/StatusMark'
+import { VitalText } from '../signal/VitalText'
+import { laneRunStatus, runOutcomeStatus } from './pipelineRunStatus'
 import {
   durationLabel,
   LANE_MODES,
@@ -63,7 +66,7 @@ function RunDetail({ run, testId }: { run: RunTelemetry | undefined; testId: str
   return (
     <div className="ml-2 space-y-0.5" data-testid={`${testId}-detail`}>
       <p className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted">
-        <Badge tone={stuck ? 'danger' : run.stage === 'agent' ? 'ok' : 'neutral'}>{STAGE_LABEL[run.stage] ?? run.stage}</Badge>
+        <StatusPill status={stuck ? 'failed' : 'running'} label={STAGE_LABEL[run.stage] ?? run.stage} title={stuck ? 'Stuck: this run has held its agent space too long' : undefined} />
         <span>
           for {durationLabel(run.stageSec)} · run {durationLabel(run.ageSec)}
           {run.model ? ` · ${run.model}` : ''}
@@ -178,7 +181,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-mono text-xs font-semibold text-fg">{lane.name}</span>
         {showApp && <Badge tone="neutral">{lane.projectName}</Badge>}
-        <Badge tone={state === 'working' ? 'ok' : state === 'paused' || state === 'draining' ? 'warn' : 'neutral'}>{state}</Badge>
+        <StatusPill status={laneRunStatus(state)} label={state} />
         <span className="text-2xs text-fg-muted">
           on {host?.hostname ?? 'a machine'}
           {lane.repo ? ` (${lane.repo})` : ''} · {laneCountsLine(lane)}
@@ -412,14 +415,18 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
                 {lane.recent.slice(0, 10).map((r) => (
                   <tr key={r.claimId}>
                     <td className="py-1 pr-2 align-top">
-                      <Badge tone={r.outcome === 'pr_opened' || r.outcome === 'pushed' || r.outcome === 'filed' ? 'ok' : r.failureKind === 'infra' || r.outcome === 'lease_expired' ? 'warn' : r.outcome === 'failed' || r.outcome === 'refused' ? 'danger' : 'neutral'}>
-                        {OUTCOME_LABEL[r.outcome ?? ''] ?? r.outcome ?? 'ended'}
-                        {r.failureKind ? ` · ${r.failureKind === 'infra' ? 'machine' : 'code'}` : ''}
-                      </Badge>
+                      <StatusPill
+                        status={runOutcomeStatus(r.outcome, r.failureKind)}
+                        label={`${OUTCOME_LABEL[r.outcome ?? ''] ?? r.outcome ?? 'ended'}${r.failureKind ? ` · ${r.failureKind === 'infra' ? 'machine' : 'code'}` : ''}`}
+                      />
                     </td>
                     <td className="max-w-xs py-1 pr-2 align-top">
                       <RunTitle reportId={r.reportId} title={r.title} className="block truncate text-fg" />
-                      {r.detail && <span className="block truncate text-fg-muted" title={r.detail}>{r.detail}</span>}
+                      {r.detail && (
+                        <span className="block truncate text-fg-muted" title={r.detail}>
+                          <VitalText text={r.detail} />
+                        </span>
+                      )}
                     </td>
                     <td className="py-1 pr-2 align-top">
                       {r.prUrl && (

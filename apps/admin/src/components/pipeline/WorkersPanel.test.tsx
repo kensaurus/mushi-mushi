@@ -151,6 +151,11 @@ describe('WorkersPanel', () => {
     expect(q('worker-lane-l1-queue')!.textContent).toContain('First queued')
     expect(q('worker-lane-l1-recent')!.textContent).toContain('Opened a PR')
     expect(q('worker-lane-l1-recent')!.textContent).toContain('Failed · machine')
+    // States are status pills (2026-11-18): the machine is online, a PR passed,
+    // a machine failure is slow rather than the code's fault.
+    const pills = (id: string) => [...q(id)!.querySelectorAll('[data-testid="status-pill"]')].map((p) => [p.getAttribute('data-status'), p.textContent])
+    expect(pills('worker-host-h1')).toEqual(expect.arrayContaining([['passed', 'online']]))
+    expect(pills('worker-lane-l1-recent')).toEqual(expect.arrayContaining([['passed', 'Opened a PR'], ['slow', 'Failed · machine']]))
   })
 
   it('pausing a lane sends only paused', async () => {

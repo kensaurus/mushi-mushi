@@ -329,6 +329,9 @@ describe('PipelinePage', () => {
     expect(row.textContent).toContain('Build & Test ×2')
     const squares = row.querySelectorAll('[role="listitem"]')
     expect(squares).toHaveLength(2)
+    // Each train is a status mark, shape plus colour (2026-11-18).
+    expect([...squares].every((s) => s.querySelector('[data-testid="status-mark"]'))).toBe(true)
+    expect(row.querySelector('[data-testid="status-pill"][data-status="failed"]')?.textContent).toBe('Build & Test ×2')
     await click(squares[1])
     expect(q('pipeline-train-detail')!.textContent).toContain('CI failed: Build & Test.')
     await click(q('pipeline-train-kensaurus/glot.it-retry'))

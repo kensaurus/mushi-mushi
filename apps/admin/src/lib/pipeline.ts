@@ -447,14 +447,6 @@ export function ageLabel(iso: string | null, now: number = Date.now()): string {
   return `${Math.round(h / 24)} d`
 }
 
-export const TRAIN_STATE_TONE: Record<string, 'ok' | 'danger' | 'accent' | 'neutral'> = {
-  merged: 'ok',
-  failed: 'danger',
-  building: 'accent',
-  testing: 'accent',
-  abandoned: 'neutral',
-}
-
 /** One fix's place in the pipeline (GET /v1/admin/pipeline/fix/:id): its group, the group's actions and what the server would refuse. */
 export interface PipelineFixView {
   generatedAt: string
