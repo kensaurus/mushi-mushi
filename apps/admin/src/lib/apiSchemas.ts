@@ -190,7 +190,7 @@ export const ActivationResponseSchema = z
 // the server free to extend later (e.g. `incident`, `runbook`).
 const ChartEventKindSchema = z.enum(['deploy', 'cron', 'byok'])
 
-const ChartEventSchema = z
+export const ChartEventSchema = z
   .object({
     occurred_at: z.string(),
     kind: ChartEventKindSchema,
