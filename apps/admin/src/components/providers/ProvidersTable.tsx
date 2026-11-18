@@ -37,6 +37,20 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
   if (providers.length === 0) return <p className="text-xs text-fg-muted">No provider accounts yet.</p>
   return (
     <ul className="list-none divide-y divide-edge-subtle overflow-hidden rounded-md border border-edge p-0" aria-label="Provider accounts, worst first" data-testid="providers-rows">
+      {/* Column names (2026-11-18: "11m" and "—" had no label). Wide screens only; each cell keeps its own title. */}
+      <li
+        aria-hidden="true"
+        className="hidden gap-x-3 bg-surface-raised px-2.5 py-1 text-2xs font-semibold text-fg-secondary md:flex md:items-center"
+        data-testid="providers-head"
+      >
+        <span className="md:w-32 md:shrink-0">State</span>
+        <span className="md:flex-1">Account</span>
+        <span className="md:w-44 md:shrink-0">Balance</span>
+        <span className="md:w-12 md:shrink-0">Probed</span>
+        <span className="md:w-14 md:shrink-0">Incidents</span>
+        <span className="md:w-48 md:shrink-0">Used by</span>
+        <span className="md:ml-auto">On</span>
+      </li>
       {providers.map((p) => {
         const state = providerState(p)
         const inc = incidents.get(p.id)
