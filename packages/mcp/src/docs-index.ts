@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 239 pages, generated from llms.txt. */
+/** 240 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -464,6 +464,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["admin", "prompt-lab", "prompt", "lab", "ai", "prompts"],
     headings: ["The 4-step workflow", "Summary tiles", "Steps", "Prompt table columns", "Actions per row", "Common tasks", "Fixing wrong component classification", "Investigating a bad judge score"],
     excerpt: "The AI prompts page in the Mushi Mushi console lets you edit and A/B compare the prompts behind each AI step before you promote a new version.",
+  },
+  {
+    title: "Providers & AI routes",
+    url: docUrl("/admin/providers"),
+    route: "/admin/providers",
+    markdown: "admin/providers.md",
+    keywords: ["admin", "providers", "ai", "routes"],
+    headings: [],
+    excerpt: "Operator-only page in the Mushi Mushi console showing each app's AI provider accounts, their health and spend, and the ordered model routes each app tries.",
   },
   {
     title: "Scheduled tests",
