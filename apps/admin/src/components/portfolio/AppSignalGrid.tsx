@@ -20,6 +20,9 @@ import type { SignalTone } from '../signal/StatusGlyph'
 import { appKey, shortAge, type AppSignals } from '../../lib/appSignals'
 import { appLink, openApp } from '../../lib/openApp'
 
+/** Top reasons that no column of the grid shows, so the row names them under the app. */
+const NO_COLUMN: ReadonlySet<string> = new Set(['broken', 'fix'])
+
 /** Release age past this many days is the darkest step. */
 const RELEASE_AGE_TOP_DAYS = 60
 
@@ -72,7 +75,9 @@ export function AppSignalGrid({ rows, now }: { rows: readonly AppSignals[]; now:
   const heatRows: HeatRow[] = rows.map((r) => ({
     id: r.card.projectId,
     label: r.card.name,
-    sub: r.reasons[0]?.short ?? 'all clear',
+    // No subtitle that repeats a column ("448 open bugs" over the Open bugs cell, 2026-11-18).
+    // Only a top problem no column shows (a failing part, a part to fix) is named under the app.
+    sub: r.reasons[0] && NO_COLUMN.has(r.reasons[0].id) ? r.reasons[0].title : undefined,
     keys: [appKey(r.card.projectId)],
     cells: signalCells(r, now),
   }))

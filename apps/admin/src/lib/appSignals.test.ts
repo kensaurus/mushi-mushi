@@ -118,7 +118,7 @@ describe('rankingSentence', () => {
 })
 
 describe('appAlerts', () => {
-  it('one card per worst app that needs you, the top reason as title and number, one action into that app', () => {
+  it('one card per worst app that needs you, the top reason named in the title and counted once in the number, one action into that app', () => {
     const ranked = rankApps(
       [card({ projectId: 'p-ci', name: 'ci-red', openReports: 2, ciFailsToday: 3 }), card({ projectId: 'p-bugs', name: 'buggy', openReports: 9 }), card({ projectId: 'p-one', name: 'one', openReports: 1 }), card({ projectId: 'p-more', name: 'more', openReports: 1 }), card({ projectId: 'p-ok', name: 'ok', worst: 'ok' })],
       NONE,
@@ -128,11 +128,13 @@ describe('appAlerts', () => {
     const alerts = appAlerts(ranked, (id) => opened.push(id))
     expect(alerts.map((a) => a.id)).toEqual(['p-ci', 'p-bugs', 'p-more'])
     const [ci, bugs] = alerts
-    expect(ci).toMatchObject({ severity: 'critical', label: 'CI red', app: 'ci-red', title: '3 CI jobs failed today', detail: '2 open bugs', metric: { value: '3', unit: 'jobs failed' }, keys: [appKey('p-ci')] })
+    expect(ci).toMatchObject({ severity: 'critical', label: 'CI red', app: 'ci-red', title: 'CI failing today', detail: '2 open bugs', metric: { value: '3', unit: 'jobs failed' }, keys: [appKey('p-ci')] })
+    // The number is said once, by the metric; the title names the problem.
+    for (const a of alerts) expect(a.title).not.toMatch(/\d/)
     expect(ci!.action!.label).toBe('Open CI')
     expect(ci!.action!.to).toContain('/ci')
     expect(ci!.action!.to).toContain('p-ci')
-    expect(bugs).toMatchObject({ severity: 'serious', label: 'Bugs waiting', title: '9 open bugs', detail: 'Nothing else open.', metric: { value: '9', unit: 'bugs' } })
+    expect(bugs).toMatchObject({ severity: 'serious', label: 'Bugs waiting', title: 'Open bug reports', detail: 'Nothing else open.', metric: { value: '9', unit: 'bugs' } })
     expect(bugs!.action!.to).toContain('/reports')
     bugs!.action!.onClick!()
     expect(opened).toEqual(['p-bugs'])

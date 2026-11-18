@@ -204,6 +204,8 @@ describe('Apps signals', () => {
     expect(container.querySelector('[data-testid="heat-row-yen"] [data-col="checkin"] svg[data-tone="danger"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="heat-row-twm"] [data-col="checkin"]')!.className).toContain('ci-nodata')
     expect(text('[data-testid="portfolio-signal-grid-legend"]')).toContain('no data')
+    // No subtitle that repeats the Open bugs column under the app's name.
+    expect(container.querySelector('[data-testid="heat-row-yen"] th')!.textContent).toBe('yen-yen')
   })
 
   it('leads with alert cards for the worst three, one action each, and a ranking headline', async () => {
@@ -211,7 +213,11 @@ describe('Apps signals', () => {
     const cards = [...container.querySelectorAll('[data-testid^="portfolio-alert-"]')]
     expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['portfolio-alert-glot', 'portfolio-alert-yen', 'portfolio-alert-twm'])
     expect(cards[0]!.getAttribute('data-severity')).toBe('critical')
-    expect(cards[0]!.textContent).toContain('4 CI jobs failed today')
+    // The title names the problem; the big number alone says how many.
+    expect(cards[0]!.textContent).toContain('CI failing today')
+    expect(cards[0]!.textContent).not.toContain('4 CI jobs failed today')
+    expect(cards[1]!.textContent).toContain('Open bug reports')
+    expect(cards[1]!.textContent).not.toContain('12 open bugs')
     const action = cards[1]!.querySelector('a')!
     expect(action.textContent).toBe('Open bugs')
     expect(action.getAttribute('href')).toMatch(/^\/reports\?.*project=yen/)
