@@ -177,7 +177,8 @@ export function SpendLedgerCard({ orgId, projects, iconFor }: { orgId: string; p
                   </li>
                 ))}
               </ul>
-              <div className="overflow-x-auto">
+              {/* Scrolls in its own box at 390 px; `relative` keeps the sr-only text inside it too. */}
+              <div className="relative min-w-0 overflow-x-auto" data-testid="spend-ledger-scroll">
                 <table className="w-full min-w-160 text-xs" data-testid="spend-ledger-table">
                   <caption className="sr-only">Spend per app over 30 days, most first</caption>
                   <thead>

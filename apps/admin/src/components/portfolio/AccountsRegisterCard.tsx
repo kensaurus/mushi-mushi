@@ -228,7 +228,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
               }}
             >
               <div className="flex flex-col gap-2 p-3">
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <SelectField label="Provider" value={form.provider} onChange={(e) => set('provider', e.target.value as AccountForm['provider'])}>
                     {ACCOUNT_PROVIDERS.map((p) => <option key={p} value={p}>{PROVIDER_LABEL[p]}</option>)}
                   </SelectField>

@@ -238,7 +238,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                 <Input label={form.configLabel} value={configValue} onChange={(e) => setConfigValue(e.target.value)} />
               ))}
               <Textarea label={form?.credentialLabel ?? 'Credential'} value={credential} onChange={(e) => setCredential(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <SelectField label="For which app" value={bindProject} onChange={(e) => setBindProject(e.target.value)}>
                   <option value="">Not bound yet</option>
                   {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}

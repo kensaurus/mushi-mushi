@@ -394,7 +394,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                     </Card>
                   )}
                   {view === 'cards' && attention.length > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {attention.map((card) => (
                         <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
                       ))}

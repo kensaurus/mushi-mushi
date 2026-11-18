@@ -95,6 +95,14 @@ describe('FindingsMatrix', () => {
     expect(row.querySelector('[data-testid="fix-once-dot"]')!.getAttribute('aria-label')).toBe('AI key rejected: calm-app')
   })
 
+  it('scrolls sideways in its own positioned box, so its sr-only headers never widen the page', async () => {
+    await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
+    const box = container.querySelector('[data-testid="fix-once-matrix"]')!
+    // An absolutely placed sr-only span escapes an overflow box that is not its containing block.
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['relative', 'min-w-0', 'overflow-x-auto']))
+    expect(box.querySelector('table')).not.toBeNull()
+  })
+
   it('shows the explanation only after the row is opened', async () => {
     await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
     expect(container.textContent).not.toContain('is rejected by anthropic')
