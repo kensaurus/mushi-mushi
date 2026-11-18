@@ -361,6 +361,16 @@ export interface DiagnosisQuotaVerdict {
 
 const diagnosisCache = new Map<string, { verdict: DiagnosisQuotaVerdict; expiresAt: number }>()
 
+/**
+ * Reach-first (owner, 2026-11-19): a free project that brings its own Anthropic or
+ * OpenAI key pays its own LLM bill, so the free plan's monthly diagnosis cap does not
+ * stop it. Only the free-plan cap lifts: paid overage and spend caps are unchanged.
+ */
+export function byokLiftsFreeCap(verdict: DiagnosisQuotaVerdict, hasOwnKey: boolean): DiagnosisQuotaVerdict {
+  if (verdict.allowed || verdict.reason !== 'NO_SUBSCRIPTION_OVER_FREE' || !hasOwnKey) return verdict
+  return { ...verdict, allowed: true, reason: undefined }
+}
+
 export function invalidateDiagnosisCache(projectId?: string): void {
   if (projectId) diagnosisCache.delete(projectId)
   else diagnosisCache.clear()

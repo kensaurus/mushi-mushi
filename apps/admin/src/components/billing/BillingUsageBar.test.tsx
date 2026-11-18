@@ -59,6 +59,15 @@ async function renderBar(over: Partial<BillingUsageBarProps> = {}) {
 }
 
 describe('BillingUsageBar', () => {
+  it('a free app on its own AI key past the cap reads Own AI key, never paused (ADR 0063)', async () => {
+    const over = { tierId: 'free_cloud', diagnosesUsed: 340, diagnosesLimit: 300, pct: 113, overQuota: false, overageRateDiagnoses: null }
+    const paused = await renderBar(over)
+    expect(paused).toMatch(/paused/)
+    const own = await renderBar({ ...over, byokUncapped: true })
+    expect(own).toContain('Own AI key')
+    expect(own).not.toMatch(/paused|Limit reached/)
+  })
+
   it('with the team meters shown, draws no second quota meter or fixes count', async () => {
     const text = await renderBar({ quotaInStrip: true })
     expect(container.querySelector('[role="progressbar"]')).toBeNull()

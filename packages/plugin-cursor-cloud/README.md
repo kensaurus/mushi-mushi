@@ -18,7 +18,7 @@ need your own Cursor API key, and each run spends your Cursor credit.
 Cursor agents itself: add your Cursor API key on the **Integrations** page
 (Cursor Cloud card) and send any report to Cursor, or install **Cursor Cloud
 Agent** from the Marketplace page to start agents automatically (Marketplace
-installs need a paid plan, Builder or above, see
+installs work on every plan, Free included, see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Either way Mushi Mushi calls
 Cursor's API directly and never sends events to this package. It is only for
 running the dispatch from your own server, for example next to a self-hosted

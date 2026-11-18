@@ -51,7 +51,7 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
-- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** Three apps and 300 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 ## Why I built it
@@ -1717,7 +1717,7 @@ button also checks in with Mushi Mushi when a page loads, which records your
 site's address (not the page) and the browser type.
 
 **How long it is kept.** On the free plan, reports and everything attached to
-them are deleted after 14 days. Paid plans keep them longer:
+them are deleted after 30 days. Paid plans keep them longer:
 [the privacy policy](/legal/privacy#7-retention) has the table.
 
 **Tell your users.** You must tell them that reports can include a
@@ -1987,7 +1987,7 @@ each use one small extra package, which the setup page lists. On Capacitor
 they are settings. The setup takes a few minutes, then you make a new build of
 your app so the button ships with it.
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI
 key of your own. See [pricing](/pricing).
 
 ## Native iOS, Android and Flutter (previews)
@@ -2637,7 +2637,8 @@ A test message should arrive in the channel. See [Slack app](/plugins/slack) and
 
 ## 6. AI keys and cost
 
-**What you get:** Free includes 100 diagnoses a month, with a hard stop.
+**What you get:** Free includes 300 diagnoses a month, with a hard stop. With
+your own Anthropic or OpenAI key, Free has no cap.
 Builder and Studio include more, and monthly plans can run into capped
 overage. Reports are always kept, even when diagnoses pause. See
 [Pricing](/pricing).
@@ -2750,7 +2751,7 @@ events. If no deploy has been seen in 14 days, it says so. See
   before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
-  14 days, Builder 90, Studio 180, Enterprise custom.
+  30 days, Builder 90, Studio 180, Enterprise custom.
 - **Storage.** To keep screenshots in your own bucket, see [Storage](/admin/storage)
   and [BYO storage](/security/byo-storage).
 - **Who can see what.** Review **Team → Members** when someone joins or leaves.
@@ -2967,12 +2968,12 @@ Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
 title: "Pricing: Free, Builder, Studio and self-host"
-description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
+description: Mushi Mushi pricing. Free for three apps and 300 AI bug diagnoses a month. Builder $29/mo for 1,000 diagnoses, Studio $79/mo for 10 apps. Free to self-host.
 ---
 
 # Pricing
 
-Free for one app. You pay only when you want Mushi Mushi on more apps. A
+Free for three apps. You pay only when you want more diagnoses, longer history or more apps. A
 **diagnosis** is one bug explained in plain English, and repeat reports of the
 same bug count once.
 
@@ -2985,17 +2986,17 @@ developers are below.
 
 ## All plans
 
-A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan sets how many **apps** your team can have: three on Free and Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
 **More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
 
-**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) work on Free too, and so do usage alerts. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
-  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 300 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock. The cap is for diagnoses on Mushi Mushi's AI key: a free project that adds its own Anthropic or OpenAI key is not capped.
 
 **Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
@@ -3007,7 +3008,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to your plan.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to a paid plan. On Free, your own Anthropic or OpenAI key lifts the monthly cap.
 
 **What does NOT count:**
 
@@ -3083,7 +3084,7 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured. A free project with its own Anthropic or OpenAI key does not pause.
 
 **Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
@@ -3095,7 +3096,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. A diagnosis on your own key still counts toward the 100 a month.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. On Free, a project with its own Anthropic or OpenAI key is not capped: the 300 a month is for diagnoses on Mushi Mushi's key. On a paid plan, a diagnosis on your own key still counts toward the plan.
 
 ### When does my quota reset?
 
@@ -3511,7 +3512,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi
@@ -3703,7 +3704,7 @@ To let a client see only their own app, put that app in **its own team**:
    **Team → Team members**. Invitations need Studio; a team on Free or Builder
    has one seat, yours.
 
-A new team starts on the Free plan (one app, 100 diagnoses a month). A plan is
+A new team starts on the Free plan (three apps, 300 diagnoses a month). A plan is
 bought per team (see [What it costs](#what-it-costs)), so a separate team for a
 client is a separate plan: it costs more than keeping their app in your main
 team, where one plan covers every app.
@@ -3728,7 +3729,7 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 
 | Plan | Apps in a team | People | Diagnoses a month | Price |
 | --- | --- | --- | --- | --- |
-| Free | 1 | 1 | 100 | $0 |
+| Free | 3 | 1 | 300 | $0 |
 | Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
 | Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
@@ -3777,7 +3778,7 @@ Details on [pricing](/pricing).
   screenshot and code snippets. Mushi Mushi does not train models on reports or
   code. The full list of companies is in the
   [Privacy Policy, section 5](/legal/privacy#5-sub-processors).
-- **How long it is kept.** Reports are deleted after 14 days on Free, 90 on
+- **How long it is kept.** Reports are deleted after 30 days on Free, 90 on
   Builder and 180 on Studio. You can set a shorter time per app under
   **Team → Compliance**.
 - **Who is responsible.** For the reports from a client's app, you or your
@@ -3869,7 +3870,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. One app and 100 diagnoses a month free;
+report so you see the loop before real users do. Three apps and 300 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·
@@ -3927,7 +3928,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide claude
 ```
 
-Free tier: one app, 100 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+Free tier: three apps, 300 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
 self-hostable with one command.
 
 **Next:** [MCP server quickstart](/quickstart/mcp) ·
@@ -3986,7 +3987,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Free tier: one app, 100 diagnoses a month, no card. Open source, self-hostable.
+Free tier: three apps, 300 diagnoses a month, no card. Open source, self-hostable.
 
 **Next:** [Cursor integration guide](/integrations/cursor) ·
 [MCP server quickstart](/quickstart/mcp) ·
@@ -4087,7 +4088,7 @@ it:
 npx mushi-mushi
 ```
 
-Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
+Free is three apps and 300 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 
@@ -4144,7 +4145,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Mushi Cloud (one app and 100 diagnoses a month free) or at your own
+Point the server at Mushi Mushi Cloud (three apps and 300 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 
@@ -4201,8 +4202,8 @@ A few minutes for the setup, plus the time your app takes to build.
 
 ## What it costs
 
-Free for one app: 100 diagnoses a month, no card and no AI key of your own.
-More apps are on [Builder and Studio](/pricing).
+Free for three apps: 300 diagnoses a month, no card and no AI key of your own.
+More diagnoses and apps are on [Builder and Studio](/pricing).
 
 ## Next
 
@@ -4259,9 +4260,9 @@ about 10 seconds.
 
 ## What it costs
 
-Free for one app: 100 diagnoses a month, no card and no AI key of your own. A
+Free for three apps: 300 diagnoses a month, no card and no AI key of your own. A
 diagnosis is one bug explained, and repeat reports of the same bug count once.
-More apps are on [Builder and Studio](/pricing).
+More diagnoses and apps are on [Builder and Studio](/pricing).
 
 ## Next
 
@@ -4330,7 +4331,7 @@ vars:
 npx mushi-mushi
 ```
 
-The free tier watches one app with 100 diagnoses a month and no card, and you can
+The free tier watches three apps with 300 diagnoses a month and no card, and you can
 [self-host the whole stack](/self-hosting) with one command if you'd rather
 keep everything on your own infrastructure.
 
@@ -6730,10 +6731,10 @@ See [.github/CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/mast
 |---|---|---|
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
-| Mushi Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Mushi Cloud — Free tier | Yes — 3 apps, 300 diagnoses / mo, **hard stop** at limit (no limit with your own AI key) | — |
 | Mushi Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 (Builder) or $0.02 (Studio) per extra diagnosis; Enterprise from $499 / mo |
 
-**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 14 days), team seats, and enterprise features (SSO, compliance exports).
+**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 30 days), team seats, and enterprise features (SSO, compliance exports).
 
 Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 classification (Sonnet produces a plain-English root cause + fix hint). Noise-filtered reports and duplicates collapsed into an existing group do not count.
 
@@ -13566,7 +13567,7 @@ description: Replace Instabug (now Luciq) with Mushi Mushi for in-app bug report
 ## Why switch
 
 - **Open source and price.** Mushi Mushi SDKs are MIT and the server is AGPLv3.
-  Self-hosting is free; the cloud is free for one app and 100 diagnoses a
+  Self-hosting is free; the cloud is free for three apps and 300 diagnoses a
   month. Compare with your Luciq contract.
 - **AI triage.** Mushi Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
@@ -14557,7 +14558,7 @@ trigger on mobile.
   MIT on npm; its backend is a hosted service.)
 - **Self-host.** Mushi Mushi runs on your own Supabase / Postgres.
 - **AI triage.** Mushi Mushi's two-stage classifier and judge loop ship in the box.
-- **Pricing.** Self-hosting is free. The cloud is free for one app and 100
+- **Pricing.** Self-hosting is free. The cloud is free for three apps and 300
   diagnoses a month; paid plans are priced by number of apps (see
   [pricing](/pricing)).
 
@@ -16552,7 +16553,7 @@ Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
 title: Mushi Mushi Cloud
-description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
+description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for three apps with 300 diagnoses a month.
 ---
 
 # Mushi Mushi Cloud
@@ -16567,10 +16568,11 @@ plan. [Pricing](/pricing) has the details.
 No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
 You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
 included. Mushi Mushi then uses your Anthropic or OpenAI key first for the
-diagnosis and for fix drafts; a diagnosis on your own key still counts toward
-your plan. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
-every plan; installing plugins from the Marketplace needs Builder or above, and
-team invites need Studio. Full details are on [pricing](/pricing).
+diagnosis and for fix drafts. On Free, a project with its own Anthropic or
+OpenAI key has no monthly diagnosis cap; on a paid plan a diagnosis on your own
+key still counts toward the plan. The Integrations page (Sentry, Slack, GitHub,
+Linear, Jira) and plugins from the Marketplace work on every plan, and team
+invites need Studio. Full details are on [pricing](/pricing).
 
 ## Sign-up flow
 
@@ -17137,8 +17139,8 @@ defaults). **`db push` alone is not enough for a self-hosted project:**
   Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
   fails.
 - New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
-  Mushi Cloud: 100 diagnoses a month (then reports stop at
-  `quota_exceeded`), 1 app, 1 seat and 14-day retention.
+  Mushi Cloud: on Free, 300 diagnoses a month (then reports stop at
+  `quota_exceeded`), 3 apps, 1 seat and 30-day retention.
 
 `mushi selfhost up` fixes both after every `db push`. It upserts the three
 runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and
@@ -17187,7 +17189,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 | **Data residency** | Pick a region (US, EU or JP) at project creation | All hosted data is in one Tokyo (`ap-northeast-1`) project today, whatever region you pick. Dedicated US and EU clusters are planned, not live | [Data residency](/security/data-residency) |
 | **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
-| **Retention sweep** | Reports older than your plan window (Free 14 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily | [SOC 2 → retention](/security/soc2#data-retention-policies) |
+| **Retention sweep** | Reports older than your plan window (Free 30 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily | [SOC 2 → retention](/security/soc2#data-retention-policies) |
 | **Tenant isolation** | Row-level security is enabled on the public tables, and policies scope rows to the projects you own or belong to (`(SELECT auth.uid())`) | Live | [No client data leakage](/security/no-leakage-claim) |
 | **Nightly RLS coverage check** | `mushi_rls_coverage_snapshot()` lists every public table and whether RLS is enabled; the `soc2-evidence` job records the result as control CC6.1 | Live, nightly | [SOC 2 → automated controls](/security/soc2#automated-controls) |
 | **Prompt-injection defence** | The diagnosis runs in two stages so the main model never reads raw report text; text sent to the fix and review agents passes `sanitizeForLLM()`; screenshots go to an image-only call; an OWASP LLM01-style corpus runs in CI | Live | [Prompt-injection defence](/security/prompt-injection) |
@@ -17674,7 +17676,7 @@ Retention is set per project in **Compliance → Retention** and stored in `proj
 | `byok_audit_retention_days` | 365 | Must be greater than 0 |
 | `legal_hold` | off | When on, nothing in the project is deleted |
 
-On Mushi Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 14 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
+On Mushi Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 30 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
 
 ## DSAR (Data Subject Access Request)
 
@@ -17723,12 +17725,12 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 # Privacy Policy
 
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-11-11. Treat
+  description of how Mushi Mushi handles personal data as of 2026-11-19. Treat
   it as a description of current practice, not a finished legal document.
   Operator details are set; a lawyer's review is pending.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 6. Version 6 adds the operator's address (sections 1, 9 and 13); nothing about the data we handle changes. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
+**Effective date:** 2026-11-19 · **Version:** 7. Version 7 keeps reports on the Free plan for 30 days instead of 14 (section 7). Version 6, 2026-11-11, added the operator's address (sections 1, 9 and 13); nothing about the data we handle changed. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
 
 This policy covers **Mushi Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -17861,7 +17863,7 @@ Dedicated US and EU clusters are planned, not live. See
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 30 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
 | SDK key check-ins (first and last seen per key and kind of place) | While the key exists | Deleted with the key or the project (database cascade) |
@@ -17997,7 +17999,7 @@ description: The terms for Mushi Mushi Cloud, the admin console, the SDKs and th
   draft. Operator details and governing law are set; a lawyer's review is
   pending. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 3 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3 sets the governing law and court in section 14 and adds the operator's address and responsible person in section 17). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
+**Effective date:** 2026-11-19 · **Version:** 4 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3, 2026-11-11, set the governing law and court in section 14 and added the operator's address and responsible person in section 17; version 4 raises Free in section 7 to three apps, 300 diagnoses a month and 30 days of history, with no diagnosis cap for a project that uses its own AI key). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
 
 These terms are between you and **Kensaurus 合同会社** (Japan,
 "Mushi Mushi", "we") and cover **Mushi Mushi Cloud** at `kensaur.us/mushi-mushi`,
@@ -18086,10 +18088,11 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
-14-day report retention. At 100, the pipeline **stops** for the rest of the
+The **Free** plan includes **three apps and 300 diagnoses per month**, one seat,
+and 30-day report retention. At 300, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
-run until the counter resets or you upgrade. We do not silently bill overage
+run until the counter resets or you upgrade. A project that uses its own
+Anthropic or OpenAI key is not stopped. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
 
 ## 8. Paid plans and billing
@@ -18544,7 +18547,7 @@ So the human stays in the loop. The loop just gets shorter.
 
 Every SDK is MIT: web, React, Vue, Svelte, Angular, React Native, Capacitor and Node on npm, plus the CLI and the MCP server. iOS, Android and Flutter SDKs are previews in the repo. It is all on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) and the admin console are AGPLv3, which is OSI open source: self-host it free, fork it, modify it for your own org. Offer a modified server as a hosted service and you publish your changes (§13) or take a commercial license.
 
-It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers one app and 100 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](/pricing)).
+It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers three apps and 300 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](/pricing)).
 
 ## Try it
 
@@ -19494,7 +19497,7 @@ can fix it from.
 ## Get this for your own app
 
 When a real user reports a bug, Mushi Mushi writes a diagnosis like this one. It
-needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
+needs no Sentry and no AI key of yours: the free plan covers three apps and 300 diagnoses a
 month.
 
 - **Lovable or Bolt:** sign up, copy one line and ask your builder to add it. No
@@ -19640,7 +19643,7 @@ Source: https://kensaur.us/mushi-mushi/docs/ja
 
 ---
 title: Mushi Mushi とは（日本語）
-description: Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。
+description: Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 3 本・月 300 件の診断まで。
 ---
 
 # Mushi Mushi とは
@@ -19678,12 +19681,12 @@ AI の診断は間違うことがあります。変更内容は、公開する�
 
 | プラン | アプリ数 | 診断（月・チーム全体） | 料金 |
 | --- | --- | --- | --- |
-| Free | 1 本 | 100 件 | 無料 |
+| Free | 3 本 | 300 件 | 無料 |
 | Builder | 3 本 | 1,000 件 | 月額 29 ドル |
 | Studio | 10 本 | 3,000 件 | 月額 79 ドル |
 
-- **無料プランはアプリ 1 本・月 100 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
-- 月 100 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。
+- **無料プランはアプリ 3 本・月 300 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
+- 月 300 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。自分の Anthropic または OpenAI のキーを設定したアプリには、この上限はありません。
 - プランはチーム単位です。どのアプリからアップグレードしても、チーム内のすべてのアプリが同じプランになり、月の診断件数もチーム全体で共有します。
 - 料金は米ドル建てです（Builder 月額 29 ドル、Studio 月額 79 ドル）。Stripe でカード決済され、円換算額はカード会社のレートで決まります。
 - サーバーを自分で運用する場合（セルフホスト）は無料です。
@@ -19823,9 +19826,10 @@ Sentry, you can connect it, but you don't have to.
 
 ## What it costs
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI
 key of your own. A diagnosis is one bug explained, and repeat reports of the
-same bug count once. Paid plans are for more apps. See [pricing](/pricing).
+same bug count once. Paid plans add more diagnoses, longer history and more
+apps. See [pricing](/pricing).
 
 ## What about bugs nobody reports?
 
@@ -19931,7 +19935,7 @@ not write most of the code by hand, and you don't always know how it works.
 
 **Start here:** the install box on the [home page](/) (one command for Claude
 Code, one click for Cursor, a script tag for [Lovable or Bolt](/quickstart/lovable-bolt)).
-The free plan covers one app with 100 diagnoses a month, no card and no AI key.
+The free plan covers three apps with 300 diagnoses a month, no card and no AI key.
 
 ## You're a developer and you own your code
 
@@ -20483,7 +20487,7 @@ Below the bar you will see:
 
 **What happens at 100%?**
 
-- **Free:** New reports are captured but **not diagnosed** until the period resets.
+- **Free:** New reports are captured but **not diagnosed** until the period resets. A free project with its own Anthropic or OpenAI key is not capped.
 - **Builder / Studio (monthly):** Overage continues ($0.03 a diagnosis on Builder, $0.02 on Studio) until your **spend cap** pauses Stage-2 classification. No reports are lost.
 - **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
@@ -20518,7 +20522,7 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ## Apps on your plan
 
-A plan sets how many apps your team watches: **Free 1, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
+A plan sets how many apps your team watches: **Free 3, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
 
 The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnoses, overage and history, and shows whether your team's apps and this period's diagnoses fit each plan.
 
@@ -27620,7 +27624,7 @@ Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | --- | --- |
-| Free | Solo workspace, 1 app |
+| Free | Solo workspace, 3 apps |
 | Builder | Solo workspace, 3 apps |
 | Studio | 5 seats (you and up to 4 teammates; pending invitations count) and 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls, no app limit |

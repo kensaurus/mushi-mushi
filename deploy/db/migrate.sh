@@ -58,7 +58,7 @@ insert into public.mushi_runtime_config (key, value) values
 on conflict (key) do update set value = excluded.value, updated_at = now();
 
 -- Self-hosted: no billing, so lift the Mushi Mushi Cloud plan limits on every
--- plan (100 diagnoses/month, 1 app, 1 seat, 14-day retention on Free). Same
+-- plan (300 diagnoses/month, 3 apps, 1 seat, 30-day retention on Free). Same
 -- SQL as SELFHOST_PLAN_SQL in packages/cli/src/commands/selfhost.ts.
 update public.pricing_plans set
   included_diagnoses_per_month = null,

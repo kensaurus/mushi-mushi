@@ -12,8 +12,8 @@ lands.
 PagerDuty on the **Integrations** page of the console (paste the Events API v2
 routing key, on any plan) and Mushi Mushi pages and resolves for you. Run this
 package only if you want the PagerDuty calls to come from your own server.
-Installing **PagerDuty Escalation** from the Marketplace needs a paid plan
-(Builder or above, see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
+Installing **PagerDuty Escalation** from the Marketplace works on every plan,
+Free included (see [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
 npm i @mushi-mushi/plugin-pagerduty

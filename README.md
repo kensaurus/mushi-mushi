@@ -10,7 +10,7 @@ Mushi Mushi checks your live site, shows where people get stuck, and reviews you
 
 **[Check your live app free →](https://kensaur.us/mushi-mushi/docs/check?src=github-readme)** No sign-up, nothing to install.
 
-**[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for one app.
+**[Add it to Lovable or Bolt with one prompt →](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt)** No terminal, about five minutes, free for three apps.
 
 Or, in your app's folder:
 
@@ -181,7 +181,7 @@ The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `
 
 **Want a real diagnosis of your own code right away?** A test report is one made-up sentence, so its diagnosis is thin. Bring in a bug you already know about: `npx mushi-mushi sentry import` (your newest unresolved Sentry issues, once Sentry is connected under Integrations in the console) or `npx mushi-mushi reports file --title "…" --description "…"`. Connect your GitHub repository so the diagnosis can name your files.
 
-The hosted free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
+The hosted free plan covers three apps and 300 diagnoses a month, with no card and no AI key of your own ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Or you can [self-host](#self-host).
 
 <details>
 <summary><b>Let your AI editor do the setup</b></summary>

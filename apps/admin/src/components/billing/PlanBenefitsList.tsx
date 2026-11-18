@@ -117,7 +117,7 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
       </ul>
       {(planId === 'hobby' || planId === 'free_cloud') && (
         <InlineProof className="mt-2">
-          Watch up to 3 apps with automatic fix PRs, plugins and an audit log on{' '}
+          Get 1,000 diagnoses a month, 90 days of history, an audit log and email support on{' '}
           <span className="text-brand">Builder · $29/mo</span>.
         </InlineProof>
       )}

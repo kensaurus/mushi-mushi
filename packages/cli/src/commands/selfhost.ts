@@ -180,8 +180,8 @@ export function buildRuntimeConfigSql(supabaseUrl: string, internalToken: string
  * @internal Exported for tests only.
  * Orgs on a fresh instance resolve to a Mushi Mushi Cloud plan row
  * (`free_cloud` for personal orgs, the `hobby` column default otherwise,
- * _shared/org-billing.ts): 100 diagnoses a month (then reports stop at
- * `quota_exceeded`), 1 app, 1 seat, 14-day retention, no Pro features. On
+ * _shared/org-billing.ts): on Free, 300 diagnoses a month (then reports stop at
+ * `quota_exceeded`), 3 apps, 1 seat, 30-day retention, no Pro features. On
  * your own instance there is nothing to bill, so lift them on every row,
  * whichever one an org lands on. Re-applied on every `up`, after `db push`,
  * so a later migration that reshapes a plan does not bring the limits back.

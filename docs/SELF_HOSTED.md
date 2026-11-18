@@ -46,8 +46,8 @@ npx mushi-mushi@latest selfhost up --project-ref <your-ref> \
 4. points the database at your project: `mushi_runtime_config.supabase_url`,
    `service_role_key` and `internal_caller_token`. The migrations seed the
    Mushi Mushi Cloud URL there; until this step, your cron jobs call Cloud,
-5. lifts the Mushi Mushi Cloud free-plan limits on your instance (100 diagnoses
-   a month, 1 app, 1 seat, 14-day retention), since there is nothing to bill,
+5. lifts the Mushi Mushi Cloud free-plan limits on your instance (300 diagnoses
+   a month, 3 apps, 1 seat, 30-day retention), since there is nothing to bill,
 6. deploys every edge function (`verify_jwt` comes from `config.toml`),
 7. saves the endpoint and console URL to the CLI config, and checks `GET /health`.
 

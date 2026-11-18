@@ -135,7 +135,7 @@ lose an afternoon on code I didn't write. I wanted the report to arrive
 already explained.
 
 What's open: SDKs are MIT, the server is AGPLv3, self-hosting is one command.
-The hosted free tier is 1 app and 100 diagnoses a month, no card.
+The hosted free tier is 3 apps and 300 diagnoses a month, no card.
 
 How it differs from what you already use, as far as I can tell:
 - Sentry starts from what the code threw (it also has a User Feedback widget and
@@ -492,7 +492,7 @@ why, scoped to the files involved. The fix prompt lands in Cursor or Claude
 Code over MCP, with no second LLM key.
 
 Open source: MIT SDKs, AGPLv3 server, self-host in one command. Hosted free
-tier: 1 app, 100 diagnoses a month, no card.
+tier: 3 apps, 300 diagnoses a month, no card.
 
 How it differs:
 • Sentry starts from what the code threw (it also has a user-feedback widget); its AI agent (Seer) is a paid add-on

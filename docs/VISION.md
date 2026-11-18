@@ -169,14 +169,14 @@ diagnosis."** A bug comes in; Mushi produces *a diagnosis* — plain-English roo
 cause + the fix. This is the unit we meter for quota, the word in the GIF
 caption, and the verb in the docs ("Mushi diagnosed it"). One word, everywhere.
 
-### 2.2 Cloud pricing canon (October 2026)
+### 2.2 Cloud pricing canon (November 2026)
 
 These numbers are the source of truth for docs, billing UI, and quota gates. If a
 surface shows different limits, it has drifted.
 
 | Plan | Base | Apps | Included diagnoses / mo | Hard stop or overage |
 | --- | --- | --- | --- | --- |
-| **Free** | $0 | 1 | 100 | **Hard stop** — no overage, no card |
+| **Free** | $0 | 3 | 300 | **Hard stop** — no overage, no card; no cap with your own AI key |
 | **Builder** | $29 ($290/yr) | 3 | 1,000 | Overage $0.03/diagnosis, default **$50** spend cap |
 | **Studio** | $79 ($790/yr) | 10 | 3,000 | Overage $0.03/diagnosis, default **$200** spend cap |
 | **Enterprise** | from $499 | Unlimited | As agreed | SSO, self-host support |

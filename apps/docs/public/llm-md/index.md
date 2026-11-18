@@ -35,7 +35,7 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
-- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** Three apps and 300 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 ## Why I built it

@@ -95,9 +95,10 @@ describe('pricing plan warm-isolate cache', () => {
 
     const fallback = await getPlan('pro');
     expect(fallback.id).toBe('free_cloud');
-    // Conservative = no paid features. Free includes your own AI key since
-    // 2026-10-28 (migration 20261028180000), so byok stays on.
-    expect(fallback.feature_flags).toMatchObject({ byok: true, sso: false, plugins: false, audit_log: false, teams: false });
+    // Conservative = the Free row. Free includes your own AI key since
+    // 2026-10-28 (migration 20261028180000) and plugins since 2026-11-19
+    // (migration 20261119090000); paid features stay off.
+    expect(fallback.feature_flags).toMatchObject({ byok: true, sso: false, plugins: true, audit_log: false, teams: false });
 
     await getPlan('pro');
     expect(state.loads).toBe(1);

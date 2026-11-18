@@ -210,6 +210,7 @@ export function ProjectBillingCard({
         }
         llmCostUsd={project.llm_cost_usd_this_month}
         overQuota={project.over_diagnosis_quota ?? project.over_quota}
+        byokUncapped={project.byok_uncapped ?? false}
         overageRate={isAnnual ? null : (overageRate ?? null)}
         overageRateDiagnoses={isAnnual ? null : (tier?.overage_unit_amount_decimal_diagnoses ?? null)}
         basePriceUsd={tier?.monthly_price_usd ?? 0}

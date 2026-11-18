@@ -60,7 +60,7 @@ So the human stays in the loop. The loop just gets shorter.
 
 Every SDK is MIT: web, React, Vue, Svelte, Angular, React Native, Capacitor and Node on npm, plus the CLI and the MCP server. iOS, Android and Flutter SDKs are previews in the repo. It is all on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) and the admin console are AGPLv3, which is OSI open source: self-host it free, fork it, modify it for your own org. Offer a modified server as a hosted service and you publish your changes (§13) or take a commercial license.
 
-It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers one app and 100 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
+It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers three apps and 300 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ## Try it
 

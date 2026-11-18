@@ -4,12 +4,12 @@ Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
 title: "Pricing: Free, Builder, Studio and self-host"
-description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
+description: Mushi Mushi pricing. Free for three apps and 300 AI bug diagnoses a month. Builder $29/mo for 1,000 diagnoses, Studio $79/mo for 10 apps. Free to self-host.
 ---
 
 # Pricing
 
-Free for one app. You pay only when you want Mushi Mushi on more apps. A
+Free for three apps. You pay only when you want more diagnoses, longer history or more apps. A
 **diagnosis** is one bug explained in plain English, and repeat reports of the
 same bug count once.
 
@@ -22,17 +22,17 @@ developers are below.
 
 ## All plans
 
-A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan sets how many **apps** your team can have: three on Free and Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
 **More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
 
-**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) work on Free too, and so do usage alerts. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
-  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 300 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock. The cap is for diagnoses on Mushi Mushi's AI key: a free project that adds its own Anthropic or OpenAI key is not capped.
 
 **Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
@@ -44,7 +44,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to your plan.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to a paid plan. On Free, your own Anthropic or OpenAI key lifts the monthly cap.
 
 **What does NOT count:**
 
@@ -120,7 +120,7 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured. A free project with its own Anthropic or OpenAI key does not pause.
 
 **Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
@@ -132,7 +132,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. A diagnosis on your own key still counts toward the 100 a month.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. On Free, a project with its own Anthropic or OpenAI key is not capped: the 300 a month is for diagnoses on Mushi Mushi's key. On a paid plan, a diagnosis on your own key still counts toward the plan.
 
 ### When does my quota reset?
 

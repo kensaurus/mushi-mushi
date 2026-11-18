@@ -299,11 +299,11 @@ export function BillingPage() {
         helpTitle={copy?.help?.title ?? 'About Billing'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??
-          'Your plan and its usage. A plan sets how many apps you watch and how many plain-English diagnoses a month are included; reports are always captured. Free covers one app, Builder three, Studio ten.'
+          'Your plan and its usage. A plan sets how many apps you watch and how many plain-English diagnoses a month are included; reports are always captured. Free and Builder cover three apps, Studio ten.'
         }
         helpUseCases={
           copy?.help?.useCases ?? [
-            'Move to Builder for a second app, or when this month\'s diagnoses run out',
+            'Move to Builder when this month\'s diagnoses run out, or to Studio for more than three apps',
             'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
             'Cross-check usage between Mushi Mushi (reports/fixes/tokens) and Stripe (line items)',
           ]

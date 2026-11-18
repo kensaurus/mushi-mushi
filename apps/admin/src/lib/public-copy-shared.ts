@@ -36,7 +36,7 @@ export const LOGIN_HERO = {
    */
   cloudTagline: MUSHI_TAGLINE_V2.hero,
   /** Directly under the title on sign-up: the price, and the one thing that happens next. */
-  signupNext: 'Free for one app, no card. Next: copy one line and paste it into Lovable, Bolt or your code.',
+  signupNext: 'Free for three apps, no card. Next: copy one line and paste it into Lovable, Bolt or your code.',
   /** Under the sign-up form: the last doubt a stranger has before trusting a new tool. */
   signupReassurance: 'Open source, so you can read every line it runs.',
   selfHostTagline: 'Sign in to your self-hosted Mushi Mushi console.',

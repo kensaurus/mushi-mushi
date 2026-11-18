@@ -20,7 +20,7 @@ export const LANDING_HERO = {
    * No star count: at this stage a small number is anti-proof.
    */
   facts: [
-    'Free for one app: 100 diagnoses a month, no card',
+    'Free for three apps: 300 diagnoses a month, no card',
     'About 5 minutes to set up',
     'No coding needed with Lovable or Bolt',
   ],
@@ -226,7 +226,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     group: 'no-code',
     q: 'What does it collect from my users?',
-    a: 'When someone sends a report: what they typed, a picture of the screen if they attach one (they see it first and can remove it; password and card-number boxes are blacked out), the page address, their browser and screen size, and the app\'s recent error messages. It also counts page visits with a random ID, and skips browsers that ask not to be tracked. No name or email is collected unless your app passes one. On the free plan, reports are deleted after 14 days.',
+    a: 'When someone sends a report: what they typed, a picture of the screen if they attach one (they see it first and can remove it; password and card-number boxes are blacked out), the page address, their browser and screen size, and the app\'s recent error messages. It also counts page visits with a random ID, and skips browsers that ask not to be tracked. No name or email is collected unless your app passes one. On the free plan, reports are deleted after 30 days.',
     more: { label: 'The full list, and one sentence for your own privacy note →', href: '/quickstart/lovable-bolt#what-it-collects-from-your-users' },
   },
   {
@@ -238,7 +238,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     group: 'no-code',
     q: 'Do I need my own AI key?',
-    a: "No. Mushi Mushi writes the diagnosis with its own AI, and the free plan watches one app with 100 diagnoses a month, no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi Mushi hands it.",
+    a: "No. Mushi Mushi writes the diagnosis with its own AI, and the free plan watches three apps with 300 diagnoses a month, no card. Your editor's AI (Cursor, Claude Code, Lovable) does the fix, with the prompt Mushi Mushi hands it.",
   },
   {
     group: 'no-code',
@@ -268,7 +268,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     group: 'developers',
     q: 'Is it open source? Can I self-host?',
-    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: one app, 100 diagnoses a month, no card.',
+    a: 'Yes. The libraries you add to your app (SDKs) are MIT-licensed and the server is AGPLv3. You can run the whole thing on your own server with one command, or use the hosted free plan: three apps, 300 diagnoses a month, no card.',
   },
   {
     group: 'developers',

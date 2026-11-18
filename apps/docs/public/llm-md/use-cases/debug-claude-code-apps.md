@@ -47,7 +47,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide claude
 ```
 
-Free tier: one app, 100 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+Free tier: three apps, 300 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
 self-hostable with one command.
 
 **Next:** [MCP server quickstart](/quickstart/mcp) ·

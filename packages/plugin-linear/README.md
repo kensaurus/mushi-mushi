@@ -12,7 +12,7 @@ can move it along your Linear workflow.
 Linear on the **Integrations** page of the console (OAuth or an API key, on
 any plan) and Mushi Mushi files and closes Linear issues itself. Run this package
 only if you want the Linear calls to come from your own server. Installing
-**Linear Sync** from the Marketplace needs a paid plan (Builder or above, see
+**Linear Sync** from the Marketplace works on every plan, Free included (see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash

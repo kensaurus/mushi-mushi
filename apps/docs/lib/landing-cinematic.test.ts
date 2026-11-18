@@ -60,8 +60,8 @@ describe('landing cinematic copy SSOT', () => {
   })
 
   it('keeps the free-plan claim and the setup facts in the hero facts row (ADR 0056)', () => {
-    // Free since 2026-10-28: one app, 100 diagnoses a month (docs/plan-pricing.md).
-    expect(LANDING_HERO.facts[0]).toMatch(/free for one app: 100 diagnoses/i)
+    // Free since 2026-11-19: three apps, 300 diagnoses a month (migration 20261119090000).
+    expect(LANDING_HERO.facts[0]).toMatch(/free for three apps: 300 diagnoses/i)
     expect(LANDING_HERO.facts).toContain('About 5 minutes to set up')
     expect(LANDING_HERO.facts).toContain('No coding needed with Lovable or Bolt')
     const hero = read('components', 'landing', 'CinematicEditorialHero.tsx')
@@ -277,10 +277,10 @@ describe('landing cinematic copy SSOT', () => {
     expect(remove?.more?.href).toBe('/quickstart/lovable-bolt#how-to-remove-it')
     expect(guide).toContain('## What it collects from your users')
     expect(guide).toContain('## How to remove it')
-    // True of the code: Free keeps reports 14 days (_shared/plans.ts), and the
+    // True of the code: Free keeps reports 30 days (_shared/plans.ts), and the
     // screenshot blacks out password and card boxes (ALWAYS_REDACT_SELECTORS).
-    expect(collect?.a).toMatch(/deleted after 14 days/)
-    expect(read('..', '..', 'packages', 'server', 'supabase', 'functions', '_shared', 'plans.ts')).toMatch(/max_projects: 1,\s+retention_days: 14,/)
+    expect(collect?.a).toMatch(/deleted after 30 days/)
+    expect(read('..', '..', 'packages', 'server', 'supabase', 'functions', '_shared', 'plans.ts')).toMatch(/max_projects: 3,\s+retention_days: 30,/)
     expect(read('..', '..', 'packages', 'web', 'src', 'capture', 'screenshot.ts')).toContain('input[type="password"],input[autocomplete^="cc-"]')
     // The structured data is still one flat list of every question, grouped only on screen.
     const faq = read('components', 'landing', 'LandingFaq.tsx')

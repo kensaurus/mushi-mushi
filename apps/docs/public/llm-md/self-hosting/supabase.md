@@ -76,8 +76,8 @@ defaults). **`db push` alone is not enough for a self-hosted project:**
   Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
   fails.
 - New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
-  Mushi Cloud: 100 diagnoses a month (then reports stop at
-  `quota_exceeded`), 1 app, 1 seat and 14-day retention.
+  Mushi Cloud: on Free, 300 diagnoses a month (then reports stop at
+  `quota_exceeded`), 3 apps, 1 seat and 30-day retention.
 
 `mushi selfhost up` fixes both after every `db push`. It upserts the three
 runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and

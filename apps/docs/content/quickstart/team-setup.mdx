@@ -163,7 +163,8 @@ A test message should arrive in the channel. See [Slack app](/plugins/slack) and
 
 ## 6. AI keys and cost
 
-**What you get:** Free includes 100 diagnoses a month, with a hard stop.
+**What you get:** Free includes 300 diagnoses a month, with a hard stop. With
+your own Anthropic or OpenAI key, Free has no cap.
 Builder and Studio include more, and monthly plans can run into capped
 overage. Reports are always kept, even when diagnoses pause. See
 [Pricing](/pricing).
@@ -276,7 +277,7 @@ events. If no deploy has been seen in 14 days, it says so. See
   before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
-  14 days, Builder 90, Studio 180, Enterprise custom.
+  30 days, Builder 90, Studio 180, Enterprise custom.
 - **Storage.** To keep screenshots in your own bucket, see [Storage](/admin/storage)
   and [BYO storage](/security/byo-storage).
 - **Who can see what.** Review **Team → Members** when someone joins or leaves.

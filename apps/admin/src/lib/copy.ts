@@ -988,7 +988,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About billing',
-        whatIsIt: 'Your plan and its usage. Free watches one app with 100 diagnoses a month; Builder ($29) watches three, Studio ($79) ten. Your own AI keys work on every plan.',
+        whatIsIt: 'Your plan and its usage. Free watches three apps with 300 diagnoses a month; Builder ($29) has 1,000 diagnoses and 90 days of history; Studio ($79) watches ten apps. Your own AI keys work on every plan.',
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',

@@ -163,7 +163,7 @@ export default [mushi.configs.recommended]
 
 ## Free to start
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI key of your own. Repeat reports of one bug count once. [Pricing](https://kensaur.us/mushi-mushi/docs/pricing).
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI key of your own. Repeat reports of one bug count once. [Pricing](https://kensaur.us/mushi-mushi/docs/pricing).
 
 You don't need Sentry or any monitoring tool. If you have one, Mushi Mushi can read its errors too.
 

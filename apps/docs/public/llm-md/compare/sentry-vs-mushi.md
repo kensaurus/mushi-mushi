@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi

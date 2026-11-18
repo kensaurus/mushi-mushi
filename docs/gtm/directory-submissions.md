@@ -22,7 +22,7 @@ configs stays `mushi` (that is what the console, CLI and docs write).
 | Privacy policy | `https://kensaur.us/mushi-mushi/docs/legal/privacy` | `apps/docs/content/legal/` |
 | Support | GitHub Issues `https://github.com/kensaurus/mushi-mushi/issues`; kensaurus@gmail.com (already public in the README) | `README.md` |
 | Icon | `packages/brand/src/logo-mark-512.png` (512 px PNG; raw URL in `server.json`) | |
-| Free plan | 1 app, 100 diagnoses a month, no card, no AI key | `README.md` Quick start |
+| Free plan | 3 apps, 300 diagnoses a month, no card, no AI key | `README.md` Quick start |
 | Licence | SDKs, CLI, MCP: MIT. Server and console: AGPLv3 | `README.md` License |
 | Install doc for agents | `llms-install.md` at the repo root | |
 
@@ -36,7 +36,7 @@ Your users' bug reports, explained in plain English, with a fix your AI editor c
 **Short description (≤ 300):**
 Mushi Mushi turns "it's broken" from a user into a plain-English diagnosis
 and a ready fix prompt. Your editor reads it over MCP: list reports, get the
-fix context, mark it fixed, reply to the reporter. Free for one app.
+fix context, mark it fixed, reply to the reporter. Free for three apps.
 
 **Long description (≤ 2,000):**
 
@@ -64,7 +64,7 @@ fix context, mark it fixed, reply to the reporter. Free for one app.
 > Works without Sentry or any monitoring stack. If you do run Sentry, its
 > errors land in the same queue.
 >
-> Free plan: one app, 100 diagnoses a month, no card. Open source (SDKs and
+> Free plan: three apps, 300 diagnoses a month, no card. Open source (SDKs and
 > MCP MIT, server AGPLv3); self-hosting is supported.
 
 **Categories / tags:** Developer tools, Debugging, Bug tracking, Productivity.
@@ -207,7 +207,7 @@ there are samples I wrote; the diagnoses are real model output.
 No SDK? One curl files a report:
 https://kensaur.us/mushi-mushi/docs/quickstart/http-api
 
-Free for one app. SDKs and MCP are MIT, the server AGPLv3.
+Free for three apps. SDKs and MCP are MIT, the server AGPLv3.
 Where it stands: [N] sign-ups, [N] outside projects with a real report.
 I'd most like to hear where a diagnosis was wrong.
 ```
@@ -232,7 +232,7 @@ MCP and make the fix.
 Try the read-only demo without signing up:
 https://kensaur.us/mushi-mushi/docs/connect?utm_source=reddit&utm_medium=post&utm_campaign=sideproject
 
-Free for one app, open source. What would stop you from adding it?
+Free for three apps, open source. What would stop you from adding it?
 ```
 
 ### r/indiehackers

@@ -27,9 +27,9 @@ describe('estimateCost', () => {
     expect(estimateCost(indie, 5000)).toEqual({ total: 79, overage: 50, capped: true })
   })
 
-  it('hard-stops Free past 100 diagnoses', () => {
-    expect(estimateCost(free, 100)).toEqual({ total: 0, overage: 0, capped: false })
-    expect(estimateCost(free, 101)).toEqual({ total: 0, overage: 0, capped: true })
+  it('hard-stops Free past 300 diagnoses', () => {
+    expect(estimateCost(free, 300)).toEqual({ total: 0, overage: 0, capped: false })
+    expect(estimateCost(free, 301)).toEqual({ total: 0, overage: 0, capped: true })
   })
 
   it('meters Studio at $0.03 past 3,000 (owner cost fix, 2026-10-28)', () => {
@@ -53,7 +53,7 @@ describe('estimateCost', () => {
   })
 
   it('annual toggle leaves the free plan unchanged', () => {
-    expect(estimateCost(free, 101, true)).toEqual({ total: 0, overage: 0, capped: true })
+    expect(estimateCost(free, 301, true)).toEqual({ total: 0, overage: 0, capped: true })
   })
 })
 
@@ -80,7 +80,7 @@ describe('TIERS catalog', () => {
   it('has three self-serve cloud tiers named Free, Builder and Studio, sold by apps', () => {
     expect(TIERS.map((t) => t.id)).toEqual(['free_cloud', 'indie', 'pro'])
     expect(TIERS.map((t) => [t.name, t.apps, t.baseUsd, t.included])).toEqual([
-      ['Free', 1, 0, 100],
+      ['Free', 3, 0, 300],
       ['Builder', 3, 29, 1000],
       ['Studio', 10, 79, 3000],
     ])

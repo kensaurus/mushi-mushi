@@ -54,6 +54,15 @@ export type KeyStatus =
   | 'quota_exhausted'
   | 'auth_failed';
 
+/** True when the project's first Anthropic or OpenAI key is its own (BYOK), not Mushi Mushi's. */
+export async function projectHasOwnLlmKey(db: SupabaseClient, projectId: string): Promise<boolean> {
+  for (const provider of ['anthropic', 'openai'] as const) {
+    const key = await resolveLlmKey(db, projectId, provider, { purpose: 'probe' }).catch(() => null)
+    if (key?.key && key.source === 'byok') return true
+  }
+  return false
+}
+
 export interface ResolvedKey {
   /** byok_keys row id (null for legacy/env) */
   keyId?: string;

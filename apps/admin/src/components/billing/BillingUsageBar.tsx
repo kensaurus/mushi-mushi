@@ -28,6 +28,8 @@ export interface BillingUsageBarProps {
   llmCostUsd?: number
   /** API-flagged: ingest is currently being rejected (Free) or overage-billed (paid). */
   overQuota: boolean
+  /** ADR 0063: a free project on its own AI key: the diagnosis cap does not stop it. */
+  byokUncapped?: boolean
   /** USD per report once over included quota. `null` for plans without metered overage. */
   overageRate: number | null
   overageRateDiagnoses?: number | null
@@ -93,6 +95,13 @@ const USAGE_NUMBER_TONE: Record<UsageTone, string> = {
   warn: 'text-warn',
   danger: 'text-danger',
   muted: 'text-fg',
+}
+
+/** ADR 0063: the project's own AI key runs its diagnoses, so the free cap never pauses them. */
+const BYOK_UNCAPPED_HEADLINE: UsageHeadline = {
+  tone: 'muted',
+  chipLabel: 'Own AI key',
+  narrative: 'Your own AI key runs these diagnoses, so the free cap does not stop them.',
 }
 
 /**
@@ -248,6 +257,7 @@ export function BillingUsageBar({
   periodEnd,
   llmCostUsd,
   overQuota,
+  byokUncapped = false,
   overageRate,
   overageRateDiagnoses,
   basePriceUsd = 0,
@@ -267,7 +277,9 @@ export function BillingUsageBar({
   const displayLimit = usingDiagnoses ? diagnosesLimit : limitReports
   const displayLabel = usingDiagnoses ? 'diagnoses this period' : 'reports this period'
 
-  const headline = buildUsageHeadline(displayCount, displayLimit, pct, overQuota, overageRate, tierId, usingDiagnoses)
+  const headline = byokUncapped && usingDiagnoses
+    ? BYOK_UNCAPPED_HEADLINE
+    : buildUsageHeadline(displayCount, displayLimit, pct, overQuota, overageRate, tierId, usingDiagnoses)
   const barTone = USAGE_BAR_TONE[headline.tone]
   // Bar fill: clamp at 100% so the visual length stays sane, but the chip +
   // narrative still report the *real* overage above the bar.
