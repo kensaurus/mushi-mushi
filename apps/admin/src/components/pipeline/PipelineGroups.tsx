@@ -15,7 +15,9 @@ import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
 import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
+import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import type { PendingAction } from './PipelineActionDialog'
+import { MoreActionsMenu } from './MoreActionsMenu'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import type { WorkerLane } from '../../lib/workers'
 
@@ -63,6 +65,10 @@ function blockedFixLink(reason: string): { label: string; to: string } | null {
  * One button per group action. An action the server would refuse for every
  * item is disabled with its reason (report 69fcafcb); a bulk button runs on
  * the items that can take it and says how many.
+ *
+ * `split` (the pipeline page, 2026-11-18): only the primary action
+ * (lib/pipelineSignals.ts `primaryAction`) is a button; the rest sit in a
+ * "More" menu with the same disabled reasons, busy state and test ids.
  */
 export function ActionButtons({
   actions,
@@ -72,6 +78,7 @@ export function ActionButtons({
   busyKey,
   onAction,
   testIdPrefix,
+  split = false,
 }: {
   actions: PipelineAction[]
   items: PipelineItem[]
@@ -80,35 +87,68 @@ export function ActionButtons({
   busyKey: string | null
   onAction: Props['onAction']
   testIdPrefix: string
+  split?: boolean
 }) {
-  const shown = actions.filter((a) => items.some((i) => (a === 'dismiss' || a === 'mark_fixed' || a === 'requeue' ? i.reportId : i.prUrl)))
+  const shown = offeredActions(actions, items)
   if (shown.length === 0) return null
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const meta = (a: PipelineAction) => {
+    const key = `${a}:${keyPrefix}`
+    const ids = actionableIds(items, a)
+    const off = ids.length === 0
+    const reason = off ? (sharedBlockReason(items, a) ?? 'None of these can take it right now.') : undefined
+    const some = !off && ids.length < items.length ? `${ids.length} of ${items.length} can take it; the others are listed with the reason.` : undefined
+    return {
+      key,
+      ids,
+      off,
+      title: reason ?? some,
+      label: `${ACTION_META[a].label}${ids.length > 1 ? ` (${ids.length})` : ''}`,
+      run: () => onAction({ action: a, fixIds: ids, reportIds: ids.map((id) => byId.get(id)?.reportId ?? null), target }, key),
+    }
+  }
+  const button = (a: PipelineAction) => {
+    const m = meta(a)
+    return (
+      <Btn
+        key={a}
+        size="sm"
+        variant={m.off ? 'ghost' : ACTION_META[a].variant}
+        loading={busyKey === m.key}
+        disabled={m.off || (busyKey != null && busyKey !== m.key)}
+        title={m.title}
+        aria-describedby={m.off ? `${testIdPrefix}-${a}-why` : undefined}
+        onClick={m.run}
+        data-testid={`${testIdPrefix}-${a}`}
+      >
+        {m.label}
+      </Btn>
+    )
+  }
+  if (!split) return <span className="flex flex-wrap gap-1">{shown.map(button)}</span>
+  const primary = primaryAction(shown, items)
+  const rest = shown.filter((a) => a !== primary)
   return (
-    <span className="flex flex-wrap gap-1">
-      {shown.map((a) => {
-        const key = `${a}:${keyPrefix}`
-        const ids = actionableIds(items, a)
-        const off = ids.length === 0
-        const reason = off ? (sharedBlockReason(items, a) ?? 'None of these can take it right now.') : undefined
-        const some = !off && ids.length < items.length ? `${ids.length} of ${items.length} can take it; the others are listed with the reason.` : undefined
-        const byId = new Map(items.map((i) => [i.id, i]))
-        return (
-          <Btn
-            key={a}
-            size="sm"
-            variant={off ? 'ghost' : ACTION_META[a].variant}
-            loading={busyKey === key}
-            disabled={off || (busyKey != null && busyKey !== key)}
-            title={reason ?? some}
-            aria-describedby={off ? `${testIdPrefix}-${a}-why` : undefined}
-            onClick={() => onAction({ action: a, fixIds: ids, reportIds: ids.map((id) => byId.get(id)?.reportId ?? null), target }, key)}
-            data-testid={`${testIdPrefix}-${a}`}
-          >
-            {ACTION_META[a].label}
-            {ids.length > 1 ? ` (${ids.length})` : ''}
-          </Btn>
-        )
-      })}
+    <span className="flex flex-wrap items-center gap-1">
+      {primary && button(primary)}
+      <MoreActionsMenu
+        label={target}
+        testId={`${testIdPrefix}-more-actions`}
+        actions={rest.map((a) => {
+          const m = meta(a)
+          return {
+            key: a,
+            label: m.label,
+            onSelect: m.run,
+            disabled: m.off || (busyKey != null && busyKey !== m.key),
+            busy: busyKey === m.key,
+            title: m.title,
+            describedBy: m.off ? `${testIdPrefix}-${a}-why` : undefined,
+            testId: `${testIdPrefix}-${a}`,
+            danger: ACTION_META[a].variant === 'danger',
+          }
+        })}
+      />
     </span>
   )
 }
@@ -211,6 +251,7 @@ function ItemRow({ item, group, props }: { item: PipelineItem; group: PipelineGr
           busyKey={props.busyKey}
           onAction={props.onAction}
           testIdPrefix={`pipeline-item-${item.id}`}
+          split
         />
         {result && (
           <span className={`text-2xs ${result.ok ? 'text-ok-foreground' : 'text-danger-foreground'}`} role="status" data-testid={`pipeline-item-${item.id}-result`}>
@@ -274,6 +315,7 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
             busyKey={props.busyKey}
             onAction={props.onAction}
             testIdPrefix={`pipeline-group-${group.id}`}
+            split
           />
           {appId && lanes.length > 0 && sendIds.length > 0 && (
             <SendToWorkerButton projectId={appId} reportIds={sendIds} lanes={lanes} data-testid={`pipeline-group-${group.id}-send-to-worker`} />

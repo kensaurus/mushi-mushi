@@ -65,6 +65,12 @@ export interface PipelineGroup {
   /** The setting that holds the group; `hint` says what it needs. */
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
+  /**
+   * Every item's time in its stage as [0–3 d, 3–7 d, 7–30 d, 30 d+], counted on the server
+   * before the item list is cut (2026-11-18). Absent on an older server and on some groups:
+   * lib/pipelineSignals.ts buckets the listed items instead.
+   */
+  ages?: [number, number, number, number]
 }
 
 export interface PipelineStage {

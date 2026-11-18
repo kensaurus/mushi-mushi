@@ -7,7 +7,9 @@
  *   GET  /v1/admin/pipeline/fix/:id  one fix's group, actions and refused actions (report page)
  *   POST /v1/admin/pipeline/actions  { action, fixIds?, projectId?, reason? } one-click fixes
  *
- * The read returns every stage with its stuck groups (_shared/pipeline-view.ts),
+ * The read returns every stage with its stuck groups (_shared/pipeline-view.ts;
+ * each group carries `ages`, its items' time in stage as [0–3 d, 3–7 d, 7–30 d,
+ * 30 d+] counted before the item list is cut, for the console's age bar),
  * the release trains of the last 7 days per repo, and intake rejects. The
  * actions change only GitHub PRs and merge-queue rows the caller can write;
  * the merge queue's own logic (train.ts, worker.ts) is never changed here:
@@ -418,7 +420,7 @@ async function readLocalInfra(db: Db, projectIds: string[], now: Date) {
       seen.add(x.report_id);
       return !x.auto_requeued && open.has(x.report_id) && !queuedIds.has(x.report_id) && newest.get(x.report_id) === x.claimed_at;
     });
-    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])));
+    return localInfraGroup(stuck, open, new Map(lanes.map((l) => [l.id, l.name])), now);
   } catch (err) {
     plog.warn('local worker runs read failed', { err: err instanceof Error ? err.message : String(err) });
     return null;
