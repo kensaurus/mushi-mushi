@@ -100,22 +100,33 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
   // Refresh also looks up the app icons again (a new store icon shows now,
-  // not after the daily check). One request with the flag, then the normal
-  // read, so the flag never becomes part of the cached path.
+  // not after the daily check). The flagged request answers the whole
+  // portfolio, so the page shows that answer: ONE read per Refresh. It used
+  // to follow it with page.reload(), a second full read (2026-11-18). The
+  // flag stays out of the cached path; the newer of the two answers shows.
+  const [refreshed, setRefreshed] = useState<{ path: string; data: PortfolioResponse; at: string } | null>(null)
   const [refreshingIcons, setRefreshingIcons] = useState(false)
   const refresh = () => {
     findings.reload()
     setRefreshingIcons(true)
+    const forPath = path
     const groupParam = group ? `&group=${encodeURIComponent(group)}` : ''
-    void apiFetch(`${base}?refreshIcons=1${groupParam}`, { cache: 'no-store' }).finally(() => {
-      setRefreshingIcons(false)
-      page.reload()
-    })
+    void apiFetch<PortfolioResponse>(`${base}?refreshIcons=1${groupParam}`, { cache: 'no-store' })
+      .then((res) => {
+        if (res.ok && res.data) setRefreshed({ path: forPath, data: res.data, at: new Date().toISOString() })
+        // The flagged read failed: the normal read still refreshes (and shows its error).
+        else page.reload()
+      })
+      .catch(() => page.reload())
+      .finally(() => setRefreshingIcons(false))
   }
+  const freshWins = refreshed != null && refreshed.path === path && (page.lastFetchedAt == null || refreshed.at >= page.lastFetchedAt)
+  const portfolio = freshWins ? refreshed.data : page.data
+  const fetchedAt = freshWins ? refreshed.at : page.lastFetchedAt
   // The public demo stays out of the cards and every count ("All 10 apps need you").
-  const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(page.data?.cards ?? []), [page.data])
+  const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
   const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
-  const names = useMemo(() => new Map((page.data?.cards ?? []).map((c) => [c.projectId, c.name])), [page.data])
+  const names = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c.name])), [portfolio])
   const status = useMemo(() => portfolioStatusSentence(cards), [cards])
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
   const firstNext = status.first ? appUrgency(status.first).next : null
@@ -132,7 +143,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   // Every app, the demo included: spend, connectors and the digest still name it.
-  const appList = useMemo(() => (page.data?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [page.data])
+  const appList = useMemo(() => (portfolio?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [portfolio])
   // App icons: the team's project list knows each app's SDK origin and repo.
   const setup = useSetupStatus()
   const snapshots = useProjectSnapshots()
@@ -155,7 +166,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
         helpHowToUse="Start with the first card: it lists what needs attention and what to do. Not checked yet means Mushi Mushi has not looked; it is never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
         helpFlowPath="/portfolio"
       >
-        <FreshnessPill at={page.lastFetchedAt} isValidating={page.isValidating} />
+        <FreshnessPill at={fetchedAt} isValidating={page.isValidating} />
         <Btn size="sm" variant="ghost" onClick={refresh} loading={page.isValidating || refreshingIcons} title="Read every app again, and look up their store icons again">
           Refresh
         </Btn>
@@ -166,7 +177,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             show: cards.length > 0,
-            children: page.data ? (
+            children: portfolio ? (
               <PageStatus
                 sentence={status.sentence}
                 tone={status.tone}
@@ -174,7 +185,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 metrics={[
                   { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
                   { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                  { label: 'Fix once', value: page.data.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                  { label: 'Fix once', value: portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
                 ]}
                 action={
                   status.first && firstNext ? (
@@ -206,7 +217,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
 
       {/* The apps are known before their details: list them at once instead of
           a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
-      {page.loading && !page.data ? (
+      {page.loading && !portfolio ? (
         teamApps.length > 0 ? (
           <Card className="px-3 py-1">
             <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
@@ -225,8 +236,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
       {page.error && (
         <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
       )}
-      {page.data && page.data.readErrors.length > 0 && <ReadErrorsCallout errors={page.data.readErrors} />}
-      {page.data && cards.length === 0 && (
+      {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
+      {portfolio && cards.length === 0 && (
         <Card className="px-4 py-8 text-center text-sm text-fg-faint">
           <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
           <p className="mt-1 text-xs">
@@ -238,8 +249,8 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           </p>
         </Card>
       )}
-      {page.data && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
-      {cards.length > 0 && page.data && (
+      {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
+      {cards.length > 0 && portfolio && (
         <>
           <PortfolioSectionNav />
           <section id="portfolio-apps" aria-labelledby="portfolio-apps-title" className="scroll-mt-20 space-y-3">

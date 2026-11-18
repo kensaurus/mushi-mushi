@@ -51,6 +51,11 @@ export interface PortfolioCard {
   spend: PortfolioSpendColumn
   /** Columns of this card whose read failed or was cut short: unknown, not empty. */
   unreadable: PortfolioReadPart[]
+  /**
+   * CI job failures today (UTC day, code failures only). null: no repo, or
+   * the read failed (`unreadable` lists `ci`). Absent on an older server.
+   */
+  ciFailsToday?: number | null
 }
 
 export type PortfolioReadPart =
@@ -64,6 +69,7 @@ export type PortfolioReadPart =
   | 'kind'
   | 'integrations'
   | 'cross_project'
+  | 'ci'
 
 export interface PortfolioReadError {
   part: PortfolioReadPart

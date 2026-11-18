@@ -225,6 +225,41 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
   })
 })
 
+describe('portfolio CI failures today (Apps heat grid, 2026-11-18)', () => {
+  const job = (n: number, over: Record<string, unknown>) => ({ id: `job-${n}`, project_id: pid(1), ci_kind: 'code_failure', infra: false, completed_at: '2026-10-02T09:00:00Z', ...over })
+
+  it('counts code failures since UTC midnight per app with a repo; no repo reads null, not 0', async () => {
+    const db = seed({
+      project_repos: [{ id: 'r1', project_id: pid(1) }, { id: 'r3', project_id: pid(3) }],
+      ci_jobs: [
+        job(1, {}),
+        job(2, { completed_at: '2026-10-02T00:30:00Z' }),
+        // Yesterday (UTC), a lost runner, and a pass do not count.
+        job(3, { completed_at: '2026-10-01T23:59:00Z' }),
+        job(4, { ci_kind: 'runner_lost', infra: true }),
+        job(5, { ci_kind: 'passed' }),
+      ],
+    })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const by = (id: string) => res.body.data.cards.find((c: { projectId: string }) => c.projectId === id)
+    expect(by(pid(1)).ciFailsToday).toBe(2)
+    expect(by(pid(3)).ciFailsToday).toBe(0)
+    expect(by(pid(2)).ciFailsToday).toBeNull()
+    expect(res.body.data.readErrors).toEqual([])
+  })
+
+  it('a failed CI read is unknown on every card and named, never 0', async () => {
+    const db = seed({ project_repos: [{ id: 'r1', project_id: pid(1) }] }, { failRead: (t: string) => (t === 'ci_jobs' ? 'relation "ci_jobs" is unavailable' : null) })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(200)
+    for (const card of res.body.data.cards) {
+      expect(card.ciFailsToday).toBeNull()
+      expect(card.unreadable).toContain('ci')
+    }
+    expect(res.body.data.readErrors).toEqual([expect.objectContaining({ part: 'ci', kind: 'failed' })])
+  })
+})
+
 describe('portfolio fail-open: a failed read is never $0, "no cap", "none yet" or "no holes"', () => {
   const failing = (...tables: string[]) => ({ failRead: (t: string) => (tables.includes(t) ? `relation "${t}" is unavailable` : null) })
 
