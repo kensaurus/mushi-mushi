@@ -66,7 +66,7 @@ It catches the bugs that never throw an error: the pay button hidden under the k
 
 ## Page by page
 
-Nine pages of the console, recorded on the maker's own apps (glot.it, tsumagoi, Help Her Take Photo, yen-yen and more). Real data, nothing staged; other people's emails and keys are masked. Each page has a longer write-up in the [console guide](https://kensaur.us/mushi-mushi/docs/admin).
+Ten pages of the console, recorded on the maker's own apps (glot.it, tsumagoi, Help Her Take Photo, yen-yen and more). Real data, nothing staged; other people's emails and keys are masked. Each page has a longer write-up in the [console guide](https://kensaur.us/mushi-mushi/docs/admin).
 
 ### Find out what broke
 
@@ -80,7 +80,7 @@ Is the site up, what broke, which pull requests wait for you and what ships next
 *Open it when* a user wrote “it's broken” and you need to know how bad, how many and where.  
 Reports from your users, Sentry and your own checks land in one list. “Fix first” ranks open bugs by severity and by how many people they reached.
 
-<img src="./docs/media/tour/reports.gif" alt="The Bugs list across all apps: severity tiles, Fix first, and reports from users and Sentry with their status" width="800" />
+<img src="./docs/media/tour/reports.gif" alt="The Bugs list across all apps: severity tiles with week sparklines, Fix first, and reports from users and Sentry with their status" width="800" />
 
 **Bug detail: the cause in plain English**  
 *Open it when* you don't fully understand the code your AI wrote, and now you need to.  
@@ -88,25 +88,31 @@ Each report gets a diagnosis: what the person saw, why it broke, the file at fau
 
 <img src="./docs/media/tour/report-detail.gif" alt="One bug report: its plain-English classification, the fix prompt for your coding agent, and the evidence behind it" width="800" />
 
+**Apps: every app on one table**  
+*Open it when* you run several apps and want the worst one first.  
+One row per app, one column per signal (open bugs, risks, SDK, release age, CI failures, last check-in), darker where it is worse. Problems open in several apps become one "Fix once" item.
+
+<img src="./docs/media/tour/portfolio.gif" alt="Apps: alert cards for the apps that need you, the apps-by-signal heat table, and Fix once items shared across apps" width="800" />
+
 ### Get it fixed
 
 **Fixes: what your agent tried**  
 *Open it when* you sent a few bugs to an agent and want to know which fixes are safe to merge.  
-Every attempt with its pull request, review verdict and CI. Ready ones sit at the top; the ones that stopped say why.
+Every attempt with its pull request, review verdict and CI. A train of counts shows where fixes are, ready ones sit at the top, and the ones that stopped say why.
 
-<img src="./docs/media/tour/fixes.gif" alt="Fixes: pull requests ready to merge with their review and CI state, then every attempt with its outcome" width="800" />
+<img src="./docs/media/tour/fixes.gif" alt="Fixes: ready, stopped and fixed counts, the release train, pull requests ready to merge with their review and CI state, then every attempt with its outcome" width="800" />
 
 **Pipeline: where fixes get stuck**  
 *Open it when* bugs go in, but nothing seems to come out the other end.  
-Every stage from report to deploy, with stuck items counted and the action for each group (re-run CI, re-run the review, close the PR) right beside it.
+Every stage from report to deploy, with the bottleneck in red, a bar of how long stuck work has waited, and the one action for each stuck group (re-run CI, re-run the review, close the PR) right beside it.
 
-<img src="./docs/media/tour/pipeline.gif" alt="Pipeline: stage cards from reported to deployed, then the stuck groups with an action button each" width="800" />
+<img src="./docs/media/tour/pipeline.gif" alt="Pipeline: stage cards from reported to deployed with the bottleneck marked, age bars for stuck work, then the stuck groups with one action button each" width="800" />
 
 **CI runners: why the merge is still waiting**  
 *Open it when* a fix is done but its tests haven't run, or your Actions bill jumped.  
 Which jobs wait for which machine and for how long, what every machine is running, and how long each job usually takes. On a big screen it uses the whole width.
 
-<img src="./docs/media/tour/ci.gif" alt="CI runners: what needs a look, the machines running now, jobs with time left, the queue and job times" width="800" />
+<img src="./docs/media/tour/ci.gif" alt="CI runners: alert cards for what needs a look, the machines running now, the week as a heatmap, and every check with its result" width="800" />
 
 ### Keep it from coming back
 
@@ -120,7 +126,7 @@ Bugs that keep coming back become rules, and your editor reads them over MCP bef
 *Open it when* you want one answer before you ship.  
 Every automatic check in one grid (the full-stack audit, scheduled browser tests, triage grading and more), failing ones first.
 
-<img src="./docs/media/tour/checks.gif" alt="Checks: every automatic check for one app in a grid, failing ones first" width="800" />
+<img src="./docs/media/tour/checks.gif" alt="Checks: alert cards for failing checks, then every automatic check for one app in a grid with its state" width="800" />
 
 **Connect: Mushi Mushi inside your editor**  
 *Open it when* you'd rather ask your editor than open another dashboard.  

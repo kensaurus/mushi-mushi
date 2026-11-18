@@ -67,9 +67,11 @@ const ALL_APPS_EXACT: readonly string[] = ['/reports']
 
 /**
  * Pages that never show one app's data, so the one-app notice would be wrong
- * on them: the account-wide portfolio, the project list, team settings.
+ * on them: the account-wide portfolio, the project list, team settings, and
+ * Providers & AI routes (the platform's provider accounts, never one app's;
+ * it said "This page shows one app at a time", 2026-11-18).
  */
-const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/']
+const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers']
 
 type AllAppsSupport = 'combined' | 'account' | 'single'
 

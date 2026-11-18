@@ -82,6 +82,7 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/portfolio')).toBe('account')
     expect(allAppsSupportFor('/projects')).toBe('account')
     expect(allAppsSupportFor('/org/acme/settings/members')).toBe('account')
+    expect(allAppsSupportFor('/providers')).toBe('account')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
     expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')
