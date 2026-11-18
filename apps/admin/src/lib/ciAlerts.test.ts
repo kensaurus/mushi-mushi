@@ -172,6 +172,14 @@ describe('the waiting card as label chips (2026-11-18)', () => {
     expect(a.keys).toContain('label:kensaurus-local')
   })
 
+  it('says no machine has the label when none ran such a job', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.filter((j) => j.id !== 'r1')
+    o.runners = []
+    const a = rankCiAlerts(o, buildCiStatus(o, FIXTURE_NOW), FIXTURE_NOW).find((x) => x.id === 'waiting')!
+    expect(a.labels).toEqual({ needs: ['kensaurus-local'], has: [], missing: ['alienware-ci', 'alienwarex16', 'overseas-ci'] })
+  })
+
   it('draws no chips for jobs waiting on GitHub cloud', () => {
     const o = waitingForLocal()
     o.jobs = o.jobs.map((j) => (j.id.startsWith('w') ? { ...j, labels: ['ubuntu-latest'] } : j))

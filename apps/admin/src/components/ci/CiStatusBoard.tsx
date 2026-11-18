@@ -202,7 +202,7 @@ function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
       <StatusMark status="waiting" />
       <span className="text-xs font-bold text-st-waiting-ink tabular-nums">
         {n} waiting for{g.needs.length === 0 ? ' a machine' : ''}
-      </span>
+      </span>{' '}
       {g.needs.map((l) => (
         <span
           key={l}

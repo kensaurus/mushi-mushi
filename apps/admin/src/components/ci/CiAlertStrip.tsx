@@ -52,10 +52,12 @@ function WaitLabelChips({ alert, labels }: { alert: CiAlert; labels: NonNullable
             {l}
           </span>
         ))}
-        {labels.has.length > 0 && <span className="ml-1">has it:</span>}
+        <span className="ml-1">has it:</span>
         {labels.has.map((m) => (
           <StatusPill key={m} status="passed" label={m} className="font-mono" />
         ))}
+        {/* No machine has the label: the most actionable case, so it is said, not left blank. */}
+        {labels.has.length === 0 && <StatusPill status="failed" label="none" />}
         {labels.missing.length > 0 && <span className="ml-1">missing:</span>}
         {labels.missing.map((m) => (
           <StatusPill key={m} status="failed" label={m} className="font-mono" />

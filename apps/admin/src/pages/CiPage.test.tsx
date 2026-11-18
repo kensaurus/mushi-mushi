@@ -141,7 +141,7 @@ describe('CiPage', () => {
   it('lists waiting jobs under one header per label they need, not the label on every row', async () => {
     await render()
     const nuc = q('ci-waiting-group-nuc')!
-    expect(nuc.textContent).toBe('2 waiting fornuc')
+    expect(nuc.textContent).toBe('2 waiting for nuc')
     expect(nuc.querySelectorAll('[data-testid="ci-waiting-label"]')).toHaveLength(1)
     for (const id of ['j2', 'j3']) {
       const row = q(`ci-waiting-${id}`)!
@@ -149,7 +149,7 @@ describe('CiPage', () => {
       // The job's rows sit right under their header.
       expect(nuc.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
-    expect(q('ci-waiting-group-cloud')!.textContent).toBe('1 waiting for a machine')
+    expect(q('ci-waiting-group-cloud')!.textContent!.trim()).toBe('1 waiting for a machine')
   })
 
   it('draws the waiting card as label chips and keeps its sentence for screen readers', async () => {
