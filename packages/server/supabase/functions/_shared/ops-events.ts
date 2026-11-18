@@ -43,6 +43,15 @@ const log = rootLog.child('ops-hub')
 // deno-lint-ignore no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args: Record<string, unknown>) => any }
 
+/**
+ * Dedupe keys and threads belong to one app (2026-11-18): all of an owner's
+ * apps share an organization, and two apps sending `sales.daily:<date>` must
+ * not dedupe or thread into each other. No project = organization-level.
+ */
+function sameApp<Q extends { eq: (c: string, v: unknown) => Q; is: (c: string, v: null) => Q }>(q: Q, projectId: string | null): Q {
+  return projectId ? q.eq('project_id', projectId) : q.is('project_id', null)
+}
+
 export const OPS_EVENT_COLUMNS =
   'id, organization_id, project_id, category, severity, kind, title, body, facts, url, amount_minor, currency, thread_key, dedupe_key, parent_id, occurred_at, source, slack_channel, slack_ts, slack_thread_ts, slack_error, acked_by, acked_at, created_at'
 
@@ -135,11 +144,8 @@ export type RecordResult =
  * same URL, weeks after the first was fixed, gets its own message and its own
  * resolve edits that message, not the first one.
  */
-async function findThreadParent(db: Db, organizationId: string, threadKey: string, category: OpsCategory): Promise<OpsEventRow | null> {
-  const { data, error } = await db
-    .from('ops_events')
-    .select(OPS_EVENT_COLUMNS)
-    .eq('organization_id', organizationId)
+async function findThreadParent(db: Db, organizationId: string, projectId: string | null, threadKey: string, category: OpsCategory): Promise<OpsEventRow | null> {
+  const { data, error } = await sameApp(db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('organization_id', organizationId), projectId)
     .eq('thread_key', threadKey)
     .eq('category', category)
     .order('occurred_at', { ascending: false })
@@ -160,7 +166,7 @@ export async function recordOpsEvent(
 ): Promise<RecordResult> {
   const e = clampEvent(args.input)
   const now = (deps.now ?? (() => new Date()))()
-  const parent = e.threadKey ? await findThreadParent(db, args.organizationId, e.threadKey, e.category) : null
+  const parent = e.threadKey ? await findThreadParent(db, args.organizationId, args.projectId, e.threadKey, e.category) : null
   const row = {
     organization_id: args.organizationId,
     project_id: args.projectId,
@@ -182,10 +188,7 @@ export async function recordOpsEvent(
   const { data, error } = await db.from('ops_events').insert(row).select(OPS_EVENT_COLUMNS).single()
   if (!error && data) return { status: 'created', event: data as OpsEventRow }
   if (error?.code === '23505' && row.dedupe_key) {
-    const { data: existing } = await db
-      .from('ops_events')
-      .select(OPS_EVENT_COLUMNS)
-      .eq('organization_id', args.organizationId)
+    const { data: existing } = await sameApp(db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('organization_id', args.organizationId), args.projectId)
       .eq('dedupe_key', row.dedupe_key)
       .maybeSingle()
     if (existing) return { status: 'duplicate', event: existing as OpsEventRow }
@@ -340,12 +343,9 @@ export interface EmitArgs {
   requireOpenThread?: boolean
 }
 
-/** True when the thread's latest event in this org and category exists and is not a resolve. */
-export async function threadIsOpen(db: Db, organizationId: string, threadKey: string, category: OpsCategory): Promise<boolean> {
-  const { data, error } = await db
-    .from('ops_events')
-    .select('severity')
-    .eq('organization_id', organizationId)
+/** True when the thread's latest event in this org, app and category exists and is not a resolve. */
+export async function threadIsOpen(db: Db, organizationId: string, projectId: string | null, threadKey: string, category: OpsCategory): Promise<boolean> {
+  const { data, error } = await sameApp(db.from('ops_events').select('severity').eq('organization_id', organizationId), projectId)
     .eq('thread_key', threadKey)
     .eq('category', category)
     .order('occurred_at', { ascending: false })
@@ -363,7 +363,7 @@ export async function emitOpsEvent(db: Db, args: EmitArgs, deps: OpsDeps = {}): 
     if (error || !orgId) return 'skipped'
     const read = await readOpsSettings(db, orgId)
     if (!read.ok || !read.row?.enabled) return 'skipped'
-    if (args.requireOpenThread && (!args.input.threadKey || !(await threadIsOpen(db, orgId, args.input.threadKey, args.input.category)))) return 'skipped'
+    if (args.requireOpenThread && (!args.input.threadKey || !(await threadIsOpen(db, orgId, args.projectId, args.input.threadKey, args.input.category)))) return 'skipped'
     const recorded = await recordOpsEvent(db, { organizationId: orgId, projectId: args.projectId, input: redactEventPii(args.input) }, deps)
     if (recorded.status === 'created') await deliverOpsEvent(db, recorded.event, deps)
     if (recorded.status === 'error') log.warn('ops source event not stored', { projectId: args.projectId, kind: args.input.kind, err: recorded.error })

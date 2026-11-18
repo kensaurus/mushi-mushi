@@ -200,16 +200,20 @@ export function answerReleases(releases: FeedRow[], apps: OpsApp[], n: number, n
  * closed by a resolve in their thread at or after them. A second incident in
  * the same thread after the first was resolved is open again.
  */
-export function openAlerts<T extends Pick<FeedRow, 'severity' | 'thread_key' | 'acked_at' | 'occurred_at'>>(alerts: T[]): T[] {
+export function openAlerts<T extends Pick<FeedRow, 'project_id' | 'severity' | 'thread_key' | 'acked_at' | 'occurred_at'>>(alerts: T[]): T[] {
+  // A thread is one app's: another app's resolve on the same key closes nothing here.
+  const threadOf = (a: T) => (a.thread_key ? `${a.project_id ?? ''}|${a.thread_key}` : null)
   const lastResolve = new Map<string, number>()
   for (const a of alerts) {
-    if (a.severity !== 'resolved' || !a.thread_key) continue
+    const thread = threadOf(a)
+    if (a.severity !== 'resolved' || !thread) continue
     const at = Date.parse(a.occurred_at)
-    if (at > (lastResolve.get(a.thread_key) ?? -Infinity)) lastResolve.set(a.thread_key, at)
+    if (at > (lastResolve.get(thread) ?? -Infinity)) lastResolve.set(thread, at)
   }
   return alerts.filter((a) => {
     if (a.severity === 'resolved' || a.acked_at) return false
-    const closedAt = a.thread_key ? lastResolve.get(a.thread_key) : undefined
+    const thread = threadOf(a)
+    const closedAt = thread ? lastResolve.get(thread) : undefined
     return closedAt === undefined || closedAt < Date.parse(a.occurred_at)
   })
 }

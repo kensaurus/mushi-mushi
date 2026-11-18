@@ -16004,8 +16004,8 @@ curl -X POST "$MUSHI_API_URL/v1/ops/events" \
 | `facts` | no | Up to 8 `{ label, value }` pairs |
 | `url` | no | `https://` only: the **Open** button |
 | `amount_minor`, `currency` | together | The amount in the currency's smallest unit (yen, cents) and its ISO code. A `kind` with `refund` in it counts as money out. |
-| `thread_key` | no | Groups an incident with its follow-ups, for example `invoice:in_123` or `deploy::production` |
-| `dedupe_key` | no | A retried request with the same key stores and posts once (answers `200` with `status: duplicate`) |
+| `thread_key` | no | Groups an incident with its follow-ups within this app, for example `invoice:in_123` or `deploy::production` |
+| `dedupe_key` | no | A retried request with the same key from the same app stores and posts once (answers `200` with `status: duplicate`). Two apps may use the same key |
 | `occurred_at` | no | ISO time, within the last 30 days |
 
 Answers: `202` once stored (the Slack post happens right after), `400 VALIDATION_ERROR`,
