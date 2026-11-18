@@ -1,7 +1,9 @@
 /**
  * FILE: apps/admin/src/components/portfolio/PortfolioFindings.tsx
  * PURPOSE: The Apps tab below the grid: problems shared by apps (2026-11-18 signal pass).
- *   - Fix once: a findings × apps matrix (FindingsMatrix).
+ *   - Fix once: a findings × apps matrix (FindingsMatrix) from 768 px of room; below that, one
+ *     row per problem in the "Across your apps" layout (both are in the DOM, a container query
+ *     picks one).
  *   - Across your apps, SDK versions, Missing setups: one row per problem with the icons of
  *     the apps it is open in and one action, instead of the same sentence once per app
  *     ("yen-yen (app) has no version probe.", "glot.it (app) has no version probe." …).
@@ -120,7 +122,29 @@ export function PortfolioFindings({
         {matrix.length === 0 ? (
           <StatusPill status="passed" label="Nothing open in 2+ apps" />
         ) : (
-          <FindingsMatrix rows={matrix} appOrder={appOrder} iconFor={iconFor} />
+          // The matrix needs about 768 px; narrower (a phone, a split window) each problem is a
+          // row like "Across your apps", so the buttons stay on screen (2026-11-18 preview at
+          // 390 px: the matrix scrolled and every action sat off to the right). The container is
+          // this wrapper, not an element carrying the @ classes itself.
+          <div className="@container" data-testid="fix-once">
+            <div className="hidden @3xl:block" data-testid="fix-once-wide">
+              <FindingsMatrix rows={matrix} appOrder={appOrder} iconFor={iconFor} />
+            </div>
+            <ul className="divide-y divide-edge-subtle @3xl:hidden" data-testid="fix-once-list">
+              {matrix.map((r) => (
+                <GroupedRow
+                  key={r.ruleId}
+                  testId={`fix-once-item-${r.ruleId}`}
+                  mark={SEV_STATUS[r.severity]}
+                  title={r.title}
+                  detail={r.gateLabel ? `${r.gateLabel}: ${r.explanation}` : r.explanation}
+                  projectIds={appOrder.filter((id) => r.projectIds.includes(id)).concat(r.projectIds.filter((id) => !appOrder.includes(id)))}
+                  iconFor={iconFor}
+                  action={<CopyFixButton label={r.action} prompt={r.fix} apps={r.projectIds.length} />}
+                />
+              ))}
+            </ul>
+          </div>
         )}
       </Section>
       {across.length > 0 && (
