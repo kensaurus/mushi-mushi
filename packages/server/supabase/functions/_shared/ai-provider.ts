@@ -14,10 +14,11 @@
  *
  * A failed read keeps the default ('anthropic'): one unreadable row must not
  * move an organization's spend to another vendor. It logs a warning and is not
- * cached. From 2026-11-17 the read was one PostgREST embed,
- * `projects?select=organizations(ai_provider)`; the ops_mutes junction made it
- * ambiguous (PGRST201), every read failed without a word, and the OpenAI
- * organization ran Claude on its own keys. So the read is two plain selects.
+ * cached. The read used to be one PostgREST embed,
+ * `projects?select=organizations(ai_provider)`. On 2026-11-17 the ops_mutes
+ * junction made that embed ambiguous (PGRST201), every read failed without a
+ * word, and the OpenAI organization ran Claude on its own keys. So the read is
+ * two plain selects.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
