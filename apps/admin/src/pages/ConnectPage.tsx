@@ -46,6 +46,7 @@ import { mintMcpKeyHref } from '../components/mcp/McpStatusBanner'
 import { useScrollToHash } from '../lib/useScrollToHash'
 import { Mascot } from '../components/mascot/Mascot'
 import { editorConnectGuide } from '../lib/fieldGuide'
+import { connectedEditor } from '../lib/connectEditor'
 
 interface ProjectRepoLite {
   repo_url: string | null
@@ -274,6 +275,7 @@ export function ConnectPage() {
         <ConnectStudio
           projectId={project?.id ?? activeProjectId}
           projectName={project?.name}
+          connectedEditor={mcpStatsQuery.data ? connectedEditor(mcpStats) : null}
         />
         {mcpOptional && project ? (
           <p className="mt-2 text-xs text-fg-muted" data-testid="connect-mcp-optional">

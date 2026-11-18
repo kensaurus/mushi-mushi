@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Card } from '../../components/ui'
 import { RevealedKeyCard } from '../RevealedKeyCard'
-import { Btn, Tooltip, CopyButton } from '../ui'
+import { Btn, Tooltip, CopyButton, RelativeTime } from '../ui'
 import { CodeInline } from '../CodePanel'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
 import { diagnoseKey, type SdkHealthApiKey } from '../SdkHealthSummary'
@@ -10,6 +10,8 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { RotateKeyDialog } from '../RotateKeyDialog'
 import { canRotateKey } from '../../lib/projectKeys'
 import { describeActionError } from '../../lib/actionError'
+import { ConfirmDialog } from '../ConfirmDialog'
+import { staleKeysToRevoke } from '../../lib/staleKeys'
 
 /**
  * How many keys to show before collapsing behind "Show all". Long-lived
@@ -54,6 +56,8 @@ export function SdkInstallKeyPanel({
   // The one key the user asked to rotate; the confirm lists exactly this key.
   const [pendingRotate, setPendingRotate] = useState<SdkHealthApiKey | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [confirmStale, setConfirmStale] = useState(false)
+  const [revokingStale, setRevokingStale] = useState(false)
 
   useEffect(() => {
     onRotatedKeyChange(rotatedKey)
@@ -98,6 +102,29 @@ export function SdkInstallKeyPanel({
       return tb - ta
     })
   }, [fetchedKeys, keyPrefixes])
+
+  // One action for the pile of old e2e/test keys (owner, 2026-11-18): SDK keys
+  // unused for over 7 days, never the one the app runs on (lib/staleKeys.ts).
+  const staleKeys = useMemo(() => staleKeysToRevoke(activeKeys), [activeKeys])
+  const staleIds = useMemo(() => new Set(staleKeys.map((k) => k.id)), [staleKeys])
+
+  /** Revoke the stale keys one by one with the per-key revoke (DELETE …/keys/:keyId). */
+  async function revokeStaleKeys() {
+    setRevokingStale(true)
+    const done = new Set<string>()
+    const failed: string[] = []
+    for (const k of staleKeys) {
+      const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${k.id}`, { method: 'DELETE' })
+      // Already revoked elsewhere counts as done.
+      if (res.ok || res.error?.code === 'KEY_NOT_FOUND') done.add(k.id)
+      else failed.push(`${k.key_prefix}… (${describeActionError(res.error, 'could not revoke')})`)
+    }
+    setRevokingStale(false)
+    setConfirmStale(false)
+    setFetchedKeys((prev) => prev.filter((k) => !done.has(k.id)))
+    invalidateApiCache('/v1/admin/projects')
+    if (failed.length > 0) onError(`Revoked ${done.size} of ${staleKeys.length} stale keys. Not revoked: ${failed.join(', ')}.`)
+  }
 
   const visibleKeys = showAll ? activeKeys : activeKeys.slice(0, VISIBLE_KEY_LIMIT)
   const hiddenCount = activeKeys.length - visibleKeys.length
@@ -150,6 +177,13 @@ export function SdkInstallKeyPanel({
               Active API key{activeKeys.length > 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-1.5">
+              {staleKeys.length > 0 && (
+                <Tooltip content="SDK keys no app has used for over 7 days. The key your app used last stays. You confirm first." side="top">
+                  <Btn size="sm" variant="ghost" onClick={() => setConfirmStale(true)} data-testid="revoke-stale-keys">
+                    Revoke {staleKeys.length} stale key{staleKeys.length === 1 ? '' : 's'}
+                  </Btn>
+                </Tooltip>
+              )}
               <Tooltip
                 content="Makes a new key that can only send bug reports and fills it into the snippet below. Your other keys keep working."
                 side="top"
@@ -173,6 +207,11 @@ export function SdkInstallKeyPanel({
                       >
                         <CodeInline className="min-w-0 break-all">{k.key_prefix}…</CodeInline>
                       </Tooltip>
+                      {staleIds.has(k.id) && (
+                        <span className="shrink-0 text-3xs font-bold tracking-wider text-warn-foreground uppercase" title="Unused for over 7 days: the stale-key action revokes it">
+                          stale
+                        </span>
+                      )}
                       {k.label && (
                         <span
                           className="shrink-0 text-3xs text-fg-muted truncate max-w-40"
@@ -240,6 +279,40 @@ export function SdkInstallKeyPanel({
             {minting ? 'Making a key…' : 'Make a key and fill it in'}
           </Btn>
         </Box>
+      )}
+
+      {confirmStale && staleKeys.length > 0 && (
+        <ConfirmDialog
+          title={`Revoke ${staleKeys.length} stale key${staleKeys.length === 1 ? '' : 's'}?`}
+          body="No app has used these SDK keys for over 7 days, or they were made more than 7 days ago and never used. Revoking is permanent: a build that still carries one stops sending bug reports. The key your app used last is not on the list."
+          details={
+            <ul className="space-y-0.5 font-mono text-2xs" aria-label="Keys to revoke">
+              {staleKeys.map((k) => (
+                <li key={k.id} className="flex flex-wrap gap-x-2">
+                  <span className="font-semibold text-fg">{k.key_prefix}…</span>
+                  {k.label && <span className="text-fg-secondary">{k.label}</span>}
+                  <span className="text-fg-secondary">
+                    {k.last_seen_at ? (
+                      <>
+                        last used <RelativeTime value={k.last_seen_at} />
+                      </>
+                    ) : (
+                      'never used'
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          }
+          confirmLabel={`Revoke ${staleKeys.length}`}
+          cancelLabel="Keep them"
+          tone="danger"
+          loading={revokingStale}
+          onConfirm={() => void revokeStaleKeys()}
+          onCancel={() => {
+            if (!revokingStale) setConfirmStale(false)
+          }}
+        />
       )}
 
       {pendingRotate && (
