@@ -38,12 +38,13 @@ beforeAll(async () => {
 })
 
 type Handler = (c: FakeContext, next?: () => Promise<void>) => Promise<unknown> | unknown
-interface JsonResult { body: { ok: boolean; data?: any; error?: any }; status: number }
+interface JsonResult { body: { ok: boolean; data?: any; error?: any }; status: number; headers: Record<string, string> }
 interface FakeContext {
   req: { header: (k: string) => string | undefined; param: (k: string) => string | undefined; query: (k: string) => string | undefined }
   get: (k: string) => unknown
   set: (k: string, v: unknown) => void
   json: (body: Record<string, unknown>, status?: number) => JsonResult
+  header: (k: string, v: string) => void
 }
 
 class FakeApp {
@@ -61,11 +62,13 @@ class FakeApp {
       const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]))
       const query = new URLSearchParams(qs ?? '')
       const v: Record<string, unknown> = { userId: 'user-a', authMethod: 'jwt', ...vars }
+      const headers: Record<string, string> = {}
       const c: FakeContext = {
         req: { header: () => undefined, param: (k) => params[k], query: (k) => query.get(k) ?? undefined },
         get: (k) => v[k],
         set: (k, val) => { v[k] = val },
-        json: (body, status = 200) => ({ body: body as JsonResult['body'], status }),
+        json: (body, status = 200) => ({ body: body as JsonResult['body'], status, headers }),
+        header: (k, val) => { headers[k] = val },
       }
       let result: unknown
       const run = async (i: number): Promise<void> => {
@@ -86,6 +89,21 @@ const NOW = new Date('2026-10-02T12:00:00Z')
 const pid = (n: number) => `1000000${n}-0000-4000-8000-000000000000`
 const NAMES = ['glot.it', 'solo-boss-cloud', 'yen-yen', 'the-wanting-mind', 'Help Her Take Photo', 'tsumagoi', 'mushi-demo']
 const P_OTHER = '2000000b-0000-4000-8000-000000000000'
+
+/** billing_llm_cost_by_project, as the SQL function sums it (rows with a cost only). */
+function costRpc(rows: Array<{ project_id: string; cost_usd: unknown; created_at: string }>) {
+  return (fn: string, args: Record<string, unknown>) => {
+    if (fn !== 'billing_llm_cost_by_project') return null
+    const ids = args.p_project_ids as string[]
+    const since = Date.parse(String(args.p_since))
+    const sums = new Map<string, number>()
+    for (const r of rows) {
+      if (!ids.includes(r.project_id) || r.cost_usd == null || Date.parse(r.created_at) < since) continue
+      sums.set(r.project_id, (sums.get(r.project_id) ?? 0) + Number(r.cost_usd))
+    }
+    return [...sums.entries()].map(([project_id, cost_usd]) => ({ project_id, cost_usd }))
+  }
+}
 
 function seed(extra: Record<string, unknown[]> = {}, options: Parameters<typeof makeFakeDb>[1] = {}): FakeDb {
   return makeFakeDb({
@@ -180,14 +198,15 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
   })
 
   it('sums 30 days of Mushi LLM spend and reports caps as facts', async () => {
+    const calls = [
+      { project_id: pid(1), cost_usd: '0.40', created_at: '2026-09-30T00:00:00Z' },
+      { project_id: pid(1), cost_usd: 0.11, created_at: '2026-09-20T00:00:00Z' },
+      { project_id: pid(1), cost_usd: 9, created_at: '2026-08-01T00:00:00Z' },
+    ]
     const db = seed({
-      llm_invocations: [
-        { project_id: pid(1), cost_usd: '0.40', created_at: '2026-09-30T00:00:00Z' },
-        { project_id: pid(1), cost_usd: 0.11, created_at: '2026-09-20T00:00:00Z' },
-        { project_id: pid(1), cost_usd: 9, created_at: '2026-08-01T00:00:00Z' },
-      ],
+      llm_invocations: calls,
       project_settings: [{ project_id: pid(1), autofix_max_spend_usd: '5.0000', monthly_llm_budget_usd: null }],
-    })
+    }, { rpc: costRpc(calls) })
     const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
     expect(glot.spend).toEqual({ llmUsd30d: 0.51, llmCalls30d: 2, partial: false, autofixCapUsd: 5, monthlyLlmBudgetUsd: null, capsKnown: true })
@@ -199,11 +218,20 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     const calls = Array.from({ length: 2_500 }, (_, i) => ({
       id: `call-${String(i).padStart(5, '0')}`, project_id: pid(1), cost_usd: 0.01, created_at: '2026-09-30T00:00:00Z',
     }))
-    const db = seed({ llm_invocations: calls }, { maxRows: 1_000 })
+    const db = seed({ llm_invocations: calls }, { maxRows: 1_000, rpc: costRpc(calls) })
     const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
     expect(glot.spend).toMatchObject({ llmCalls30d: 2_500, llmUsd30d: 25, partial: false })
     expect(res.body.data.readErrors).toEqual([])
+    // One SQL sum and a head count per app, never a page-by-page read of every call (7 s live, 2026-11-18).
+    expect(db.rpcCalls.filter((r) => r.fn === 'billing_llm_cost_by_project')).toHaveLength(1)
+  })
+
+  it('times each read part in a Server-Timing header', async () => {
+    const res = await harness(seed()).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const parts = res.headers['Server-Timing']!.split(', ').map((p) => p.split(';')[0])
+    expect(parts).toEqual(expect.arrayContaining(['runs', 'sdk', 'reports', 'spend', 'presence', 'kind', 'releases', 'ci', 'findings', 'total']))
+    expect(res.headers['Server-Timing']).toMatch(/spend;dur=\d+/)
   })
 
   it('finds the latest SDK release even when the catalog is longer than one 1,000-row response', async () => {

@@ -45,6 +45,7 @@ import type {
   SdkSkewEntry,
 } from '../../_shared/portfolio-types.ts'
 import { readAllPages } from '../../_shared/paged-read.ts'
+import { llmCostByProjectSince } from '../../_shared/billing-usage-counts.ts'
 import { iconsDue, isStoreIconUrl, refreshAppIcons } from '../../_shared/app-icon.ts'
 import { runInBackground } from '../../_shared/background.ts'
 import { publicFetch } from '../../_shared/safe-fetch.ts'
@@ -227,7 +228,6 @@ function latestRunsByProject(runs: readonly RunRow[]): RunRow[] {
 const MAX_RUN_ROWS = 20_000
 const MAX_FINDING_ROWS = 20_000
 const MAX_REPORT_ROWS = 50_000
-const MAX_SPEND_ROWS = 50_000
 const MAX_RELEASE_ROWS = 5_000
 const MAX_SDK_VERSION_ROWS = 20_000
 /** Reads with at most a few rows per project (settings, repos, SDK observations, the project list). */
@@ -420,42 +420,26 @@ const EMPTY_SPEND: PortfolioSpendColumn = { llmUsd30d: 0, llmCalls30d: 0, partia
 async function loadSpend(db: Db, projectIds: string[], since: string, errs: ReadErrors): Promise<Map<string, PortfolioSpendColumn>> {
   const out = new Map<string, PortfolioSpendColumn>(projectIds.map((id) => [id, { ...EMPTY_SPEND }]))
   if (projectIds.length === 0) return out
-  type CallRow = { project_id: string; cost_usd: number | string | null }
-  const [callsRead, capsRes] = await Promise.all([
-    readAllPages<CallRow>(
-      (from, to, count) => db
-        .from('llm_invocations')
-        .select('id, project_id, cost_usd', { count })
-        .in('project_id', projectIds)
-        .gte('created_at', since)
-        .order('id', { ascending: true })
-        .range(from, to),
-      { what: 'llm_invocations', maxRows: MAX_SPEND_ROWS },
-    ).catch((err: unknown) => {
-      noteFailed(errs, 'spend', "Mushi's AI spend could not be read.", err instanceof Error ? err.message : String(err))
-      return null
-    }),
+  // 2026-11-18: this was a paged read of every call (18,398 rows in 30 days for one team,
+  // 19 sequential pages, about 7 s, the slowest part of the Apps page). Now the cost is one
+  // SQL sum (billing_llm_cost_by_project) and the calls one indexed head count per app.
+  const [costs, counts, capsRes] = await Promise.all([
+    llmCostByProjectSince(db as never, projectIds, since).catch(() => null),
+    Promise.all(projectIds.map((id) => db.from('llm_invocations').select('id', { count: 'exact', head: true }).eq('project_id', id).gte('created_at', since))),
     db.from('project_settings').select('project_id, autofix_max_spend_usd, monthly_llm_budget_usd').in('project_id', projectIds),
   ])
-  if (!callsRead) {
+  const countErr = counts.find((r) => r.error)?.error
+  if (!costs || countErr) {
+    noteFailed(errs, 'spend', "Mushi's AI spend could not be read.", countErr?.message ?? 'cost sum failed')
     for (const s of out.values()) {
       s.llmUsd30d = null
       s.llmCalls30d = null
     }
   } else {
-    if (callsRead.truncated) {
-      noteTruncated(errs, 'spend', `More than ${MAX_SPEND_ROWS.toLocaleString('en-US')} AI calls in 30 days: the spend shown is a lower bound.`)
-    }
-    for (const c of callsRead.rows) {
+    projectIds.forEach((id, i) => (out.get(id)!.llmCalls30d = counts[i]!.count ?? 0))
+    for (const c of costs.data) {
       const s = out.get(c.project_id)
-      if (!s) continue
-      s.llmCalls30d = (s.llmCalls30d ?? 0) + 1
-      const n = Number(c.cost_usd ?? 0)
-      if (Number.isFinite(n)) s.llmUsd30d = (s.llmUsd30d ?? 0) + n
-    }
-    for (const s of out.values()) {
-      s.partial = callsRead.truncated
-      s.llmUsd30d = Math.round((s.llmUsd30d ?? 0) * 100) / 100
+      if (s) s.llmUsd30d = Math.round(c.cost_usd * 100) / 100
     }
   }
   if (capsRes.error) {
@@ -590,8 +574,13 @@ export async function buildPortfolio(
   orgName: string | null,
   projectIds: string[],
   page: number,
-  opts: { forceIcons?: boolean } = {},
+  opts: { forceIcons?: boolean; timing?: string[] } = {},
 ): Promise<PortfolioResponse> {
+  // One Server-Timing entry per read part, so a slow part shows in the browser's network tab.
+  const timed = <T,>(name: string, p: Promise<T>): Promise<T> => {
+    const t0 = performance.now()
+    return p.finally(() => opts.timing?.push(`${name};dur=${Math.round(performance.now() - t0)}`))
+  }
   const now = deps.compose.now()
   const sorted = [...projectIds].sort()
   let projectRows: ProjectRow[] = []
@@ -622,16 +611,16 @@ export async function buildPortfolio(
   const errs: ReadErrors = []
   const since = new Date(now.getTime() - 30 * 86400_000).toISOString()
   const [runs, sdk, openReports, spend, presence, declaredKind, releases, ciFails] = await Promise.all([
-    loadLatestRuns(db, sorted, errs),
-    loadSdk(db, pageIds, errs),
-    loadOpenReports(db, pageIds, errs),
-    loadSpend(db, pageIds, since, errs),
-    loadPresence(db, sorted, errs),
-    loadDeclaredKinds(db, pageIds, errs),
-    loadLatestReleases(db, pageIds, errs),
-    loadCiFailsToday(db, pageIds, now, errs),
+    timed('runs', loadLatestRuns(db, sorted, errs)),
+    timed('sdk', loadSdk(db, pageIds, errs)),
+    timed('reports', loadOpenReports(db, pageIds, errs)),
+    timed('spend', loadSpend(db, pageIds, since, errs)),
+    timed('presence', loadPresence(db, sorted, errs)),
+    timed('kind', loadDeclaredKinds(db, pageIds, errs)),
+    timed('releases', loadLatestReleases(db, pageIds, errs)),
+    timed('ci', loadCiFailsToday(db, pageIds, now, errs)),
   ])
-  const findings = await loadOpenFindings(db, runs, errs)
+  const findings = await timed('findings', loadOpenFindings(db, runs, errs))
   const skew = sdk ? sdkSkew(pageIds, sdk.observations, sdk.latest) : []
   const freshIcons = opts.forceIcons && iconTask ? await settleWithin(iconTask, ICON_FORCE_WAIT_MS) : null
 
@@ -738,7 +727,11 @@ export function registerPortfolioRoutes(app: Hono<{ Variables: Variables }>, dep
     const scoped = await scopeToGroup(c, db, access.orgId, access.projectIds)
     if (scoped instanceof Response) return scoped
     try {
-      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, scoped, page, { forceIcons })
+      const timing: string[] = []
+      const t0 = performance.now()
+      const data = await buildPortfolio(db, deps, access.orgId, access.orgName, scoped, page, { forceIcons, timing })
+      c.header('Server-Timing', [...timing, `total;dur=${Math.round(performance.now() - t0)}`].join(', '))
+      c.header('Timing-Allow-Origin', '*')
       return c.json({ ok: true, data })
     } catch (err) {
       plog.error('portfolio failed', { orgId: access.orgId, err: (err as Error)?.message ?? String(err) })
