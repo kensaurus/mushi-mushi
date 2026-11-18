@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { FindingGroup, PortfolioFindingsResponse } from './portfolioTypes'
-import { clipWords, crossFindingAction, fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, normaliseAppSentence, withoutApps } from './groupAppFindings'
+import { clipWords, crossFindingAction, fixOnceRows, groupAcrossApps, groupHoles, groupSdkSkew, normaliseAppSentence, tokenFreeTitle, withoutApps } from './groupAppFindings'
 
 type Cross = PortfolioFindingsResponse['crossProject'][number]
 
@@ -119,7 +119,7 @@ describe('fixOnceRows', () => {
     expect(rows.map((r) => [r.ruleId, r.title, r.action])).toEqual([
       ['byok_key_invalid', 'AI key rejected', 'Fix key'],
       ['index_stale', 'Code index out of date', 'Re-index'],
-      ['spend_cap_unset', 'No AI spend limit', 'Set budget'],
+      ['spend_cap_unset', 'No Mushi Mushi spend cap', 'Set budget'],
       // The catalog title reads as a pass; the row names the problem.
       ['security_headers_missing', 'Security headers missing', 'Set headers'],
     ])
@@ -128,6 +128,36 @@ describe('fixOnceRows', () => {
   it('an unknown rule takes its gate’s action and a six-word clip of its title', () => {
     const [row] = fixOnceRows([group({ ruleId: 'workflow_no_timeout', gate: 'ci_drift', sampleMessage: 'The deploy workflow has no timeout on its build job, so a hang bills.' })], (g) => g.sampleMessage)
     expect(row).toMatchObject({ title: 'The deploy workflow has no timeout…', action: 'Fix CI', explanation: 'The deploy workflow has no timeout on its build job, so a hang bills.' })
+  })
+})
+
+// mushi-mushi-allowlist: the hex values below are design-drift finding text under test, never a UI colour.
+describe('Fix once titles', () => {
+  const group = (over: Partial<FindingGroup>): FindingGroup => ({
+    ruleId: 'x', title: null, gate: 'radar', gateLabel: null, severity: 'warn', projectIds: ['a', 'b'], findingCount: 2, sampleMessage: '', suggestedFix: 'p', ...over,
+  })
+
+  it('names the two spend checks so they read as different problems', () => {
+    const rows = fixOnceRows([group({ ruleId: 'provider_limit_unset' }), group({ ruleId: 'spend_cap_unset' })], (g) => g.sampleMessage)
+    const titles = rows.map((r) => r.title)
+    expect(titles).toContain('No limit at the AI provider')
+    expect(titles).toContain('No Mushi Mushi spend cap')
+  })
+
+  it('an off-palette colour is named by its kind, the hex only in the tooltip', () => {
+    const [row] = fixOnceRows([group({ ruleId: 'off_token_color', gate: 'design_drift', sampleMessage: 'Colour #0B100F is not in your tokens.' })], (g) => g.sampleMessage)
+    expect(row).toMatchObject({ title: 'Off-palette colour', fullTitle: 'Colour #0B100F is not in your tokens.', action: 'Use tokens' })
+  })
+
+  // mushi-mushi-allowlist: finding text under test, not a UI colour.
+  it('an unknown rule loses its hex colours and long tokens instead of being cut mid-sentence', () => {
+    expect(tokenFreeTitle('Colour #0B100F is not in your tokens.', 'Design')).toBe('Colour is not in your tokens')
+    expect(tokenFreeTitle('src/components/portfolio/AppSignalGrid.tsx is over 2,000 lines.', null)).toBe('Is over 2,000 lines')
+    // Nothing left but one word: the gate names it.
+    expect(tokenFreeTitle('#fff', 'Design drift')).toBe('Design drift problem')
+    const [row] = fixOnceRows([group({ ruleId: 'new_rule', gate: 'design_drift', gateLabel: 'Design', sampleMessage: 'Colour #0B100F is not in your tokens.' })], (g) => g.sampleMessage)
+    expect(row!.title).not.toMatch(/#|…/)
+    expect(row!.fullTitle).toContain('#0B100F')
   })
 })
 

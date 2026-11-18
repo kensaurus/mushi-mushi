@@ -206,7 +206,9 @@ export function withoutApps(data: PortfolioFindingsResponse, hidden: ReadonlySet
 const FIX_ONCE: Record<string, { title: string; action: string }> = {
   // Mushi setup checks (gate "radar")
   byok_key_invalid: { title: 'AI key rejected', action: 'Fix key' },
-  spend_cap_unset: { title: 'No AI spend limit', action: 'Set budget' },
+  // Two different checks (2026-11-18: "No AI provider spending limit" and "No AI spend limit"
+  // read as one): this is Mushi Mushi's own monthly AI budget and auto-fix caps…
+  spend_cap_unset: { title: 'No Mushi Mushi spend cap', action: 'Set budget' },
   webhook_never_delivered: { title: 'Webhooks never arrive', action: 'Fix webhook' },
   index_branch_mismatch: { title: 'Code index on wrong branch', action: 'Fix branch' },
   index_stale: { title: 'Code index out of date', action: 'Re-index' },
@@ -243,11 +245,20 @@ const FIX_ONCE: Record<string, { title: string; action: string }> = {
   key_unused_90d: { title: 'Key unused for 90 days', action: 'Revoke key' },
   key_in_client_bundle: { title: 'Secret key in the build', action: 'Remove key' },
   paid_feature_no_kill_switch: { title: 'Paid feature has no switch', action: 'Add switch' },
-  provider_limit_unset: { title: 'No AI provider spending limit', action: 'Set limit' },
+  // …and this is the limit set at OpenAI or Anthropic on your own keys.
+  provider_limit_unset: { title: 'No limit at the AI provider', action: 'Set limit' },
   // The sample names one app's package; the others may differ, so the action stays general.
   known_vulnerable_dependency: { title: 'Known hole in a dependency', action: 'Upgrade deps' },
   runtime_end_of_life: { title: 'Runtime out of security fixes', action: 'Upgrade runtime' },
   spend_down_idle: { title: 'Spend-down key is idle', action: 'Check key' },
+  // Design drift (design-deviance.ts). The sample names one literal ("Colour <hex> is not
+  // in your tokens"); the group spans many, so the title names the kind and the tooltip the sample.
+  off_token_color: { title: 'Off-palette colour', action: 'Use tokens' },
+  off_token_font: { title: 'Off-system font', action: 'Use tokens' },
+  off_scale_spacing: { title: 'Spacing off the scale', action: 'Use tokens' },
+  off_scale_radius: { title: 'Corner radius off the scale', action: 'Use tokens' },
+  contrast_below_aa: { title: 'Text contrast below AA', action: 'Fix contrast' },
+  raw_interactive_element: { title: 'Raw button or input', action: 'Use components' },
 }
 
 /** A rule's problem title and action word; null when the rule has none here. */
@@ -274,11 +285,29 @@ const GATE_ACTION: Record<string, string> = {
   store_review: 'Fix listing',
 }
 
+/** A hex colour, or an unbroken token of 20+ characters (a path, an id, a class list). */
+const TOKEN_RE = /#[0-9a-f]{3,8}\b|\S{20,}/gi
+
+/**
+ * A title for a rule this file does not know, from the server's sentence: without the hex
+ * colours and long tokens that clipped it mid-word ("Colour <hex> is not in your…"), then
+ * six words at most. The whole sentence stays in the row's tooltip. Falls back to the gate.
+ * @internal Exported for tests; the page reaches it through fixOnceRows.
+ */
+export function tokenFreeTitle(text: string, gateLabel: string | null): string {
+  const bare = text.replace(TOKEN_RE, ' ').replace(/\s+([,.;:])/g, '$1').replace(/\s{2,}/g, ' ').replace(/[.\s]+$/, '').trim()
+  if (bare.split(/\s+/).filter(Boolean).length >= 2) return clipWords(bare.charAt(0).toUpperCase() + bare.slice(1))
+  return gateLabel ? `${gateLabel} problem` : clipWords(text)
+}
+
 /** One row of the findings × apps matrix. */
 export interface FixOnceRow {
   ruleId: string
   severity: Severity
+  /** Six words at most, with no hex colour or long token. */
   title: string
+  /** The whole sentence behind the title, for the row's tooltip. */
+  fullTitle: string
   action: string
   projectIds: string[]
   /** What opens under the row: the gate, and one sample of the finding. */
@@ -294,10 +323,12 @@ export interface FixOnceRow {
 export function fixOnceRows(groups: readonly FindingGroup[], fallbackTitle: (g: FindingGroup) => string): FixOnceRow[] {
   const rows = groups.map((g): FixOnceRow => {
     const known = ruleProblem(g.ruleId)
+    const full = fallbackTitle(g)
     return {
       ruleId: g.ruleId,
       severity: g.severity,
-      title: known?.title ?? clipWords(fallbackTitle(g)),
+      title: known?.title ?? tokenFreeTitle(full, g.gateLabel ?? null),
+      fullTitle: g.sampleMessage || full,
       action: known?.action ?? GATE_ACTION[g.gate] ?? 'Copy fix',
       projectIds: [...new Set(g.projectIds)],
       gateLabel: g.gateLabel ?? null,

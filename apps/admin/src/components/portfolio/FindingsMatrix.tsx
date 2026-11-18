@@ -71,7 +71,9 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
                       className="flex w-full min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
                     >
                       <StatusMark status={sev.status} label={sev.word} />
-                      <span className="truncate font-semibold text-fg">{r.title}</span>
+                      <span className="truncate font-semibold text-fg" title={r.fullTitle}>
+                        {r.title}
+                      </span>
                       <span className={`shrink-0 font-mono text-2xs font-bold tabular-nums ${STATUS_INK[sev.status]}`} title={`${r.projectIds.length} apps`}>
                         {r.projectIds.length}
                         <span className="sr-only"> apps</span>
