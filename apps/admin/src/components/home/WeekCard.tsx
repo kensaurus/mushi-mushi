@@ -37,7 +37,7 @@ function WeekSpark({ label, daily }: { label: string; daily: readonly number[] }
       {daily.map((v, i) => {
         const h = v <= 0 ? 1 : Math.max(2, Math.round((v / max) * SPARK_H))
         const x = i * (BAR_W + BAR_GAP) + (i >= split && split > 0 ? WEEK_GAP : 0)
-        return <rect key={i} x={x} y={SPARK_H - h} width={BAR_W} height={h} rx={0.5} className={i >= split ? 'fill-fg' : 'fill-fg-faint'} data-week={i >= split ? 'this' : 'last'} />
+        return <rect key={i} x={x} y={SPARK_H - h} width={BAR_W} height={h} rx={0.5} fill="currentColor" className={i >= split ? 'text-fg' : 'text-fg-faint'} data-week={i >= split ? 'this' : 'last'} />
       })}
     </svg>
   )

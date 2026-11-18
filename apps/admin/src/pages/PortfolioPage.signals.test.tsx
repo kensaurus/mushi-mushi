@@ -197,11 +197,11 @@ describe('Apps signals', () => {
     const cards = [...container.querySelectorAll('[data-testid^="portfolio-alert-"]')]
     expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['portfolio-alert-glot', 'portfolio-alert-yen', 'portfolio-alert-twm'])
     expect(cards[0]!.getAttribute('data-severity')).toBe('critical')
-    expect(cards[0]!.textContent).toContain('CI failed 4× today')
+    expect(cards[0]!.textContent).toContain('4 CI jobs failed today')
     const action = cards[1]!.querySelector('a')!
     expect(action.textContent).toBe('Open bugs')
     expect(action.getAttribute('href')).toMatch(/^\/reports\?.*project=yen/)
-    expect(container.textContent).toContain('Worst first: glot.it (CI failed 4× today, 3 open bugs) · yen-yen (12 open bugs, 2 serious risks) · twm (2 open bugs) · 1 more need you.')
+    expect(container.textContent).toContain('Worst first: glot.it (4 CI jobs failed today, 3 open bugs) · yen-yen (12 open bugs, 2 serious risks) · twm (2 open bugs) · 1 more needs you.')
     expect(container.textContent).not.toMatch(/All \d+ apps need you/)
   })
 

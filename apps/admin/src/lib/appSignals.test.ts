@@ -54,7 +54,7 @@ describe('appSignals', () => {
     expect(s.sdkNote).toBe('@mushi-mushi/web 1.30.0 → 1.33.0')
     expect(s.checkIn.freshness).toBe('cold')
     expect(s.reasons.map((r) => r.id)).toEqual(['ci', 'bugs', 'silent', 'sdk'])
-    expect(s.reasons[0]!.short).toBe('CI failed 2+× today')
+    expect(s.reasons[0]!.short).toBe('2+ CI jobs failed today')
 
     const blank = appSignals(card({ name: 'b', ciFailsToday: null, radar: { checkedAt: null, status: 'never_run', open: { error: 0, warn: 0, info: 0 }, unchecked: 0, errored: 0 }, sdk: [] }), NONE, NOW)
     expect(blank.ciFailsToday).toBeNull()
@@ -103,7 +103,7 @@ describe('rankingSentence', () => {
       NOW,
     )
     const out = rankingSentence(ranked)
-    expect(out.sentence).toBe('Worst first: b (CI failed 1× today, 2 open bugs) · c (9 open bugs) · d (3 open bugs) · 1 more need you.')
+    expect(out.sentence).toBe('Worst first: b (1 CI job failed today, 2 open bugs) · c (9 open bugs) · d (3 open bugs) · 1 more needs you.')
     expect(out.tone).toBe('danger')
     expect(out.first?.card.name).toBe('b')
   })
@@ -128,7 +128,7 @@ describe('appAlerts', () => {
     const alerts = appAlerts(ranked, (id) => opened.push(id))
     expect(alerts.map((a) => a.id)).toEqual(['p-ci', 'p-bugs', 'p-more'])
     const [ci, bugs] = alerts
-    expect(ci).toMatchObject({ severity: 'critical', label: 'CI red', app: 'ci-red', title: 'CI failed 3× today', detail: '2 open bugs', metric: { value: '3', unit: 'CI fails' }, keys: [appKey('p-ci')] })
+    expect(ci).toMatchObject({ severity: 'critical', label: 'CI red', app: 'ci-red', title: '3 CI jobs failed today', detail: '2 open bugs', metric: { value: '3', unit: 'jobs failed' }, keys: [appKey('p-ci')] })
     expect(ci!.action!.label).toBe('Open CI')
     expect(ci!.action!.to).toContain('/ci')
     expect(ci!.action!.to).toContain('p-ci')

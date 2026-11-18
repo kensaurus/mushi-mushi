@@ -659,7 +659,7 @@ export interface WeekRow {
 }
 
 /** Days in a week row's series: last week and this week. */
-export const WEEK_SERIES_DAYS = 14
+const WEEK_SERIES_DAYS = 14
 
 /**
  * Count timestamps per UTC day from `start` (a UTC midnight), oldest first.

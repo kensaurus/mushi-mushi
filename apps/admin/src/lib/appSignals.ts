@@ -37,7 +37,7 @@ type AppReasonId = 'broken' | 'ci' | 'risks' | 'bugs' | 'silent' | 'fix' | 'watc
 
 interface AppReason {
   id: AppReasonId
-  /** A few words for the headline and the alert title: "CI failed 4× today". */
+  /** A few words for the headline and the alert title: "4 CI jobs failed today". */
   short: string
   /** The big number on an alert card. */
   metric: { value: string; unit: string }
@@ -98,7 +98,7 @@ export function lastCheckIns(projects: readonly SetupProject[] | null | undefine
   return out
 }
 
-/** One app's signals, score and reasons. @internal Exported for tests; the page uses rankApps. */
+/** @internal Exported for tests; the page uses rankApps. One app's signals, score and reasons. */
 export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, string | null>, now: number): AppSignals {
   const reasons: AppReason[] = []
   const urgency = appUrgency(card)
@@ -119,7 +119,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   const ciFailsToday = card.ciFailsToday == null ? null : { value: card.ciFailsToday, atLeast: ciUnread }
   if (ciFailsToday && ciFailsToday.value > 0) {
     const n = ciFailsToday.value
-    reasons.push({ id: 'ci', short: `CI failed ${n}${ciFailsToday.atLeast ? '+' : ''}× today`, metric: { value: `${n}${ciFailsToday.atLeast ? '+' : ''}`, unit: n === 1 ? 'CI fail' : 'CI fails' }, to: '/ci', weight: 15 * Math.min(n, 4) })
+    reasons.push({ id: 'ci', short: `${n}${ciFailsToday.atLeast ? '+' : ''} CI ${n === 1 ? 'job' : 'jobs'} failed today`, metric: { value: `${n}${ciFailsToday.atLeast ? '+' : ''}`, unit: n === 1 ? 'job failed' : 'jobs failed' }, to: '/ci', weight: 15 * Math.min(n, 4) })
   }
 
   const radarUnread = card.unreadable.includes('gate_runs') || card.unreadable.includes('findings')
@@ -207,7 +207,7 @@ function appsNeedingYou(ranked: readonly AppSignals[]): AppSignals[] {
   return ranked.filter((r) => r.tier <= 1 && r.reasons.length > 0)
 }
 
-/** "glot.it (CI failed 4× today, 3 open bugs)": the name and its top two reasons. */
+/** "glot.it (4 CI jobs failed today, 3 open bugs)": the name and its top two reasons. */
 function named(r: AppSignals): string {
   const why = r.reasons.slice(0, 2).map((x) => x.short).join(', ')
   return why ? `${r.card.name} (${why})` : r.card.name
@@ -232,7 +232,7 @@ export function rankingSentence(ranked: readonly AppSignals[]): { sentence: stri
   const rest = needing.length - 3
   const first = needing[0]
   const tone = first.tier === 0 || (first.ciFailsToday?.value ?? 0) > 0 ? 'danger' : 'warn'
-  return { sentence: `Worst first: ${top}${rest > 0 ? ` · ${rest} more need you` : ''}.`, tone, first }
+  return { sentence: `Worst first: ${top}${rest > 0 ? ` · ${rest} more ${rest === 1 ? 'needs' : 'need'} you` : ''}.`, tone, first }
 }
 
 /** The highlight key of an app: its heat row, alert card and app card share it. */
