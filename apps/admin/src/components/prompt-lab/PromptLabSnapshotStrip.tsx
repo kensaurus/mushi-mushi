@@ -24,20 +24,18 @@ interface Props {
 }
 
 export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels }: Props) {
-  const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
+  const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : 'No grades'
   const source = bestScoreSource(stats) ?? (stats.bestScore != null ? 'grade' : null)
-  // Say the state; the numbers sit in the metrics below (2026-11-18: the sentence
-  // repeated them, and its "3 with no grades" disagreed with the rows).
+  // The line speaks for the grades only. The banner above owns the test state; this line
+  // used to repeat it ("Tests are running…" under "A/B running…", round-2 review 2026-11-18).
   const sentence =
     stats.bestScore != null
       ? `Best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}.`
-      : stats.untestedAbCount > 0
-        ? 'Tests are running, waiting for their first grades.'
-        : 'No version has grades yet.'
+      : 'No version has a grade yet. Grades come from Triage grading.'
   return (
     <PageStatus
       ariaLabel="AI prompts status"
-      tone={stats.bestScore != null ? 'ok' : stats.untestedAbCount > 0 ? 'info' : 'neutral'}
+      tone="neutral"
       sentence={sentence}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[

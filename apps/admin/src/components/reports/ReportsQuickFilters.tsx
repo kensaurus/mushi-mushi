@@ -11,9 +11,8 @@
  *              to see how big the "new" bucket is.
  *            - One-click triage pivot: every chip is a toggle — click to
  *              filter, click again to clear.
- *            - Quiet when empty: chips with 0 results still render so
- *              the user learns the shape of the inbox (and knows the
- *              filter exists), but use a muted tone.
+ *            - Quiet when empty: a status bucket with 0 reports hides
+ *              (All, Open and the active chip always show).
  *            - Narrow viewports: status and severity are separate groups
  *              stacked in a column. The divider lives in the severity
  *              group and only shows from the sm breakpoint, so a wrap
@@ -26,7 +25,7 @@ import { useActiveProjectSignal } from '../../lib/activeProject'
 import { useRealtimeReload } from '../../lib/realtime'
 import { FilterChip } from '../ui'
 import { FilterChipCell, FilterChipRail } from '../FilterChipRail'
-import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, type ReportStatusStats } from '../../lib/reportsListFilters'
+import { SEVERITY_CHIPS, STATUS_CHIPS, statusChipCount, statusChipShown, type ReportStatusStats } from '../../lib/reportsListFilters'
 
 type StatsResponse = ReportStatusStats
 
@@ -78,13 +77,15 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
       <FilterChipRail trackId="reports-status" aria-label="Status filters">
         {STATUS_CHIPS.map((b) => {
           const count = stats ? statusChipCount(b.value, stats) : 0
+          if (!statusChipShown(b.value, status === b.value, stats)) return null
           return (
             <FilterChipCell key={b.value || 'all'} active={status === b.value}>
               <FilterChip
                 label={b.label}
                 count={stats ? count : null}
                 active={status === b.value}
-                onClick={() => onSetFilter('status', status === b.value ? '' : b.value)}
+                // Clicking the active chip goes back to the default list (Open).
+                onClick={() => onSetFilter('status', status === b.value ? 'open' : b.value)}
                 tone={b.tone}
                 hint={
                   b.value === ''

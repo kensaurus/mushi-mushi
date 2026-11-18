@@ -1,37 +1,42 @@
 /**
  * FILE: NotificationsSnapshotStrip.tsx
  * PURPOSE: Reporter updates status: did the people who reported bugs hear back,
- *          and did they open it (PageStatus, P1).
+ *          and did they open it (PageStatus, P1). It is the page's ONE status
+ *          row (round-2 review 2026-11-18): the "2 updates not opened" banner
+ *          above it said the same count again, so its action lives here now.
+ *          "Not opened" is normal, not a fault: neutral, never amber. A zero
+ *          "Sent today" is not drawn.
  */
 
-import { PageStatus, formatRelative } from '../ui'
-import type { NotificationStats } from './types'
-import { pluralizeWithCount } from '../../lib/format'
+import { Btn, PageStatus, formatRelative } from '../ui'
+import type { NotificationStats, NotificationTabId } from './types'
 import { notificationsLinks } from '../../lib/statCardLinks'
+import { notificationsStatusAction, notificationsStatusSentence } from '../../lib/notificationsView'
 
 interface Props {
   stats: NotificationStats
   fetchedAt: string | null
   isValidating?: boolean
   statLabels?: Record<string, string>
+  onTab?: (tab: NotificationTabId) => void
 }
 
-function updatesSentence(stats: NotificationStats): string {
-  if (!stats.notificationsEnabled) return 'Reporter updates are off: the people who report bugs do not hear back.'
-  if (stats.total === 0) return 'No updates sent to reporters yet.'
-  const last = stats.lastNotificationAt ? `, the last ${formatRelative(stats.lastNotificationAt)}` : ''
-  // The Unread number and the banner carry the not-opened count; the sentence does not say it a third time.
-  const unopened = stats.unread > 0 ? '' : '; all opened'
-  return `${pluralizeWithCount(stats.total, 'update')} sent to reporters${last}${unopened}.`
-}
-
-export function NotificationsSnapshotStrip({ stats, fetchedAt, isValidating, statLabels }: Props) {
+export function NotificationsSnapshotStrip({ stats, fetchedAt, isValidating, statLabels, onTab }: Props) {
+  const action = notificationsStatusAction(stats)
+  const sentence = notificationsStatusSentence(stats, stats.lastNotificationAt ? formatRelative(stats.lastNotificationAt) : null)
   return (
     <PageStatus
       ariaLabel="Reporter updates status"
       tone={!stats.notificationsEnabled ? 'warn' : stats.unread > 0 ? 'info' : 'ok'}
-      sentence={updatesSentence(stats)}
+      sentence={sentence}
       freshness={{ at: fetchedAt, isValidating }}
+      action={
+        action && onTab ? (
+          <Btn size="sm" variant={action.primary ? 'primary' : 'ghost'} onClick={() => onTab(action.tab)} data-testid="notifications-status-action">
+            {action.label}
+          </Btn>
+        ) : null
+      }
       metrics={[
         {
           label: statLabels?.total ?? 'Sent',
@@ -42,16 +47,19 @@ export function NotificationsSnapshotStrip({ stats, fetchedAt, isValidating, sta
         {
           label: statLabels?.unread ?? 'Not opened',
           value: stats.unread,
-          tone: stats.unread > 0 ? 'warn' : 'neutral',
-          hint: 'Updates the reporter has not opened yet.',
+          hint: 'Updates the reporter has not opened yet. Normal: they see them the next time they open the widget.',
           to: notificationsLinks.unread,
         },
-        {
-          label: statLabels?.last24h ?? 'Sent today',
-          value: stats.last24h,
-          hint: 'Updates sent in the last 24 hours.',
-          to: notificationsLinks.last24h,
-        },
+        ...(stats.last24h > 0
+          ? [
+              {
+                label: statLabels?.last24h ?? 'Sent today',
+                value: stats.last24h,
+                hint: 'Updates sent in the last 24 hours.',
+                to: notificationsLinks.last24h,
+              },
+            ]
+          : []),
       ]}
     />
   )

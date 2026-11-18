@@ -45,4 +45,25 @@ describe('McpStatusBanner', () => {
     expect(line.className).not.toMatch(/danger|brand|border/)
     expect(line.querySelector('p')!.outerHTML).not.toMatch(/danger|brand/)
   })
+
+  // Round-2 review (2026-11-18): "Mint MCP key" while cursor-mcp-org already reached every project.
+  it('with an account key that reaches the app, offers the snippet, not another key', () => {
+    act(() => {
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(McpStatusBanner, {
+            stats: { ...EMPTY_MCP_STATS, hasAnyProject: true, topPriority: 'report_only_keys', reportOnlyKeyCount: 4, projectId: 'p1' },
+            accountKey: { label: 'cursor-mcp-org' },
+            onTab: () => {},
+          }),
+        ),
+      )
+    })
+    expect(host.querySelector('[data-testid="mcp-sdk-keys-line"]')).toBeNull()
+    const line = host.querySelector('[data-testid="mcp-account-key-line"]')!
+    expect(line.textContent).toContain('cursor-mcp-org')
+    expect(host.textContent).not.toContain('Mint MCP key')
+  })
 })

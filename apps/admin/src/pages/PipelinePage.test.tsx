@@ -215,6 +215,11 @@ async function render(url = '/pipeline') {
 }
 
 const q = (id: string) => document.querySelector(`[data-testid="${id}"]`) as HTMLElement | null
+/** The status block's number for one label (PageStatus renders each as a dt/dd pair). */
+const statusMetric = (label: string) => {
+  const dt = Array.from(q('pipeline-status')?.querySelectorAll('dt') ?? []).find((d) => d.textContent?.startsWith(label))
+  return dt?.parentElement?.querySelector('dd')?.textContent ?? null
+}
 async function click(el: Element | null) {
   if (!el) throw new Error('missing element')
   await act(async () => {
@@ -516,13 +521,40 @@ describe('PipelinePage', () => {
 
   it('the status line names the biggest stuck group and runs its first action that can succeed', async () => {
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('5 items need you. The biggest: 2 PRs: their own CI is red')
-    // Bugs that only wait for a fix are their own count, never "need you" (2026-11-16).
-    expect(q('pipeline-status')!.textContent).toContain('Waiting for a fix')
+    expect(q('pipeline-status')!.textContent).toContain('Start with the biggest: 2 PRs: their own CI is red')
+    // The count is the "Need you" number, not restated in the sentence (round-2 review, 2026-11-18).
+    expect(statusMetric('Need you')).toBe('5')
+    // "Waiting for a fix" is the Triaged stage's own count and "Merged, 7 days" the pace row's: never repeated here.
+    expect(q('pipeline-status')!.textContent).not.toContain('Waiting for a fix')
+    expect(q('pipeline-status')!.textContent).not.toContain('Merged, 7 days')
     const top = q('pipeline-top-action')!
     expect(top.textContent).toBe('Send to CI repair (2)')
     await click(top)
     expect(document.body.textContent).toContain('otherwise your local mushi work lanes')
+  })
+
+  it('counts the backlog stuck over 3 days as needing you, as Home does: never "Nothing needs you now" beside it', async () => {
+    // Round-2 review 2026-11-18 (390, This app): "Nothing needs you now", Need you 0, while the page
+    // listed "2 reports: triaged over 3 days ago, no fix started" and Home's Needs you listed it too.
+    const data = state.data as PipelineData
+    for (const st of data.stages) {
+      st.groups = []
+      st.count = 0
+      st.stuck = 0
+    }
+    const triaged = data.stages.find((x) => x.id === 'triaged')!
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '2 reports: triaged over 3 days ago, no fix started', count: 2, oldestAt: '2026-10-20T00:00:00Z', actions: [], settings: null, items: [], ages: [0, 2, 0, 0] }]
+    triaged.count = 4
+    triaged.stuck = 2
+    await render()
+    const status = q('pipeline-status')!
+    expect(status.textContent).not.toContain('Nothing needs you')
+    expect(status.textContent).toContain('Start with the biggest: 2 reports: triaged over 3 days ago, no fix started')
+    expect(statusMetric('Need you')).toBe('2')
+    // A backlog is a warning, not a failure: amber, never red.
+    expect(status.querySelector('.bg-danger')).toBeNull()
+    expect(status.querySelector('.bg-warn')).not.toBeNull()
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('2')
   })
 
   it('a long group pages with "Show more" instead of a scroll box inside the page', async () => {
@@ -540,15 +572,16 @@ describe('PipelinePage', () => {
 describe('PipelinePage signals (2026-11-18)', () => {
   it('colours only the jam: the bottleneck red, the backlog and moving stages neutral, the stuck count always in text', async () => {
     await render()
-    expect(q('pipeline-funnel')!.querySelectorAll('li').length).toBe(8)
+    // Empty stages fold into one line instead of four "0 · empty" boxes (round-2 review, 2026-11-18).
+    expect(q('pipeline-funnel')!.querySelectorAll('li').length).toBe(4)
+    expect(q('pipeline-stages-empty')!.textContent).toBe('Empty now:1 Reported2 Triaged7 Merged8 Deployed')
     const tone = (id: string) => q(`pipeline-stage-${id}`)!.closest('li')!.getAttribute('data-tone')
     expect(tone('pr')).toBe('danger')
     // pr 2, ci 2, review 1: the bottleneck and one runner-up, never three of four.
     expect(tone('ci')).toBe('warn')
     expect(tone('review')).toBe('neutral')
-    expect(tone('triaged')).toBe('neutral')
     expect(tone('train')).toBe('neutral')
-    expect(tone('merged')).toBe('neutral')
+    expect(q('pipeline-stage-merged')).toBeNull()
     expect(q('pipeline-stage-pr')!.querySelector('svg[data-tone="danger"]')).not.toBeNull()
     expect(q('pipeline-stage-review-stuck')!.textContent).toBe('1 stuck')
   })
@@ -562,12 +595,18 @@ describe('PipelinePage signals (2026-11-18)', () => {
     await render()
     expect(q('pipeline-stage-triaged')!.closest('li')!.getAttribute('data-tone')).toBe('neutral')
     expect(q('pipeline-stage-triaged-stuck')!.textContent).toBe('900 waiting over 3 days')
-    expect(q('pipeline-age-waiting-total')!.textContent).toBe('900')
+    // It needs you, as Home counts it: one "Need you" age row adding up to the status number,
+    // never a second row with an impossible "0–3 d" bucket (round-2 review, 2026-11-18).
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('905')
+    expect(q('pipeline-age-waiting')).toBeNull()
+    expect(statusMetric('Need you')).toBe('905')
+    // The failed PRs still lead the sentence; the backlog never takes the red bottleneck.
+    expect(q('pipeline-status')!.textContent).toContain('Start with the biggest: 2 PRs: their own CI is red')
   })
 
   it('shows how long stuck work has waited, adding up to "Need you", from the server buckets when present', async () => {
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('5 items need you')
+    expect(statusMetric('Need you')).toBe('5')
     expect(q('pipeline-age-need-you-total')!.textContent).toBe('5')
     expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Need you, 5 by time in stage: 0–3 d 5, 3–7 d 0, 7–30 d 0, 30 d+ 0')
     expect(q('pipeline-age-waiting')).toBeNull()
@@ -589,7 +628,7 @@ describe('PipelinePage signals (2026-11-18)', () => {
     reported.count = 37
     reported.stuck = 37
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('42 items need you')
+    expect(statusMetric('Need you')).toBe('42')
     expect(q('pipeline-age-need-you-total')!.textContent).toBe('42')
     expect(q('pipeline-age-need-you-unaged')!.textContent).toContain('37')
     expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('0–3 d 5')
@@ -603,13 +642,14 @@ describe('PipelinePage signals (2026-11-18)', () => {
     triaged.count = 765
     triaged.stuck = 765
     await render()
-    expect(q('pipeline-age-waiting-total')!.textContent).toBe('765')
-    expect(q('pipeline-age-waiting-unlisted')!.textContent).toContain('665')
-    expect(q('pipeline-age-waiting-unaged')).toBeNull()
-    expect(q('pipeline-age-waiting')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('30 d+ 100')
-    // The listed 100 fill 100 / 765 of the bar; the newer rest is empty track, not painted 30 d+.
-    const old = q('pipeline-age-waiting')!.querySelector('[data-bucket="3"]') as HTMLElement
-    expect(parseFloat(old.style.width)).toBeCloseTo((100 / 765) * 100, 1)
+    // The backlog joins the one "Need you" row (5 failed PRs + 765 waiting).
+    expect(q('pipeline-age-need-you-total')!.textContent).toBe('770')
+    expect(q('pipeline-age-need-you-unlisted')!.textContent).toContain('665')
+    expect(q('pipeline-age-need-you-unaged')).toBeNull()
+    expect(q('pipeline-age-need-you')!.querySelector('[role="img"]')!.getAttribute('aria-label')).toContain('30 d+ 100')
+    // The listed 100 fill 100 / (5 + 765) of the bar; the newer rest is empty track, not painted 30 d+.
+    const old = q('pipeline-age-need-you')!.querySelector('[data-bucket="3"]') as HTMLElement
+    expect(parseFloat(old.style.width)).toBeCloseTo((100 / 770) * 100, 1)
   })
 
   it('reads a reason code in a held PR as a plain-word chip', async () => {

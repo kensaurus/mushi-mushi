@@ -7,6 +7,7 @@
 
 import { DisclosurePanel, Input } from '../ui'
 import { NODE_COLORS } from '../../lib/tokens'
+import type { IsolatedToggleState } from './isolatedNodes'
 import {
   EDGE_LABELS,
   EDGE_TYPES,
@@ -25,19 +26,17 @@ const QUICK_VIEWS = [
 export type QuickView = (typeof QUICK_VIEWS)[number]['key']
 
 interface QuickViewsProps {
-  hideSingletons: boolean
+  /** The box's effective state (isolatedToggleState): what the map actually does. */
+  isolatedToggle: IsolatedToggleState
   singletonCount: number
-  /** Every node is unlinked, so the option shows them anyway (nothing would be left). */
-  allIsolated?: boolean
   onApplyView: (preset: QuickView) => void
   onToggleSingletons: (next: boolean) => void
   onRelayout: () => void
 }
 
 export function QuickViewsRow({
-  hideSingletons,
+  isolatedToggle,
   singletonCount,
-  allIsolated = false,
   onApplyView,
   onToggleSingletons,
   onRelayout,
@@ -57,16 +56,21 @@ export function QuickViewsRow({
       ))}
       <span className="ml-auto inline-flex items-center gap-2">
         <label
-          className="inline-flex items-center gap-1.5 cursor-pointer text-2xs text-fg-muted whitespace-nowrap"
-          title={allIsolated && hideSingletons ? 'No item has a link yet, so all of them are shown.' : undefined}
+          className={`inline-flex items-center gap-1.5 text-2xs whitespace-nowrap ${
+            isolatedToggle.disabled ? 'cursor-not-allowed text-fg-faint' : 'cursor-pointer text-fg-muted'
+          }`}
         >
           <input
             type="checkbox"
-            checked={hideSingletons}
+            checked={isolatedToggle.checked}
+            disabled={isolatedToggle.disabled}
             onChange={(e) => onToggleSingletons(e.target.checked)}
             className="h-3 w-3 accent-brand"
+            data-testid="graph-hide-isolated"
           />
-          Hide isolated nodes{singletonCount > 0 ? ` (${singletonCount})` : allIsolated && hideSingletons ? ' (none linked yet)' : ''}
+          Hide isolated nodes
+          {singletonCount > 0 ? <span className="tabular-nums">({singletonCount})</span> : null}
+          {isolatedToggle.reason ? <span>· {isolatedToggle.reason}</span> : null}
         </label>
         <button
           type="button"
@@ -79,6 +83,12 @@ export function QuickViewsRow({
       </span>
     </div>
   )
+}
+
+/** "12/12 · 19/19" read as nothing; name what is counted, and say "all" when nothing is filtered. */
+export function typeCountsLabel(nodeOn: number, nodeAll: number, edgeOn: number, edgeAll: number): string {
+  if (nodeOn === nodeAll && edgeOn === edgeAll) return 'All item and link types'
+  return `${nodeOn} of ${nodeAll} item types · ${edgeOn} of ${edgeAll} link types`
 }
 
 interface FilterChipsProps {
@@ -115,10 +125,14 @@ export function GraphFilterChips({
         trailing={
           <span
             className="text-2xs font-normal text-fg-faint whitespace-nowrap tabular-nums"
-            title="Node types shown · edge types shown"
+            data-testid="graph-type-counts"
           >
-            {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} ·{' '}
-            {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length}
+            {typeCountsLabel(
+              NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length,
+              NODE_TYPES.length,
+              EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length,
+              EDGE_TYPES.length,
+            )}
           </span>
         }
       >

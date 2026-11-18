@@ -208,6 +208,15 @@ function expectRestingUnderline(rootEl: ParentNode) {
   }
 }
 
+/** An app's row in the Firecrawl table, by name (rows are worst first, so not by index). */
+function appRow(name: string): Element {
+  const li = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li')).find(
+    (n) => n.querySelector('[data-testid="firecrawl-app-row"]')?.textContent?.includes(name),
+  )
+  if (!li) throw new Error(`no app row "${name}"`)
+  return li
+}
+
 function toggle(label: string): HTMLButtonElement | HTMLInputElement {
   const el = Array.from(host.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
     (n.getAttribute('aria-label') ?? n.closest('label')?.textContent ?? '').includes(label),
@@ -230,8 +239,10 @@ describe('CreditsPage', () => {
 
   it('shows the Firecrawl balance, the pace to its reset, and a switch per app', async () => {
     await render()
-    expect(host.textContent).toContain('64,175 of 100,000 credits left')
-    expect(host.textContent).toContain('resets Nov 3 (11 days)')
+    // The balance is the countdown card's number; the Firecrawl section does not say it again (round-2 review).
+    expect(host.textContent!.split('64,175').length - 1).toBe(1)
+    expect(host.textContent).not.toContain('64,175 of 100,000 credits left')
+    expect(host.textContent).toContain('Resets Nov 3 (11 days); unused credits do not roll over.')
     expect(host.textContent).toContain('Watches, audits and rank checks use about 272 a day · about 2,994 before Nov 3 · about 61,181 would go unused.')
     const rows = host.querySelectorAll('[aria-label="Site watch per app"] > li')
     expect(rows).toHaveLength(3)
@@ -242,14 +253,36 @@ describe('CreditsPage', () => {
     const widen = Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes('Watch up to 100 pages'))!
     await act(async () => widen.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/site-watch', method: 'PUT', body: { baseUrl: 'https://tsumagoi.kensaur.us', pageLimit: 100 } })
-    const watchSwitches = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
-    const letsTalk = watchSwitches[2].querySelector('[role="switch"], input[type="checkbox"]') as HTMLButtonElement
+    const letsTalk = appRow('lets-talk').querySelector('[role="switch"], input[type="checkbox"]') as HTMLButtonElement
     await act(async () => letsTalk.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p3/site-watch', method: 'PUT', body: { baseUrl: 'https://talk.kensaur.us', pageLimit: 25 } })
   })
 })
 
 // Fresh-eyes 2026-11-18: an app with no address was a block of empty fields each.
+// Round-2 review 2026-11-18: eight near-identical per-app blocks.
+describe('Firecrawl app table on /credits', () => {
+  it('is one row per app, worst first, with the last audit as a pill and the settings inside the row', async () => {
+    await render()
+    const rows = Array.from(host.querySelectorAll('[data-testid="firecrawl-app-row"]'))
+    // tsumagoi has 2 failing rules: it leads.
+    expect(rows[0].textContent).toContain('tsumagoi')
+    const pill = appRow('tsumagoi').querySelector('[data-testid="firecrawl-last-audit"] [data-testid="status-pill"]')!
+    expect(pill.getAttribute('data-status')).toBe('failed')
+    expect(pill.textContent).toBe('2 failing')
+    // Watch and audit are separate columns, so "daily" and "Weekly" no longer read as one contradicting switch.
+    expect(rows[0].textContent).toContain('Daily · 30 pages')
+    expect(rows[0].textContent).toContain('Weekly · 139 pages')
+    // Never audited: hollow, not a pass.
+    expect(appRow('mushi-mushi').querySelector('[data-testid="firecrawl-last-audit"] [data-testid="status-pill"]')!.getAttribute('data-status')).toBe('idle')
+    // The settings stay reachable inside each row.
+    expect((appRow('tsumagoi').querySelector('details') as HTMLDetailsElement).open).toBe(false)
+    expect(Array.from(appRow('tsumagoi').querySelectorAll('button')).some((b) => b.textContent === 'Run now')).toBe(true)
+    // The "Its reports are on Reports" line is not repeated per app.
+    expect(host.textContent).not.toContain('spend-down sends them to Cursor.')
+  })
+})
+
 describe('Firecrawl apps not set up on /credits', () => {
   it('folds apps with no address and nothing on into one Add address row', async () => {
     state.watches = { ...state.watches, p3: { watch: null, openPages: [], suggestedUrl: null, firecrawlReady: true } }
@@ -288,14 +321,13 @@ describe('site audit on /credits', () => {
     expect(host.textContent).toContain('76 pages, 2 rules failing, 2 reports filed.')
     // 260 a day of watches + (76 + 1) / 7 = 11 a day of audit.
     expect(host.textContent).toContain('Watches, audits and rank checks use about 272 a day')
-    const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
     const auditSwitch = (row: Element) =>
       Array.from(row.querySelectorAll('[role="switch"], input[type="checkbox"]')).find((n) =>
         (n.getAttribute('aria-label') ?? n.closest('label')?.textContent ?? '').includes('Audit links'),
       ) as HTMLButtonElement
-    await act(async () => auditSwitch(rows[0]).click())
+    await act(async () => auditSwitch(appRow('mushi-mushi')).click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p1/site-audit', method: 'PUT', body: { enabled: true, baseUrl: 'https://kensaur.us/mushi-mushi' } })
-    const runNow = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Run now'))!
+    const runNow = Array.from(appRow('tsumagoi').querySelectorAll('button')).find((b) => b.textContent?.includes('Run now'))!
     await act(async () => runNow.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/site-audit/run', method: 'POST', body: null })
   })
@@ -380,12 +412,11 @@ describe('search rank on /credits', () => {
     expect(chips[0].textContent).toContain('#2')
     expect(chips[0].textContent).toContain('↑3')
     expect(chips[1].textContent).toContain('20+')
-    const rows = Array.from(host.querySelectorAll('[aria-label="Site watch per app"] > li'))
-    const edit = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent === 'Edit keywords')!
+    const edit = Array.from(appRow('tsumagoi').querySelectorAll('button')).find((b) => b.textContent === 'Edit keywords')!
     await act(async () => edit.click())
-    const box = rows[1].querySelector('textarea') as HTMLTextAreaElement
+    const box = appRow('tsumagoi').querySelector('textarea') as HTMLTextAreaElement
     expect(box.value).toBe('嬬恋 車中泊 @JP\nTsumagoi camping')
-    const save = Array.from(rows[1].querySelectorAll('button')).find((b) => b.textContent?.includes('Save'))!
+    const save = Array.from(appRow('tsumagoi').querySelectorAll('button')).find((b) => b.textContent?.includes('Save'))!
     await act(async () => save.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/projects/p2/search-ranks', method: 'PUT', body: { keywords: '嬬恋 車中泊 @JP\nTsumagoi camping' } })
   })
@@ -505,10 +536,16 @@ describe('Local workers on /credits', () => {
     ]
     try {
       await render()
-      const idle = host.querySelector('[data-testid="credits-idle"]')!
-      expect(idle.textContent).toContain('Cursor credits idle for 7 h.')
-      expect(idle.textContent).toContain('What blocks the work: glot: a run has held an agent space')
-      expect(host.querySelector('[data-testid="credits-idle-open"]')!.getAttribute('href')).toBe('/pipeline?tab=workers')
+      // Round-2 review: the blocker leads the page as a red card, above the countdowns, said once.
+      const card = host.querySelector('[data-testid="credits-alert-credits-idle"]')!
+      expect(card.getAttribute('data-severity')).toBe('critical')
+      expect(card.textContent).toContain('Cursor credits idle for 7 h')
+      expect(card.textContent).toContain('7h idle')
+      expect(card.querySelector('[data-testid="credits-idle"]')!.textContent).toContain('What blocks the work: glot: a run has held an agent space')
+      expect(card.querySelector('a[href="/pipeline?tab=workers"]')!.textContent).toBe('Open Workers')
+      expect(host.querySelectorAll('[data-testid="credits-idle"]')).toHaveLength(1)
+      const countdowns = host.querySelector('[data-testid="credit-countdowns"]')!
+      expect(card.compareDocumentPosition(countdowns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     } finally {
       state.workerFlags = []
     }

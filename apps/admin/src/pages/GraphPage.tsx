@@ -32,7 +32,7 @@ import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
-import { filterIsolated } from '../components/graph/isolatedNodes'
+import { filterIsolated, isolatedToggleState } from '../components/graph/isolatedNodes'
 import { BugClusterList } from '../components/graph/BugClusterList'
 import { GraphCanvas } from '../components/graph/GraphCanvas'
 import { readVizToken } from '../lib/vizTokens'
@@ -65,6 +65,7 @@ import {
   type NodeType,
 } from '../components/graph/types'
 import { GraphWorkspaceReadout } from '../components/graph/GraphWorkspaceReadout'
+import { planGraphSnapshot } from '../components/graph/graphSnapshot'
 import {
   ActionPill,
   ActionPillRow,
@@ -454,6 +455,8 @@ export function GraphPage() {
     [stats, copy?.tabLabels],
   )
 
+  const snapshotPlan = planGraphSnapshot(stats, { fragile: copy?.statLabels?.fragile ?? 'Hotspots' })
+
   usePublishPageContext({
     route: '/graph',
     title: 'Bug clusters',
@@ -508,9 +511,8 @@ export function GraphPage() {
 
       <div data-dav-anchor="graph:act">
         <QuickViewsRow
-          hideSingletons={hideSingletons}
+          isolatedToggle={isolatedToggleState(hideSingletons, isolated)}
           singletonCount={singletonCount}
-          allIsolated={isolated.allIsolated}
           onApplyView={applyView}
           onToggleSingletons={setHideSingletons}
           onRelayout={() => setLayoutSeed((s) => s + 1)}
@@ -694,42 +696,56 @@ export function GraphPage() {
       {!ux.hideGraphSnapshot && activeTab === 'overview' && (
       <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <SnapshotSectionHint text={activeTabMeta.description} />
+        {snapshotPlan.tiles.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {/* Leads with clusters (report groups): the node total mixes every
               node type, so "192" under a "report groups" caption misled. */}
+          {snapshotPlan.tiles.includes('clusters') && (
           <StatCard
             label="Clusters"
             value={stats.reportNodes}
-            accent={stats.reportNodes > 0 ? 'text-fg' : undefined}
+            accent="text-fg"
             tooltip={nodesTooltip(stats)}
             detail={nodesDetail(stats)}
             to={graphLinks.nodes}
           />
+          )}
+          {snapshotPlan.tiles.includes('links') && (
           <StatCard
             label={copy?.statLabels?.edges ?? 'Links'}
             value={stats.edgeCount}
-            accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
+            accent="text-fg"
             tooltip={edgesTooltip(stats)}
             detail={edgesDetail(stats)}
             to={graphLinks.edges}
           />
+          )}
+          {snapshotPlan.tiles.includes('fragile') && (
           <StatCard
             label={copy?.statLabels?.fragile ?? 'Fragile'}
             value={stats.fragileComponents}
-            accent={stats.fragileComponents > 0 ? 'text-danger' : 'text-ok'}
+            accent="text-danger"
             tooltip={fragileTooltip(stats)}
             detail={fragileDetail(ux.plainBanner)}
             to={graphLinks.fragile}
           />
+          )}
+          {snapshotPlan.tiles.includes('inventory') && (
           <StatCard
             label={copy?.statLabels?.inventory ?? 'Inventory'}
             value={stats.inventoryNodes}
-            accent={stats.inventoryNodes > 0 ? 'text-info' : undefined}
+            accent="text-fg"
             tooltip={inventoryTooltip(stats)}
             detail={inventoryDetail(stats)}
             to={graphLinks.inventory}
           />
+          )}
         </div>
+        ) : null}
+        {/* Zeros and unknowns in one line, not a row of 0 tiles (fresh-eyes 2026-11-18). */}
+        {snapshotPlan.zeroLine ? (
+          <p className="text-2xs text-fg-muted" data-testid="graph-snapshot-zero-line">{snapshotPlan.zeroLine}</p>
+        ) : null}
       </Section>
       )}
 
@@ -754,24 +770,6 @@ export function GraphPage() {
 
       {activeTab === 'backend' && (
         <div className="space-y-3">
-          <ContainedBlock tone="info" label="Graph backend debug">
-            <p className="text-sm font-medium text-fg">Sync posture</p>
-            <InlineProof className="mt-2">
-              Backend: <span className="font-mono text-fg-secondary">{stats.graphBackend}</span>
-              {stats.ageAvailable ? ' · Apache AGE available' : ' · SQL-only mode'}
-              {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0
-                ? ` · ${stats.unsyncedNodes} unsynced nodes · ${stats.unsyncedEdges} unsynced edges`
-                : ' · fully synced'}
-            </InlineProof>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <SignalChip tone={stats.ageAvailable ? 'ok' : 'neutral'}>
-                {stats.ageAvailable ? 'AGE on' : 'SQL mode'}
-              </SignalChip>
-              <SignalChip tone={stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'warn' : 'ok'}>
-                {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'Sync pending' : 'Fully synced'}
-              </SignalChip>
-            </div>
-          </ContainedBlock>
           <div className="grid gap-3 md:grid-cols-2">
             <GraphBackendPanel />
             <OntologyPanel />

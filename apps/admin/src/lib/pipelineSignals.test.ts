@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { PipelineGroup, PipelineItem, PipelineStage } from './pipeline'
-import { groupPrimary, primaryAction, stageTones, stuckAges } from './pipelineSignals'
+import { groupPrimary, needYouAges, needsYouCount, needsYouGroups, primaryAction, stageTones, stuckAges } from './pipelineSignals'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString()
@@ -129,5 +129,38 @@ describe('primaryAction', () => {
   it('the status line runs a group primary only when the server would take it', () => {
     expect(groupPrimary({ actions: ['ci_repair', 'rerun_ci'], items: [item('a'), item('b')] })).toEqual({ action: 'ci_repair', ids: ['a', 'b'] })
     expect(groupPrimary({ actions: ['ci_repair', 'close'], items: [item('a', { blocked: { ci_repair: 'no' } })] })).toBeNull()
+  })
+})
+
+describe('needsYouCount (one source with Home "Needs you")', () => {
+  // Round-2 review 2026-11-18: /pipeline said "Nothing needs you now" (0) while it listed
+  // "2 reports: triaged over 3 days ago, no fix started" and Home's Needs you listed that group.
+  it('counts every stuck group, the triaged backlog included, and splits out what failed', () => {
+    const stages = [
+      stage('triaged', 2, [group({ stage: 'triaged', id: 'no_fix_old', count: 2 }), group({ stage: 'triaged', id: 'fresh', tone: 'moving', count: 2 })]),
+      stage('pr', 0, [group({ stage: 'pr', id: 'empty', count: 0 })]),
+    ]
+    expect(needsYouCount(stages)).toEqual({ total: 2, backlog: 2, failing: 0 })
+    expect(needsYouGroups(stages).map((g) => g.id)).toEqual(['no_fix_old'])
+  })
+
+  it('orders groups biggest first and counts failing work apart from the backlog', () => {
+    const stages = [
+      stage('triaged', 770, [group({ stage: 'triaged', id: 'no_fix_old', count: 770 })]),
+      stage('pr', 42, [group({ stage: 'pr', id: 'agent_failed_person', count: 42 }), group({ stage: 'pr', id: 'agent_failed', count: 40 })]),
+    ]
+    expect(needsYouCount(stages)).toEqual({ total: 852, backlog: 770, failing: 82 })
+    expect(needsYouGroups(stages).map((g) => g.id)).toEqual(['no_fix_old', 'agent_failed_person', 'agent_failed'])
+  })
+
+  it('folds the backlog into the one "Need you" age row so the bar adds up to the same total', () => {
+    const stages = [
+      stage('triaged', 40, [group({ stage: 'triaged', count: 40, ages: [0, 10, 20, 10] })]),
+      stage('ci', 3, [group({ count: 3, ages: [1, 1, 1, 0] })]),
+    ]
+    const merged = needYouAges(stuckAges(stages, NOW))
+    expect(merged.needYou).toEqual([1, 11, 21, 10])
+    expect(merged.waiting).toEqual([0, 0, 0, 0])
+    expect(merged.needYou.reduce((a, b) => a + b, 0)).toBe(needsYouCount(stages).total)
   })
 })

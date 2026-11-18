@@ -11,11 +11,11 @@ import { EMPTY_STORAGE_STATS, type StorageStats } from './types'
 const stats = (over: Partial<StorageStats>): StorageStats => ({ ...EMPTY_STORAGE_STATS, projectId: 'p1', projectName: 'yen-yen', ...over })
 
 describe('storageVerdict', () => {
-  it('says the built-in storage needs no check, and names other apps failing separately', () => {
+  it('draws the unchecked built-in storage neutral, and leaves other apps to their own rows', () => {
     const v = storageVerdict(stats({ activeProjectConfigured: false, activeProjectHealthStatus: 'unknown', configuredCount: 1, failingCount: 1 }))
-    expect(v).toMatchObject({ tone: 'ok', chip: 'Built-in storage', action: 'configure' })
-    expect(v.sentence).toBe("yen-yen stores screenshots in Mushi Mushi's built-in storage. There's nothing to check. 1 other app's own bucket is failing.")
-    expect(v.sentence).not.toMatch(/not checked/)
+    expect(v).toMatchObject({ tone: 'neutral', chip: 'Built-in storage', action: 'configure' })
+    expect(v.sentence).toBe("yen-yen stores screenshots in Mushi Mushi's built-in storage.")
+    expect(v.sentence).not.toMatch(/not checked|failing/)
   })
 
   it("does not count this app's own failing bucket as another app's", () => {

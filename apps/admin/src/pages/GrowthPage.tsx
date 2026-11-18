@@ -38,6 +38,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { LineSparkline } from '../components/charts'
 import { IconGauge } from '../components/icons'
 import { DailyScorecard } from '../components/growth/DailyScorecard'
+import { isAllZero, orderWeeksAscending, shortDateTime, stagesWithData } from '../lib/growthView'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,8 +148,13 @@ export function GrowthPage() {
     )
   }
 
-  const weeks = data?.weeks ?? []
+  // Oldest → newest whatever order the server sends (it sends newest first):
+  // the tiles read the current week, the chart runs left → right in time.
+  const weeks = orderWeeksAscending(data?.weeks ?? [])
   const latest = weeks.length > 0 ? weeks[weeks.length - 1] : null
+  // Columns that are 0 in every week say nothing (Fix pulled, Habit, Paid today).
+  const shownStages = stagesWithData(STAGES, weeks)
+  const activatedSeries = weeks.map((w) => w.activated ?? 0)
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-growth">
@@ -190,7 +196,7 @@ export function GrowthPage() {
             children: latest ? (
               <StatGrid>
                 <StatCard
-                  label="Signups"
+                  label="Signups this week"
                   value={fmt(latest.signups)}
                   detail={`week of ${shortWeek(latest.week_start)}`}
                   trend={weeks.map((w) => w.signups ?? 0)}
@@ -239,7 +245,7 @@ export function GrowthPage() {
         </div>
         {data?.generated_at && (
           <p className="text-2xs text-fg-faint">
-            Generated {new Date(data.generated_at).toLocaleString()}
+            Generated {shortDateTime(data.generated_at)}
           </p>
         )}
       </div>
@@ -281,19 +287,28 @@ export function GrowthPage() {
       {data && weeks.length > 0 && latest && (
         <>
           <Section title={`Activated projects — last ${weeks.length} weeks`}>
-            <LineSparkline
-              values={weeks.map((w) => w.activated ?? 0)}
-              xLabels={weeks.map((w) => shortWeek(w.week_start))}
-              height={64}
-              showAxes
-              scaleToData
-              yAxisCaption="Activated"
-              ariaLabel="Activated external projects per week"
-            />
-            <div className="mt-2 flex flex-wrap gap-4 text-xs text-fg-muted">
-              <span>Peak: {fmt(Math.max(...weeks.map((w) => w.activated ?? 0)))}</span>
-              <span>Total: {fmt(sum(weeks.map((w) => w.activated ?? 0)))}</span>
-            </div>
+            {/* No 0–0 chart: one line says nothing was activated (round-2 sweep 2026-11-18). */}
+            {isAllZero(activatedSeries) ? (
+              <p className="text-xs text-fg-muted" data-testid="growth-activated-empty">
+                No project was activated in the last {weeks.length} weeks.
+              </p>
+            ) : (
+              <>
+                <LineSparkline
+                  values={activatedSeries}
+                  xLabels={weeks.map((w) => shortWeek(w.week_start))}
+                  height={64}
+                  showAxes
+                  scaleToData
+                  yAxisCaption="Activated"
+                  ariaLabel="Activated external projects per week"
+                />
+                <div className="mt-2 flex flex-wrap gap-4 text-xs text-fg-muted">
+                  <span>Peak: {fmt(Math.max(...activatedSeries))}</span>
+                  <span>Total: {fmt(sum(activatedSeries))}</span>
+                </div>
+              </>
+            )}
           </Section>
 
           <Section title="Weekly funnel — drop-off between adjacent stages">
@@ -302,7 +317,7 @@ export function GrowthPage() {
                 <thead>
                   <tr className="text-left text-2xs text-fg-secondary font-semibold">
                     <th className="py-1.5 pr-3 font-medium">Week</th>
-                    {STAGES.map((stage) => (
+                    {shownStages.map((stage) => (
                       <th key={stage} className="py-1.5 px-2 text-right font-medium">
                         {STAGE_LABEL[stage]}
                       </th>
@@ -313,15 +328,17 @@ export function GrowthPage() {
                   {[...weeks].reverse().map((w) => (
                     <tr key={w.week_start} className="border-t border-edge-subtle align-top">
                       <td className="py-2 pr-3 font-mono text-fg-muted whitespace-nowrap">{shortWeek(w.week_start)}</td>
-                      {STAGES.map((stage, i) => {
+                      {shownStages.map((stage) => {
                         const value = w[stage] ?? 0
-                        const prev = i > 0 ? (w[STAGES[i - 1]] ?? 0) : null
+                        // Drop-off from the funnel's previous stage, hidden or not.
+                        const at = STAGES.indexOf(stage)
+                        const prev = at > 0 ? (w[STAGES[at - 1]] ?? 0) : null
                         const drop = prev == null ? null : dropOff(prev, value)
                         return (
                           <td key={stage} className="py-2 px-2 text-right tabular-nums">
                             <div className="text-fg">{fmt(value)}</div>
                             {drop != null && (
-                              <div className={`text-2xs ${dropTone(drop)}`}>
+                              <div className="text-2xs text-fg-faint">
                                 {drop === 0 ? '±0%' : `−${drop}%`}
                               </div>
                             )}
@@ -334,7 +351,7 @@ export function GrowthPage() {
               </table>
             </div>
             <p className="mt-2 text-2xs text-fg-faint">
-              Drop-off = share lost from the previous stage in the same week. Newest week first.
+              Under each number: share lost from the stage before, same week. Newest week first.
             </p>
           </Section>
 
@@ -346,8 +363,9 @@ export function GrowthPage() {
                 <thead>
                   <tr className="text-left text-2xs text-fg-secondary font-semibold">
                     <th className="py-1.5 pr-3 font-medium">Source</th>
-                    <th className="py-1.5 px-2 text-right font-medium">Signups</th>
-                    <th className="py-1.5 px-2 text-right font-medium">Activated</th>
+                    {/* The window in the header: 6 here is 8 weeks, the tile is this week, the scorecard 14 days. */}
+                    <th className="py-1.5 px-2 text-right font-medium">Signups ({weeks.length} wk)</th>
+                    <th className="py-1.5 px-2 text-right font-medium">Activated ({weeks.length} wk)</th>
                     <th className="py-1.5 px-2 text-right font-medium">Activation rate</th>
                   </tr>
                 </thead>
@@ -401,11 +419,11 @@ function dropOff(prev: number, next: number): number | null {
   return Math.max(0, Math.min(100, Math.round((1 - next / prev) * 100)))
 }
 
-function dropTone(drop: number): string {
-  if (drop >= 70) return 'text-danger'
-  if (drop >= 40) return 'text-warn'
-  return 'text-fg-faint'
-}
+/*
+ * Drop-off is drawn neutral: losing most visitors before signup is normal
+ * attrition, not a failure, and a column of red "−100%" read as an outage
+ * (round-2 sweep 2026-11-18).
+ */
 
 function pctDetail(part: number | null | undefined, whole: number | null | undefined, suffix: string): string {
   const p = part ?? 0

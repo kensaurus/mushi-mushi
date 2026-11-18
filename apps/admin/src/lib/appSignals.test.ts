@@ -144,6 +144,20 @@ describe('appAlerts', () => {
     expect(opened).toEqual(['p-bugs'])
   })
 
+  it('leaves out a detail every card carries word for word ("2 serious risks" on all three)', () => {
+    const risky = (name: string, ci: number, bugs: number) => card({ projectId: name, name, ciFailsToday: ci, openReports: bugs, radar: { checkedAt: hoursAgo(3), status: 'pass', open: { error: 2, warn: 0, info: 0 }, unchecked: 0, errored: 0 } })
+    const alerts = appAlerts(rankApps([risky('a', 4, 1), risky('b', 3, 5), risky('c', 2, 1)], NONE, NOW), () => {})
+    expect(alerts).toHaveLength(3)
+    for (const a of alerts) expect(String(a.detail)).not.toContain('2 serious risks')
+    expect(alerts.find((a) => a.id === 'b')!.detail).toBe('5 open bugs')
+    expect(alerts.find((a) => a.id === 'a')!.detail).toBe('1 open bug')
+    // Everything else was shared: not "Nothing else open." (things are open), just no line.
+    const twins = appAlerts(rankApps([risky('a', 4, 1), risky('c', 2, 1)], NONE, NOW), () => {})
+    expect(twins.map((a) => a.detail)).toEqual(['', ''])
+    // One card alone keeps its whole detail.
+    expect(appAlerts(rankApps([risky('a', 4, 1)], NONE, NOW), () => {})[0]!.detail).toBe('2 serious risks · 1 open bug')
+  })
+
   it('no alert when nothing needs you', () => {
     expect(appAlerts(rankApps([card({ name: 'ok', worst: 'ok' })], NONE, NOW), () => {})).toEqual([])
   })

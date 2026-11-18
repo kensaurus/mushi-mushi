@@ -344,6 +344,7 @@ export function ExperimentsPage() {
           projectId={projectId ?? ''}
           onCreate={() => setActiveTab('new')}
           showNewButton={ux.hideOverviewChrome}
+          firstStepShown={!ux.hideExperimentsSnapshot && stats.totalExperiments === 0}
         />
       )}
 
@@ -378,7 +379,7 @@ export function ExperimentsPage() {
   )
 }
 
-function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpen, onLaunch, onStop, projectId, onCreate, showNewButton }: {
+function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpen, onLaunch, onStop, projectId, onCreate, showNewButton, firstStepShown = false }: {
   experiments: Experiment[]
   loading: boolean
   error: string | null
@@ -391,15 +392,20 @@ function ExperimentsTab({ experiments, loading, error, errorCode, onRetry, onOpe
   onCreate: () => void
   /** Quickstart / beginner hide the header "+ New", so the list carries it. */
   showNewButton: boolean
+  /** The page's first-step card already says "No experiments yet" with its one button. */
+  firstStepShown?: boolean
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to manage experiments." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <PageLoadError error={error} code={errorCode} resource="experiments" onRetry={onRetry} />
   if (!experiments.length) {
+    // Round-2 sweep 2026-11-18: the first-step card and this empty state were
+    // stacked, each with its own "Create experiment". One says it.
+    if (firstStepShown) return null
     return (
       <EmptyState
         title="No experiments"
-        description="Create your first A/B experiment to start testing variants with SDK assignment."
+        description="Create an A/B experiment to compare two versions of a screen with your users."
         action={<Btn size="sm" variant="primary" onClick={onCreate}>Create experiment</Btn>}
       />
     )
@@ -586,7 +592,7 @@ function NewExperimentForm({ projectId, onCreated, onCancel, firstStep = false }
         </label>
         <label className="block space-y-1">
           <span className="text-sm font-medium text-fg">Hypothesis</span>
-          <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="Changing CTA to orange will increase clicks by 5%" />
+          <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="e.g. An orange button gets more clicks" />
         </label>
         <label className="flex items-center gap-2 text-sm text-fg">
           <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />

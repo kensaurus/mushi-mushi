@@ -9,6 +9,8 @@
 import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { ResultChip, Toggle } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
+import { spendDownSwitchLocked, spendDownUnused } from '../../lib/creditsView'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
 import { expiryLabel } from '../../lib/creditPlan'
@@ -69,18 +71,22 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           const modelName = cursorModelLabel(k.model) ?? "each app's Cursor model"
           const expiry = expiryLabel(k.creditsExpireAt, now)
           const editable = canChangeSpendDown(k, canManageOrg)
+          const unused = spendDownUnused(k)
           return (
             <li key={k.id} className="space-y-1 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm">
-                  <span className="font-mono text-fg-secondary">{k.keyHint ?? '…'}</span>
+                  <span className="text-fg-secondary">{k.keyHint ?? '…'}</span>
                   {k.label && <span className="ml-2 text-fg-muted">{k.label}</span>}
                   {expiry && <span className="ml-2 text-xs text-fg-muted">· {expiry}</span>}
+                  {/* On but no app sends bugs through it: a state, drawn as a pill (round-2 review). */}
+                  {unused && <StatusPill status="waiting" label="Unused" className="ml-2 align-middle" />}
                 </p>
                 <Toggle
                   label="Fix open bugs before the credits expire"
                   checked={k.enabled}
-                  disabled={!editable || busy === k.id || (!k.enabled && !k.creditsExpireAt)}
+                  // Expired credits cannot be spent: no live switch for them (round-2 review).
+                  disabled={!editable || busy === k.id || spendDownSwitchLocked(k)}
                   onChange={(v) =>
                     void save(
                       k.id,
@@ -91,7 +97,7 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
                 />
               </div>
               <p className="text-xs text-fg-secondary">
-                {line.text} Runs on {modelName}.{' '}
+                {unused ? 'No app sends bugs through it: each app has its own Cursor key, auto-fix is off, or no repo is linked.' : line.text} Runs on {modelName}.{' '}
                 <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Change</Link>
               </p>
               {!k.enabled && !k.creditsExpireAt && (

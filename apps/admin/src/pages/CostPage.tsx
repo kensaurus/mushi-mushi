@@ -52,6 +52,7 @@ import {
 } from '../components/cost/types'
 import { OperationChip } from '../components/OperationChip'
 import { ModelChip, UsdAmount } from '../components/cost/CostDisplayChips'
+import { formatSpendUsd, usesPlatformKeysOnly } from '../lib/costView'
 
 const TABS: Array<{ id: CostTabId; label: string; description: string }> = [
   {
@@ -79,11 +80,8 @@ function listRows<T>(payload: T[] | null | undefined): T[] {
   return Array.isArray(payload) ? payload : []
 }
 
-function fmtSpend(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`
-  if (n >= 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(6)}`
-}
+/** One money format on the page: 4 decimals (review 2026-11-18). */
+const fmtSpend = formatSpendUsd
 
 export function CostPage() {
   const copy = usePageCopy('/cost')
@@ -188,7 +186,7 @@ export function CostPage() {
     (stats.totalCalls === 0 ? 1 : 0) +
     (stats.spendSpike24h ? 1 : 0) +
     stats.failedCalls24h +
-    (!stats.byokAnthropicConfigured && stats.platformKeyCalls24h > 0 ? 1 : 0)
+    (usesPlatformKeysOnly(stats) ? 1 : 0)
 
   usePublishPageContext({
     route: '/cost',
@@ -201,18 +199,12 @@ export function CostPage() {
   const tabOptions = useMemo(
     () => [
       { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
-      {
-        id: 'breakdown' as const,
-        label: copy?.tabLabels?.breakdown ?? 'Breakdown',
-        count: stats.operationsCount > 0 ? stats.operationsCount : undefined,
-      },
-      {
-        id: 'log' as const,
-        label: copy?.tabLabels?.log ?? 'Raw log',
-        count: stats.totalCalls > 0 ? stats.totalCalls : undefined,
-      },
+      // No counts on the tabs: "Breakdown 10" / "Raw log 65" repeated the
+      // Operations and Total logged tiles right above (review 2026-11-18).
+      { id: 'breakdown' as const, label: copy?.tabLabels?.breakdown ?? 'Breakdown' },
+      { id: 'log' as const, label: copy?.tabLabels?.log ?? 'Raw log' },
     ],
-    [copy?.tabLabels, stats.operationsCount, stats.totalCalls],
+    [copy?.tabLabels],
   )
 
   if (!activeProjectId) {
@@ -235,7 +227,7 @@ export function CostPage() {
           }
           helpHowToUse={
             copy?.help?.howToUse ??
-            'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
+            'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own AI key.'
           }
         />
         <NextStep
@@ -275,7 +267,7 @@ export function CostPage() {
         }
         helpHowToUse={
           copy?.help?.howToUse ??
-          'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
+          'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own AI key.'
         }
       >
         {!ux.hideOverviewChrome && (
@@ -349,9 +341,8 @@ export function CostPage() {
             {dailySeries.activeDays > 0 ? (
               <Card className="p-4">
                 <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-                  <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
-                    Daily spend
-                  </SignalChip>
+                  {/* A heading like "Month-end forecast" below, not a grey pill. */}
+                  <h3 className="text-xs font-semibold text-fg">Daily spend</h3>
                   <Btn to="/billing" size="sm" variant="ghost">Compare to plan usage</Btn>
                 </div>
                 <DailySpendChart
@@ -371,9 +362,7 @@ export function CostPage() {
             )}
             {dailySeries.activeDays === 0 ? (
               <ContainedBlock tone="muted" className="p-4 space-y-3">
-                <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
-                  Daily spend
-                </SignalChip>
+                <h3 className="text-xs font-semibold text-fg">Daily spend</h3>
                 <EmptySectionMessage
                   text="No daily rollups yet."
                   hint="Ingest a report or run a Health smoke test to generate llm_invocations rows."
@@ -391,9 +380,7 @@ export function CostPage() {
         {active === 'breakdown' && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card className="p-4">
-              <SignalChip tone="neutral" className="mb-3 uppercase tracking-wide font-medium">
-                By operation
-              </SignalChip>
+              <h3 className="mb-3 text-xs font-semibold text-fg">By operation</h3>
               {summaryLoading ? (
                 <TableSkeleton rows={3} />
               ) : Object.keys(byOp).length === 0 ? (
@@ -413,7 +400,7 @@ export function CostPage() {
                             <OperationChip operation={op} />
                           </td>
                           <td className="py-1.5 text-right">
-                            <UsdAmount value={cost} digits={5} />
+                            <UsdAmount value={cost} />
                           </td>
                         </tr>
                       ))}
@@ -424,9 +411,7 @@ export function CostPage() {
             </Card>
 
             <Card className="p-4">
-              <SignalChip tone="neutral" className="mb-3 uppercase tracking-wide font-medium">
-                By model
-              </SignalChip>
+              <h3 className="mb-3 text-xs font-semibold text-fg">By model</h3>
               {summaryLoading ? (
                 <TableSkeleton rows={3} />
               ) : Object.keys(byModel).length === 0 ? (
@@ -446,7 +431,7 @@ export function CostPage() {
                             <ModelChip model={model} />
                           </td>
                           <td className="py-1.5 text-right">
-                            <UsdAmount value={cost} digits={5} />
+                            <UsdAmount value={cost} />
                           </td>
                         </tr>
                       ))}

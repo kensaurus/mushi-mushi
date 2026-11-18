@@ -35,14 +35,14 @@ import {
   SegmentedControl,
 } from '../components/ui'
 import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
-import { LessonsSnapshotStrip } from '../components/lessons/LessonsSnapshotStrip'
+import { LessonsSnapshotStrip, lessonsNothingYet } from '../components/lessons/LessonsSnapshotStrip'
 import { LessonsReadout } from '../components/lessons/LessonsReadout'
 import {
   EMPTY_LESSONS_STATS,
   type LessonsStats,
   type LessonsTabId,
 } from '../components/lessons/LessonsStatsTypes'
-import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
+import { IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -198,8 +198,9 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       {loading && <TableSkeleton rows={8} />}
 
       {!loading && lessons.length === 0 && (
+        // No icon: the compact empty state keeps the page's sans heading
+        // (round-2 sweep: the editorial variant set "No lessons yet" in serif).
         <EmptyState
-          icon={<IconIntelligence className="w-8 h-8" />}
           title="No lessons yet"
           description="A rule is made when 3 or more reports share one cause and read alike. More reports bring the first one."
         />
@@ -428,7 +429,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     <div>
       <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
         <p
-          className="min-w-0 truncate text-sm text-fg-muted"
+          className="min-w-0 flex-1 basis-64 text-sm text-fg-muted text-pretty"
           title="Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report."
         >
           Promote a pattern to make its rule a lesson. Strong ones are promoted every 6 hours.
@@ -448,7 +449,6 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
 
       {!loading && clusters.length === 0 && (
         <EmptyState
-          icon={<IconShield className="w-8 h-8" />}
           title="No recurring patterns yet"
           description="Patterns form by themselves once several reports share one cause. Nothing to do until then."
         />
@@ -463,10 +463,8 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
               className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-edge px-4 py-2.5"
               data-testid="lessons-cluster-group"
             >
-              <span className="flex min-w-0 items-center gap-2">
-                <Badge className="bg-surface-overlay text-fg-secondary whitespace-nowrap">{item.size >= 3 ? 'No rule suggested yet' : 'Still growing'}</Badge>
-                <span className="text-sm font-medium text-fg">{groupedClustersLabel(item.clusters.length, item.size)}</span>
-              </span>
+              {/* The label already says "still growing"; no chip repeating it. */}
+              <span className="min-w-0 text-sm font-medium text-fg">{groupedClustersLabel(item.clusters.length, item.size)}</span>
               <span className="text-xs text-fg-faint whitespace-nowrap">
                 Last seen: <RelativeTime value={item.lastSeenAt} />
               </span>
@@ -731,7 +729,9 @@ export function LessonsPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideLessonsSnapshot,
+            // Nothing learned and nothing growing: the tab's empty state says
+            // so once (round-2 sweep: "No lessons yet" twice over 0/0 tiles).
+            show: !ux.hideLessonsSnapshot && !lessonsNothingYet(stats),
             children: (
               <LessonsSnapshotStrip
                 stats={stats}

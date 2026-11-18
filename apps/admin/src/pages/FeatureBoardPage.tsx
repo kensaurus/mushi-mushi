@@ -496,9 +496,12 @@ export function FeatureBoardPage() {
         <Btn size="sm" variant="ghost" onClick={reload} loading={isValidating}>
           Refresh
         </Btn>
-        <Btn to="/feedback" size="sm" variant="ghost">
+        {/* With no requests the empty state carries the one link to My feedback. */}
+        {!boardEmpty && (
+          <Btn to="/feedback" size="sm" variant="ghost">
             My feedback
           </Btn>
+        )}
       </PageHeaderBar>
 
       <PagePosture
@@ -530,15 +533,21 @@ export function FeatureBoardPage() {
           search, status and sort controls had nothing to act on, and the serif hero sat in
           a dashed card inside the list card. */}
       {projectId && boardEmpty && (
+        // Round-2 sweep 2026-11-18: the tips were a "/"-bulleted list in
+        // monospace (EmptyState's hints), and "My feedback" / "Open My
+        // feedback" sat in the header and here. Plain sans steps, one link.
         <EmptyState
           title="No feature requests yet"
-          description="Feature requests submitted via the Feedback form will appear here for voting."
-          hints={[
-            'Users pick “Request a feature” in the widget or My feedback',
-            'One vote per person; click again to take yours back',
-            'Mark shipped when the idea lands in a release',
-          ]}
-          action={<Btn to="/feedback" size="sm">Open My feedback</Btn>}
+          description="Requests your users send from the widget or My feedback show here, ranked by votes."
+          action={
+            <div className="space-y-3">
+              <ul className="list-disc space-y-0.5 pl-4 text-xs text-fg-muted" data-testid="feature-board-empty-tips">
+                <li>One vote per person; click again to take yours back.</li>
+                <li>Mark a request shipped when it lands in a release.</li>
+              </ul>
+              <Btn to="/feedback" size="sm">Open My feedback</Btn>
+            </div>
+          }
         />
       )}
 

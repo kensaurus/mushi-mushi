@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/components/query/types.ts
  */
 
-export type QueryTabId = 'overview' | 'ask' | 'history' | 'schema'
+export type QueryTabId = 'ask' | 'history' | 'schema'
 
 export type QueryMode = 'nl' | 'raw'
 

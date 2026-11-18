@@ -10,7 +10,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
 import { QueryReadout } from '../components/query/QueryReadout'
-import { QUERY_TABS, resolveQueryTab } from '../components/query/queryTabs'
+import { QUERY_TABS, defaultLibraryTab, resolveQueryTab, type QueryLibraryTab } from '../components/query/queryTabs'
 import { QueryCopyButton } from '../components/query/QueryCopyButton'
 import { QueryResultsTable } from '../components/query/QueryResultsTable'
 import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
@@ -68,7 +68,7 @@ interface RunItem {
   latencyMs?: number
 }
 
-type SidebarTab = 'saved' | 'recent' | 'team'
+type SidebarTab = QueryLibraryTab
 
 // Approved tables for raw SQL mode — mirrors the backend APPROVED_TABLES set.
 // Shown in the schema reference panel so users know what to query.
@@ -156,7 +156,8 @@ export function QueryPage() {
   const [runs, setRuns] = useState<RunItem[]>([])
   const [pendingDeleteHistory, setPendingDeleteHistory] = useState<HistoryRow | null>(null)
   const [deletingHistory, setDeletingHistory] = useState(false)
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('saved')
+  // null until the user picks a list; until then the Library opens where the rows are.
+  const [sidebarChoice, setSidebarTab] = useState<SidebarTab | null>(null)
   const rawTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   const {
@@ -300,6 +301,7 @@ export function QueryPage() {
 
   const saved = useMemo(() => history.filter((h) => h.is_saved), [history])
   const recent = useMemo(() => history.filter((h) => !h.is_saved), [history])
+  const sidebarTab: SidebarTab = sidebarChoice ?? defaultLibraryTab(saved.length, recent.length)
 
   usePublishPageContext({
     route: '/query',
@@ -322,7 +324,6 @@ export function QueryPage() {
         count: saved.length + recent.length > 0 ? saved.length + recent.length : undefined,
       },
       { id: 'schema' as const, label: 'Schema' },
-      { id: 'overview' as const, label: 'Overview' },
     ],
     [stats.runs24h, saved.length, recent.length],
   )
@@ -426,14 +427,6 @@ export function QueryPage() {
         size="sm"
       />
 
-      {activeTab === 'overview' && (
-        <QueryReadout
-          stats={stats}
-          fetchedAt={statsFetchedAt}
-          isValidating={statsValidating}
-        />
-      )}
-
       {activeTab === 'schema' && (
         <Card className="p-3">
           <div className="mb-2 text-xs font-semibold">Approved tables</div>
@@ -442,19 +435,18 @@ export function QueryPage() {
               Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.
             </p>
           </ContainedBlock>
-          <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
-            {SCHEMA_REFERENCE.map((t) => (
-              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-              <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised border-b border-edge-subtle/30 last:border-b-0">
-                <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                <span className="text-2xs text-fg-faint font-mono leading-relaxed">
-                  {t.columns}
-                  {t.note ? <span className="block text-info/80 not-italic mt-0.5">{t.note}</span> : null}
-                </span>
-              </div>
-            ))}
-          </div>
+          <SchemaTableList className="rounded-sm border border-edge-subtle overflow-hidden" />
         </Card>
+      )}
+
+      {/* Developer details (endpoints, schema-cache health) used to be the only thing on an
+          Overview tab; they belong with the schema they describe (round-2 review, 2026-11-18). */}
+      {activeTab === 'schema' && (
+        <QueryReadout
+          stats={stats}
+          fetchedAt={statsFetchedAt}
+          isValidating={statsValidating}
+        />
       )}
 
       {(activeTab === 'ask' || activeTab === 'history') && (
@@ -497,18 +489,7 @@ export function QueryPage() {
               <span className="text-2xs font-medium text-fg-secondary">Approved tables · <code className="text-brand">$1</code> = your project_id</span>
               <span className="text-2xs text-fg-faint">severity: critical=P0 high=P1 medium=P2 low=P3</span>
             </div>
-            <div className="divide-y divide-edge-subtle/30 max-h-48 overflow-y-auto">
-              {SCHEMA_REFERENCE.map((t) => (
-                // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                <div key={t.table} className="px-3 py-1.5 grid grid-cols-[7rem_1fr] gap-2 items-start">
-                  <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
-                  <span className="text-2xs text-fg-faint font-mono leading-relaxed">
-                    {t.columns}
-                    {t.note && <span className="block text-info/80 not-italic mt-0.5">{t.note}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <SchemaTableList className="max-h-48 overflow-y-auto" />
           </div>
         )}
 
@@ -887,6 +868,29 @@ export function QueryPage() {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * The approved tables. A fixed 7rem name column let "classification_evaluations" print over
+ * its own column list (round-2 review, 2026-11-18): the name now gets its own line on a phone
+ * and a column sized to the longest name from `sm` up, and long names wrap instead of
+ * overflowing.
+ */
+function SchemaTableList({ className = '' }: { className?: string }) {
+  return (
+    <ul className={`divide-y divide-edge-subtle/30 ${className}`} data-testid="query-schema-tables">
+      {SCHEMA_REFERENCE.map((t) => (
+        // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+        <li key={t.table} className="grid grid-cols-1 gap-x-4 gap-y-0.5 px-3 py-2 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] items-start bg-surface-raised">
+          <code className="min-w-0 break-all text-2xs font-mono font-medium text-brand">{t.table}</code>
+          <span className="min-w-0 break-words text-2xs text-fg-faint font-mono leading-relaxed">
+            {t.columns}
+            {t.note ? <span className="block font-sans text-info-foreground mt-0.5">{t.note}</span> : null}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 

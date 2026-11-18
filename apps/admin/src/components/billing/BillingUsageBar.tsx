@@ -2,11 +2,14 @@
  * Quota usage bar with sparkline for a billing project card.
  */
 
+import { Link } from 'react-router-dom'
 import { Badge, Sparkline } from '../ui'
-import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
-import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { SignalChip } from '../report-detail/ReportSurface'
 import { formatLlmCost } from '../../lib/format'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { appUsageFacts } from '../../lib/billingView'
+import { formatSpendUsd } from '../../lib/costView'
+import { sdkHealthHref } from '../../lib/sdkHealth'
 import {
   buildUsageForecast,
   daysUntilPeriodReset,
@@ -47,6 +50,16 @@ export interface BillingUsageBarProps {
    * but never a projected dollar bill.
    */
   complimentary?: boolean
+  /**
+   * The team meters at the top of Billing already draw the quota count, its
+   * bar, "% used" and the reset: skip them here, keep the forecast and any
+   * warning (review 2026-11-18: 24 / 3,000 and "1% used" each shown twice).
+   */
+  quotaInStrip?: boolean
+  /** The app this card is for: its own counts say so. */
+  appName?: string
+  /** For the "check SDK health" link when the app sent nothing. */
+  projectId?: string
 }
 
 // Severity tone the whole UsageBar takes on — matches across chip, progress
@@ -244,6 +257,9 @@ export function BillingUsageBar({
   diagnosesUsed,
   diagnosesLimit,
   complimentary = false,
+  quotaInStrip = false,
+  appName = 'This app',
+  projectId,
 }: BillingUsageBarProps) {
   // Phase 2: prefer diagnoses metering when the plan has a diagnoses limit.
   const usingDiagnoses = diagnosesLimit != null
@@ -276,6 +292,19 @@ export function BillingUsageBar({
   )
   const resetLabel = formatPeriodResetLabel(daysUntilPeriodReset(periodEnd))
   const seriesSummary = summariseUsageSeries(usageSeries)
+  const showQuota = !quotaInStrip
+  // With the meter above, a calm narrative ("Plenty of headroom") restates
+  // the 1% bar; only a warning stays.
+  const narrative =
+    showQuota || headline.tone === 'warn' || headline.tone === 'danger' ? headline.narrative : null
+  const worstTone =
+    headline.tone === 'danger' || forecast?.tone === 'danger'
+      ? 'danger'
+      : headline.tone === 'warn' || forecast?.tone === 'warn'
+        ? 'warn'
+        : 'muted'
+  const forecastLine = [narrative, forecast?.label, forecast?.projectedCostLabel].filter(Boolean).join(' · ')
+  const appFacts = appUsageFacts(usage, llmCostUsd, formatSpendUsd, { includeFixes: !quotaInStrip })
 
   return (
     <section
@@ -284,7 +313,9 @@ export function BillingUsageBar({
       data-quota-tone={headline.tone}
     >
       {/* Headline row — the count + severity chip are now the focal point of
-          the card. Tabular-nums keeps the digits aligned across re-renders. */}
+          the card. Tabular-nums keeps the digits aligned across re-renders.
+          Skipped when the team meters above already draw it. */}
+      {showQuota && (
       <div className="flex items-baseline justify-between gap-2 flex-wrap">
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5 flex-wrap">
@@ -311,12 +342,13 @@ export function BillingUsageBar({
           </span>
           {headline.chipLabel}
           {pct != null && headline.chipLabel !== `${pct}% used` && (
-            <span className="ml-1 font-mono opacity-80 tabular-nums">{pct}%</span>
+            <span className="ml-1 opacity-80 tabular-nums">{pct}%</span>
           )}
         </Badge>
       </div>
+      )}
 
-      {displayLimit != null && (
+      {showQuota && displayLimit != null && (
         <div
           className="relative h-2.5 bg-surface-overlay rounded-sm overflow-hidden"
           role="progressbar"
@@ -342,30 +374,21 @@ export function BillingUsageBar({
         </div>
       )}
 
-      {(headline.narrative || forecast) && (
-        <ContainedBlock tone={headline.tone === 'danger' ? 'warn' : headline.tone === 'warn' ? 'warn' : 'muted'} className="flex flex-wrap items-center gap-2">
-          {headline.narrative && (
-            <InlineProof className={`border-0 bg-transparent px-0 py-0 ${headline.tone === 'danger' ? 'text-danger' : headline.tone === 'warn' ? 'text-warn' : ''}`}>
-              {headline.narrative}
-            </InlineProof>
-          )}
-          {forecast && (
-            <SignalChip tone={forecast.tone === 'danger' ? 'danger' : forecast.tone === 'warn' ? 'warn' : 'neutral'} className="font-mono">
-              {forecast.label}
-            </SignalChip>
-          )}
-          {forecast?.projectedCostLabel && (
-            <SignalChip tone="neutral" className="font-mono">
-              {forecast.projectedCostLabel}
-            </SignalChip>
-          )}
-        </ContainedBlock>
+      {/* One sans line that wraps: the forecast used to be a monospace chip
+          in a grey box, cut to "at th…" at 390 (review 2026-11-18). */}
+      {forecastLine && (
+        <p
+          className={`text-2xs leading-snug text-pretty ${
+            worstTone === 'danger' ? 'text-danger' : worstTone === 'warn' ? 'text-warn' : 'text-fg-muted'
+          }`}
+          data-testid="billing-usage-forecast"
+        >
+          {forecastLine}
+        </p>
       )}
 
-      {resetLabel && (
-        <InlineProof className="border-0 bg-transparent px-0 py-0 text-fg-muted tabular-nums">
-          {resetLabel}
-        </InlineProof>
+      {showQuota && resetLabel && (
+        <p className="text-2xs text-fg-muted tabular-nums">{resetLabel}</p>
       )}
 
       {/* 30-day reports trend — sits between the period headline and the
@@ -380,17 +403,17 @@ export function BillingUsageBar({
           className="border-t border-edge-subtle/60 pt-2 space-y-1"
           aria-label="Last 30 days of reports ingested"
         >
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <SignalChip tone="neutral" className="uppercase tracking-wider">
-              Last 30 days
-            </SignalChip>
-            <InlineProof className="border-0 bg-transparent px-0 py-0 font-mono tabular-nums">
-              {seriesSummary.total.toLocaleString()} report
-              {seriesSummary.total === 1 ? '' : 's'}
-              <span aria-hidden="true" className="mx-1">·</span>
-              {seriesSummary.activeDays} active day
-              {seriesSummary.activeDays === 1 ? '' : 's'}
-            </InlineProof>
+          {/* This app's own reports, not the team's: "0 reports" sat under
+              the team's "24 / 3,000 diagnoses" with no scope (review 2026-11-18). */}
+          <div className="flex items-baseline justify-between gap-2 flex-wrap">
+            <h4 className="text-2xs font-semibold text-fg">Reports from {appName} · last 30 days</h4>
+            {seriesSummary.total > 0 && (
+              <p className="text-2xs text-fg-muted tabular-nums">
+                {seriesSummary.total.toLocaleString()} report{seriesSummary.total === 1 ? '' : 's'}
+                <span aria-hidden="true" className="mx-1">·</span>
+                {seriesSummary.activeDays} active day{seriesSummary.activeDays === 1 ? '' : 's'}
+              </p>
+            )}
           </div>
           {seriesSummary.total > 0 ? (
             <div className="flex items-center gap-3 flex-wrap">
@@ -402,60 +425,54 @@ export function BillingUsageBar({
                   ariaLabel={`Daily reports trend over the last 30 days. Total ${seriesSummary.total}, ${seriesSummary.activeDays} active days, peak ${seriesSummary.peakReports}${seriesSummary.peakDayLabel ? ` on ${seriesSummary.peakDayLabel}` : ''}.`}
                 />
               </div>
-              <InlineProof className="tabular-nums border-0 bg-transparent px-0 py-0">
-                {seriesSummary.avgPerActiveDay > 0 && (
-                  <>
-                    <SignalChip tone="neutral" className="font-mono">
-                      {seriesSummary.avgPerActiveDay} / active day
-                    </SignalChip>
-                  </>
-                )}
-                {seriesSummary.peakDayLabel && seriesSummary.peakReports > 0 && (
-                  <SignalChip tone="neutral" className="font-mono">
-                    peak {seriesSummary.peakReports.toLocaleString()} on {seriesSummary.peakDayLabel}
-                  </SignalChip>
-                )}
-                {seriesSummary.lastActiveDayLabel && seriesSummary.lastActiveDaysAgo != null && (
-                  <SignalChip tone="neutral">
-                    last activity{' '}
-                    {seriesSummary.lastActiveDaysAgo === 0
-                      ? 'today'
-                      : seriesSummary.lastActiveDaysAgo === 1
-                        ? 'yesterday'
-                        : `${seriesSummary.lastActiveDaysAgo}d ago`}
-                  </SignalChip>
-                )}
-              </InlineProof>
+              <p className="text-2xs text-fg-muted tabular-nums">
+                {[
+                  seriesSummary.avgPerActiveDay > 0 ? `${seriesSummary.avgPerActiveDay} / active day` : null,
+                  seriesSummary.peakDayLabel && seriesSummary.peakReports > 0
+                    ? `peak ${seriesSummary.peakReports.toLocaleString()} on ${seriesSummary.peakDayLabel}`
+                    : null,
+                  seriesSummary.lastActiveDayLabel && seriesSummary.lastActiveDaysAgo != null
+                    ? `last activity ${
+                        seriesSummary.lastActiveDaysAgo === 0
+                          ? 'today'
+                          : seriesSummary.lastActiveDaysAgo === 1
+                            ? 'yesterday'
+                            : `${seriesSummary.lastActiveDaysAgo}d ago`
+                      }`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
             </div>
           ) : (
-            <EmptySectionMessage
-              text="No reports ingested in the last 30 days."
-              hint="Confirm the SDK is wired up and sending events to this project."
-            />
+            // One plain line, not a dashed box; whether the app is checking in
+            // is SDK health's job (Connect), not Billing's (review 2026-11-18).
+            <p className="text-2xs text-fg-muted text-pretty" data-testid="billing-app-no-reports">
+              None.{' '}
+              {projectId ? (
+                <Link to={sdkHealthHref(projectId)} className="text-fg underline underline-offset-2 hover:text-accent">
+                  Check SDK health
+                </Link>
+              ) : null}
+            </p>
           )}
         </section>
       )}
 
-      {/* Secondary metrics — explicitly demoted below the quota block.
-          They're useful but not what the user came here to read. */}
-      <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-edge-subtle/60">
-        <ContainedBlock tone="muted" className="flex flex-wrap items-center gap-1.5 py-1.5">
-          <SignalChip tone="info">
-            {/* Merged fix PRs from any agent; `fixes` counts only the server agent's runs (1c802df2). */}
-            Fixes merged <span className="font-mono tabular-nums">{(usage.fixesSucceeded ?? usage.fixes).toLocaleString()}</span>
-          </SignalChip>
-          <SignalChip tone="neutral">
-            Classifier tokens <span className="font-mono tabular-nums">{usage.tokens.toLocaleString()}</span>
-          </SignalChip>
-          {llmCostUsd != null && (
-            <span title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd">
-              <SignalChip tone="brand">
-                LLM {formatLlmCost(llmCostUsd)}
-              </SignalChip>
-            </span>
-          )}
-        </ContainedBlock>
-      </div>
+      {/* This app's own counts, flat. With the team meters shown, Fixes
+          merged is theirs only: "Fixes merged 191" beside "Fixes merged 0"
+          was two scopes with one label (review 2026-11-18). Zeros are grey. */}
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-edge-subtle/60 pt-2 text-2xs text-fg-muted">
+        <span>{appName} this period</span>
+        {appFacts.map((f) => (
+          <span key={f.label} title={f.label === 'AI cost' ? 'Spent on AI calls this billing month, from llm_invocations.cost_usd' : undefined}>
+            <span aria-hidden="true" className="mr-2">·</span>
+            {f.label}{' '}
+            <span className={`tabular-nums font-medium ${f.zero ? 'text-fg-faint' : 'text-fg'}`}>{f.value}</span>
+          </span>
+        ))}
+      </p>
     </section>
   )
 }

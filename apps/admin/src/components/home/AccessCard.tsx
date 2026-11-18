@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom'
 import { Badge, RelativeTime, Section, Skeleton, type BadgeTone } from '../ui'
 import { initialsOf, type HomeAccess, type HomeSection, type SdkFreshness } from '../../lib/projectHome'
 import { HomeSectionBody } from './HomeSectionBody'
+import { groupHomeKeys } from '../../lib/homeView'
 
 const SDK_TONE: Record<SdkFreshness, { tone: BadgeTone; text: string }> = {
   'up-to-date': { tone: 'okSubtle', text: 'Up to date' },
@@ -24,26 +25,6 @@ interface Props {
   section: HomeSection<HomeAccess>
   /** The plan includes the audit log (enterprise). */
   auditLog: boolean
-}
-
-type HomeKey = { label: string; kind: 'sdk' | 'mcp' | 'other'; lastUsedAt: string | null }
-
-/**
- * One row per key name and kind, newest use first: every `mushi login` mints a "cli-login"
- * key, so Home listed five identical rows (2026-11-16).
- */
-function groupKeys(keys: HomeKey[]): Array<HomeKey & { count: number }> {
-  const out = new Map<string, HomeKey & { count: number }>()
-  for (const k of keys) {
-    const id = `${k.label}\u0000${k.kind}`
-    const seen = out.get(id)
-    if (!seen) out.set(id, { ...k, count: 1 })
-    else {
-      seen.count++
-      if (k.lastUsedAt && (!seen.lastUsedAt || k.lastUsedAt > seen.lastUsedAt)) seen.lastUsedAt = k.lastUsedAt
-    }
-  }
-  return [...out.values()]
 }
 
 export function AccessCard({ section, auditLog }: Props) {
@@ -92,33 +73,7 @@ export function AccessCard({ section, auditLog }: Props) {
               ) : a.keys.length === 0 ? (
                 <Link to="/projects" className="text-link hover:underline">Create a key</Link>
               ) : (
-                <ul className="space-y-1">
-                  {groupKeys(a.keys).map((k) => (
-                    <li key={`${k.label}-${k.kind}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                      <span className="min-w-0 truncate text-fg">
-                        {k.label}
-                        {k.count > 1 && <span className="ml-1 text-fg-muted">×{k.count}</span>}
-                      </span>
-                      <Badge tone="neutral">{KIND_LABEL[k.kind]}</Badge>
-                      <span className="text-fg-muted">
-                        {k.lastUsedAt ? (
-                          <>
-                            used <RelativeTime value={k.lastUsedAt} />
-                          </>
-                        ) : (
-                          'never used'
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                  {a.keysTotal > a.keys.length && (
-                    <li>
-                      <Link to="/projects" className="text-xs text-link hover:underline">
-                        All {a.keysTotal} keys →
-                      </Link>
-                    </li>
-                  )}
-                </ul>
+                <KeyList keys={a.keys} keysTotal={a.keysTotal} />
               )}
             </Row>
             <Row term="Logs">
@@ -137,6 +92,42 @@ export function AccessCard({ section, auditLog }: Props) {
         )}
       </HomeSectionBody>
     </Section>
+  )
+}
+
+function KeyList({ keys, keysTotal }: { keys: HomeAccess['keys']; keysTotal: number }) {
+  const g = groupHomeKeys(keys)
+  return (
+    <ul className="space-y-1">
+      {g.used.map((k) => (
+        <li key={`${k.label}-${k.kind}`} className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+          <span className="min-w-0 truncate text-fg">
+            {k.label}
+            {k.count > 1 && <span className="ml-1 text-fg-muted">×{k.count}</span>}
+          </span>
+          <Badge tone="neutral">{KIND_LABEL[k.kind]}</Badge>
+          {k.lastUsedAt && (
+            <span className="whitespace-nowrap text-fg-muted">
+              used <RelativeTime value={k.lastUsedAt} />
+            </span>
+          )}
+        </li>
+      ))}
+      {/* Never-used keys on one line: "never used" ×3 was one fact three times (round-2 sweep 2026-11-18). */}
+      {g.unused.length > 0 && (
+        <li className="text-xs text-fg-muted" data-testid="home-keys-unused">
+          <span className="text-fg-secondary">{g.unused.length} never used:</span>{' '}
+          {g.unused.map((k) => `${k.label}${k.count > 1 ? ` ×${k.count}` : ''}`).join(', ')}
+        </li>
+      )}
+      {keysTotal > keys.length && (
+        <li>
+          <Link to="/projects" className="text-xs text-link hover:underline">
+            All {keysTotal} keys →
+          </Link>
+        </li>
+      )}
+    </ul>
   )
 }
 

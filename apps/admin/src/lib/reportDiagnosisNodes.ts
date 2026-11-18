@@ -317,7 +317,10 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     return [{ ...base, title: 'Diagnosis failed', detail: 'deep diagnosis did not finish', state: 'failed', needsLook: true, why: view.message }]
   }
   if (view.kind === 'stage1_only') {
-    return [{ ...base, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
+    // The report's confidence is the first check's certainty about the
+    // category (the Symptom node shows it); there is no diagnosis to be sure
+    // of, so no % here: "no full diagnosis 97%" read as a 97% diagnosis.
+    return [{ ...base, confidence: null, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
   return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi Mushi is still reading this report.' }]
 }
@@ -344,8 +347,8 @@ export function checkNodes(report: ReportDetail): DiagnosisNode[] {
       id: 'judge',
       lane: 'check',
       title: 'Not graded yet',
-      detail: 'judge runs on a sample',
-      state: 'pending',
+      detail: 'judge grades a sample',
+      state: 'unchecked',
       confidence: null,
       needsLook: false,
       why: 'A second model grades a sample of triaged reports (category, severity, component, repro). This one has not been graded yet.',

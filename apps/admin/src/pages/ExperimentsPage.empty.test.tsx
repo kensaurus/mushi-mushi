@@ -96,6 +96,9 @@ describe('ExperimentsPage empty state', () => {
     const card = host.querySelector('[data-testid="page-first-step"]')
     expect(card?.textContent).toContain('No experiments yet')
     expect(host.querySelector('[data-testid="empty-probe"]')?.textContent).toBe('empty')
+    // Round-2 sweep: one empty state, one Create button (the list's own empty card steps aside).
+    expect([...host.querySelectorAll('button, a')].filter((b) => b.textContent?.trim() === 'Create experiment')).toHaveLength(1)
+    expect(host.textContent).not.toContain('SDK assignment')
   })
 
   it('shows the status sentence once an experiment exists', async () => {

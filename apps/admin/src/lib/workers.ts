@@ -234,7 +234,9 @@ export function workersSummary(data: WorkLanesData, now: number = Date.now()) {
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
   const online = data.hosts.filter((h) => h.online && !h.revoked).length
   const taking = data.lanes.filter((l) => laneTaking(l, hosts.get(l.hostId), now)).length
-  const queued = data.lanes.reduce((n, l) => n + l.queue.length, 0)
+  // Each report once: a report queued on two lanes is one report waiting (the status said 119
+  // beside a lane's "Queue (117)", round-2 review 2026-11-18).
+  const queued = new Set(data.lanes.flatMap((l) => l.queue.map((q) => q.reportId))).size
   const offlineWithQueue = data.lanes.filter((l) => l.queue.length > 0 && !hosts.get(l.hostId)?.online).length
   let tone: 'ok' | 'warn' | 'neutral' = 'neutral'
   let sentence: string

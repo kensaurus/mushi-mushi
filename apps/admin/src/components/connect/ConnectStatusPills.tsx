@@ -63,7 +63,8 @@ export function connectPills(input: ConnectPillsInput): ConnectPill[] {
       id: 'heartbeat',
       label: 'App checked in',
       value: heard ? `Heard ${heard}` : 'Not heard yet',
-      tone: freshness === 'healthy' ? 'ok' : freshness === 'never' ? 'neutral' : 'warn',
+      // Quiet (1 h – 7 d) is grey; only a week of silence warns (2026-11-18).
+      tone: freshness === 'healthy' ? 'ok' : freshness === 'cold' ? 'warn' : 'neutral',
       href: `#${SDK_HEALTH_ANCHOR}`,
     },
     {

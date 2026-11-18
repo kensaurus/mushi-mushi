@@ -78,7 +78,8 @@ describe('summaryPlace', () => {
 
 describe('missingCaptures', () => {
   it('lists every empty evidence panel, and none that has data', () => {
-    expect(missingCaptures(r())).toEqual(['vitals', 'console', 'network', 'repro'])
+    // The screenshot, session ID and breadcrumbs notes joined the same line (R2 sweep 2026-11-18).
+    expect(missingCaptures(r())).toEqual(['vitals', 'console', 'network', 'repro', 'screenshot', 'session', 'breadcrumbs'])
     expect(
       missingCaptures(
         r({
@@ -87,7 +88,16 @@ describe('missingCaptures', () => {
           repro_timeline: [{ kind: 'route', ts: 1 }] as unknown as ReportDetail['repro_timeline'],
         }),
       ),
-    ).toEqual(['network'])
+    ).toEqual(['network', 'screenshot', 'session', 'breadcrumbs'])
+    expect(
+      missingCaptures(
+        r({
+          screenshot_url: 'https://x/s.png',
+          session_id: 's1',
+          custom_metadata: { sentry: { breadcrumbs: [{ message: 'x' }] } } as unknown as ReportDetail['custom_metadata'],
+        }),
+      ),
+    ).toEqual(['vitals', 'console', 'network', 'repro'])
     // Backend spans keep the Network card (its trace waterfall).
     expect(missingCaptures(r({ backend_spans: [{}] as unknown as ReportDetail['backend_spans'] }))).not.toContain('network')
   })

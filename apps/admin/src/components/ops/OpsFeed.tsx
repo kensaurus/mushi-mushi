@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import type { OpsApp, OpsEvent } from '../../lib/opsTypes'
 import { Btn } from '../ui'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
 import {
   SEVERITY_META,
   agoText,
@@ -24,11 +24,15 @@ import {
   isRefund,
   needsAck,
   opsAppName,
+  slackChipShown,
   slackState,
+  splitBodyCta,
   unackedIds,
   type FeedGroupItem,
   type FeedThreadItem,
+  type NeedsLookView,
 } from '../../lib/opsView'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import { OpsAppIcon } from './OpsCoverage'
 
 interface FeedProps {
@@ -42,6 +46,8 @@ interface FeedProps {
   onAckMany: (ids: string[]) => void
   /** Highlight one event (?event= from a Slack link). */
   focusId?: string | null
+  /** The team's Slack bot is on: "stored only" is then worth a chip on the row. */
+  slackEnabled: boolean
 }
 
 function EventRow({
@@ -55,6 +61,8 @@ function EventRow({
   focused,
   copies = 1,
   inGroup = false,
+  slackEnabled,
+  severityHeaded = false,
 }: {
   e: OpsEvent
   app: OpsApp | undefined
@@ -68,10 +76,14 @@ function EventRow({
   copies?: number
   /** Inside an app's info group: the group already names the app and the severity. */
   inGroup?: boolean
+  slackEnabled: boolean
+  /** The row sits under a heading that already names its severity ("2 failures"). */
+  severityHeaded?: boolean
 }) {
   const sev = SEVERITY_META[e.severity]
   const slack = slackState(e)
-  const amount = e.amount_minor != null && e.currency ? `${isRefund(e.kind) ? '−' : ''}${formatMoney(Math.abs(e.amount_minor), e.currency)}` : null
+  const body = splitBodyCta(e.body, e.url)
+  const facts = [amountFact(e), ...e.facts.map((f) => `${f.label}: ${f.value}`)].filter((f): f is string => Boolean(f))
   return (
     <div
       className={`flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2 ${reply ? 'border-l-2 border-edge-subtle pl-4' : ''} ${focused ? 'outline-2 outline-accent -outline-offset-2' : ''}`}
@@ -83,32 +95,51 @@ function EventRow({
           <span className="truncate">{e.project_id ? opsAppName(app) : 'team'}</span>
         </span>
       )}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-fg">
+      {/* Phone: the title takes the full row and the chips wrap under it (never one word per line). */}
+      <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
+        <p className="text-sm font-bold text-pretty break-words text-fg">
           <span aria-hidden="true">{eventEmoji(e)}</span> {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{e.title}</a> : e.title}
           {copies > 1 && (
-            <span className="ml-1 font-mono text-2xs font-semibold text-fg-secondary" title={`Sent ${copies} times`} data-testid={`ops-copies-${e.id}`}>
+            <span className="ml-1 text-2xs font-semibold text-fg-secondary tabular-nums" title={`Sent ${copies} times`} data-testid={`ops-copies-${e.id}`}>
               ×{copies}
             </span>
           )}
         </p>
-        {e.body && <p className="line-clamp-2 max-w-prose text-xs text-fg-secondary sm:line-clamp-none">{e.body}</p>}
-        {(amount || e.facts.length > 0) && (
-          <p className="line-clamp-1 text-2xs text-fg-secondary sm:line-clamp-none">
-            {[amount ? `Amount: ${amount}` : null, ...e.facts.map((f) => `${f.label}: ${f.value}`)].filter(Boolean).join('  ·  ')}
+        {(body.text || body.cta) && (
+          <p className="max-w-prose text-xs break-words text-fg-secondary">
+            {body.text}
+            {body.cta && e.url && (
+              <>
+                {body.text ? ' ' : ''}
+                <a href={e.url} target="_blank" rel="noopener noreferrer" className={`font-semibold ${LINK_ACCENT}`} data-testid={`ops-cta-${e.id}`}>
+                  {body.cta} ↗
+                </a>
+              </>
+            )}
           </p>
+        )}
+        {facts.length > 0 && (
+          <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-fg-secondary" data-testid={`ops-facts-${e.id}`}>
+            {facts.map((f) => (
+              <li key={f} className="break-words">
+                {f}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
       <span className="flex shrink-0 flex-wrap items-center gap-1.5">
-        {!inGroup && (
+        {!inGroup && !severityHeaded && (
           <span className={`inline-flex items-center gap-1 rounded-xs px-1 py-px text-2xs font-semibold whitespace-nowrap ${CHIP_TONE[sev.tone]}`}>
             <span aria-hidden="true">{sev.glyph}</span> {sev.label}
           </span>
         )}
-        <span className={`inline-flex items-center gap-1 rounded-xs px-1 py-px text-2xs font-semibold whitespace-nowrap ${CHIP_TONE[slack.tone === 'ok' ? 'ok' : slack.tone === 'danger' ? 'danger' : 'neutral']}`} title={slack.detail ?? undefined} data-testid={`ops-slack-${e.id}`}>
-          <span aria-hidden="true">{slack.glyph}</span> {slack.label}
-        </span>
-        <time dateTime={e.occurred_at} title={new Date(e.occurred_at).toLocaleString()} className="font-mono text-2xs text-fg-secondary tabular-nums">
+        {slackChipShown(slack, slackEnabled) && (
+          <span className={`inline-flex items-center gap-1 rounded-xs px-1 py-px text-2xs font-semibold whitespace-nowrap ${CHIP_TONE[slack.tone === 'danger' ? 'danger' : 'neutral']}`} title={slack.detail ?? undefined} data-testid={`ops-slack-${e.id}`}>
+            <span aria-hidden="true">{slack.glyph}</span> {slack.label}
+          </span>
+        )}
+        <time dateTime={e.occurred_at} title={new Date(e.occurred_at).toLocaleString()} className="text-2xs whitespace-nowrap text-fg-secondary tabular-nums">
           {agoText(e.occurred_at, now)}
         </time>
         {e.acked_at ? (
@@ -128,21 +159,26 @@ function EventRow({
   )
 }
 
-type RowCtx = Omit<FeedProps, 'events' | 'apps'> & { byId: Map<string, OpsApp> }
+function amountFact(e: OpsEvent): string | null {
+  if (e.amount_minor == null || !e.currency) return null
+  return `Amount: ${isRefund(e.kind) ? '−' : ''}${formatMoney(Math.abs(e.amount_minor), e.currency)}`
+}
+
+type RowCtx = Omit<FeedProps, 'events' | 'apps'> & { byId: Map<string, OpsApp>; severityHeaded?: boolean }
 
 function ThreadItem({ item, ctx, inGroup = false }: { item: FeedThreadItem; ctx: RowCtx; inGroup?: boolean }) {
   const { event, replies } = item.thread
-  const { byId, now, canAck, acking, onAck, onAckMany, focusId } = ctx
+  const { byId, now, canAck, acking, onAck, onAckMany, focusId, slackEnabled } = ctx
   // A folded duplicate acknowledges every copy, so none of them comes back as open.
   const ackThis = item.ids.length > 1 ? () => onAckMany(item.ids) : onAck
   return (
     <>
-      <EventRow e={event} app={byId.get(event.project_id ?? '')} now={now} canAck={canAck} acking={acking.has(event.id)} onAck={ackThis} focused={focusId === event.id} copies={item.ids.length} inGroup={inGroup} />
+      <EventRow e={event} app={byId.get(event.project_id ?? '')} now={now} canAck={canAck} acking={acking.has(event.id)} onAck={ackThis} focused={focusId === event.id} copies={item.ids.length} inGroup={inGroup} slackEnabled={slackEnabled} severityHeaded={ctx.severityHeaded} />
       {replies.length > 0 && (
         <ol className="ml-8 pb-1" aria-label={`Replies to ${event.title}`}>
           {replies.map((r) => (
             <li key={r.id}>
-              <EventRow e={r} app={byId.get(r.project_id ?? '')} now={now} canAck={canAck} acking={acking.has(r.id)} onAck={onAck} reply focused={focusId === r.id} />
+              <EventRow e={r} app={byId.get(r.project_id ?? '')} now={now} canAck={canAck} acking={acking.has(r.id)} onAck={onAck} reply focused={focusId === r.id} slackEnabled={slackEnabled} />
             </li>
           ))}
         </ol>
@@ -159,7 +195,8 @@ function GroupItem({ group, events, ctx }: { group: FeedGroupItem; events: OpsEv
   const openIds = unackedIds(group.items, events)
   const busy = openIds.some((id) => ctx.acking.has(id))
   const count = group.items.reduce((n, i) => n + i.ids.length, 0)
-  const label = `${group.projectId ? opsAppName(app) : 'team'} · ${categoryCount(group.category, count)}`
+  const name = group.projectId ? opsAppName(app) : 'team'
+  const label = `${name} · ${categoryCount(group.category, count)}`
   return (
     <div data-testid={`ops-group-${group.key}`}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
@@ -174,16 +211,16 @@ function GroupItem({ group, events, ctx }: { group: FeedGroupItem; events: OpsEv
             {open ? '▾' : '▸'}
           </span>
           <OpsAppIcon app={app} />
-          <span className="truncate">{label}</span>
+          {/* The name may truncate on a phone; the count never does. */}
+          <span className="min-w-0 truncate">{name}</span>{' '}
+          <span className="shrink-0 font-normal whitespace-nowrap text-fg-secondary">· {categoryCount(group.category, count)}</span>
         </button>
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className={`inline-flex items-center gap-1 rounded-xs px-1 py-px text-2xs font-semibold whitespace-nowrap ${CHIP_TONE[SEVERITY_META.info.tone]}`}>
-            <span aria-hidden="true">{SEVERITY_META.info.glyph}</span> {SEVERITY_META.info.label}
-          </span>
-          <time dateTime={newest.occurred_at} title={new Date(newest.occurred_at).toLocaleString()} className="font-mono text-2xs text-fg-secondary tabular-nums">
+          <time dateTime={newest.occurred_at} title={new Date(newest.occurred_at).toLocaleString()} className="text-2xs whitespace-nowrap text-fg-secondary tabular-nums">
             {agoText(newest.occurred_at, ctx.now)}
           </time>
-          {ctx.canAck && openIds.length > 0 && (
+          {/* Collapsed rows are all info (the feed heading says so once); the bulk button shows with the rows it acts on. */}
+          {open && ctx.canAck && openIds.length > 0 && (
             <Btn size="sm" variant="ghost" className="whitespace-nowrap" loading={busy} onClick={() => ctx.onAckMany(openIds)} aria-label={`Acknowledge all: ${label}`} title="Mark every row in this group as seen here and in Slack">
               Acknowledge all
             </Btn>
@@ -203,32 +240,52 @@ function GroupItem({ group, events, ctx }: { group: FeedGroupItem; events: OpsEv
   )
 }
 
-export function OpsFeed({ events, apps, ...rest }: FeedProps) {
+export function OpsFeed({ events, apps, pinnedAbove, ...rest }: FeedProps & { pinnedAbove: boolean }) {
   const ctx: RowCtx = { ...rest, byId: new Map(apps.map((a) => [a.id, a])) }
   const { pinned, items } = arrangeFeed(events)
+  // Unfiltered, the open rows are already listed under "Needs a look" at the top of the page. Under
+  // a filter they stay in this list, first, so the filtered view is complete.
+  const rows: Array<FeedThreadItem | FeedGroupItem> = pinnedAbove ? items : [...pinned, ...items]
+  if (rows.length === 0) return <p className="px-3 py-2 text-xs text-fg-secondary">Every event on this page is listed under Needs a look, above.</p>
   return (
-    <div className="space-y-2">
-      {pinned.length > 0 && (
-        <section aria-label="Needs a look" id="ops-needs-look" data-testid="ops-needs-look">
-          <h3 className="mb-1 text-2xs font-bold tracking-wider text-danger-foreground uppercase">Needs a look</h3>
-          <ol className="divide-y divide-edge-subtle rounded-md border border-danger/40 bg-surface-raised">
-            {pinned.map((item) => (
-              <li key={item.thread.event.id} className="ci-rise">
-                <ThreadItem item={item} ctx={ctx} />
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-      {items.length > 0 && (
-        <ol className="divide-y divide-edge-subtle rounded-md border border-edge-subtle bg-surface-raised" data-testid="ops-feed">
+    <ol className="divide-y divide-edge-subtle rounded-md border border-edge-subtle bg-surface-raised" data-testid="ops-feed">
+      {rows.map((item) => (
+        <li key={item.kind === 'group' ? `g:${item.key}` : item.thread.event.id} className="ci-rise">
+          {item.kind === 'group' ? <GroupItem group={item} events={events} ctx={ctx} /> : <ThreadItem item={item} ctx={ctx} />}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/**
+ * The top of /ops: what still needs someone, worst first. Failures (red) and warnings (amber) are
+ * separate groups, each headed by its own count; together they are the page's one
+ * "needs a look" number (lib/opsView needsLookView).
+ */
+export function OpsNeedsLook({ view, apps, ...rest }: Omit<FeedProps, 'events'> & { view: NeedsLookView }) {
+  const ctx: RowCtx = { ...rest, byId: new Map(apps.map((a) => [a.id, a])), severityHeaded: true }
+  if (view.count === 0) return null
+  const group = (tone: 'danger' | 'warn', items: FeedThreadItem[], noun: [string, string]) =>
+    items.length > 0 && (
+      <div data-testid={`ops-needs-look-${tone}`}>
+        <h3 className={`mb-1 inline-flex items-center gap-1.5 text-xs font-bold ${tone === 'danger' ? 'text-danger-foreground' : 'text-warn-foreground'}`}>
+          <StatusGlyph tone={tone} />
+          <span className="tabular-nums" data-testid={`ops-needs-look-${tone}-count`}>{items.length}</span> {noun[items.length === 1 ? 0 : 1]}
+        </h3>
+        <ol className={`divide-y divide-edge-subtle rounded-md border bg-surface-raised ${tone === 'danger' ? 'border-danger/40' : 'border-warn/40'}`}>
           {items.map((item) => (
-            <li key={item.kind === 'group' ? `g:${item.key}` : item.thread.event.id} className="ci-rise">
-              {item.kind === 'group' ? <GroupItem group={item} events={events} ctx={ctx} /> : <ThreadItem item={item} ctx={ctx} />}
+            <li key={item.thread.event.id} className="ci-rise">
+              <ThreadItem item={item} ctx={ctx} />
             </li>
           ))}
         </ol>
-      )}
-    </div>
+      </div>
+    )
+  return (
+    <section aria-label={`Needs a look: ${view.count}`} id="ops-needs-look" data-testid="ops-needs-look" className="space-y-3">
+      {group('danger', view.failures, ['failure', 'failures'])}
+      {group('warn', view.warnings, ['warning', 'warnings'])}
+    </section>
   )
 }

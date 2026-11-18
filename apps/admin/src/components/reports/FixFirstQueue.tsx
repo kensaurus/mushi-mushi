@@ -51,7 +51,9 @@ export function FixFirstQueue({ scope }: { scope: 'project' | 'enumeration' }) {
           // The same bug in several apps (or filed several times) is one row.
           const spread = apps > 1 ? `${apps} apps` : members.length > 1 ? `${members.length} reports` : null
           return (
-            <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5" data-testid={`reports-fix-first-${r.id}`}>
+            // A phone shows the worst three; the rest of the page is chrome
+            // above the list (R2 sweep 2026-11-18).
+            <li key={r.id} className={`${i >= 3 ? 'hidden sm:flex' : 'flex'} flex-wrap items-center gap-x-3 gap-y-1 py-1.5`} data-testid={`reports-fix-first-${r.id}`}>
               <span className="w-4 shrink-0 text-right font-mono text-2xs tabular-nums text-fg-faint">{i + 1}</span>
               <span className="inline-flex shrink-0 items-center gap-1.5 text-2xs text-fg-secondary">
                 <span aria-hidden className={`h-2 w-2 rounded-full ${severityTrafficBg(r.severity) ?? 'bg-fg-faint'}`} />

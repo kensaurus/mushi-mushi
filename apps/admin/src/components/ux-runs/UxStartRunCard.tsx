@@ -29,11 +29,35 @@ const CHOICES: Array<{ title: string; body: string }> = [
 
 // One 3-step strip (2026-11-18 sweep: seven boxed paragraphs and two
 // numbered lists read as a manual). Each step names where it happens.
-const WHERE: Array<{ where: string; what: string }> = [
-  { where: 'Local studio · this computer', what: 'Run the command below in your app’s repo. An agent edits one screen at a time and a second model checks each change.' },
-  { where: 'Console · this page', what: 'Tick Mirror to the Mushi Mushi console and the run shows here as it goes, from any device.' },
-  { where: 'Merge · this page', what: 'Kept changes land on a branch as a draft PR. Merge it here once its checks pass.' },
-]
+// Round-2 sweep 2026-11-18: in cloud mode step 1 still said "Run the command
+// below" with no command under it. Each mode now has its own first two steps.
+export type UxRunWhere = 'local' | 'cloud'
+type WhereStep = { where: string; what: ReactNode }
+
+const MERGE_STEP: WhereStep = { where: 'Merge · this page', what: 'Kept changes land on a branch as a draft PR. Merge it here once its checks pass.' }
+
+export function uxRunSteps(mode: UxRunWhere): WhereStep[] {
+  if (mode === 'cloud') {
+    return [
+      {
+        where: 'Cloud · your repo’s GitHub Actions',
+        what: (
+          <>
+            A Cursor Cloud agent works through your app signed out, one screen at a time. Your repo needs{' '}
+            <code className="whitespace-nowrap font-mono">.github/workflows/mushi-ux.yml</code>.
+          </>
+        ),
+      },
+      { where: 'Console · this page', what: 'The run shows here once the runner reaches the first screen.' },
+      MERGE_STEP,
+    ]
+  }
+  return [
+    { where: 'Local studio · this computer', what: 'Run the command below in your app’s repo. An agent edits one screen at a time and a second model checks each change.' },
+    { where: 'Console · this page', what: 'Tick Mirror to the Mushi Mushi console and the run shows here as it goes, from any device.' },
+    MERGE_STEP,
+  ]
+}
 
 /** A closed, plain disclosure: one line until asked for (no card inside the card). */
 function MoreLine({ summary, children, testId }: { summary: string; children: ReactNode; testId: string }) {
@@ -49,12 +73,12 @@ function MoreLine({ summary, children, testId }: { summary: string; children: Re
 }
 
 export function UxStartRunCard({ hasRuns, projectId }: { hasRuns: boolean; projectId: string }) {
-  const [where, setWhere] = useState<'local' | 'cloud'>('local')
+  const [where, setWhere] = useState<UxRunWhere>('local')
   return (
     <DisclosurePanel title={hasRuns ? 'Start another run' : 'Start your first run'} defaultOpen={!hasRuns}>
       <div className="flex flex-col gap-3 p-3 text-xs">
         <ol className="grid gap-3 sm:grid-cols-3" aria-label="Where each step happens">
-          {WHERE.map((w, i) => (
+          {uxRunSteps(where).map((w, i) => (
             <li key={w.where} className="flex min-w-0 gap-2">
               <span aria-hidden className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-surface-overlay text-3xs font-semibold tabular-nums text-fg">
                 {i + 1}

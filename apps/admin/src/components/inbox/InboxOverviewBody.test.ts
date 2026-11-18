@@ -31,7 +31,7 @@ describe('resolveInboxOverviewMode', () => {
 })
 
 describe('splitInboxCards', () => {
-  const card = (id: string, scope: string) => ({ id, scope, group: 'plan', pageLabel: id, pageTo: '/' + id, action: null }) as unknown as InboxCard
+  const card = (id: string, scope: string) => ({ id, scope, group: 'plan', pageLabel: id, pageTo: '/' + id, action: null, state: 'pass' }) as unknown as InboxCard
 
   it('ranks decisions and moves a re-grade chore to the footer (journeys 2026-10-27)', () => {
     const { decisions, chores } = splitInboxCards([card('triage', 'reports'), card('judge-check', 'judge'), card('fixes', 'fixes')])
@@ -43,5 +43,15 @@ describe('splitInboxCards', () => {
     const { decisions, more } = splitInboxCards(Array.from({ length: 7 }, (_, i) => card(`c${i}`, 'reports')))
     expect(decisions).toHaveLength(5)
     expect(more).toBe(2)
+  })
+})
+
+describe('activityMetaLabel (round-2 review, 2026-11-18: "Meta:" explained nothing)', () => {
+  it('names a report severity, a report status, and a fix agent', async () => {
+    const { activityMetaLabel } = await import('../../pages/InboxPage')
+    expect(activityMetaLabel({ kind: 'report', meta: 'medium' })).toBe('Severity')
+    expect(activityMetaLabel({ kind: 'report', meta: 'classified' })).toBe('Status')
+    expect(activityMetaLabel({ kind: 'fix', meta: 'claude-haiku-4-5' })).toBe('Agent')
+    expect(activityMetaLabel({ kind: 'report', meta: null })).toBeNull()
   })
 })

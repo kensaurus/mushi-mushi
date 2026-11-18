@@ -5,7 +5,7 @@
  * Reads and writes `project_settings.notification_prefs` via the settings API.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { describeApiFailure } from '../../lib/humanizeApiError'
@@ -36,56 +36,38 @@ const DEFAULT_PREFS: NotifPrefs = {
   'report_severity_min': 'low',
 }
 
-const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label: string; description: string }> = [
-  {
-    key: 'qa_story.failed',
-    label: 'QA story failed',
-    description: 'Notify when a QA story fails or errors',
-  },
-  {
-    key: 'qa_story.recovered',
-    label: 'QA story recovered',
-    description: 'Notify when a previously failing story passes again',
-  },
-  {
-    key: 'report.classified',
-    label: 'New bug sorted',
-    description: 'Notify when the AI has sorted a new bug',
-  },
-  {
-    key: 'fix.dispatched',
-    label: 'Fix started',
-    description: 'Notify when an auto-fix attempt is started',
-  },
-  {
-    key: 'fix.pr_opened',
-    label: 'Fix PR opened',
-    description: 'Notify when a draft PR is opened on GitHub',
-  },
-  {
-    key: 'fix.failed',
-    label: 'Fix attempt failed',
-    description: 'Notify when an auto-fix attempt fails',
-  },
-  {
-    key: 'fix.merged',
-    label: 'Fix merged',
-    description: 'Notify when a fix PR is merged',
-  },
-  {
-    key: 'intelligence.report',
-    label: 'Weekly intelligence report',
-    description: 'A weekly summary of how your bugs and fixes are trending',
-  },
+// The label is the event; a subtitle only when it adds something the label
+// does not say (round-2 review 2026-11-18: each subtitle restated its title).
+const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label: string; description?: string }> = [
+  { key: 'qa_story.failed', label: 'QA story failed' },
+  { key: 'qa_story.recovered', label: 'QA story recovered' },
+  { key: 'report.classified', label: 'New bug sorted' },
+  { key: 'fix.dispatched', label: 'Fix started' },
+  { key: 'fix.pr_opened', label: 'Fix PR opened', description: 'A draft PR on GitHub' },
+  { key: 'fix.failed', label: 'Fix attempt failed' },
+  { key: 'fix.merged', label: 'Fix merged' },
+  { key: 'intelligence.report', label: 'Weekly intelligence report', description: 'How bugs and fixes are trending' },
 ]
+
+/** How many alert events are switched on (the page's "No alert channel" row counts them). */
+export function alertEventsOn(prefs: Partial<Record<string, unknown>>): number {
+  return EVENTS.filter((e) => prefs[e.key] !== false).length
+}
 
 const SEVERITY_OPTIONS = ['low', 'medium', 'high', 'critical'] as const
 
 interface Props {
   projectId: string
+  /**
+   * Slack, Discord or Teams is connected. Without one the events go nowhere,
+   * so the toggles are disabled until a channel exists (round-2 review).
+   */
+  channelConnected?: boolean
+  /** The saved count of events on, once loaded (null while loading or failed). */
+  onEventsOnChange?: (count: number | null) => void
 }
 
-export function NotificationPrefsMatrix({ projectId }: Props) {
+export function NotificationPrefsMatrix({ projectId, channelConnected = true, onEventsOnChange }: Props) {
   const toast = useToast()
   const [prefs, setPrefs] = useState<NotifPrefs>(DEFAULT_PREFS)
   const [loading, setLoading] = useState(true)
@@ -95,6 +77,11 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
   const [error, setError] = useState(false)
   // Bumped by Retry to re-run the load effect.
   const [reloadNonce, setReloadNonce] = useState(0)
+  // A report-back callback: held in a ref so a new identity never refetches.
+  const reportOn = useRef(onEventsOnChange)
+  useEffect(() => {
+    reportOn.current = onEventsOnChange
+  })
 
   // Three bugs lived here:
   //
@@ -129,13 +116,19 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
       .then((res) => {
         if (cancelled) return
         if (res.ok) {
-          setPrefs({ ...DEFAULT_PREFS, ...(res.data?.notification_prefs ?? {}) })
+          const loaded = { ...DEFAULT_PREFS, ...(res.data?.notification_prefs ?? {}) }
+          setPrefs(loaded)
+          reportOn.current?.(alertEventsOn(loaded))
         } else {
           setError(true)
+          reportOn.current?.(null)
         }
       })
       .catch(() => {
-        if (!cancelled) setError(true)
+        if (!cancelled) {
+          setError(true)
+          reportOn.current?.(null)
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -160,7 +153,10 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
         method: 'PATCH',
         body: JSON.stringify({ notification_prefs: prefs }),
       })
-      if (res.ok) toast.success('Notification preferences saved.')
+      if (res.ok) {
+        toast.success('Notification preferences saved.')
+        reportOn.current?.(alertEventsOn(prefs))
+      }
       else {
         const t = describeApiFailure(res.error, 'Could not save notification preferences')
         toast.error(t.title, t.description)
@@ -201,27 +197,36 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
 
   return (
     <div className="space-y-3">
-      {/* Rows only: the Alert events panel is the card (no bordered box inside it). */}
-      <div className="divide-y divide-edge-subtle" data-testid="notification-prefs-rows">
+      {!channelConnected && (
+        <p className="text-2xs leading-snug text-fg-secondary" data-testid="notification-prefs-no-channel">
+          Connect Slack, Discord or Teams above to change these. With no channel they have nowhere to go.
+        </p>
+      )}
+      {/* Rows only: the Alert events panel is the card (no bordered box inside it).
+          Two columns on a wide screen, so a label and its switch sit close together. */}
+      <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2" data-testid="notification-prefs-rows">
         {EVENTS.map((event) => (
           <div
             key={event.key}
-            className="flex items-start justify-between gap-4 py-2.5 min-h-11"
+            className="flex min-h-11 items-center justify-between gap-4 border-b border-edge-subtle py-2"
           >
-            <div className="min-w-0 flex-1 pt-0.5">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-fg">{event.label}</p>
-              <p className="text-2xs text-fg-muted leading-snug mt-0.5">{event.description}</p>
+              {event.description ? <p className="mt-0.5 text-2xs leading-snug text-fg-muted">{event.description}</p> : null}
             </div>
             <Toggle
               checked={prefs[event.key]}
               onChange={() => toggle(event.key)}
               ariaLabel={event.label}
+              disabled={!channelConnected}
             />
           </div>
         ))}
+      </div>
+      <div>
 
         {prefs['report.classified'] && (
-          <div className="flex flex-col gap-2 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold text-fg">Minimum severity for report alerts</p>
               <p className="text-2xs text-fg-muted leading-snug mt-0.5">
@@ -238,6 +243,7 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
                 }))
               }
               aria-label="Minimum severity for report alerts"
+              disabled={!channelConnected}
             >
               {SEVERITY_OPTIONS.map((s) => (
                 <option key={s} value={s}>
@@ -250,7 +256,7 @@ export function NotificationPrefsMatrix({ projectId }: Props) {
       </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-edge-subtle/80 pt-3">
-        <Btn type="button" variant="primary" size="md" loading={saving} onClick={() => void handleSave()}>
+        <Btn type="button" variant="primary" size="md" loading={saving} disabled={!channelConnected} onClick={() => void handleSave()}>
           Save preferences
         </Btn>
       </div>

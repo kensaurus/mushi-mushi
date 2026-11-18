@@ -24,6 +24,8 @@ interface Props {
   stats: McpStats
   onTab?: (tab: McpTabId) => void
   plainBanner?: boolean
+  /** An account key that already reaches this app (lib/mcpSetupView.ts accountKeyForProject). */
+  accountKey?: { label: string | null } | null
 }
 
 function tabFromPath(path: string | null): McpTabId | null {
@@ -33,7 +35,7 @@ function tabFromPath(path: string | null): McpTabId | null {
   return null
 }
 
-export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
+export function McpStatusBanner({ stats, onTab, plainBanner = false, accountKey = null }: Props) {
   const copy = usePageCopy('/mcp')
   const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
@@ -66,6 +68,30 @@ export function McpStatusBanner({ stats, onTab, plainBanner = false }: Props) {
           ) : null
         }
       />
+    )
+  }
+
+  // An account key already reaches this app: no "Mint MCP key" (round-2
+  // review 2026-11-18). The next step is pasting it into an editor.
+  if (accountKey && (priority === 'report_only_keys' || priority === 'no_mcp_key')) {
+    return (
+      <div
+        className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-xs text-fg-secondary"
+        data-testid="mcp-account-key-line"
+      >
+        <p className="flex min-w-0 items-center gap-2">
+          <StatusGlyph tone="off" />
+          <span className="min-w-0">
+            Your account key <span className="font-medium text-fg">{accountKey.label ?? 'Account key'}</span> reaches
+            this app. Editors can use it.
+          </span>
+        </p>
+        {onTab ? (
+          <Btn size="sm" variant="ghost" className="shrink-0 whitespace-nowrap" onClick={() => onTab('setup')}>
+            {actions.setup ?? 'Paste snippet'}
+          </Btn>
+        ) : null}
+      </div>
     )
   }
 

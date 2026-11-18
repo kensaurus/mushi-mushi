@@ -15,7 +15,7 @@ describe('routeFallbackTitle', () => {
   })
 
   it('resolves dynamic App.tsx segments via extra matchers', () => {
-    expect(routeFallbackTitle('/reports/abc-123')).toBe('Report')
+    expect(routeFallbackTitle('/reports/abc-123')).toBe('Bug report')
     expect(routeFallbackTitle('/content/asset-1')).toBe('Content checks')
     expect(routeFallbackTitle('/integrations')).toBe('Integrations')
     expect(routeFallbackTitle('/integrations/config')).toBe('Integrations')

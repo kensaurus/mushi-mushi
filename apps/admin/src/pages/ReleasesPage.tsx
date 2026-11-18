@@ -577,6 +577,11 @@ function ReleasesList({
   )
 }
 
+/** The tabs whose empty state is the snapshot's "No releases yet" first step. @internal Exported for tests. */
+export function releasesListTab(tab: ReleasesTabId): boolean {
+  return tab === 'drafts' || tab === 'published'
+}
+
 export function ReleasesPage() {
   const copy = usePageCopy('/releases')
   const ux = useReleasesUx()
@@ -710,7 +715,8 @@ export function ReleasesPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || listValidating}>
           Refresh
         </Btn>
-        {!emptyFirstStep && (
+        {/* One Draft action per view: the empty snapshot's own button on the lists, none on the draft form itself. */}
+        {activeTab !== 'draft' && !(emptyFirstStep && releasesListTab(activeTab)) && (
           <Btn size="sm" variant="primary" className="whitespace-nowrap" onClick={() => setActiveTab('draft')}>
             + Draft
           </Btn>
@@ -740,7 +746,9 @@ export function ReleasesPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideReleasesSnapshot,
+            // With no releases the snapshot is the drafts/published lists' one first step; it is
+            // not drawn above the Batch, App stores or draft-form tabs, which have their own content.
+            show: !ux.hideReleasesSnapshot && !(emptyFirstStep && !releasesListTab(activeTab)),
             children: (
               <ReleasesSnapshotStrip
                 stats={stats}

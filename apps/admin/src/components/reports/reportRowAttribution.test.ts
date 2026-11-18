@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { captureMode, reporterWho, routePathname } from './reportRowAttribution'
+import { captureMode, captureRestatesSource, reporterWho, routePathname } from './reportRowAttribution'
 import type { ReportRow } from './types'
 
 const row = (reporter_token_hash: string | null) => ({ reporter_token_hash }) as unknown as ReportRow
@@ -41,5 +41,21 @@ describe('routePathname', () => {
   it('returns null for nothing', () => {
     expect(routePathname(undefined)).toBeNull()
     expect(routePathname('?q=1')).toBeNull()
+  })
+})
+
+describe('captureRestatesSource', () => {
+  // "◆ Sentry" + "sentry" on every Bugs row (R2 sweep 2026-11-18).
+  it('drops the chip that only repeats the source tag', () => {
+    expect(captureRestatesSource('sentry', 'sentry')).toBe(true)
+    expect(captureRestatesSource('user', 'user')).toBe(true)
+    expect(captureRestatesSource('mushi', 'check')).toBe(true)
+  })
+
+  it('keeps a chip that adds something', () => {
+    expect(captureRestatesSource('auto', 'user')).toBe(false)
+    expect(captureRestatesSource('server', 'user')).toBe(false)
+    expect(captureRestatesSource('shake', 'user')).toBe(false)
+    expect(captureRestatesSource('user', 'task')).toBe(false)
   })
 })

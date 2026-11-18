@@ -475,7 +475,7 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        reports: 'Reports',
+        reports: 'Digests',
         pipeline: 'Jobs',
       },
       help: {

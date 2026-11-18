@@ -18,10 +18,27 @@ import { stoppedTitle } from './countDefinitions'
  */
 export type InboxCardBuildContext =
   | (Pick<InboxStats, 'judgeStale' | 'judgeStaleHours'> &
-      Partial<Pick<InboxStats, 'urgentOpenReports' | 'integrationRed' | 'integrationAmber'>>)
+      Partial<Pick<InboxStats, 'urgentOpenReports' | 'integrationRed' | 'integrationAmber'>> & {
+        /**
+         * The app's stuck pipeline groups, biggest first (lib/pipelineSignals.ts needsYouGroups):
+         * the same items Home's "Needs you" lists. Absent: no pipeline card; null: the read failed
+         * or is loading, so the card says "not checked" (round-2 review, 2026-11-18: Home listed
+         * "2 reports: triaged over 3 days ago" and this page did not).
+         */
+        pipelineNeedsYou?: ReadonlyArray<{ id: string; label: string; count: number }> | null
+        /** Local worker problems (GET /v1/admin/work/lanes flags); null when not read. */
+        workerProblems?: number | null
+      })
   | undefined
 
 export type InboxCardGroup = 'plan' | 'do' | 'check' | 'act' | 'ops'
+
+/**
+ * How a card stands. `pass` is the only state drawn with a ✓: the thing was checked and is
+ * fine. `none` has nothing to check yet (no fix ever ran); `unknown` was not read. "Fixes in
+ * flight ✓" showed with no fixes at all (round-2 review, 2026-11-18).
+ */
+export type InboxCardState = 'open' | 'pass' | 'none' | 'unknown'
 
 export interface InboxCard {
   id: string
@@ -30,7 +47,10 @@ export interface InboxCard {
   pageLabel: string
   pageTo: string
   action: PageAction | null
+  state: InboxCardState
 }
+
+const stateOf = (action: PageAction | null, idle: 'pass' | 'none' | 'unknown' = 'pass'): InboxCardState => (action ? 'open' : idle)
 
 function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
   // The server only sets judgeStale when old scores AND ungraded reports
@@ -78,15 +98,72 @@ export function buildInboxCards(
   const amberIntegrations =
     ctx?.integrationAmber ??
     integrations.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded').length
+  // Nothing to judge health by: no integration is set up and the stats did not count any.
+  const noIntegrations = integrations.length === 0 && ctx?.integrationRed == null
+  const workerProblems = ctx?.workerProblems ?? 0
 
-  return [
-    {
-      id: 'reports-plan',
-      scope: 'intelligence',
-      group: 'plan',
-      pageLabel: 'Reports queue',
-      pageTo: '/reports',
-      action:
+  const healthAction = computeNextBestAction({
+    scope: 'health',
+    redCount: redIntegrations,
+    amberCount: amberIntegrations,
+  })
+  // Local worker problems are this app's health too: Pipeline listed two while this card said ✓.
+  const workerAction: PageAction | null =
+    workerProblems > 0
+      ? {
+          tone: 'do',
+          title: `${workerProblems} local worker problem${workerProblems === 1 ? ' stops' : 's stop'} fixes`,
+          reason: 'A machine running mushi work is offline, stuck or out of credits. Each problem has its fix on the Workers tab.',
+          primary: { kind: 'link', to: '/pipeline?tab=workers', label: 'Open Workers' },
+        }
+      : null
+  const healthOpen = healthAction ?? workerAction
+  const integrationsAction = computeNextBestAction({
+    scope: 'integrations',
+    disconnectedCount: redIntegrations,
+    expiringCount: 0,
+  })
+  const fixesAction: PageAction | null =
+    failedFixes > 0
+      ? {
+          tone: 'do',
+          title: stoppedTitle(failedFixes),
+          reason: 'Read why the last attempt stopped, then retry or fix it in your editor.',
+          primary: { kind: 'link', to: '/fixes?tab=attempts&status=failed', label: 'See why it stopped' },
+        }
+      : null
+
+  const pipelineGroups = ctx?.pipelineNeedsYou
+  const pipelineTotal = (pipelineGroups ?? []).reduce((n, g) => n + g.count, 0)
+  const pipelineTop = pipelineGroups?.[0]
+  const pipelineAction: PageAction | null =
+    pipelineTop && pipelineGroups
+      ? {
+          tone: 'do',
+          title: pipelineGroups.length === 1 ? pipelineTop.label : `${pipelineTotal} items are stuck in the pipeline`,
+          reason:
+            pipelineGroups.length === 1
+              ? 'Open it to see each item and the fix the pipeline offers.'
+              : `${pipelineGroups.length} groups. The biggest: ${pipelineTop.label}.`,
+          primary: { kind: 'link', to: `/pipeline?group=${encodeURIComponent(pipelineTop.id)}`, label: 'Open the pipeline' },
+        }
+      : null
+  const pipelineCard: InboxCard[] =
+    pipelineGroups === undefined
+      ? []
+      : [
+          {
+            id: 'pipeline-do',
+            scope: 'pipeline',
+            group: 'do',
+            pageLabel: 'Pipeline',
+            pageTo: '/pipeline',
+            action: pipelineAction,
+            state: pipelineGroups === null ? 'unknown' : stateOf(pipelineAction),
+          },
+        ]
+
+  const reportsAction: PageAction | null =
         critical14d > 0
           ? {
               tone: 'do',
@@ -115,7 +192,18 @@ export function buildInboxCards(
                 // that bucket, oldest first (it used to open Classified).
                 primary: { kind: 'link', to: '/reports?status=new&sort=created_at&dir=asc', label: 'Open triage queue' },
               }
-            : null,
+            : null
+  const judgeAction = resolveJudgeAction(ctx)
+
+  return [
+    {
+      id: 'reports-plan',
+      scope: 'intelligence',
+      group: 'plan',
+      pageLabel: 'Reports queue',
+      pageTo: '/reports',
+      action: reportsAction,
+      state: stateOf(reportsAction, data ? 'pass' : 'unknown'),
     },
     {
       id: 'judge-check',
@@ -123,23 +211,20 @@ export function buildInboxCards(
       group: 'check',
       pageLabel: 'Judge',
       pageTo: '/judge',
-      action: resolveJudgeAction(ctx),
+      action: judgeAction,
+      state: stateOf(judgeAction),
     },
+    // Stuck pipeline work sits next to failed fixes, the same list Home's "Needs you" shows.
+    ...pipelineCard,
     {
       id: 'fixes-do',
       scope: 'fixes',
       group: 'do',
       pageLabel: 'Fixes in flight',
       pageTo: '/fixes',
-      action:
-        failedFixes > 0
-          ? {
-              tone: 'do',
-              title: stoppedTitle(failedFixes),
-              reason: 'Read why the last attempt stopped, then retry or fix it in your editor.',
-              primary: { kind: 'link', to: '/fixes?tab=attempts&status=failed', label: 'See why it stopped' },
-            }
-          : null,
+      action: fixesAction,
+      // No fix ever ran (or none in the window): nothing to pass, so no ✓.
+      state: stateOf(fixesAction, !data ? 'unknown' : (fixSummary?.total ?? 0) === 0 ? 'none' : 'pass'),
     },
     {
       id: 'health-ops',
@@ -147,11 +232,8 @@ export function buildInboxCards(
       group: 'ops',
       pageLabel: 'Integration health',
       pageTo: '/health',
-      action: computeNextBestAction({
-        scope: 'health',
-        redCount: redIntegrations,
-        amberCount: amberIntegrations,
-      }),
+      action: healthOpen,
+      state: stateOf(healthOpen, noIntegrations && ctx?.workerProblems == null ? 'none' : 'pass'),
     },
     {
       id: 'integrations-act',
@@ -159,11 +241,8 @@ export function buildInboxCards(
       group: 'act',
       pageLabel: 'Integrations',
       pageTo: '/integrations/config',
-      action: computeNextBestAction({
-        scope: 'integrations',
-        disconnectedCount: redIntegrations,
-        expiringCount: 0,
-      }),
+      action: integrationsAction,
+      state: stateOf(integrationsAction, noIntegrations ? 'none' : 'pass'),
     },
   ]
 }

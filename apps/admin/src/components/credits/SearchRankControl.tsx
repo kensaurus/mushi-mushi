@@ -28,6 +28,8 @@ interface Props {
   target: string | null
   firecrawlReady: boolean
   onChanged: (message: { ok: boolean; message: string }) => void
+  /** False when the app's status row above already draws the chips (Firecrawl table). */
+  showChips?: boolean
 }
 
 /** "#2", "#2 (was #5)", "not in the top 20", "not checked yet". */
@@ -69,7 +71,51 @@ function lines(keywords: RankKeyword[]): string {
   return keywords.map((k) => (k.country === 'US' ? k.query : `${k.query} @${k.country}`)).join('\n')
 }
 
-export function SearchRankControl({ projectId, name, keywords, target, firecrawlReady, onChanged }: Props) {
+/**
+ * One chip per keyword: the words (wrapping, never cut mid-word), the rank and
+ * its move. "20+" means not in the top 20; the chip's label says so.
+ */
+export function RankChips({ name, keywords, inline = false }: { name: string; keywords: RankKeyword[]; inline?: boolean }) {
+  if (keywords.length === 0) return null
+  // Inside a <summary> (phrasing content only) the list is spans with list roles.
+  const List = inline ? 'span' : 'ul'
+  const Item = inline ? 'span' : 'li'
+  return (
+    <List
+      className="flex flex-wrap gap-1.5 text-xs text-fg-secondary"
+      aria-label={`Search ranks for ${name}`}
+      {...(inline ? { role: 'list' } : {})}
+    >
+      {keywords.map((k) => {
+        const chip = rankChip(k)
+        const label = `${k.query}${k.country !== 'US' ? ` (${k.country})` : ''}: ${rankLabel(k)}`
+        return (
+          <Item
+            key={k.id}
+            {...(inline ? { role: 'listitem' } : {})}
+            className="inline-flex max-w-full items-baseline gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5"
+            title={k.last_top?.length ? `${label}. Top results: ${k.last_top.join(', ')}` : label}
+            aria-label={label}
+            data-testid="search-rank-chip"
+          >
+            <span className="min-w-0 [overflow-wrap:anywhere]">
+              {k.query}
+              {k.country !== 'US' && <span className="text-fg-muted"> {k.country}</span>}
+            </span>
+            <span className={`shrink-0 whitespace-nowrap font-semibold tabular-nums ${RANK_TONE[chip.tone]}`}>{chip.value}</span>
+            {chip.move && (
+              <span className={`shrink-0 text-2xs tabular-nums ${chip.move.startsWith('↑') ? 'text-ok-foreground' : 'text-danger-foreground'}`}>
+                {chip.move}
+              </span>
+            )}
+          </Item>
+        )
+      })}
+    </List>
+  )
+}
+
+export function SearchRankControl({ projectId, name, keywords, target, firecrawlReady, onChanged, showChips = true }: Props) {
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -109,34 +155,7 @@ export function SearchRankControl({ projectId, name, keywords, target, firecrawl
         </div>
       </div>
       {!target && <p className="text-xs text-fg-muted">Watch or audit the live site first, so Mushi Mushi knows which address to look for.</p>}
-      {keywords.length > 0 && draft == null && (
-        <ul className="flex flex-wrap gap-1.5 text-xs text-fg-secondary" aria-label={`Search ranks for ${name}`}>
-          {keywords.map((k) => {
-            const chip = rankChip(k)
-            const label = `${k.query}${k.country !== 'US' ? ` (${k.country})` : ''}: ${rankLabel(k)}`
-            return (
-              <li
-                key={k.id}
-                className="inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5"
-                title={k.last_top?.length ? `${label}. Top results: ${k.last_top.join(', ')}` : label}
-                aria-label={label}
-                data-testid="search-rank-chip"
-              >
-                <span className="min-w-0 max-w-48 truncate">
-                  {k.query}
-                  {k.country !== 'US' && <span className="text-fg-muted"> {k.country}</span>}
-                </span>
-                <span className={`font-mono font-semibold tabular-nums ${RANK_TONE[chip.tone]}`}>{chip.value}</span>
-                {chip.move && (
-                  <span className={`font-mono text-2xs tabular-nums ${chip.move.startsWith('↑') ? 'text-ok-foreground' : 'text-danger-foreground'}`}>
-                    {chip.move}
-                  </span>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      {showChips && keywords.length > 0 && draft == null && <RankChips name={name} keywords={keywords} />}
       {draft != null && (
         <form
           className="space-y-1.5"

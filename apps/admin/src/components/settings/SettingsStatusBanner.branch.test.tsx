@@ -55,7 +55,7 @@ describe('SettingsStatusBanner branch pattern', () => {
       branchPatternInvalid: true,
       onFixBranch,
     })
-    expect(host.textContent).toContain('1 key needs your attention')
+    expect(host.textContent).toContain('1 key and the fix branch pattern need your attention')
     expect(host.querySelector('[data-testid="settings-banner-branch"]')?.textContent).toContain('fix branch pattern is no longer allowed')
     act(() => (host.querySelector('[data-testid="settings-banner-fix-branch"]') as HTMLButtonElement).click())
     expect(onFixBranch).toHaveBeenCalled()

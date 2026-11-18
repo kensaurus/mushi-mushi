@@ -228,3 +228,53 @@ export function allFindingsPrompt(findings: JourneyFinding[], appUrl: string | n
   const items = findings.map((f, i) => `${i + 1}. ${f.title}\n   Pages: ${f.pages.join(', ')}\n   ${f.detail}\n   Change: ${f.suggestion}`)
   return [head, '', ...items, '', 'For each one, find the route or page component in this repo, make the change, and tell me what you changed and how to check it.'].join('\n')
 }
+
+/**
+ * What the Journey optimizer knows about the app's SDK from /v1/admin/setup
+ * (the `sdk_installed` step and its last check-in). The empty state said
+ * "Install the Mushi Mushi SDK" to an app whose SDK was installed and
+ * sending, and the address field sat empty though the SDK's origin was known
+ * (round-2 review).
+ */
+export interface JourneySdkState {
+  installed: boolean
+  /** The http(s) origin the SDK last checked in from, never a localhost or app-scheme one. */
+  origin: string | null
+}
+
+interface SetupStepLike {
+  id: string
+  complete: boolean
+  diagnostic?: { last_sdk_seen_at: string | null; last_sdk_origin: string | null } | null
+}
+
+export function journeySdkState(steps: readonly SetupStepLike[] | null | undefined): JourneySdkState {
+  const step = steps?.find((s) => s.id === 'sdk_installed')
+  const installed = Boolean(step?.complete || step?.diagnostic?.last_sdk_seen_at)
+  return { installed, origin: publicOrigin(step?.diagnostic?.last_sdk_origin ?? null) }
+}
+
+function publicOrigin(origin: string | null): string | null {
+  if (!origin) return null
+  try {
+    const u = new URL(origin)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
+    if (/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(u.hostname) || u.hostname.endsWith('.local')) return null
+    return u.origin
+  } catch {
+    return null
+  }
+}
+
+/** The two "how to get a map" lines of the empty state, true to what is already done. */
+export function journeyStartHints(input: { hasScan: boolean; hasVisits: boolean; sdkInstalled: boolean }): string[] {
+  return [
+    input.hasScan ? 'Site scan: done.' : 'Press Scan my site above to map your public pages (needs a Firecrawl key in Settings, AI keys).',
+    input.hasVisits
+      ? 'Visits: arriving.'
+      : input.sdkInstalled
+        ? "Turn on session tracking: your SDK is installed but sends no visits. Set trackSessions: true (the default), or start a window under Record visits on demand if it is on 'on-demand'."
+        : 'Install the Mushi Mushi SDK with session tracking on (trackSessions: true, the default) to see where real people go.',
+  ]
+}
+

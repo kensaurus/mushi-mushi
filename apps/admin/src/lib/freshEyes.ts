@@ -169,7 +169,8 @@ export function runnerMessage(r: FreshEyesRunner | null | undefined, now: number
     case 'offline':
       return { tone: 'warn', text: `${host} is offline${r.lastSeenAt ? ` (last seen ${agoText(r.lastSeenAt, now)})` : ''}. Turn it on, or start the worker on it, to run the test.`, canRun: false, setup: 'workers' }
     case 'none':
-      return { tone: 'warn', text: 'The test runs on your computer, where its browser and AI run. Set up Mushi Mushi on your computer once, then press Run now.', canRun: false, setup: 'install' }
+      // Never set up is a first step, not a warning (round-2 sweep 2026-11-18).
+      return { tone: 'info', text: 'The test runs on your computer, where its browser and AI run. Install the Mushi Mushi worker there once:', canRun: false, setup: 'install' }
   }
 }
 
@@ -187,11 +188,10 @@ function agoText(iso: string, now: number): string {
  * without one, fixing the fields would not help.
  */
 export function runNowBlocker(input: { runnerCanRun: boolean; runnerSetup: 'install' | 'workers' | 'update' | null; url: string; goal: string }): string | null {
-  if (!input.runnerCanRun) {
-    if (input.runnerSetup === 'install') return 'Set up Mushi Mushi on your computer first (above).'
-    if (input.runnerSetup === 'update') return 'Update Mushi Mushi on your computer first (above).'
-    return 'Turn on a computer for this app first (above).'
-  }
+  // The computer step is drawn as step 1 above the form and says what to do;
+  // the button only points at it, so the instruction is not said twice
+  // (round-2 sweep 2026-11-18).
+  if (!input.runnerCanRun) return 'Finish step 1 first.'
   if (!input.url.trim()) return 'Add a start page.'
   if (!isStartUrl(input.url)) return 'Use a start page that starts with https://'
   const goal = input.goal.trim()

@@ -34,7 +34,8 @@ import {
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
-import { statusLabel, severityLabel, categoryLabel, categoryBadge } from '../lib/tokens'
+import { statusLabel, severityLabel, categoryLabel } from '../lib/tokens'
+import { CATEGORY_NEUTRAL } from '../components/report-detail/categoryTone'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { useDispatchTargetRepo } from '../lib/useDispatchTargetRepo'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -567,7 +568,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   return (
     <div>
       <PageHeaderBar
-        title="Report detail"
+        title="Bug report"
         contextChip={null}
 
         helpTitle="About this report"
@@ -733,7 +734,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         hasFixHistory={(report.fix_attempts?.length ?? 0) > 0}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* items-start: each card is as tall as its content; stretched to the
+          row's tallest card, the LLM classification and timeline cards were
+          mostly empty boxes (R2 sweep 2026-11-18). */}
+      <div className="grid grid-cols-1 items-start lg:grid-cols-2 gap-3">
         <Section id="report-user-report" title="User report" icon={<IconUser />}>
           {report.user_category && (
             <div className="mb-2.5">
@@ -742,7 +746,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
                 <InfoHint content="What the reporter said the issue was about, before LLM classification." />
               </div>
               <div className="mt-1">
-                <Badge className={categoryBadge(report.user_category)}>
+                <Badge className={CATEGORY_NEUTRAL}>
                   {categoryLabel(report.user_category)}
                 </Badge>
               </div>
@@ -762,11 +766,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               tooltip="What the reporter said they were trying to do when the issue happened."
             />
           )}
-          {!report.screenshot_url && (
-            <p className="text-2xs text-fg-faint italic mt-2">
-              {screenshotEmptyText(report)}
-            </p>
-          )}
+          {/* A missing screenshot is on the one "Not captured" line below. */}
         </Section>
 
         <Section id="report-classification" title="LLM classification" icon={<IconIntelligence />}>
@@ -860,7 +860,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           <p
             className="flex items-center gap-2 text-xs text-fg-muted lg:col-span-2"
             data-testid="report-not-captured"
-            title="The SDK records these while the widget session is open. Imports from Sentry and alarms carry none."
+            title={[
+              'The SDK records these while the widget session is open. Imports from Sentry and alarms carry none.',
+              missing.includes('screenshot') ? screenshotEmptyText(report) : null,
+            ].filter(Boolean).join(' ')}
           >
             <span aria-hidden className="ci-nodata h-3 w-6 shrink-0 rounded-sm border border-edge-subtle" />
             <span>
@@ -885,6 +888,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           reportId={report.id}
           reportStatus={report.status}
           onSentryClosed={onReload}
+          hideNoBreadcrumbsNote
         />
       </div>
 
@@ -900,6 +904,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       <div className="mt-3">
         <ReportComments
           thread={commentThread}
+          canReachReporter={reportHasReporter(report)}
           onPosted={(visibleToReporter) => {
             if (visibleToReporter) setReporterViewVersion((v) => v + 1)
           }}

@@ -7,7 +7,8 @@
  *          without opening the plan comparison.
  */
 
-import { InlineProof, SignalChip } from '../report-detail/ReportSurface'
+import { InlineProof } from '../report-detail/ReportSurface'
+import { seatEntitlementLabel } from '../../lib/billingView'
 
 interface FeatureFlags {
   sso?: boolean
@@ -28,6 +29,8 @@ interface Props {
   flags: FeatureFlags
   retentionDays: number
   seatLimit: number | null
+  /** seatLimit's source says null = no limit; otherwise null is unknown. */
+  seatLimitKnown?: boolean
 }
 
 interface Entitlement {
@@ -37,7 +40,7 @@ interface Entitlement {
   meta?: string
 }
 
-export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatLimit }: Props) {
+export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatLimit, seatLimitKnown = false }: Props) {
   const entitlements: Entitlement[] = [
     {
       label: 'Report retention',
@@ -45,11 +48,12 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
       meta: `${retentionDays} days`,
     },
     {
-      label: 'Admin seats',
+      label: 'Seats',
       included: true,
-      // A plan without teams is one person whatever seat_limit says (the
-      // billing tier may omit it, which read as "Unlimited" on Free).
-      meta: !flags.teams ? 'Just you' : seatLimit == null ? 'Unlimited' : `${seatLimit}`,
+      // The Seats meter's own limit: the billing tier omits seat_limit, and a
+      // null read as "Unlimited" next to "Seats 3 / 5" (review 2026-11-18).
+      meta:
+        seatEntitlementLabel({ teams: Boolean(flags.teams), seatLimit, limitKnown: seatLimitKnown }) ?? undefined,
     },
     {
       label: 'Bring your own LLM key',
@@ -91,9 +95,7 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
       aria-label={`Entitlements on ${planName}`}
       className="border-t border-edge-subtle pt-2"
     >
-      <SignalChip tone="neutral" className="mb-1.5 text-3xs font-semibold">
-        What you get on {planName}
-      </SignalChip>
+      <h4 className="mb-1.5 text-2xs font-semibold text-fg">What you get on {planName}</h4>
       <ul className="grid gap-x-4 gap-y-1 sm:grid-cols-2">
         {entitlements.map(e => (
           <li
@@ -109,9 +111,7 @@ export function PlanBenefitsList({ planId, planName, flags, retentionDays, seatL
             <span className={e.included ? 'text-fg-secondary' : 'text-fg-faint line-through decoration-fg-faint/40'}>
               {e.label}
             </span>
-            {e.meta && (
-              <SignalChip tone="neutral" className="font-mono text-3xs">{e.meta}</SignalChip>
-            )}
+            {e.meta && <span className="text-2xs text-fg-muted tabular-nums">· {e.meta}</span>}
           </li>
         ))}
       </ul>

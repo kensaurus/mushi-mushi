@@ -398,7 +398,7 @@ export function SdkInstallConfigurator({
             </select>
           </label>
           <label className="block">
-            <span className="text-fg-muted">Min description</span>
+            <span className="text-fg-muted">Min description (characters)</span>
             <input
               type="number"
               min={0}

@@ -275,3 +275,56 @@ export function unackedIds(items: readonly FeedThreadItem[], events: readonly Op
     return e ? needsAck(e) : false
   })
 }
+
+export interface NeedsLookView {
+  /** Unacknowledged urgent threads (a failed deploy, a failed release), newest first. */
+  failures: FeedThreadItem[]
+  /** Unacknowledged warnings: their own group, never inside the red failures box. */
+  warnings: FeedThreadItem[]
+  /** The one count the page shows for "needs a look": exactly the rows listed. */
+  count: number
+}
+
+/** The "Needs a look" list and its count, from one source (arrangeFeed's pinned rows). */
+export function needsLookView(events: OpsEvent[]): NeedsLookView {
+  const { pinned } = arrangeFeed(events)
+  const failures = pinned.filter((i) => i.thread.event.severity === 'urgent')
+  const warnings = pinned.filter((i) => i.thread.event.severity !== 'urgent')
+  return { failures, warnings, count: failures.length + warnings.length }
+}
+
+/**
+ * Columns any app has sent at least once, in `orderOpsColumns` order, and the ones nobody has
+ * (a column of "– never" on every row says one thing ten times: name it once instead).
+ */
+export function splitOpsColumns(rows: readonly CoverageRowView[]): { shown: OpsColumn[]; empty: OpsColumn[] } {
+  const order = orderOpsColumns(rows)
+  const hasData = (id: OpsColumn) => rows.some((r) => r.cells.some((c) => c.column === id && c.lastAt))
+  const shown = order.filter(hasData)
+  const empty = order.filter((id) => !hasData(id))
+  // With no data anywhere, keep the grid so the hatched "never" cells show what to connect.
+  return shown.length === 0 ? { shown: order, empty: [] } : { shown, empty }
+}
+
+/**
+ * An event body that ends by pointing at its run ("… Open the run to see which step failed.")
+ * becomes text plus a real link when the event has a URL. Without a URL the body is left alone.
+ */
+export function splitBodyCta(body: string | null, url: string | null): { text: string | null; cta: string | null } {
+  if (!body) return { text: null, cta: null }
+  if (!url) return { text: body, cta: null }
+  const m = /^(.*?)\s*\b(Open (?:the|this) [^.]{1,60}\.)\s*$/s.exec(body)
+  if (!m) return { text: body, cta: null }
+  return { text: m[1].trim() || null, cta: m[2].replace(/\.$/, '') }
+}
+
+/**
+ * Draw the Slack chip only when it says something the page does not: a post that failed, a mute,
+ * or "stored only" while the bot is on. "✓ In Slack" on every row, or "stored only" on every row
+ * under the "Slack bot is off" callout, is repetition.
+ */
+export function slackChipShown(state: SlackState, slackEnabled: boolean): boolean {
+  if (state.tone === 'ok') return false
+  if (state.label === 'Stored only') return slackEnabled
+  return true
+}

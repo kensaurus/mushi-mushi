@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { checkNowBlocker } from './AnomaliesPage'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -23,6 +24,18 @@ describe('Unusual spikes tabs', () => {
     const spikes = src.slice(src.indexOf("{activeTab === 'anomalies' && ("), src.indexOf("{activeTab === 'metrics' && ("))
     expect(spikes).toContain('<CheckNowCard')
     expect(spikes.indexOf('<CheckNowCard')).toBeLessThan(spikes.indexOf('<AnomaliesTab'))
+  })
+
+  // 2026-11-18: "No numbers yet" three times, two "Add metrics" buttons and an enabled Check now.
+  it('disables Check now with its reason when there is nothing to check', () => {
+    expect(checkNowBlocker('p1', false)).toBe('No numbers to check yet: add metrics first.')
+    expect(checkNowBlocker('', true)).toBe('Pick an app in the header first.')
+    expect(checkNowBlocker('p1', true)).toBeNull()
+  })
+
+  it('keeps one empty state: the Spikes list draws nothing more when no numbers arrived', () => {
+    expect(src).toContain('if (!anomalies.length && noMetrics) return null')
+    expect(src).not.toContain('No numbers yet. Send some on the Metrics tab first.')
   })
 
   it('says what the empty Summary will show, in plain words', () => {

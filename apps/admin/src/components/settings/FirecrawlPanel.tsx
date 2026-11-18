@@ -194,7 +194,7 @@ export function FirecrawlPanel() {
           purpose="The most pages one lookup may read. Lower keeps costs down; higher finds more."
           status={
             <span className="flex items-center gap-1 text-sm text-fg-secondary">
-              <span className="font-mono">{pages}</span> {pages === 1 ? 'page' : 'pages'}
+              <span className="font-medium tabular-nums">{pages}</span> {pages === 1 ? 'page' : 'pages'}
               <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
             </span>
           }
@@ -205,7 +205,7 @@ export function FirecrawlPanel() {
             max="50"
             step="1"
             aria-label="Pages per lookup"
-            className="w-full accent-brand"
+            className="w-full max-w-sm accent-brand"
             value={pages}
             onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
           />

@@ -75,21 +75,22 @@ export function JudgeAgreementOverview({
   )
   const points = agreementPoints(weeks)
   const rows = worst.data?.evaluations ?? []
+  // One graded week is one number: it used to fill a whole card ("0% agreed (0 of 2 grades)")
+  // beside the list (round-2 review, 2026-11-18). It becomes a line above the list, which then
+  // takes the full width.
+  const single = points.length === 1
 
   return (
-    <div className="grid min-w-0 gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="judge-agreement-overview">
+    <div className={`grid min-w-0 gap-3 [&>*]:min-w-0 ${single ? '' : 'lg:grid-cols-2'}`} data-testid="judge-agreement-overview">
+      {single ? (
+        <p className="text-sm text-fg" data-testid="judge-agreement-single">
+          <span className="font-semibold tabular-nums">{points[0]!.value}%</span>{' '}
+          <span className="text-fg-secondary">agreed, {singleWeekWords(weeks)}.</span>{' '}
+          <span className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</span>
+        </p>
+      ) : (
       <Section title="How often the grader agrees">
-        {points.length === 1 ? (
-          // One week can't draw a trend: its axis ran "0%" to "0%" and
-          // "Nov 9" to "Nov 9" (2026-11-18 sweep). Say the one value instead.
-          <div className="space-y-1" data-testid="judge-agreement-single">
-            <p className="text-sm text-fg">
-              <span className="font-semibold tabular-nums">{points[0]!.value}%</span>{' '}
-              <span className="text-fg-secondary">agreed, {singleWeekWords(weeks)}</span>
-            </p>
-            <p className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</p>
-          </div>
-        ) : points.length > 0 ? (
+        {points.length > 0 ? (
           <>
             <MetricTimeline title="Agreed with the diagnosis, per week (%)" points={points} formatValue={(v) => `${Math.round(v)}%`} height={120} />
             {capped ? <p className="mt-1 text-2xs text-fg-faint">The oldest week may be missing some grades.</p> : null}
@@ -98,6 +99,7 @@ export function JudgeAgreementOverview({
           <p className="text-xs text-fg-muted">No grades in the last 12 weeks.</p>
         )}
       </Section>
+      )}
       <Section title={`Worst disagreements, last ${windowDays} days`}>
         {worst.loading && !worst.data ? (
           <Loading text="Reading the disagreements…" />

@@ -161,9 +161,17 @@ export function SkillRunsCard({ projects }: Props) {
         )}
       </div>
       {skill?.measure && <p className="text-2xs text-fg-muted">Each round measures {skill.measure}, before and after, in its pull request.</p>}
-      <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
-        Start skill run
-      </Btn>
+      <div className="flex flex-wrap items-center gap-2">
+        <Btn size="sm" type="button" loading={busy} disabled={!projectId || scope.trim().length < 3} onClick={() => void start()}>
+          Start skill run
+        </Btn>
+        {/* A greyed button says why (round-2 review). */}
+        {!projectId ? (
+          <span className="text-2xs text-fg-secondary" data-testid="skill-run-disabled-reason">Pick an app first.</span>
+        ) : scope.trim().length < 3 ? (
+          <span className="text-2xs text-fg-secondary" data-testid="skill-run-disabled-reason">Say what to work on first.</span>
+        ) : null}
+      </div>
 
       {runs && runs.length > 0 && (() => {
         const runRow = (r: SkillRun) => (
@@ -204,7 +212,10 @@ export function SkillRunsCard({ projects }: Props) {
                 <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 text-xs text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50">
                   <StatusGlyph tone={g.status === 'done' ? 'ok' : 'off'} />
                   <span className="font-semibold">{g.status === 'done' ? 'Done' : 'Stopped'}</span>
-                  <span className="font-mono tabular-nums text-fg-secondary">{g.runs.length}</span>
+                  <span className="tabular-nums text-fg-secondary">{g.runs.length}</span>
+                  <span className="text-2xs text-fg-muted">
+                    {g.status === 'done' ? 'runs that finished' : 'runs that ended early: stopped, a round not merged, or a limit hit'}
+                  </span>
                 </summary>
                 <ul className="divide-y divide-edge-subtle">{g.runs.map(runRow)}</ul>
               </details>

@@ -24,7 +24,7 @@ export function EvalDatasetCard({ labelled, recentSamples }: EvalDatasetCardProp
           <h3 className="text-xs font-semibold text-fg-secondary">
             Eval dataset · recent classified reports
           </h3>
-          <span className="text-2xs text-fg-faint font-mono">
+          <span className="text-2xs text-fg-faint tabular-nums">
             {labelled.toLocaleString()} labelled
           </span>
         </div>
@@ -41,11 +41,12 @@ export function EvalDatasetCard({ labelled, recentSamples }: EvalDatasetCardProp
                 className="flex items-start gap-2 border-t border-edge-subtle pt-1.5 first:border-0 first:pt-0"
               >
                 <div className="flex-1 min-w-0">
-                  {/* One line with an ellipsis: slice(0, 140) cut words mid-way with no mark. */}
+                  {/* Two lines that wrap at word breaks: one truncated line cut the sentence mid-word
+                      (round-2 review, 2026-11-18); the full text stays in the title. */}
                   <Link
                     to={`/reports/${s.id}`}
                     title={s.description ?? undefined}
-                    className="block truncate text-fg-secondary hover:text-fg underline-offset-2 hover:underline"
+                    className="block line-clamp-2 break-words text-fg-secondary hover:text-fg underline-offset-2 hover:underline"
                   >
                     {s.description || '(no description)'}
                   </Link>

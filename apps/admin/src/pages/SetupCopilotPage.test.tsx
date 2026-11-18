@@ -39,6 +39,12 @@ describe('Setup copilot steps', () => {
     expect(row.querySelector('summary svg[data-tone="ok"]')).not.toBeNull()
   })
 
+  it('says "Done" to screen readers only; the ● carries it on screen', () => {
+    render(true)
+    const done = [...host.querySelectorAll('summary span')].find((s) => s.textContent === 'Done')!
+    expect(done.className).toContain('sr-only')
+  })
+
   it('keeps an unfinished step open', () => {
     render(false)
     expect(host.querySelector('[data-testid="copilot-step-done"]')).toBeNull()

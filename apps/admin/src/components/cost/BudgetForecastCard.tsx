@@ -234,7 +234,7 @@ export function BudgetForecastCard({ projectId, series, monthToDateUsd, fmtSpend
         <ForecastCell
           label="Linear forecast"
           value={fmtSpend(linearForecast)}
-          hint={`$${avg14dDaily.toFixed(3)}/day · last ${series.days.length}d`}
+          hint={`${fmtSpend(avg14dDaily)}/day · last ${series.days.length}d`}
           accent={isOverBudget80 ? (isOverBudget100 ? 'text-critical' : 'text-warn') : undefined}
         />
         <ForecastCell

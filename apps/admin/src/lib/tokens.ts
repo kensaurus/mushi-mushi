@@ -38,11 +38,14 @@ export const CATEGORY_LABELS: Record<string, string> = {
 }
 
 /** Badge chrome per category — pairs with `SEVERITY` for scan-friendly triage rows. */
+// A category is a kind of report, not a state: neutral chips. Status colours (red = failed,
+// amber = warning, blue = running, violet = selected) mean state on this console (fresh-eyes
+// 2026-11-18: "Bug" read red in four places on every report).
 export const CATEGORY_BADGE: Record<string, string> = {
-  bug: CHIP_TONE.dangerSubtle,
-  slow: CHIP_TONE.warnSubtle,
-  visual: CHIP_TONE.infoSubtle,
-  confusing: CHIP_TONE.accentSubtle,
+  bug: CHIP_TONE.neutral,
+  slow: CHIP_TONE.neutral,
+  visual: CHIP_TONE.neutral,
+  confusing: CHIP_TONE.neutral,
   other: CHIP_TONE.neutral,
 }
 
@@ -69,8 +72,8 @@ export function categoryBadge(id: string | null | undefined): string {
 export function confidenceBadgeClass(c: number | null | undefined): string {
   if (c == null) return CHIP_TONE.neutral
   if (c >= 0.85) return CHIP_TONE.okSubtle
-  if (c >= 0.65) return CHIP_TONE.warnSubtle
-  return CHIP_TONE.dangerSubtle
+  // Low confidence is a reason to check, not a failure: amber, never red.
+  return CHIP_TONE.warnSubtle
 }
 
 /**

@@ -815,7 +815,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
               />
               {!sidebarCollapsed && (
-                <span className="font-mono text-2xs text-fg-secondary font-semibold">
+                <span className="text-2xs text-fg-secondary font-semibold">
                   Collapse
                 </span>
               )}

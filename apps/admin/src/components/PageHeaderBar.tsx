@@ -58,16 +58,13 @@ function HeaderPdcaChip({ chip }: { chip: string }) {
     // on top of the freshness pill. The tooltip and aria-label keep the
     // full wording.
     <Tooltip content={copy.hint} className="min-w-0 max-w-full">
+      {/* A plain section tag (fresh-eyes 2026-11-18): four stage colours and a step number
+          ("② Bugs" blue, "④ Verify" amber) read as statuses on a console where colour means state. */}
       <span
-        className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm px-1.5 py-px text-3xs cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
+        className="inline-flex min-w-0 max-w-full items-center rounded-sm border border-edge-subtle px-1.5 py-px text-3xs text-fg-secondary cursor-help"
         aria-label={copy.ariaLabel}
+        data-stage={chip}
       >
-        <span
-          className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-sm font-bold text-3xs ${meta.badgeBg} ${meta.badgeFg}`}
-          aria-hidden="true"
-        >
-          {copy.glyph}
-        </span>
         <span className="truncate">{copy.label}</span>
       </span>
     </Tooltip>

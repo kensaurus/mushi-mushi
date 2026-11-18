@@ -36,6 +36,28 @@ const KIND_LABEL: Record<string, string> = {
   credits_idle: 'Credits idle',
 }
 
+/**
+ * The tone a flag is drawn in. Idle credits are money left unspent, a warning, never a failure:
+ * the server sends them as `danger` and the card was red (round-2 review, 2026-11-18).
+ * @internal Exported for tests.
+ */
+export function flagTone(flag: Pick<WorkerFlag, 'kind' | 'severity'>): 'danger' | 'warn' {
+  if (flag.kind === 'credits_idle') return 'warn'
+  return flag.severity === 'danger' ? 'danger' : 'warn'
+}
+
+/**
+ * A flag's small label and duration, only where they add to its title: "Credits idle" over
+ * "Cursor credits idle for 33 h", then "for 33 h" again, said one thing three times
+ * (2026-11-18). @internal Exported for tests.
+ */
+export function flagHeading(flag: Pick<WorkerFlag, 'id' | 'kind' | 'title' | 'sinceSec'>): { label: string | null; since: string | null } {
+  const label = flag.id === 'credits_out' ? 'Out of credits' : (KIND_LABEL[flag.kind] ?? 'Worker problem')
+  const title = flag.title.toLowerCase()
+  const since = flag.sinceSec != null ? durationLabel(flag.sinceSec) : null
+  return { label: title.includes(label.toLowerCase()) ? null : label, since: since && !title.includes(since.toLowerCase()) ? since : null }
+}
+
 /** An agent space, explained once wherever flags show. */
 const AGENT_SPACE = 'An agent space is one coding agent running at a time; each machine allows a set number at once (its limits below).'
 
@@ -120,12 +142,13 @@ function FlagAction({ flag, action, onChanged }: { flag: WorkerFlag; action: Wor
 function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void }) {
   const commands = flag.actions.filter((a): a is Extract<WorkerFlagAction, { kind: 'copy_command' }> => a.kind === 'copy_command')
   const buttons = flag.actions.filter((a) => a.kind !== 'copy_command')
+  const head = flagHeading(flag)
   return (
-    <li data-testid={`worker-flag-${flag.kind}`} data-flag-id={flag.id}>
+    <li data-testid={`worker-flag-${flag.kind}`} data-flag-id={flag.id} data-tone={flagTone(flag)}>
       <Callout
-        tone={flag.severity === 'danger' ? 'danger' : 'warn'}
-        label={flag.id === 'credits_out' ? 'Out of credits' : (KIND_LABEL[flag.kind] ?? 'Worker problem')}
-        action={flag.sinceSec != null ? <span className="text-2xs tabular-nums text-fg-muted">for {durationLabel(flag.sinceSec)}</span> : undefined}
+        tone={flagTone(flag)}
+        label={head.label ?? undefined}
+        action={head.since ? <span className="text-2xs tabular-nums text-fg-muted">for {head.since}</span> : undefined}
       >
         <div className="space-y-1.5">
           <p className="text-sm font-semibold text-fg">{flag.title}</p>
@@ -154,7 +177,8 @@ function FlagItem({ flag, onChanged }: { flag: WorkerFlag; onChanged: () => void
           {commands.map((a) => (
             <div key={a.command} className="space-y-0.5">
               <p className="text-2xs text-fg-muted">{flag.id === 'credits_out' ? `${a.label}:` : `${a.label}, on ${flag.hostname ?? 'the machine'}:`}</p>
-              <CodeValue value={a.command} multiline />
+              {/* Not `multiline`: its copy button is absolute inside the Tooltip anchor and landed outside the card (2026-11-18). */}
+              <CodeValue value={a.command} className="w-full" />
             </div>
           ))}
         </div>
@@ -168,15 +192,17 @@ interface Props {
   onChanged: () => void
 }
 
+/** "2 things stop your local workers from fixing bugs (1 needs you now)." The Workers status says it once, above the cards. */
+export function flagsSentence(flags: ReadonlyArray<Pick<WorkerFlag, 'kind' | 'severity'>>): string {
+  const danger = flags.filter((f) => flagTone(f) === 'danger').length
+  return `${flags.length === 1 ? '1 thing stops' : `${flags.length} things stop`} your local workers from fixing bugs${danger ? ` (${danger} ${danger === 1 ? 'needs' : 'need'} you now)` : ''}.`
+}
+
 /** Every flag, worst first, each with its actions. Empty → nothing. */
 export function WorkerFlags({ flags, onChanged }: Props) {
   if (flags.length === 0) return null
-  const danger = flags.filter((f) => f.severity === 'danger').length
   return (
     <section aria-label="Local worker problems" className="space-y-2" data-testid="worker-flags">
-      <p className="text-sm font-semibold text-fg">
-        {flags.length === 1 ? '1 thing stops' : `${flags.length} things stop`} your local workers from fixing bugs{danger ? ` (${danger} need you now)` : ''}.
-      </p>
       {flags.some((f) => f.kind === 'lanes_waiting' || f.kind === 'run_stuck') && <p className="text-2xs text-fg-muted">{AGENT_SPACE}</p>}
       <ul className="space-y-2">
         {flags.map((f) => (
@@ -190,7 +216,7 @@ export function WorkerFlags({ flags, onChanged }: Props) {
 /** Above the Pipeline tabs: how many, the worst titles, and the way to the Workers tab. */
 export function WorkerFlagsStrip({ flags, workersHref }: { flags: WorkerFlag[]; workersHref: string }) {
   if (flags.length === 0) return null
-  const danger = flags.some((f) => f.severity === 'danger')
+  const danger = flags.some((f) => flagTone(f) === 'danger')
   return (
     <Callout
       tone={danger ? 'danger' : 'warn'}

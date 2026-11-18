@@ -86,8 +86,9 @@ function WaitingBar({ waiting, error }: { waiting: HomeRelease['waiting']; error
           <span key={s} className={severityBar(s)} style={{ width: `${(waiting.counts[s] / waiting.total) * 100}%` }} />
         ))}
       </div>
+      {/* Only severities with bugs: "Critical 0" and "Not rated yet 0" were chips for nothing (round-2 sweep 2026-11-18). */}
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-        {SEVERITIES.map((s) => (
+        {parts.map((s) => (
           <li key={s}>
             <Link to={severityHref(s)} className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary hover:text-fg">
               <span aria-hidden className={`h-2 w-2 rounded-full ${severityBar(s)}`} />

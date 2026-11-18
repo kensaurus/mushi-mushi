@@ -68,6 +68,24 @@ describe('QaCoveragePage with no scheduled tests', () => {
     expect(newStory).toHaveLength(1)
     expect(host.querySelector('[data-testid="header"]')!.textContent).not.toContain('New story')
   })
+
+  it('puts the CTA before a collapsed, neutral runner guide with real code (round-2 sweep)', async () => {
+    mocks.coverage = []
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(QaCoveragePage))))
+    })
+    const text = host.textContent ?? ''
+    const details = host.querySelector('details')!
+    expect(details).not.toBeNull()
+    expect(details.open).toBe(false)
+    // "+ New story" comes before the guide in document order.
+    const newStory = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('New story'))!
+    expect(newStory.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(text).not.toContain('No stories')
+    expect(text).not.toContain('`')
+    expect(details.querySelector('code')?.textContent).toBe('mushi qa run')
+    expect(details.querySelector('[class*="bg-warn"]')).toBeNull()
+  })
 })
 
 describe('QaCoverageSnapshotStrip', () => {

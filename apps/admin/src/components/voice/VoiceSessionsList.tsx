@@ -46,7 +46,7 @@ export function VoiceSessionsList({ sessions, onConfirm, onCancel, pendingId, in
           <p className="text-2xs text-fg-muted">
             {intakeEnabled
               ? "Tap to talk above, share a voice memo into the app, or send a voice note to the project's Telegram bot. The first transcript shows up here with a Confirm button."
-              : 'Turn on voice intake first. Then tap to talk, share a voice memo into the app, or send a voice note to the Telegram bot.'}
+              : 'Tap to talk, share a voice memo into the app, or send a voice note to the Telegram bot.'}
           </p>
         </div>
       ) : (

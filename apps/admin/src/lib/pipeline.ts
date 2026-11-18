@@ -264,7 +264,11 @@ interface ActionMeta {
   needsConfirm: boolean
   /** A reason is kept as a team note on the report. */
   needsReason: boolean
-  variant: 'primary' | 'ghost' | 'danger' | 'success'
+  /**
+   * The button's look. Never `success`: a green-filled "Requeue" or "Send to CI repair" read as a
+   * passed state, not an action (round-2 review, 2026-11-18). Ink primary or outline only.
+   */
+  variant: 'primary' | 'ghost' | 'danger'
 }
 
 export const ACTION_META: Record<PipelineAction, ActionMeta> = {
@@ -273,14 +277,14 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   followup: {
     label: 'Send to follow-up',
     confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   rerun_ci: {
     label: 'Re-run CI',
@@ -315,7 +319,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Takes each draft out of draft on GitHub, so its CI runs.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   queue_merge: {
     label: 'Queue to merge',
@@ -350,7 +354,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   close: {
     label: 'Close PR',

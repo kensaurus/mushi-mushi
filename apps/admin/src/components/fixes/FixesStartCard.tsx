@@ -11,6 +11,7 @@
  *          when GitHub is ready and Autofix is off.
  */
 
+import type { ReactNode } from 'react'
 import { Btn, Card } from '../ui'
 import { useDispatchPreflight } from '../../lib/useDispatchPreflight'
 import { useTurnOnAutofix } from '../../lib/useTurnOnAutofix'
@@ -18,7 +19,16 @@ import { useTurnOnAutofix } from '../../lib/useTurnOnAutofix'
 /** The Bugs list, worst first (severity_rank: critical=4 … low=1). @internal Exported for unit tests only. */
 export const WORST_BUG_HREF = '/reports?sort=severity&dir=desc'
 
-export function FixesStartCard({ githubConnected, projectId = null }: { githubConnected: boolean; projectId?: string | null }) {
+export function FixesStartCard({
+  githubConnected,
+  projectId = null,
+  autofixGuide = null,
+}: {
+  githubConnected: boolean
+  projectId?: string | null
+  /** How Autofix works, as a disclosure under step 2: the page's one Autofix explainer (round-2 review). */
+  autofixGuide?: ReactNode
+}) {
   const preflight = useDispatchPreflight(projectId)
   const autofix = useTurnOnAutofix(projectId, preflight.reload)
   const autofixCheck = preflight.checks.find((c) => c.key === 'autofix')
@@ -37,6 +47,7 @@ export function FixesStartCard({ githubConnected, projectId = null }: { githubCo
             <strong>2. Or Autofix:</strong> Mushi Mushi opens a draft pull request for you to review.
           </li>
         </ol>
+        {autofixGuide ? <div className="mt-2">{autofixGuide}</div> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Btn size="sm" variant="primary" to={WORST_BUG_HREF}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fineTuneNextActions } from './fineTuneActions'
+import { fineTuneNextActions, opensFineTuning } from './fineTuneActions'
 
 const job = (status: string, passed?: boolean) => ({
   status,
@@ -18,5 +18,14 @@ describe('fineTuneNextActions', () => {
   it('does not offer Submit or Check status out of order', () => {
     expect(fineTuneNextActions(job('pending')).canSubmit).toBe(false)
     expect(fineTuneNextActions(job('exported')).canPoll).toBe(false)
+  })
+})
+
+describe('opensFineTuning (round-2 review 2026-11-18)', () => {
+  it('opens the Advanced fine-tuning section for a fine-tuning link only', () => {
+    expect(opensFineTuning('fine-tuning')).toBe(true)
+    expect(opensFineTuning('advanced')).toBe(true)
+    expect(opensFineTuning(null)).toBe(false)
+    expect(opensFineTuning('prompts')).toBe(false)
   })
 })

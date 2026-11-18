@@ -35,7 +35,7 @@ describe('connectPills', () => {
     ])
   })
 
-  it('an SDK that is behind gets an upgrade badge; a quiet one is amber, a never-seen one neutral', () => {
+  it('an SDK that is behind gets an upgrade badge; a quiet one is grey, a never-seen one neutral', () => {
     const behind = connectPills({
       sdkLastSeenAt: '2026-10-27T02:00:00Z',
       sdkVersion: '0.24.3',
@@ -44,7 +44,10 @@ describe('connectPills', () => {
       mcpStats: { connectedKeyCount: 0, lastSeenAt: null },
       now: NOW,
     })
-    expect(behind[0].tone).toBe('warn')
+    // 10 h quiet is normal for a low-traffic app: grey, not amber (2026-11-18).
+    expect(behind[0].tone).toBe('neutral')
+    const cold = connectPills({ sdkLastSeenAt: '2026-10-19T12:00:00Z', sdkVersion: null, sdkLatestVersion: null, sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null }, now: NOW })
+    expect(cold[0].tone).toBe('warn')
     expect(behind[1]).toMatchObject({ tone: 'warn', badge: '0.24.4 available' })
     expect(behind[2]).toMatchObject({ value: 'Not connected', tone: 'neutral' })
     const never = connectPills({ sdkLastSeenAt: null, sdkVersion: null, sdkLatestVersion: null, sdkStatus: null, mcpStats: { connectedKeyCount: 0, lastSeenAt: null }, now: NOW })

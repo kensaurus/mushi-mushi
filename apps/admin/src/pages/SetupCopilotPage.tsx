@@ -23,6 +23,7 @@ import { SetupCopilotReadout } from '../components/setup-copilot/SetupCopilotRea
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { usePublishPageContext } from '../lib/pageContext'
 import { StatusGlyph } from '../components/signal/StatusGlyph'
+import { sdkHeardFrom } from '../lib/setupCopilotView'
 
 /**
  * One setup step. When the whole setup passes, every step is a ● row you can
@@ -35,7 +36,9 @@ export function Step({ title, done, children }: { title: string; done: boolean; 
       <summary className="flex cursor-pointer select-none items-center gap-2 px-3 py-2 text-sm text-fg hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand">
         <StatusGlyph tone="ok" />
         <span className="min-w-0 flex-1 truncate">{title}</span>
-        <span className="shrink-0 text-2xs text-fg-muted">Done</span>
+        {/* The ● already says done; "Done" on all five rows was the same word
+            five times under "All 6 checks pass" (round-2 review). */}
+        <span className="sr-only">Done</span>
       </summary>
       <div className="space-y-3 px-3 pb-3 pt-1">{children}</div>
     </details>
@@ -93,6 +96,8 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
     data: projectsPayload,
     error: projectsError,
     reload,
+    lastFetchedAt: projectsFetchedAt,
+    isValidating: projectsValidating,
   } = usePageData<{ projects: ProjectRow[]; admin_host?: string | null }>('/v1/admin/projects')
   const adminHost = projectsPayload?.admin_host ?? null
   const projectsErrorText = useMemo(() => {
@@ -114,9 +119,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
   const pageSummary = useMemo(() => {
     if (!projectId) return 'Select a project'
     const { required_complete, required_total } = setup.selectors
-    const sdkLive = Boolean(
-      projectRow?.api_keys?.some((k) => k.is_active && k.last_seen_at),
-    )
+    const sdkLive = sdkHeardFrom(projectRow?.api_keys)
     const parts: string[] = []
     if (required_total > 0) {
       parts.push(`Ingest ${required_complete}/${required_total}`)
@@ -134,7 +137,7 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
     projectRow &&
       setup.selectors.required_total > 0 &&
       setup.selectors.required_complete === setup.selectors.required_total &&
-      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
+      sdkHeardFrom(projectRow.api_keys),
   )
 
   usePublishPageContext({
@@ -166,15 +169,15 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
       >
         <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Setup wizard
+          Set up
         </Link>
         <span aria-hidden="true">·</span>
         <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Connect hub
+          Connect
         </Link>
         <span aria-hidden="true">·</span>
         <Link to="/inbox" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Action Inbox
+          To-do
         </Link>
       </nav>
 
@@ -229,10 +232,11 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     projectName={projectRow.name}
                     projectSlug={projectRow.slug}
                     reportCount={projectRow.report_count}
-                    sdkConnected={Boolean(
-                      projectRow.api_keys?.some((k) => k.is_active && k.last_seen_at),
-                    )}
+                    sdkConnected={sdkHeardFrom(projectRow.api_keys)}
                     connectCmd={connectCmd}
+                    // Without these the freshness pill read "● —" (round-2 review).
+                    fetchedAt={projectsFetchedAt}
+                    validating={projectsValidating}
                   />
                 ),
               },

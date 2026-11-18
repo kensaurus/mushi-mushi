@@ -906,15 +906,15 @@ export function FixesPage() {
         helpHowToUse={copy?.help?.howToUse ?? 'The list shows every attempt. Filter by status; In flight shows runs still going.'}
       >
         <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
-        <span className="inline-flex items-center rounded-sm bg-surface-overlay/40 px-2 py-px font-mono text-2xs tabular-nums text-fg-muted">
-          {fixesTotal != null && fixesTotal > fixes.length
-            ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
-            : pluralizeWithCount(fixes.length, 'attempt')}
-        </span>
+        {/* "0 attempts" beside "No fixes in the last 30 days" was noise (round-2 review). */}
+        {fixes.length > 0 && (
+          <span className="inline-flex items-center whitespace-nowrap rounded-sm bg-surface-overlay/40 px-2 py-px text-2xs tabular-nums text-fg-muted">
+            {fixesTotal != null && fixesTotal > fixes.length
+              ? `${fixes.length} of ${pluralizeWithCount(fixesTotal, 'attempt')}`
+              : pluralizeWithCount(fixes.length, 'attempt')}
+          </span>
+        )}
       </PageHeaderBar>
-
-      {/* Before the first fix: the no-setup path first (copy the fix prompt), GitHub second (audit 2026-11-11). */}
-      {fixes.length === 0 && <FixesStartCard githubConnected={fixesStats.topPriority !== 'no_github'} projectId={activeProjectId} />}
 
       {/* Out of credits: say so, with the remedy, where Retry would have been (audit 2026-11-11). */}
       {agentCredits.state?.out && (
@@ -952,20 +952,22 @@ export function FixesPage() {
               />
             ),
           },
-          {
-            priority: POSTURE_PRIORITY.guide,
-            // A third explainer next to the help row and the banner; only
-            // worth its space before the first attempt.
-            show: fixes.length === 0,
-            children: (
-              <FixesPipelineGuide
-                topPriority={fixesStats.topPriority}
-                stats={{ ...fixesStats, inProgress: inFlightCount }}
-              />
-            ),
-          },
         ]}
       />
+
+      {/* Before the first fix: the status line above leads ("4 bugs waiting
+          for a fix"), then how a fix starts: the no-setup path first (copy the
+          fix prompt), Autofix second with its "How Autofix works" disclosure
+          inside, not a second panel repeating it (audit 2026-11-11, round-2 review). */}
+      {fixes.length === 0 && (
+        <FixesStartCard
+          githubConnected={fixesStats.topPriority !== 'no_github'}
+          projectId={activeProjectId}
+          autofixGuide={
+            <FixesPipelineGuide flat topPriority={fixesStats.topPriority} stats={{ ...fixesStats, inProgress: inFlightCount }} />
+          }
+        />
+      )}
 
       {codebaseStats &&
         (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) &&

@@ -246,4 +246,21 @@ describe('symptom node with no stated symptom', () => {
     // A stated symptom still names itself.
     expect(buildDiagnosisGraph(report()).nodes.find((n) => n.id === 'symptom')!.title).toContain('Judge response not valid JSON')
   })
+
+  // R2 sweep 2026-11-18: "Quick summary only; no full diagnosis 97%" under
+  // "Confident diagnosis", and "Not graded yet · in progress".
+  it('a quick summary is not called a confident diagnosis, and carries no diagnosis %', () => {
+    const g = buildDiagnosisGraph(report({ stage2_analysis: null, stage2_partial: null, stage1_classification: { category: 'bug' }, processing_error: null, confidence: 0.97, judge_eval: null, fix_attempts: [] }))
+    const cause = g.nodes.find((n) => n.id === 'cause')!
+    expect(cause.title).toBe('Quick summary only; no full diagnosis')
+    expect(cause.confidence).toBeNull()
+    expect(g.verdict).toEqual({ tone: 'info', label: 'Sorted; cause not diagnosed' })
+  })
+
+  it('an ungraded report is "not checked", not "in progress"', () => {
+    const g = buildDiagnosisGraph(report({ judge_eval: null }))
+    const judge = g.nodes.find((n) => n.id === 'judge')!
+    expect(judge.title).toBe('Not graded yet')
+    expect(judge.state).toBe('unchecked')
+  })
 })

@@ -122,10 +122,12 @@ export function billingMeters(stats: BillingStats, seats: SeatUsage | null = nul
 
   meters.push(fixesMeter(stats))
 
+  // A complimentary account has no spend tile: "no charges" is the banner
+  // line above, and was said four ways on the page (review 2026-11-18).
+  if (stats.isComplimentary) return meters
+
   meters.push(
-    stats.isComplimentary
-      ? { id: 'spend', label: 'Charges', value: 'None', pct: null, tone: 'neutral', detail: 'Admin account: limits apply, nothing is billed' }
-      : stats.monthlySpendCapUsd != null
+    stats.monthlySpendCapUsd != null
         ? {
             id: 'spend',
             label: 'Spend cap',

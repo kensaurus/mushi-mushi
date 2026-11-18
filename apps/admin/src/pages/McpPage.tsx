@@ -45,8 +45,9 @@ import {
   isCatalogTabId,
   mcpTestFailureMessage,
   resolveMcpTab,
-  validateMcpJsonSyntax,
 } from '../lib/mcpPageHelpers'
+import { accountKeyForProject, mcpJsonDraftCheck } from '../lib/mcpSetupView'
+import type { AccountKeyRow } from '../components/mcp/McpAccountKeysList'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 import { PageLoadError } from '../components/PageLoadError'
 
@@ -85,6 +86,9 @@ export function McpPage() {
 
   const projectsQuery = usePageData<McpProjectsResponse>(projectsPath, { deps: [activeProjectId] })
   const statsQuery = usePageData<McpStats>(statsPath, { deps: [activeProjectId] })
+  // Same read as the Setup tab's account-key list (requests are shared).
+  const accountKeysQuery = usePageData<{ keys: AccountKeyRow[] }>(activeProjectId ? '/v1/admin/mcp/account-keys' : null, { scope: 'none' })
+  const accountKey = accountKeyForProject(accountKeysQuery.data?.keys, activeProjectId)
 
   const activeProject = useMemo(() => {
     if (!activeProjectId) return null
@@ -196,10 +200,9 @@ export function McpPage() {
       : snippetMode === 'http'
         ? buildHttpCursorJson(projectId, displayName)
         : buildEnvBlock(projectId)
-  const syntaxCheck = useMemo(
-    () => validateMcpJsonSyntax(mcpJsonDraft || (snippetMode === 'env' ? '' : snippet)),
-    [mcpJsonDraft, snippet, snippetMode],
-  )
+  // Only what was pasted is checked: with an empty box it validated the
+  // generated snippet's placeholder key and warned (round-2 review 2026-11-18).
+  const syntaxCheck = useMemo(() => mcpJsonDraftCheck(mcpJsonDraft), [mcpJsonDraft])
 
   async function testMcpConnection() {
     if (!activeProjectId) return
@@ -235,8 +238,9 @@ export function McpPage() {
   }
 
 
-  const hasReadKey = stats.mcpReadKeyCount > 0
-  const hasWriteKey = stats.mcpWriteKeyCount > 0
+  // An account key that reaches this app is a key the editor can use.
+  const hasReadKey = stats.mcpReadKeyCount > 0 || Boolean(accountKey)
+  const hasWriteKey = stats.mcpWriteKeyCount > 0 || Boolean(accountKey?.scopes.includes('mcp:write'))
   const step1Tone: McpQuickstartStepProps['tone'] = hasReadKey ? 'done' : 'next'
   const step2Tone: McpQuickstartStepProps['tone'] = hasReadKey ? (stats.connectedKeyCount > 0 ? 'done' : 'next') : 'idle'
   const step3Tone: McpQuickstartStepProps['tone'] = stats.connectedKeyCount > 0 ? 'done' : hasReadKey ? 'next' : 'idle'
@@ -390,6 +394,7 @@ export function McpPage() {
                 stats={stats}
                 onTab={setTab}
                 plainBanner={ux.plainBanner}
+                accountKey={accountKey}
               />
             ),
           },

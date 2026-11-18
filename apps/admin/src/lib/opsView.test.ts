@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCoverageRows, freshness, nestThreads, paymentsToday, slackState } from './opsView'
+import { buildCoverageRows, freshness, needsLookView, nestThreads, paymentsToday, slackChipShown, slackState, splitBodyCta, splitOpsColumns } from './opsView'
 import type { OpsCoverageResponse, OpsEvent } from './opsTypes'
 
 const NOW = Date.parse('2026-11-17T05:00:00Z')
@@ -88,5 +88,61 @@ describe('slackState and money', () => {
   it('sums today per currency', () => {
     expect(paymentsToday({ JPY: 12000, USD: 4000 })).toBe('¥12,000 · $40.00')
     expect(paymentsToday({})).toBe('none yet')
+  })
+})
+
+describe('needsLookView', () => {
+  it('splits failures from warnings, worst first, and its count is exactly the rows listed', () => {
+    const events = [
+      ev({ id: 'w', severity: 'warn', title: 'Error: Word not found', occurred_at: '2026-11-17T04:40:00Z' }),
+      ev({ id: 'u1', category: 'releases', title: 'Production deploy failed', occurred_at: '2026-11-17T04:30:00Z' }),
+      ev({ id: 'u2', category: 'releases', title: 'Release failed', occurred_at: '2026-11-17T03:30:00Z' }),
+      ev({ id: 'acked', acked_at: '2026-11-17T04:45:00Z' }),
+      ev({ id: 'closed', thread_key: 'k', occurred_at: '2026-11-17T01:00:00Z' }),
+      ev({ id: 'fix', parent_id: 'closed', severity: 'resolved', occurred_at: '2026-11-17T02:00:00Z' }),
+      ev({ id: 'i', severity: 'info' }),
+    ]
+    const view = needsLookView(events)
+    expect(view.failures.map((i) => i.thread.event.id)).toEqual(['u1', 'u2'])
+    expect(view.warnings.map((i) => i.thread.event.id)).toEqual(['w'])
+    expect(view.count).toBe(view.failures.length + view.warnings.length)
+    expect(view.count).toBe(3)
+  })
+})
+
+describe('splitOpsColumns', () => {
+  const rows = (cats: string[]) =>
+    buildCoverageRows(
+      {
+        apps: [{ id: 'p1', name: 'a', slug: null, icon_url: null }],
+        coverage: cats.map((c) => ({ project_id: 'p1', category: c as 'releases', last_at: '2026-11-17T04:00:00Z', count_7d: 1 })),
+        today: { payments: {}, releases: 0, openAlerts: 0, since: '' },
+        mutes: [],
+        slack: { enabled: true },
+      },
+      NOW,
+    )
+  it('hides a column no app has sent, and keeps the grid when nothing has data', () => {
+    expect(splitOpsColumns(rows(['releases', 'bugs']))).toEqual({ shown: ['releases', 'bugs'], empty: ['payments', 'alerts'] })
+    expect(splitOpsColumns(rows([])).empty).toEqual([])
+    expect(splitOpsColumns(rows([])).shown).toHaveLength(4)
+  })
+})
+
+describe('splitBodyCta and slackChipShown', () => {
+  it('turns a closing "Open the run…" sentence into a link only when there is a URL', () => {
+    expect(splitBodyCta('main failed at build. Open the run to see which step failed.', 'https://x')).toEqual({ text: 'main failed at build.', cta: 'Open the run to see which step failed' })
+    expect(splitBodyCta('Open the run to see which step failed.', 'https://x')).toEqual({ text: null, cta: 'Open the run to see which step failed' })
+    expect(splitBodyCta('Open the run to see which step failed.', null)).toEqual({ text: 'Open the run to see which step failed.', cta: null })
+    expect(splitBodyCta('Plain body.', 'https://x')).toEqual({ text: 'Plain body.', cta: null })
+  })
+  it('draws the Slack chip only when it adds something', () => {
+    const ok = slackState({ slack_ts: '1', slack_channel: 'C', slack_error: null })
+    const stored = slackState({ slack_ts: null, slack_channel: null, slack_error: null })
+    const failed = slackState({ slack_ts: null, slack_channel: 'C', slack_error: 'channel_not_found' })
+    expect(slackChipShown(ok, true)).toBe(false)
+    expect(slackChipShown(stored, false)).toBe(false)
+    expect(slackChipShown(stored, true)).toBe(true)
+    expect(slackChipShown(failed, false)).toBe(true)
   })
 })

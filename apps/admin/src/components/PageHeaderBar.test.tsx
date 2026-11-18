@@ -69,7 +69,7 @@ describe('PageHeaderBar overview chip', () => {
 
   it('renders a chip that can shrink instead of overflowing the row', () => {
     renderDashboardHeader()
-    const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
+    const chip = container.querySelector<HTMLElement>('[aria-label^="Home:"]')
     expect(chip).not.toBeNull()
     const cls = chip!.className
     expect(cls).toContain('min-w-0')
@@ -81,9 +81,9 @@ describe('PageHeaderBar overview chip', () => {
 
   it('truncates the chip label rather than widening the header', () => {
     renderDashboardHeader()
-    const chip = container.querySelector<HTMLElement>('[aria-label^="Overview:"]')
-    // The label is the cycle's word now ("Overview"), not "PDCA …" (P5).
-    const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Overview')
+    const chip = container.querySelector<HTMLElement>('[aria-label^="Home:"]')
+    // The label is the page's own word ("Home", 2026-11-18), not "PDCA …" (P5).
+    const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Home')
     expect(label).toBeDefined()
     expect(label!.className).toContain('truncate')
   })

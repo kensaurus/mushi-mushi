@@ -16,12 +16,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   data: null as unknown,
+  loading: false,
+  error: null as string | null,
   reload: vi.fn(),
   apiFetch: vi.fn(async () => ({ ok: true, data: { aiProvider: 'openai' } })),
 }));
 
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: state.data, loading: false, error: null, reload: state.reload }),
+  usePageData: () => ({ data: state.data, loading: state.loading, error: state.error, reload: state.reload }),
 }));
 vi.mock('../../lib/supabase', () => ({ apiFetch: (...args: unknown[]) => state.apiFetch(...(args as [])) }));
 
@@ -45,6 +47,8 @@ beforeEach(() => {
   state.apiFetch.mockClear();
   state.reload.mockClear();
   onNeedOpenAiKey.mockClear();
+  state.loading = false;
+  state.error = null;
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -80,5 +84,21 @@ describe('AiProviderSection', () => {
     expect(container.textContent).toContain('No Claude key is used.');
     expect(container.textContent).toContain('An organization owner or admin can change this.');
     expect(container.querySelector('[role="radiogroup"]')?.getAttribute('aria-disabled')).toBe('true');
+    // The model ids sit behind the (i), not in a six-line sentence.
+    expect(container.textContent).not.toContain('GPT-6.1 Terra');
+  });
+
+  // Round-2 review (2026-11-18): the section vanished at 1440 and showed at 390.
+  it('says it is loading, and offers Retry when the read failed, instead of vanishing', async () => {
+    state.data = null;
+    state.loading = true;
+    render();
+    expect(container.querySelector('[data-testid="ai-provider-loading"]')).not.toBeNull();
+    state.loading = false;
+    state.error = 'boom';
+    render();
+    expect(container.querySelector('[data-testid="ai-provider-error"]')?.textContent).toContain('Could not load');
+    await act(async () => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Retry')!.click());
+    expect(state.reload).toHaveBeenCalled();
   });
 });

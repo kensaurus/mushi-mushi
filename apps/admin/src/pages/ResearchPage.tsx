@@ -106,6 +106,10 @@ export function ResearchPage() {
   // "Run first search" card above it (the same action as the Search button) steps aside.
   const searchIsFirstStep = stats.topPriority === 'ready_no_sessions' && activeTab === 'search'
   useMarkPageEmpty(searchIsFirstStep)
+  // The snapshot turns into its "No searches yet" first-step card when Firecrawl
+  // is ready and every number is 0; the History list then stays quiet.
+  const researchFirstStepShown =
+    !ux.hideResearchSnapshot && !searchIsFirstStep && stats.firecrawlReady && stats.sessions === 0 && stats.attached === 0 && stats.unattachedSnippets === 0
 
   const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
@@ -508,6 +512,8 @@ export function ResearchPage() {
                   onAgeFilterChange={setAgeFilter}
                   onOpenSession={(id) => void loadSession(id)}
                   activeSessionId={active?.sessionId ?? null}
+                  firstStepShown={researchFirstStepShown}
+                  onSearch={() => setActiveTab('search')}
                 />
               )}
             </div>

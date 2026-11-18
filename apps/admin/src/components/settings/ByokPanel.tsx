@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
-import { Input, SecretInput, Btn, ErrorAlert, ResultChip, SegmentedControl, Tooltip } from '../ui';
+import { Input, SecretInput, Btn, ErrorAlert, ResultChip, SegmentedControl, Tooltip, InfoHint } from '../ui';
 import { ConfigHelp } from '../ConfigHelp';
 import { BrandIcon } from '../ui/BrandIcon';
 import { IconPlay, IconTrash } from '../icons';
@@ -40,6 +40,8 @@ import { creditsLine, spendLine, type ByokCreditsResponse } from './byokCredits'
 import {
   isLegacyKey,
   keyStatusView,
+  isReplacedKeyView,
+  duplicateKeyCopies,
   providerStatusView,
   type KeyStatusView,
   type LegacyKey,
@@ -49,6 +51,7 @@ import { RowStatus, SettingsList, SettingsRow } from './SettingsRow';
 import { SpendDownSection } from './SpendDownSection';
 import { ReviewFollowupsSection } from './ReviewFollowupsSection';
 import { AiProviderSection } from './AiProviderSection';
+import { StatusPill } from '../signal/StatusMark';
 
 interface ProviderMeta {
   name: string;
@@ -500,6 +503,7 @@ export function ByokPanel() {
 
   const allKeys = pool.data?.keys ?? [];
   const legacyKeys = pool.data?.legacyKeys ?? [];
+  const duplicates = duplicateKeyCopies([...allKeys, ...legacyKeys]);
 
   const noticeHere = (scope: string) =>
     notice?.scope === scope ? (
@@ -550,7 +554,18 @@ export function ByokPanel() {
               <span className="text-fg-muted">{k.label}</span>
             ) : null}
           </p>
-          <RowStatus status={view} />
+          <RowStatus status={isReplacedKeyView(view) ? { ...view, label: view.label ?? 'Replaced', mark: 'cancelled' } : view} />
+          {(() => {
+            const first = duplicates.get(k.id);
+            if (!first) return null;
+            const where = isLegacyKey(first) ? 'as an old single key' : `for ${scopeChipLabel(first as PoolKey, sharing)}`;
+            return (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-secondary" data-testid="byok-duplicate-key">
+                <StatusPill status="slow" label="Same key twice" />
+                <span>This key is also saved {where}. One copy is enough: remove one.</span>
+              </p>
+            );
+          })()}
           {(() => {
             const kc = !legacy ? credits.data?.keys?.find((c) => c.id === k.id) : undefined;
             if (!kc) return null;
@@ -599,10 +614,11 @@ export function ByokPanel() {
             </p>
           )}
           {poolKey && rowScopes.length > 1 && (
+            // No visible "Used by" on every row (it repeated nine times, round-2
+            // review 2026-11-18): the options say where the key is used.
             <SegmentedControl
               size="sm"
               wrap
-              label="Used by"
               ariaLabel={`Where ${name} is used`}
               value={keyScope}
               options={rowScopes}
@@ -693,13 +709,21 @@ export function ByokPanel() {
     <>
       <SettingsList
         title="AI keys"
-        description={`Keys for the AI and web services Mushi Mushi uses for this project. They are stored encrypted and billed to your own accounts. Add more than one key for a service and Mushi Mushi switches to the next when one runs out.${
-          universal?.canAdd
-            ? ' A key for "All my apps" is added once and used by every app you own.'
-            : sharing
-              ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.`
-              : ''
-        }`}
+        // One line; the rest behind the (i). It ran to six lines at 390 px (round-2 review 2026-11-18).
+        description={
+          <span className="inline-flex items-center gap-1.5">
+            <span>Stored encrypted, billed to your own accounts.</span>
+            <InfoHint
+              content={`Add more than one key for a service and Mushi Mushi switches to the next when one runs out.${
+                universal?.canAdd
+                  ? ' A key for "All my apps" is added once and used by every app you own.'
+                  : sharing
+                    ? ` A key marked "All apps" is shared by every app in ${sharing.organizationName}, so you add it once.`
+                    : ''
+              }`}
+            />
+          </span>
+        }
       >
         <AiProviderSection
           keysToken={allKeys.filter((k) => k.provider_slug === 'openai').map((k) => k.id).join(',')}
@@ -752,7 +776,7 @@ export function ByokPanel() {
                   </a>
                   <Btn
                     size="sm"
-                    variant={keyCount === 0 || view.state === 'attention' ? 'primary' : 'ghost'}
+                    variant={keyCount === 0 || view.state === 'attention' || view.action === 'add_backup' ? 'primary' : 'ghost'}
                     type="button"
                     aria-expanded={isOpen}
                     onClick={() => openAddForm(provider)}

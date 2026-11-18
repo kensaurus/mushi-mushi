@@ -6,7 +6,7 @@ import { Card, Badge, Btn, ErrorAlert, RelativeTime, DetailRows, type DetailRowI
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { CHIP_TONE } from '../../lib/chipTone'
 
-interface GraphBackendStatus {
+export interface GraphBackendStatus {
   backend: 'sql_only' | 'age_dual' | 'age_only'
   ageAvailable: boolean
   latestAudit: {
@@ -21,8 +21,8 @@ interface GraphBackendStatus {
 
 const BACKEND_TONE: Record<GraphBackendStatus['backend'], string> = {
   sql_only: CHIP_TONE.neutral,
-  age_dual: CHIP_TONE.infoSubtle,
-  age_only: CHIP_TONE.okSubtle,
+  age_dual: CHIP_TONE.neutral,
+  age_only: CHIP_TONE.neutral,
 }
 
 const BACKEND_LABEL: Record<GraphBackendStatus['backend'], string> = {
@@ -32,68 +32,59 @@ const BACKEND_LABEL: Record<GraphBackendStatus['backend'], string> = {
 }
 
 /**
- * Translate a `GraphBackendStatus` into the standard `DetailRowItem` shape
- * used across the admin app. Keeping the row-construction here (instead of
- * inlined in the JSX) means tone choices and conditional rows are easy to
- * reason about, and the JSX stays a single readable expression.
- *
- * Tone choices:
- * - Backend mode + AGE extension stay as Badges (semantic surfaces with
- *   their own chrome) — DetailRows just hosts them.
- * - Unsynced node/edge counts use `warn` when > 0 (drift exists) and
- *   `ok` when 0 (in sync), so an operator's eye lands on the column
- *   that needs attention.
- * - Last drift audit gets `wrap: true` so the relative-time + drift-
- *   count + nodes/edges line stays on its own row instead of being
- *   crushed into a right-aligned column.
+ * Rows for the backend card: the one place the storage mode is stated
+ * (fresh-eyes 2026-11-18 found it four times on the tab). AGE is optional, so
+ * "not installed" is neutral, and the SQL to AGE sync rows only exist when AGE is
+ * in use: "Sync pending" in SQL-only mode described a copy that does not run.
  */
-function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
+export function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
+  const ageInUse = data.backend !== 'sql_only' && data.ageAvailable
   const rows: DetailRowItem[] = [
     {
-      label: 'Backend mode',
+      label: 'Stored in',
       value: <Badge className={BACKEND_TONE[data.backend]}>{BACKEND_LABEL[data.backend]}</Badge>,
-      hint: 'How the report graph is currently stored — pure SQL, dual-write to AGE, or AGE-only.',
+      hint: 'How the report graph is stored: plain SQL, SQL plus a copy in Apache AGE, or AGE only.',
     },
     {
-      label: 'AGE extension',
-      value: data.ageAvailable
-        ? <Badge className={CHIP_TONE.okSubtle}>Available</Badge>
-        : <Badge tone="warnSubtle">Not installed</Badge>,
-      hint: 'Whether the Apache AGE Postgres extension is loaded on the database.',
-    },
-    {
-      label: 'Unsynced nodes',
-      value: data.unsynced.nodes != null ? data.unsynced.nodes.toLocaleString() : 'Not checked yet',
-      mono: data.unsynced.nodes != null,
-      tone: data.unsynced.nodes == null ? 'muted' : data.unsynced.nodes > 0 ? 'warn' : 'ok',
-      hint: 'Nodes present in SQL but not yet mirrored into AGE.',
-    },
-    {
-      label: 'Unsynced edges',
-      value: data.unsynced.edges != null ? data.unsynced.edges.toLocaleString() : 'Not checked yet',
-      mono: data.unsynced.edges != null,
-      tone: data.unsynced.edges == null ? 'muted' : data.unsynced.edges > 0 ? 'warn' : 'ok',
-      hint: 'Edges present in SQL but not yet mirrored into AGE.',
+      label: 'Apache AGE (optional)',
+      value: data.ageAvailable ? 'Installed' : 'Not installed',
+      tone: 'muted',
+      hint: 'An optional Postgres extension for graph queries. The map works without it.',
     },
   ]
+  if (!ageInUse) return rows
+  const syncValue = (n: number | null) => (n == null ? 'Not checked yet' : n.toLocaleString())
+  const syncTone = (n: number | null): DetailRowItem['tone'] => (n == null ? 'muted' : n > 0 ? 'warn' : undefined)
+  rows.push(
+    {
+      label: 'Items not copied to AGE',
+      value: syncValue(data.unsynced.nodes),
+      tone: syncTone(data.unsynced.nodes),
+      hint: 'Items present in SQL but not yet copied into AGE.',
+    },
+    {
+      label: 'Links not copied to AGE',
+      value: syncValue(data.unsynced.edges),
+      tone: syncTone(data.unsynced.edges),
+      hint: 'Links present in SQL but not yet copied into AGE.',
+    },
+  )
   if (data.latestAudit) {
     const a = data.latestAudit
     rows.push({
-      label: 'Last drift audit',
+      label: 'Last drift check',
       value: (
-        <span className="font-mono text-fg-secondary">
+        <span className="tabular-nums text-fg-secondary">
           <RelativeTime value={a.ran_at} />
           {' · '}
-          {a.drift_count != null
-            ? `${a.drift_count.toLocaleString()} drift`
-            : 'no drift count'}
+          {a.drift_count != null ? `${a.drift_count.toLocaleString()} differences` : 'difference count not recorded'}
           {a.nodes_in_age != null && (
-            <> · {a.nodes_in_age.toLocaleString()} nodes / {a.edges_in_age?.toLocaleString() ?? '—'} edges in AGE</>
+            <> · {a.nodes_in_age.toLocaleString()} items / {a.edges_in_age?.toLocaleString() ?? 'not counted'} links in AGE</>
           )}
         </span>
       ),
       wrap: true,
-      hint: 'When the most recent SQL ↔ AGE drift snapshot ran.',
+      hint: 'When the most recent SQL and AGE drift snapshot ran.',
     })
   }
   return rows
@@ -121,16 +112,15 @@ export function GraphBackendPanel() {
 
   return (
     <Card elevated className="p-3">
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <div>
-          <h3 className="text-xs font-semibold text-fg-secondary">Graph backend</h3>
-          <p className="text-2xs text-fg-faint">
-            Apache AGE drift audit. Only relevant if you've enabled the AGE dual-write path.
-          </p>
-        </div>
-        <Btn size="sm" onClick={snapshot} disabled={snapshotting || !data?.ageAvailable} loading={snapshotting}>
-          Snapshot drift
-        </Btn>
+      <div className="flex items-start justify-between mb-2 gap-2">
+        <h3 className="text-xs font-semibold text-fg-secondary">Graph storage</h3>
+        {/* Drift snapshots compare SQL with AGE; without AGE there is nothing to
+            compare, so the button only exists when it can run. */}
+        {data?.ageAvailable ? (
+          <Btn size="sm" onClick={snapshot} disabled={snapshotting} loading={snapshotting} className="shrink-0 whitespace-nowrap">
+            Snapshot drift
+          </Btn>
+        ) : null}
       </div>
 
       {loading ? (

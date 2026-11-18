@@ -74,6 +74,7 @@ import {
   parseReportIdInput,
   pipelineCancelBody,
   resolveSkillsTab,
+  skillSourcesEmptyLine,
   type PipelineCancelResult,
   type SkillsTab,
 } from '../lib/skillPipelines'
@@ -1026,18 +1027,15 @@ function PipelinesTab({
           </p>
         )}
         {runs.length === 0 ? (
-          <div className="py-10 text-center flex flex-col items-center gap-4 max-w-md mx-auto">
-            <p className="text-sm font-medium text-fg">No pipeline runs yet</p>
-            <Card  className="text-xs text-fg-muted text-left w-full px-4 py-3 space-y-2">
-              <p className="font-semibold text-fg text-2xs">How to start your first run</p>
-              <ol className="list-decimal pl-4 space-y-1 text-fg-secondary">
-                <li>Open a report and copy its ID from the URL</li>
-                <li>Go to <Btn type="button" variant="ghost" size="sm" onClick={onGoToCatalog} className={`!px-0 !py-0 !border-0 !bg-transparent hover:!bg-transparent ${LINK_ACCENT}`}>Catalog</Btn> and pick a skill (try <em>workflow-fix-and-ship</em> to close a bug end-to-end)</li>
-                <li>Paste the report ID in the "Apply to a report" field, click <strong>Start pipeline</strong></li>
-                <li>Copy the context packet into your Cursor agent — the skill walks you through each step</li>
-              </ol>
-            </Card>
-            <div className="flex gap-2">
+          // One line, not a second "nothing yet" card: the Skill runs card above
+          // already says nothing has run, and the guide at the page foot has the
+          // steps. Its old steps also said to copy the report ID from the URL,
+          // while the catalog now picks the bug by title (round-2 review).
+          <div className="py-6 flex flex-col items-center gap-3 text-center" data-testid="pipeline-runs-empty">
+            <p className="text-xs text-fg-muted">
+              No pipeline runs on this app. Pick a skill in the catalog, then pick the bug by its title.
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
               <Btn type="button" variant="primary" size="sm" onClick={onGoToCatalog}>
                 Browse Catalog →
               </Btn>
@@ -1526,35 +1524,35 @@ function SourcesTab({
       <SurfacePanel className="rounded-xl p-4 flex flex-col gap-3">
         <p className="text-sm font-semibold text-fg">Add skill source</p>
         <p className="text-xs text-fg-muted">Any GitHub repo containing <code className="font-mono">skills/*/SKILL.md</code> (skills.sh-compatible).</p>
-        <div className="flex gap-2">
+        {/* Wraps at 390: the button spilled out of the card and the page scrolled sideways. */}
+        <div className="flex min-w-0 flex-wrap gap-2">
           <input
             type="text"
+            aria-label="GitHub repo (owner/repo)"
             placeholder="owner/repo (e.g. kensaurus/skills)"
             value={repoSlug}
             onChange={(e) => setRepoSlug(e.target.value)}
-            className="input flex-1 text-sm"
+            className="input min-w-0 flex-1 basis-48 text-sm"
           />
           <input
             type="text"
             placeholder="main"
             title="Git branch or tag (default: main)"
+            aria-label="Git branch or tag"
             value={ref}
             onChange={(e) => setRef(e.target.value)}
-            className="input w-24 text-sm"
+            className="input w-24 shrink-0 text-sm"
           />
-          <Btn type="button" variant="primary" size="md" onClick={addSource} disabled={adding || !repoSlug}>
+          <Btn type="button" variant="primary" size="md" className="shrink-0 whitespace-nowrap" onClick={addSource} disabled={adding || !repoSlug}>
             {adding ? 'Adding…' : 'Add source'}
           </Btn>
         </div>
       </SurfacePanel>
 
       {sources.length === 0 ? (
-        <div className="text-sm text-fg-muted flex flex-col gap-2">
-          <p>No skill sources yet.</p>
-          <p className="text-xs">
-            Add <code className="font-mono text-brand">kensaurus/skills</code> above, then sync to load 70+ agent skills into the catalog.
-          </p>
-        </div>
+        <p className="text-xs text-fg-muted" data-testid="skill-sources-empty">
+          {skillSourcesEmptyLine(stats.catalogTotal)}
+        </p>
       ) : (
         sources.map((src) => (
           <SurfacePanel key={src.id} className="rounded-xl p-4 flex items-start gap-3">
@@ -1692,7 +1690,7 @@ function EmptySkills({ onGoToSources }: { onGoToSources: () => void }) {
       <p className="text-sm text-fg-muted">Your skill catalog is empty.</p>
       <p className="text-xs text-fg-muted max-w-sm">
         Add a GitHub source and sync it to load skills.{' '}
-        <code className="font-mono text-brand">kensaurus/skills</code> brings in 70+ workflows instantly.
+        <code className="font-mono text-brand">kensaurus/skills</code> is a good first one.
       </p>
       <Btn type="button" variant="primary" size="sm" onClick={onGoToSources}>
         Go to Sources

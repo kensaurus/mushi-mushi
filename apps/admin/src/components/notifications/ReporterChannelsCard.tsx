@@ -25,13 +25,20 @@ import {
   type ReporterSettingsView,
   type TemplateKey,
 } from '../../lib/reporterChannels'
-import { Badge, Btn, Card, ErrorAlert, Textarea, Toggle } from '../ui'
+import { Badge, Btn, ErrorAlert, Textarea, Toggle } from '../ui'
+import { reporterChannelBadge } from '../../lib/notificationsView'
 
-function ProviderBadge({ state }: { state: 'configured' | 'not_configured' }) {
-  return state === 'configured' ? (
-    <Badge tone="okSubtle">Ready to send</Badge>
-  ) : (
-    <Badge tone="warnSubtle">Not set up on the server</Badge>
+/**
+ * Server first, then the switch: a channel switched OFF reads "Off" in grey,
+ * never a green "Ready to send" (round-2 review 2026-11-18).
+ */
+function ChannelBadge({ enabled, provider }: { enabled: boolean; provider: 'configured' | 'not_configured' }) {
+  const badge = reporterChannelBadge(enabled, provider)
+  const tone = badge.kind === 'server_missing' ? 'warnSubtle' : badge.kind === 'ready' ? 'okSubtle' : 'neutral'
+  return (
+    <span data-testid="reporter-channel-badge" data-kind={badge.kind}>
+      <Badge tone={tone}>{badge.label}</Badge>
+    </span>
   )
 }
 
@@ -64,9 +71,7 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
   if (error) return <ErrorAlert title="Email and push settings unavailable" message={error} onRetry={reload} />
   if (loading && !data) {
     return (
-      <Card className="p-4">
-        <p className="text-xs text-fg-muted">Loading email and push settings…</p>
-      </Card>
+      <p className="text-xs text-fg-muted">Loading email and push settings…</p>
     )
   }
   if (!data) return null
@@ -75,7 +80,8 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
   const wordingChanged = TEMPLATE_KEYS.some((k) => (drafts[k] ?? '').trim() !== (data.templates[k] ?? ''))
 
   return (
-    <Card className="p-4 space-y-4">
+    // No card of its own: the "How reporters hear back" section is the card.
+    <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold text-fg">Email and push updates</h3>
         <p className="text-xs text-fg-muted">
@@ -84,8 +90,8 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5 rounded-md border border-edge-subtle p-3">
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Toggle
               label="Email updates"
@@ -95,7 +101,7 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
                 void save('email', { email_enabled: next }, next ? 'Reporters can now ask for email updates.' : 'Email updates are off.')
               }
             />
-            <ProviderBadge state={data.providers.email} />
+            <ChannelBadge enabled={data.email_enabled} provider={data.providers.email} />
           </div>
           <p className="text-2xs text-fg-muted">
             {data.providers.email === 'not_configured'
@@ -104,7 +110,7 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
           </p>
         </div>
 
-        <div className="space-y-1.5 rounded-md border border-edge-subtle p-3">
+        <div className="space-y-1.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Toggle
               label="Browser push"
@@ -114,7 +120,7 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
                 void save('push', { push_enabled: next }, next ? 'Reporters can now turn on browser notifications.' : 'Browser push is off.')
               }
             />
-            <ProviderBadge state={data.providers.push} />
+            <ChannelBadge enabled={data.push_enabled} provider={data.providers.push} />
           </div>
           <p className="text-2xs text-fg-muted">
             {data.providers.push === 'not_configured'
@@ -173,6 +179,6 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
           </div>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

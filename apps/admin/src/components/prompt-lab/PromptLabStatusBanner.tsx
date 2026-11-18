@@ -51,10 +51,12 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
 
   if (stats.topPriority === 'untested_ab') {
     return (
+      // A running test waiting for grades is work in progress, not a warning (blue, pulsing);
+      // the subtitle names each step, so it cannot disagree with the "Steps with a test" tile.
       <StatusBannerShell
-        tone="warn"
+        tone="info"
         pulseDot
-        title="A/B running — no judge scores yet"
+        title="Test running, waiting for its first grades"
         subtitle={stats.topPriorityLabel}
         action={
           stats.topPriorityTo ? (

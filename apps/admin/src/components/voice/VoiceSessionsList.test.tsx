@@ -38,7 +38,8 @@ describe('VoiceSessionsList', () => {
     })
     const empty = host.querySelector('[data-testid="voice-sessions-empty"]')!
     expect(empty.textContent).toContain('No voice requests yet.')
-    expect(empty.textContent).toContain('Turn on voice intake first.')
+    // The page's "Voice intake is off" banner says it; the list does not repeat it (round-2 review).
+    expect(empty.textContent).not.toContain('Turn on voice intake first.')
     expect(host.querySelector('.border-dashed')).toBeNull()
   })
 })

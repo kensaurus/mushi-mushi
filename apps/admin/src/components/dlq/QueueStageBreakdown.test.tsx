@@ -11,7 +11,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { QueueStageBreakdown } from './QueueStageBreakdown'
+import { QueueStageBreakdown, stageBacklog } from './QueueStageBreakdown'
 import type { QueueSummary } from './types'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -42,5 +42,14 @@ describe('QueueStageBreakdown', () => {
     expect(rows[0]!.querySelector('[data-testid="stage-bar"]')).toBeNull()
     expect(rows[0]!.querySelector('[data-testid="stage-bar-empty"]')).not.toBeNull()
     expect(rows[1]!.querySelector('[data-testid="stage-bar"]')).not.toBeNull()
+  })
+
+  it('draws nothing when no stage has backlog (a card of 0 rows)', async () => {
+    const summary = { stages: ['fast_filter'], byStage: { fast_filter: { completed: 4 } } } as unknown as QueueSummary
+    expect(stageBacklog(summary, 'fast_filter')).toBe(0)
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(QueueStageBreakdown, { summary, selectedStage: '', onSelect: () => {} })))
+    })
+    expect(container.textContent).toBe('')
   })
 })

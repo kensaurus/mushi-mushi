@@ -5,12 +5,7 @@
 
 import type { MetricTooltipData } from '../components/ui'
 import type { CostStats } from '../components/cost/types'
-
-function fmtUsd(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`
-  if (n >= 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(6)}`
-}
+import { formatSpendUsd as fmtUsd } from './costView'
 
 export function totalLoggedTooltip(stats: CostStats): MetricTooltipData {
   const takeaway =
@@ -84,10 +79,6 @@ export function spend24hTooltip(stats: CostStats): MetricTooltipData {
   }
 }
 
-export function spend24hDetail(stats: CostStats): string {
-  return `${stats.calls24h.toLocaleString()} calls · avg ${fmtUsd(stats.avgCostPerCall24h)}/call`
-}
-
 export function spendMonthTooltip(stats: CostStats): MetricTooltipData {
   return {
     sections: [
@@ -105,10 +96,6 @@ export function spendMonthTooltip(stats: CostStats): MetricTooltipData {
       },
     ],
   }
-}
-
-export function spendMonthDetail(stats: CostStats): string {
-  return `7d: ${fmtUsd(stats.spend7dUsd)} · 30d: ${fmtUsd(stats.spend30dUsd)}`
 }
 
 export function topDriverTooltip(stats: CostStats): MetricTooltipData {
@@ -154,11 +141,6 @@ export function topDriverTooltip(stats: CostStats): MetricTooltipData {
   }
 }
 
-export function topDriverDetail(stats: CostStats): string {
-  if (!stats.topOperation) return 'Run classify or fix to populate'
-  return `${fmtUsd(stats.topOperationUsd)} · ${stats.topModel ?? 'no model'}`
-}
-
 export function operationsTooltip(stats: CostStats): MetricTooltipData {
   const takeaway =
     stats.operationsCount === 0
@@ -181,10 +163,6 @@ export function operationsTooltip(stats: CostStats): MetricTooltipData {
       },
     ],
   }
-}
-
-export function operationsDetail(): string {
-  return 'Distinct function:stage pairs · last 30 days'
 }
 
 export function modelsTooltip(stats: CostStats): MetricTooltipData {
@@ -220,16 +198,18 @@ export function modelsDetail(stats: CostStats): string {
 }
 
 export function keySourceTooltip(stats: CostStats): MetricTooltipData {
-  const configured = stats.byokAnthropicConfigured
   const platform = stats.platformKeyCalls24h
   const byok = stats.byokCalls24h
+  // The calls that ran say whether your own key is in use; the legacy
+  // byokAnthropicConfigured flag only sees an Anthropic key (review 2026-11-18).
+  const ownKeyInUse = byok > 0
 
-  const takeaway = configured
-    ? `Anthropic BYOK is configured. Last 24h: ${byok.toLocaleString()} BYOK call${byok === 1 ? '' : 's'}, ${platform.toLocaleString()} platform call${platform === 1 ? '' : 's'}.`
-    : `No Anthropic BYOK key on file. ${platform.toLocaleString()} recent call${platform === 1 ? '' : 's'} used Mushi Mushi platform keys (${fmtUsd(stats.spend24hUsd)} in 24h). Add your key in Settings → LLM keys to control billing.`
+  const takeaway = ownKeyInUse
+    ? `Last 24h: ${byok.toLocaleString()} call${byok === 1 ? '' : 's'} on your own key, ${platform.toLocaleString()} on platform keys.`
+    : `${platform.toLocaleString()} recent call${platform === 1 ? '' : 's'} used Mushi Mushi platform keys (${fmtUsd(stats.spend24hUsd)} in 24h). Add your key in Settings → LLM keys to control billing.`
 
   let callout: MetricTooltipData['callout']
-  if (platform > 0 && !configured) {
+  if (platform > 0 && !ownKeyInUse) {
     callout = {
       tone: 'warn',
       text: 'Platform-key spend hits Mushi Mushi metering, not your Anthropic invoice directly.',
@@ -260,7 +240,3 @@ export function keySourceTooltip(stats: CostStats): MetricTooltipData {
   }
 }
 
-export function keySourceDetail(stats: CostStats): string {
-  if (stats.byokAnthropicConfigured) return 'Anthropic BYOK configured'
-  return 'Add BYOK in Settings → LLM keys'
-}

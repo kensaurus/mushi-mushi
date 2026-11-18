@@ -29,6 +29,11 @@ function mcpSentence(stats: McpStats): string {
   return `${pluralizeWithCount(stats.connectedKeyCount, 'editor')} connected${last}; ${pluralizeWithCount(stats.toolCount, 'tool')} available.${mismatch}`
 }
 
+/** @internal Exported for tests: the tiles, without any that would read 0. */
+export function mcpSnapshotMetrics(...tiles: Array<PageStatusMetric | null>): PageStatusMetrics {
+  return tiles.filter((t): t is PageStatusMetric => t !== null) as PageStatusMetrics
+}
+
 export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
   const idle: PageStatusMetric = {
     label: 'Keys idle',
@@ -42,21 +47,19 @@ export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statL
     hint: 'Things your editor’s agent can ask Mushi Mushi to do, like read a bug or start a fix.',
     to: mcpLinks.tools,
   }
-  // At 0 the sentence already says no editor has called: no "0 Connected".
-  const metrics: PageStatusMetrics =
+  // At 0 the sentence already says no editor has called: no "0 Connected",
+  // and no "0 Keys idle" tile either (round-2 review 2026-11-18).
+  const connected: PageStatusMetric | null =
     stats.connectedKeyCount > 0
-      ? [
-          {
-            label: statLabels?.connected ?? 'Editors connected',
-            value: stats.connectedKeyCount,
-            tone: 'ok',
-            hint: 'Editor keys that have called Mushi Mushi at least once.',
-            to: mcpLinks.connected,
-          },
-          idle,
-          tools,
-        ]
-      : [idle, tools]
+      ? {
+          label: statLabels?.connected ?? 'Editors connected',
+          value: stats.connectedKeyCount,
+          tone: 'ok',
+          hint: 'Editor keys that have called Mushi Mushi at least once.',
+          to: mcpLinks.connected,
+        }
+      : null
+  const metrics = mcpSnapshotMetrics(connected, stats.neverConnectedCount > 0 ? idle : null, tools)
   return (
     <PageStatus
       ariaLabel="Editor agents status"

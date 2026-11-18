@@ -51,6 +51,8 @@ interface Props {
   reportStatus?: string | null
   /** Called after Sentry issues were closed, so the page reads the report again. */
   onSentryClosed?: () => void
+  /** The page lists missing breadcrumbs on its one "Not captured" line. */
+  hideNoBreadcrumbsNote?: boolean
 }
 
 /** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
@@ -220,6 +222,7 @@ export function SentryContextPanel({
   reportId,
   reportStatus,
   onSentryClosed,
+  hideNoBreadcrumbsNote = false,
 }: Props) {
   const toast = useToast()
   const [closing, setClosing] = useState(false)
@@ -478,7 +481,7 @@ export function SentryContextPanel({
         </div>
       )}
 
-      {!unified.length && !hasTags && hasSentry && (
+      {!unified.length && !hasTags && hasSentry && !hideNoBreadcrumbsNote && (
         <p className="text-2xs text-fg-faint italic mt-1">
           No breadcrumbs were captured for this report — Sentry IDs only.
         </p>

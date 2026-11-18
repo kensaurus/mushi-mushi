@@ -9,6 +9,7 @@
 import type { ReactNode } from 'react'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { STAGE_LABELS, type PromptVersion } from './types'
+import { stepTest } from './promptLabCounts'
 
 export interface StageRow {
   stage: string
@@ -16,21 +17,31 @@ export interface StageRow {
   candidate: PromptVersion | null
 }
 
-/** @internal Exported for tests only. The active version and the best-graded candidate per step. */
+/**
+ * @internal Exported for tests only. The active version and the test per step, picked by
+ * the same `stepTest` the banner counts with (a test that gets traffic first, then grade).
+ */
 export function scoreboardRows(stages: readonly string[], grouped: Readonly<Record<string, PromptVersion[]>>): StageRow[] {
   return stages.map((stage) => {
-    const versions = grouped[stage] ?? []
-    const active = versions.find((p) => p.is_active) ?? null
-    const candidates = versions.filter((p) => !p.is_active && p.is_candidate)
-    const candidate =
-      [...candidates].sort((a, b) => (b.avg_judge_score ?? -1) - (a.avg_judge_score ?? -1) || b.total_evaluations - a.total_evaluations)[0] ?? null
+    const { active, candidate } = stepTest(grouped[stage] ?? [])
     return { stage, active, candidate }
   })
 }
 
-function grade(p: PromptVersion | null): string {
-  if (!p) return '—'
-  return p.avg_judge_score != null ? `${Math.round(p.avg_judge_score * 100)}%` : 'no grades yet'
+/** A version's grade, or nothing when no version on the page has one (the status line says so once). */
+function grade(p: PromptVersion, anyGrades: boolean): string | null {
+  if (p.avg_judge_score != null) return `${Math.round(p.avg_judge_score * 100)}%`
+  return anyGrades ? 'no grades yet' : null
+}
+
+function VersionCell({ p, anyGrades }: { p: PromptVersion; anyGrades: boolean }) {
+  const g = grade(p, anyGrades)
+  return (
+    <>
+      <span className="font-mono">{p.version}</span>
+      {g ? <> · <span className="tabular-nums">{g}</span></> : null}
+    </>
+  )
 }
 
 /** @internal Exported for tests only. One plain verdict per step. */
@@ -72,7 +83,7 @@ export function splitScoreboardRows(rows: readonly StageRow[]): { shown: StageRo
 // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas): four aligned columns from sm up
 const ROW_GRID = 'grid w-full min-w-0 grid-cols-1 gap-x-4 gap-y-0.5 px-3 py-2 text-left text-xs sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)]'
 
-function ScoreRow({ row, selected, onOpen }: { row: StageRow; selected: string | null; onOpen: (stage: string) => void }) {
+function ScoreRow({ row, selected, onOpen, anyGrades }: { row: StageRow; selected: string | null; onOpen: (stage: string) => void; anyGrades: boolean }) {
   const verdict = stageVerdict(row)
   return (
     <li className="min-w-0">
@@ -86,9 +97,7 @@ function ScoreRow({ row, selected, onOpen }: { row: StageRow; selected: string |
         <span className="min-w-0 text-fg-secondary">
           <span className="text-fg-faint sm:sr-only">In use: </span>
           {row.active ? (
-            <>
-              <span className="font-mono">{row.active.version}</span> · <span className="tabular-nums">{grade(row.active)}</span>
-            </>
+            <VersionCell p={row.active} anyGrades={anyGrades} />
           ) : (
             'none'
           )}
@@ -96,9 +105,7 @@ function ScoreRow({ row, selected, onOpen }: { row: StageRow; selected: string |
         <span className="min-w-0 text-fg-secondary">
           <span className="text-fg-faint sm:sr-only">Testing: </span>
           {row.candidate ? (
-            <>
-              <span className="font-mono">{row.candidate.version}</span> · <span className="tabular-nums">{grade(row.candidate)}</span>
-            </>
+            <VersionCell p={row.candidate} anyGrades={anyGrades} />
           ) : (
             'none'
           )}
@@ -129,6 +136,8 @@ export function PromptScoreboard({
   const rows = scoreboardRows(stages, grouped)
   if (rows.length === 0) return null
   const { shown, baselineOnly } = splitScoreboardRows(rows)
+  // "no grades yet" on every version said one fact five times (round-2 review, 2026-11-18).
+  const anyGrades = stages.some((s) => (grouped[s] ?? []).some((p) => p.avg_judge_score != null))
   return (
     <section aria-labelledby="prompt-scoreboard" className="min-w-0 space-y-2" data-testid="prompt-scoreboard">
       <div className="flex items-center gap-1.5">
@@ -146,7 +155,7 @@ export function PromptScoreboard({
         </div>
         <ul className="list-none divide-y divide-edge-subtle p-0">
           {shown.map((row) => (
-            <ScoreRow key={row.stage} row={row} selected={selected} onOpen={onOpen} />
+            <ScoreRow key={row.stage} row={row} selected={selected} onOpen={onOpen} anyGrades={anyGrades} />
           ))}
         </ul>
         {baselineOnly.length > 0 && (
@@ -157,14 +166,14 @@ export function PromptScoreboard({
           >
             <summary className={`${ROW_GRID} cursor-pointer list-none text-fg-secondary hover:bg-surface-hover`}>
               <span className="font-medium text-fg">{baselineOnly.length} prompts</span>
-              <span>In use only, no grades yet</span>
+              <span>{anyGrades ? 'In use only, no grades yet' : 'In use only'}</span>
               <span className="text-fg-faint">Nothing being tested</span>
               <span className="text-fg-muted group-open:hidden">Show</span>
               <span className="hidden text-fg-muted group-open:inline">Hide</span>
             </summary>
             <ul className="list-none divide-y divide-edge-subtle border-t border-edge-subtle p-0">
               {baselineOnly.map((row) => (
-                <ScoreRow key={row.stage} row={row} selected={selected} onOpen={onOpen} />
+                <ScoreRow key={row.stage} row={row} selected={selected} onOpen={onOpen} anyGrades={anyGrades} />
               ))}
             </ul>
           </details>

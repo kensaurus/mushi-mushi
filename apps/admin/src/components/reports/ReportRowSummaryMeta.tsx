@@ -4,8 +4,10 @@ import { Tooltip } from '../ui'
 import { IconBolt } from '../icons'
 import { ReportCodeText } from './ReportCodeText'
 import type { ReportRow } from './types'
+import { reportSourceKind } from '../../lib/reportSourceKind'
 import {
   captureMode,
+  captureRestatesSource,
   inferReportLayer,
   LAYER_PILL,
   reporterWho,
@@ -121,6 +123,8 @@ export function ReportRowMeta({ row }: Props) {
   // says the same thing twice: keep the source chip, carry the reporter in its tooltip.
   const whoRepeatsSource = !who.verified && who.label.toLowerCase().includes(capture.label.toLowerCase())
   const captureTooltip = whoRepeatsSource ? `${capture.tooltip} · ${who.tooltip}` : capture.tooltip
+  // The source tag before the title already says "Sentry" / "User report".
+  const showCapture = !captureRestatesSource(capture.label, reportSourceKind(row))
   const { path, fullTitle } = resolveReportPath(row)
   const traceShort = row.sentry_trace_id ? `${row.sentry_trace_id.slice(0, 7)}…` : null
   const sdkDetail = row.sdk_package
@@ -136,9 +140,11 @@ export function ReportRowMeta({ row }: Props) {
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {app}
-        <MetaChip tone={capture.tone} tooltip={captureTooltip}>
-          {capture.label}
-        </MetaChip>
+        {showCapture && (
+          <MetaChip tone={capture.tone} tooltip={captureTooltip}>
+            {capture.label}
+          </MetaChip>
+        )}
         {!whoRepeatsSource && (
           <MetaChip tooltip={who.tooltip}>
             {who.verified && <span className="text-ok" aria-hidden="true">✓ </span>}
@@ -152,9 +158,11 @@ export function ReportRowMeta({ row }: Props) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
       {app}
-      <MetaChip tone={capture.tone} tooltip={captureTooltip}>
-        {capture.label}
-      </MetaChip>
+      {showCapture && (
+        <MetaChip tone={capture.tone} tooltip={captureTooltip}>
+          {capture.label}
+        </MetaChip>
+      )}
       {!whoRepeatsSource && (
         <>
           <span className="text-fg-faint/60 select-none" aria-hidden="true">

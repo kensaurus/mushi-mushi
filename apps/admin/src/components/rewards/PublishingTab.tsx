@@ -17,7 +17,6 @@ import { apiFetch } from '../../lib/supabase'
 import { getActiveProjectIdSnapshot } from '../../lib/activeProject'
 import { useToast } from '../../lib/toast'
 import {
-  Card,
   Section,
   Badge,
   Btn,
@@ -27,6 +26,7 @@ import {
   StatCard,
 } from '../ui'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
+import { bountyRowState, publishBlockedReason } from './rewardsView'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -77,23 +77,25 @@ interface BountyStats {
 
 // ─── Bounty action labels + colours ──────────────────────────
 
+// Severity names are labels, not states: ink, not red/amber (2026-11-18 colour rule).
 const BOUNTY_ACTIONS = [
-  { action: 'bug_critical', label: 'Critical bug',        pts: 2500, color: 'text-danger' },
-  { action: 'bug_high',     label: 'High severity bug',   pts: 1000, color: 'text-warn' },
-  { action: 'bug_medium',   label: 'Medium severity bug', pts: 500,  color: 'text-warn/70' },
-  { action: 'bug_low',      label: 'Low severity bug',    pts: 100,  color: 'text-fg-muted' },
-  { action: 'enhancement',  label: 'Enhancement',         pts: 50,   color: 'text-info' },
+  { action: 'bug_critical', label: 'Critical bug',        pts: 2500, color: 'text-fg' },
+  { action: 'bug_high',     label: 'High severity bug',   pts: 1000, color: 'text-fg' },
+  { action: 'bug_medium',   label: 'Medium severity bug', pts: 500,  color: 'text-fg' },
+  { action: 'bug_low',      label: 'Low severity bug',    pts: 100,  color: 'text-fg-secondary' },
+  { action: 'enhancement',  label: 'Enhancement',         pts: 50,   color: 'text-fg-secondary' },
 ]
 
 function statusBadge(visibility: PublishedApp['visibility']) {
   if (visibility === 'public')  return <Badge tone="okSubtle">Live</Badge>
   if (visibility === 'paused')  return <Badge tone="warnSubtle">Paused</Badge>
-  return <Badge className="bg-surface-overlay text-fg-muted">Draft</Badge>
+  return <Badge className="bg-surface-overlay text-fg-muted">Not published</Badge>
 }
 
 // ─── Main component ──────────────────────────────────────────
 
-export function PublishingTab() {
+/** `paused`: the app's rewards are off, so enabled bounties pay nothing right now. */
+export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
   const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
   const navigate = useNavigate()
@@ -386,6 +388,7 @@ export function PublishingTab() {
   const marketplaceUrl = app
     ? `${window.location.origin}/mushi-mushi/testers/apps/${app.slug}/`
     : null
+  const publishBlocked = publishBlockedReason(app != null, name)
 
   return (
     <div className="space-y-6">
@@ -394,7 +397,8 @@ export function PublishingTab() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold">Marketplace listing</h2>
-            {app && statusBadge(visibility)}
+            {/* Always said, so the tab never implies a live listing (2026-11-18). */}
+            {statusBadge(visibility)}
           </div>
           <p className="text-sm text-fg-muted mt-0.5">
             Publish this project to the Mushi Mushi Bounties marketplace so public testers can find and test it.
@@ -423,13 +427,20 @@ export function PublishingTab() {
             </Btn>
           ) : (
             <Btn variant="primary" size="sm" loading={publishing} onClick={handlePublish}
-              disabled={!app || !name.trim()}
+              disabled={publishBlocked != null}
+              aria-describedby={publishBlocked ? 'rewards-publish-blocked' : undefined}
             >
               {visibility === 'paused' ? 'Re-publish' : 'Publish'}
             </Btn>
           )}
         </div>
       </div>
+      {!isLive && publishBlocked && (
+        // Why Publish is grey, said once beside it (2026-11-18: disabled with no reason).
+        <p id="rewards-publish-blocked" className="-mt-4 text-right text-2xs text-fg-muted" data-testid="rewards-publish-blocked">
+          {publishBlocked}
+        </p>
+      )}
 
       {/* ── Stats + budget ── */}
       {!sLoading && stats && (
@@ -440,8 +451,9 @@ export function PublishingTab() {
           <StatCard label="Points spent (30d)" value={stats.points_spent_30d.toLocaleString()} />
           <StatCard
             label="Budget used"
-            value={`${Math.round(stats.monthly_budget_used_pct)}%`}
-            hint={stats.monthly_budget_usd > 0 ? `$${stats.monthly_budget_usd} cap` : 'No cap set'}
+            // A % of a $0 cap is not a number (2026-11-18 data-honesty rule).
+            value={stats.monthly_budget_usd > 0 ? `${Math.round(stats.monthly_budget_used_pct)}%` : 'No cap set'}
+            hint={stats.monthly_budget_usd > 0 ? `$${stats.monthly_budget_usd} cap` : 'Set a monthly budget below to track spend.'}
           />
         </div>
       )}
@@ -458,8 +470,7 @@ export function PublishingTab() {
 
       {/* ── Listing form ── */}
       <Section title="Listing details">
-        <Card>
-          <div className="space-y-4 p-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-fg-muted mb-1">App name *</label>
               <Input
@@ -529,7 +540,6 @@ export function PublishingTab() {
               </Btn>
             </div>
           </div>
-        </Card>
       </Section>
 
       {/* ── Budget & caps ── */}
@@ -537,8 +547,8 @@ export function PublishingTab() {
         {mLoading ? (
           <TableSkeleton rows={2} />
         ) : (
-          <Card>
-            <div className="grid gap-4 p-4 sm:grid-cols-2">
+          <>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="block text-xs font-medium text-fg-muted mb-1">
                   Monthly gift-card budget (USD)
@@ -567,12 +577,12 @@ export function PublishingTab() {
                 />
               </div>
             </div>
-            <div className="flex justify-end border-t border-edge-subtle/40 px-4 py-3">
+            <div className="mt-3 flex justify-end border-t border-edge-subtle/40 pt-3">
               <Btn variant="primary" size="sm" loading={savingBudget} onClick={handleSaveBudget}>
                 Save budget
               </Btn>
             </div>
-          </Card>
+          </>
         )}
       </Section>
 
@@ -581,26 +591,31 @@ export function PublishingTab() {
         {bLoading || bountyDraft.length === 0 ? (
           <TableSkeleton rows={5} />
         ) : (
-          <Card>
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-edge-subtle">
-                  <th className="px-4 py-2 text-left text-fg-muted font-medium uppercase tracking-wide">Severity</th>
-                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Points</th>
-                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Daily cap</th>
-                  <th className="px-4 py-2 text-right text-fg-muted font-medium uppercase tracking-wide">Enabled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bountyDraft.map((row, idx) => (
-                  <tr key={row.action} className="border-t border-edge-subtle/40">
-                    <td className={`px-4 py-2.5 font-medium ${row.color}`}>{row.label}</td>
-                    <td className="px-4 py-2.5 text-right">
+          <div data-testid="rewards-bounty-rows">
+            <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem] sm:gap-3 border-b border-edge-subtle pb-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
+              <span>Severity</span>
+              <span className="text-right">Points</span>
+              <span className="text-right">Daily cap</span>
+              <span className="text-right">Status</span>
+            </div>
+            <ul className="divide-y divide-edge-subtle/60">
+              {bountyDraft.map((row, idx) => {
+                const state = bountyRowState(row.enabled, paused)
+                return (
+                  <li
+                    key={row.action}
+                    className="grid grid-cols-2 items-end gap-x-3 gap-y-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem] sm:items-center"
+                    data-testid="rewards-bounty-row"
+                  >
+                    <span className={`col-span-2 sm:col-span-1 text-xs font-medium ${row.color}`}>{row.label}</span>
+                    <div>
+                      <span aria-hidden="true" className="mb-1 block text-2xs text-fg-muted sm:hidden">Points</span>
                       <Input
                         type="number"
                         min={0}
                         max={10000}
-                        className="ml-auto w-24 text-right font-mono"
+                        aria-label={`${row.label} points`}
+                        className="min-w-[7ch] text-right tabular-nums"
                         value={row.points_per_event}
                         onChange={e => {
                           const v = Number(e.target.value)
@@ -609,13 +624,15 @@ export function PublishingTab() {
                           ))
                         }}
                       />
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
+                    </div>
+                    <div>
+                      <span aria-hidden="true" className="mb-1 block text-2xs text-fg-muted sm:hidden">Daily cap</span>
                       <Input
                         type="number"
                         min={1}
-                        className="ml-auto w-20 text-right font-mono"
-                        placeholder="—"
+                        aria-label={`${row.label} daily cap`}
+                        className="min-w-[7ch] text-right tabular-nums"
+                        placeholder="No cap"
                         value={row.daily_cap}
                         onChange={e => {
                           setBountyDraft(prev => prev.map((r, i) =>
@@ -623,10 +640,13 @@ export function PublishingTab() {
                           ))
                         }}
                       />
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
+                    </div>
+                    <div className="col-span-2 flex justify-end sm:col-span-1">
                       <button
                         type="button"
+                        aria-pressed={row.enabled}
+                        aria-label={`${row.label}: ${state.label}. ${row.enabled ? 'Turn off' : 'Turn on'}`}
+                        title={state.tone === 'paused' ? 'Rewards are off for this app, so this bounty pays nothing until you turn them on.' : undefined}
                         onClick={() => {
                           setBountyDraft(prev => prev.map((r, i) =>
                             i === idx ? { ...r, enabled: !r.enabled } : r,
@@ -634,18 +654,18 @@ export function PublishingTab() {
                         }}
                         className="inline-flex"
                       >
-                        {row.enabled ? (
-                          <Badge tone="okSubtle">On</Badge>
+                        {state.tone === 'on' ? (
+                          <Badge tone="okSubtle">{state.label}</Badge>
                         ) : (
-                          <Badge className="bg-surface-overlay text-fg-muted">Off</Badge>
+                          <Badge className="bg-surface-overlay text-fg-muted">{state.label}</Badge>
                         )}
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle/40 px-4 py-3">
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge-subtle/40 pt-3">
               <p className="text-xs text-fg-muted">
                 1,000 pts ≈ $10 gift card or $13 Mushi Mushi Pro credit (1.3×). Points are stamped at submit time.
               </p>
@@ -653,7 +673,7 @@ export function PublishingTab() {
                 Save bounties
               </Btn>
             </div>
-          </Card>
+          </div>
         )}
       </Section>
 
@@ -662,8 +682,7 @@ export function PublishingTab() {
         {tLoading ? (
           <TableSkeleton rows={4} />
         ) : (
-          <Card>
-            <div className="space-y-4 p-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-fg-muted mb-1">
                   Country codes (ISO-2, comma-separated)
@@ -726,7 +745,6 @@ export function PublishingTab() {
                 </Btn>
               </div>
             </div>
-          </Card>
         )}
       </Section>
     </div>

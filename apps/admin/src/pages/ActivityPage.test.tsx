@@ -30,6 +30,10 @@ vi.mock('../lib/usePageData', () => ({
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'mushi-mushi' } }) }))
 vi.mock('../components/OrgSwitcher', () => ({ useActiveOrgId: () => null }))
+// The empty-portfolio first diagnosis pulls in the SDK install preview
+// (@mushi-mushi/core/reporter-ui), which a stale linked core build cannot
+// resolve; no test here renders an empty portfolio.
+vi.mock('../components/onboarding/FirstDiagnosisScreen', () => ({ FirstDiagnosisInline: () => null }))
 vi.mock('../components/PageHeaderBar', () => ({
   PageHeaderBar: ({ title }: { title: string }) => createElement('h1', null, title),
 }))
@@ -108,8 +112,42 @@ describe('Home views', () => {
     }
     const text = await render(OverviewPage)
     expect(text.match(/65 open/g)?.length).toBe(1)
-    expect(container.querySelector('a[href="/reports?status=open"]')?.textContent).toBe('Open bugs')
-    expect(container.querySelector('a[href="/dashboard?view=users"]')?.textContent).toContain('User activity')
+    // One link row (round-2 sweep 2026-11-18): the count opens the open bugs,
+    // the numbers open User activity, the card opens Home; no footer repeating
+    // "User activity → Open bugs Home" on every card, no slug under the name.
+    expect(container.querySelector('a[href="/reports?status=open"]')?.textContent).toBe('65 open')
+    expect(container.querySelector('a[href="/dashboard?view=users"]')?.textContent).toContain('75 sessions')
+    expect(text).not.toContain('Open bugs')
+    expect(text.match(/mushi-mushi/g)?.length).toBe(1)
+  })
+
+  it('Overview says "No sessions this week" once and draws a zero count neutral', async () => {
+    data.byPath = {
+      '/v1/admin/portfolio': [
+        { project_id: 'p1', name: 'q', label: 'Calm app', slug: 'calm-app', sessions_7d: 0, users_7d: 0, open_reports: 1, critical_reports: 0, last_report_at: null, last_seen_at: new Date().toISOString(), dau_spark: [] },
+      ],
+    }
+    const text = await render(OverviewPage)
+    expect(text.match(/No sessions this week/g)?.length).toBe(1)
+    expect(text).not.toContain('0 sessions')
+    expect(text).not.toContain('Quiet')
+  })
+
+  it('User activity with no sessions: one empty state, no zero tiles, no split bar, neutral zero', async () => {
+    data.byPath = {
+      '/v1/admin/activity': {
+        window_days: 30, sessions: 0, completed_sessions: 0, unique_devices: 0, identified_users: 0, avg_page_views: 0, avg_session_minutes: 0,
+        dau_series: [], top_routes: [], reports: { total: 4, open: 4, critical: 0, high: 1 }, user_split: { identified: 0, anonymous: 0 },
+      },
+    }
+    const text = await render(ActivityPage)
+    expect(container.querySelector('[data-testid="activity-empty"]')).toBeTruthy()
+    expect(text).not.toContain('Sessions (30d)')
+    expect(text).not.toContain('Who uses the app')
+    const critical = Array.from(container.querySelectorAll('a'))
+      .find((a) => a.getAttribute('href') === '/reports?status=open&severity=critical')!
+      .querySelector('span')!
+    expect(critical.className).not.toContain('danger')
   })
 
   it('Users & funnels gives the Anonymous tile its own share', async () => {
@@ -119,5 +157,17 @@ describe('Home views', () => {
     const text = await render(AnalyticsPage)
     expect(text).toContain('40% of people')
     expect(text).not.toContain('60% identified')
+  })
+
+  it('Users & funnels with no events: one sans card, no zero tiles', async () => {
+    data.byPath = {
+      '/v1/admin/events/summary': { window_days: 30, events_total: 0, persons: 0, identified: 0, anonymous: 0, distinct_events: 0, top_events: [], daily: [] },
+    }
+    const text = await render(AnalyticsPage)
+    const empty = container.querySelector('[data-testid="analytics-empty"]')!
+    expect(empty.textContent).toContain('No events yet')
+    expect(empty.querySelector('[class*="serif"], [class*="border-dashed"]')).toBeNull()
+    expect(empty.querySelector('a')!.className).toContain('whitespace-nowrap')
+    expect(text).not.toContain('Distinct events')
   })
 })

@@ -219,7 +219,7 @@ export function GraphCanvas({
               <button
                 type="button"
                 onClick={dismissHint}
-                className="ml-2 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+                className="ml-2 rounded-sm px-1 text-fg-faint hover:bg-surface-overlay hover:text-fg text-xs leading-none"
                 aria-label="Dismiss hint"
               >
                 ✕
@@ -228,7 +228,7 @@ export function GraphCanvas({
           </Panel>
         )}
         <Panel position="bottom-left">
-          <GraphLegend />
+          <GraphLegend showEdges={filteredEdgeCount > 0} />
         </Panel>
         {selectedNode && onClearSelection && (
           // In-canvas detail panel.

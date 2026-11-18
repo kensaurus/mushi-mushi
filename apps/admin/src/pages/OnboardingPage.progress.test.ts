@@ -64,4 +64,16 @@ describe('Set up page progress', () => {
     const readout = readFileSync(join(__dirname, '../components/onboarding/OnboardingSetupReadout.tsx'), 'utf8')
     expect(readout).not.toContain('No heartbeat yet')
   })
+
+  // Round-2 review: the guide said "The rail above shows the next step" under
+  // a rail with all four steps done, and Install had a second way out.
+  it('reads the guide from the rail completion, with one way to Home', () => {
+    expect(src).toContain('complete: wiredUp })')
+    expect(src).toContain('project.required_complete >= project.required_total')
+    expect(src).not.toContain('>Go to Dashboard</Btn>')
+  })
+
+  it('shows one Developer details bar on Fix a problem', () => {
+    expect(src).toContain("!firstRun && effectiveTab !== 'diagnose'")
+  })
 })

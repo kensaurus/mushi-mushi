@@ -18,6 +18,7 @@
 import type { ReactNode } from 'react'
 import { DisclosurePanel, InfoHint, Section } from '../ui'
 import { ConnectionStatus, type ConnectionState } from '../ui/ConnectionStatus'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { usePersistentState } from '../../lib/usePersistentState'
 
 export function SettingsList({
@@ -49,12 +50,33 @@ export interface RowStatusValue {
   label?: string
   detail?: string
   expiresAt?: string | null
+  /** Draw this mark instead of the state's (a replaced key is grey ⊘, not red ✕). */
+  mark?: RunStatus
+}
+
+/**
+ * The mark a row draws. A configured connection nobody tested reads grey
+ * "not checked", never a green ✓ (round-2 review 2026-11-18: "✓ Connected ·
+ * not checked yet"); a caller's own mark wins.
+ * @internal Exported for tests.
+ */
+export function rowStatusMark(status: RowStatusValue): { status: RunStatus; label: string } | null {
+  if (status.mark) return { status: status.mark, label: status.label ?? '' }
+  if (status.state === 'checking' && !status.label) return { status: 'idle', label: 'Connected · not checked yet' }
+  return null
 }
 
 export function RowStatus({ status }: { status: RowStatusValue }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-      <ConnectionStatus state={status.state} label={status.label} expiresAt={status.expiresAt} />
+      {(() => {
+        const mark = rowStatusMark(status)
+        return mark ? (
+          <StatusPill status={mark.status} label={mark.label || undefined} />
+        ) : (
+          <ConnectionStatus state={status.state} label={status.label} expiresAt={status.expiresAt} />
+        )
+      })()}
       {status.detail ? <span className="text-sm text-fg-secondary">{status.detail}</span> : null}
     </div>
   )

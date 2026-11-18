@@ -227,6 +227,15 @@ export function keyStatusView(
   }
 }
 
+/**
+ * A broken or old key another working key already replaced: tidy-up, not a
+ * failure. Its row draws a grey ⊘ "Replaced" (the banner never counts it),
+ * so the page has as many red marks as "N keys need your attention".
+ */
+export function isReplacedKeyView(view: Pick<KeyStatusView, 'state' | 'action'>): boolean {
+  return view.state === 'attention' && view.action === 'remove'
+}
+
 export interface KeySummary {
   working: number
   /** Keys that stop something working. A replaced key is counted in `replaced` instead. */
@@ -287,10 +296,14 @@ export function providerStatusView(
   const working = views.find((v) => v.state === 'working')
   if (working) {
     if (problems > 0) {
+      // The provider works, so it is a warning (amber), not a red failure;
+      // the problem key's own row stays red (round-2 review 2026-11-18).
+      const backup = views.some((v) => v.state === 'attention' && v.action === 'add_backup')
       return {
-        state: 'attention',
+        state: 'expiring',
+        label: problems === 1 ? '1 key to fix' : `${problems} keys to fix`,
         detail: `Working, but ${problems === 1 ? 'one key needs' : `${problems} keys need`} your attention below.`,
-        action: null,
+        action: backup ? 'add_backup' : null,
       }
     }
     const expiring = views.find((v) => v.state === 'expiring')
@@ -305,4 +318,25 @@ export function providerStatusView(
     if (hit) return hit
   }
   return views[0]!
+}
+
+/**
+ * The same secret saved twice for a provider (same hint, which is the key's
+ * first and last characters), e.g. once for this organization and again for
+ * "All my apps": the later copy maps to the first one, so its row can say
+ * so instead of listing the key twice as if it were two (round-2 review
+ * 2026-11-18). Rows without a hint never match.
+ */
+export function duplicateKeyCopies(keys: readonly ManagedKey[]): Map<string, ManagedKey> {
+  const firstByHint = new Map<string, ManagedKey>()
+  const copies = new Map<string, ManagedKey>()
+  const ordered = [...keys].sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? ''))
+  for (const k of ordered) {
+    if (!k.key_hint) continue
+    const id = `${k.provider_slug}:${k.key_hint}`
+    const first = firstByHint.get(id)
+    if (first) copies.set(k.id, first)
+    else firstByHint.set(id, k)
+  }
+  return copies
 }

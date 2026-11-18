@@ -7,6 +7,7 @@ import { useMemo } from 'react'
 import { SegmentedControl } from '../ui'
 import type { RewardsTabId } from './types'
 import { REWARDS_TABS } from './rewardsTabs'
+import { useEdgeFade } from '../../lib/useEdgeFade'
 
 interface Props {
   active: RewardsTabId
@@ -21,10 +22,14 @@ export function RewardsTabNav({ active, onChange, hideTabs = false }: Props) {
     [],
   )
 
+  // A right-edge fade while tabs sit past the edge (2026-11-18: at 390 Quests,
+  // Retention and Settings were off-screen with no hint).
+  const fade = useEdgeFade<HTMLDivElement>(hideTabs)
+
   if (hideTabs) return null
 
   return (
-    <div className="-mx-1 min-w-0 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin]">
+    <div ref={fade.ref} className={`-mx-1 min-w-0 overflow-x-auto pb-1 scroll-smooth [scrollbar-width:thin] ${fade.className}`} data-more={fade.more ? 'true' : undefined}>
       <SegmentedControl<RewardsTabId>
         ariaLabel="Rewards sections"
         value={active}

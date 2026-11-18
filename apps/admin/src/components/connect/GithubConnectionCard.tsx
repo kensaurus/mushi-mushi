@@ -64,7 +64,9 @@ export function GithubConnectionCard({
     <div>
       <div className="flex flex-wrap items-center gap-3 py-1">
         <BrandIcon brand="github" size={20} decorative className="text-fg" />
-        <div className="min-w-0 flex-1">
+        {/* A floor width so the actions wrap below on a phone instead of
+            squeezing the name to "GitHub rep" under them (round-2 review 2026-11-18). */}
+        <div className="min-w-[11rem] flex-1">
           <p className="text-sm font-medium text-fg">
             {linked.length > 1 ? `GitHub repositories (${linked.length})` : 'GitHub repository'}
           </p>
@@ -103,7 +105,7 @@ export function GithubConnectionCard({
         {loading ? (
           <StatusPill status="running" label="Checking" />
         ) : hasGithub ? (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusPill status="passed" label="Connected" />
             <Btn to="/repo" size="sm" variant="ghost" className="gap-1.5">
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}

@@ -120,3 +120,34 @@ describe('LessonsPage recurring patterns', () => {
     expect(host.textContent).toContain('Pattern named')
   })
 })
+
+describe('LessonsPage round-2 sweep', () => {
+  it('with nothing learned yet, says it once in a sans heading and shows no 0 tiles', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, topPriority: 'no_lessons' }
+    mocks.clusters = []
+    await render('/lessons?tab=lessons')
+    const text = host.textContent ?? ''
+    expect(text.split('No lessons yet').length - 1).toBe(1)
+    expect(host.querySelector('[data-testid="page-status"]')).toBeNull()
+    expect(host.querySelector('.font-serif')).toBeNull()
+  })
+
+  it('shows only non-zero numbers with labels that fit a phone, and never repeats the 3-report rule', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, candidateClusters: 2, totalClusterReports: 4, topPriority: 'no_lessons' }
+    mocks.clusters = []
+    await render('/lessons?tab=lessons')
+    const status = host.querySelector('[data-testid="page-status"]')!
+    const labels = [...status.querySelectorAll('dt')].map((d) => d.textContent)
+    expect(labels).toEqual(['In patterns'])
+    expect(host.textContent ?? '').not.toMatch(/3 reports share its cause/)
+    expect((host.textContent ?? '').split('share one cause').length - 1).toBeLessThanOrEqual(1)
+  })
+
+  it('a folded group row says "still growing" once', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, candidateClusters: 2, topPriority: 'candidates_ready' }
+    mocks.clusters = [cluster('a', 1, { name: null, suggested_rule: null }), cluster('b', 1, { name: null, suggested_rule: null })]
+    await render('/lessons?tab=clusters')
+    const row = host.querySelector('[data-testid="lessons-cluster-group"]')!.textContent ?? ''
+    expect(row.toLowerCase().split('still growing').length - 1).toBe(1)
+  })
+})

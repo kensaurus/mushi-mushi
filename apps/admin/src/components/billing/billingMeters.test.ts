@@ -31,16 +31,22 @@ describe('fixesMeter (1c802df2)', () => {
 })
 
 describe('billingMeters', () => {
-  it('a diagnoses meter with its bar, seats, fixes and charges', () => {
+  it('a diagnoses meter with its bar, seats, fixes and the spend cap', () => {
     const meters = billingMeters(
-      stats({ diagnosesUsed: 47, diagnosesLimit: 2000, diagnosesUsagePct: 2, isComplimentary: true, fixesSucceeded: 4 }),
+      stats({ diagnosesUsed: 47, diagnosesLimit: 2000, diagnosesUsagePct: 2, monthlySpendCapUsd: 50, fixesSucceeded: 4 }),
       { used: 2, limit: 5 },
       NOW,
     )
     expect(meters.map((m) => m.id)).toEqual(['diagnoses', 'seats', 'fixes', 'spend'])
     expect(meters[0]).toMatchObject({ value: '47 / 2,000', pct: 2, tone: 'ok', detail: '2% used · resets in 5 days' })
     expect(meters[1]).toMatchObject({ value: '2 / 5', pct: 40, detail: '3 left' })
-    expect(meters[3]).toMatchObject({ label: 'Charges', value: 'None' })
+    expect(meters[3]).toMatchObject({ label: 'Spend cap', value: '$50 / month' })
+  })
+
+  it('a complimentary account has no charges tile: the banner says it once (review 2026-11-18)', () => {
+    const meters = billingMeters(stats({ diagnosesUsed: 24, diagnosesLimit: 3000, isComplimentary: true }), { used: 3, limit: 5 }, NOW)
+    expect(meters.map((m) => m.id)).toEqual(['diagnoses', 'seats', 'fixes'])
+    expect(meters.some((m) => /charge/i.test(`${m.label} ${m.detail}`))).toBe(false)
   })
 
   it('warns near a limit and flags one that is over', () => {

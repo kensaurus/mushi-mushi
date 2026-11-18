@@ -20,6 +20,9 @@ export function laneRunStatus(state: string): RunStatus {
       return 'waiting'
     case 'draining':
       return 'slow'
+    // Its stop date passed: it takes nothing until the date moves (2026-11-18).
+    case 'stopped':
+      return 'cancelled'
     case 'idle':
       return 'idle'
     case 'offline':

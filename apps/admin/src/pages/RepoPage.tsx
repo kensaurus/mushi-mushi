@@ -398,8 +398,8 @@ export function RepoPage() {
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-fg-secondary">Repo activity</h3>
-        {activity && (
-          <span className="text-3xs text-fg-faint font-mono">
+        {activity && activity.length > 0 && (
+          <span className="text-3xs text-fg-faint tabular-nums">
             {pluralizeWithCount(activity.length, 'event')}
           </span>
         )}
@@ -539,7 +539,8 @@ export function RepoPage() {
           'Review: Pull requests lists every fix PR with CI status. Activity lists dispatches, commits, and CI results; filter it by event type.',
         ].join('\n')}
       >
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        {/* The status line carries "Updated"; the header shows it only when that line is hidden. */}
+        {ux.hideRepoSnapshot ? <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} /> : null}
         {(counts.branches ?? counts.total) > 0 && (
           <span className="text-2xs text-fg-faint whitespace-nowrap tabular-nums" title="Branches Mushi Mushi pushed for fixes">
             {pluralizeWithCount(counts.branches ?? counts.total, 'fix branch', 'fix branches')}

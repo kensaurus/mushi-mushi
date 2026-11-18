@@ -291,19 +291,24 @@ const ACTION_LABEL: Record<AppReasonId, string> = {
  * Critical (red, pulsing) when the app is broken or its CI failed today.
  */
 export function appAlerts(ranked: readonly AppSignals[], onOpen: (projectId: string) => void, max = 3): SignalAlert[] {
-  return appsNeedingYou(ranked)
-    .slice(0, max)
-    .map((r) => {
+  const shown = appsNeedingYou(ranked).slice(0, max)
+  const rests = shown.map((r) => r.reasons.slice(1, 4).map((x) => x.short))
+  // A detail every card carries word for word ("2 serious risks" on all three, round 2
+  // 2026-11-18) tells the cards apart by nothing: it is left out; the grid below has it per app.
+  const onEvery = shown.length > 1 ? new Set(rests[0]!.filter((x) => rests.every((rest) => rest.includes(x)))) : new Set<string>()
+  return shown
+    .map((r, i) => {
       const top = r.reasons[0]
       const id = r.card.projectId
-      const rest = r.reasons.slice(1, 4).map((x) => x.short)
+      const all = rests[i]!
+      const rest = all.filter((x) => !onEvery.has(x))
       return {
         id,
         severity: r.tier === 0 || (r.ciFailsToday?.value ?? 0) > 0 ? 'critical' : 'serious',
         label: ALERT_LABEL[top.id],
         app: r.card.name,
         title: top.title,
-        detail: rest.length > 0 ? rest.join(' · ') : 'Nothing else open.',
+        detail: rest.length > 0 ? rest.join(' · ') : all.length > 0 ? '' : 'Nothing else open.',
         metric: top.metric,
         keys: [appKey(id)],
         action: { label: ACTION_LABEL[top.id], to: appLink(top.to, id), onClick: () => onOpen(id) },

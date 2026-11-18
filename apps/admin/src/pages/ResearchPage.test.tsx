@@ -233,3 +233,16 @@ interface PwPage {
   setContent: (html: string, opts: { waitUntil: 'load' }) => Promise<void>
   evaluate: <T, A>(fn: (arg: A) => T, arg: A) => Promise<T>
 }
+
+describe('ResearchPage empty History tab (round-2 sweep)', () => {
+  it('shows the snapshot first-step card only, not a second "search above" empty state', () => {
+    act(() => {
+      root.render(createElement(MemoryRouter, { initialEntries: ['/research?tab=history'] }, createElement(ResearchPage)))
+    })
+    const snapshot = posture.slots.find((slot) => slot.priority === 1)
+    expect(snapshot?.show).toBe(true)
+    const text = host.textContent ?? ''
+    expect(text).not.toContain('No research sessions')
+    expect(text).not.toContain('search above')
+  })
+})

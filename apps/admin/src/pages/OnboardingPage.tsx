@@ -16,7 +16,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { testReportHref, useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
-import type { TimeToFirstDiagnosis } from '../lib/setupRail'
+import { formatDiagnosisDuration, type TimeToFirstDiagnosis } from '../lib/setupRail'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { Card, Btn, Input, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, SegmentedControl, HelpBanner, Loading } from '../components/ui'
 import { SetupProgressRail } from '../components/onboarding/SetupProgressRail'
@@ -414,6 +414,11 @@ export function OnboardingPage() {
   // left for this project to do. Keeps the page useful as a permanent SDK
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
+  // The rail's "Your app is wired up": the server's four required steps.
+  // The tab guide and the footer read this, not setupComplete (which also
+  // waits on the optional extras), so the guide no longer said "The rail
+  // above shows the next step" under a rail with every step done.
+  const wiredUp = Boolean(project && project.required_total > 0 && project.required_complete >= project.required_total)
 
   usePublishPageContext({
     route: '/onboarding',
@@ -664,7 +669,7 @@ export function OnboardingPage() {
 
       {/* One field-guide line for the open tab: what this step is for. */}
       <Mascot
-        {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: setupComplete })}
+        {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: wiredUp })}
         size="sm"
         data-testid="onboarding-tab-guide"
       />
@@ -1023,10 +1028,9 @@ export function OnboardingPage() {
               )}
             </Card>
           )}
+          {/* A "Go to Dashboard" button sat here over the footer's "Skip setup —
+              go to dashboard": one way out, at the foot. */}
           <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
-          <div className="flex gap-2">
-            <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
-          </div>
         </div>
       )}
         </>
@@ -1034,8 +1038,10 @@ export function OnboardingPage() {
       </>
       )}
 
-      {/* Where reports go: endpoint and host provenance, at the foot. */}
-      {!firstRun ? (
+      {/* Where reports go: endpoint and host provenance, at the foot. Fix a
+          problem carries its own readout (endpoints, project ref, signals):
+          two "Developer details" bars stacked there. */}
+      {!firstRun && effectiveTab !== 'diagnose' ? (
         <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
       ) : null}
 
@@ -1047,7 +1053,7 @@ export function OnboardingPage() {
           onClick={() => navigate('/dashboard')}
           className="border-0 bg-transparent shadow-none hover:bg-transparent px-0 py-0 text-2xs text-fg-faint hover:text-fg-muted"
         >
-          Skip setup — go to dashboard
+          {wiredUp ? 'Go to Home' : 'Skip setup — go to Home'}
         </Btn>
         <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
         <Btn
@@ -1067,18 +1073,6 @@ export function OnboardingPage() {
   )
 }
 
-/** Format a millisecond interval as a short human string ("1m 48s", "42s"). */
-function formatDiagnosisDuration(ms: number): string {
-  const totalSec = Math.max(0, Math.round(ms / 1000))
-  if (totalSec < 60) return `${totalSec}s`
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  if (m < 60) return s ? `${m}m ${s}s` : `${m}m`
-  const h = Math.floor(m / 60)
-  const rem = m % 60
-  return rem ? `${h}h ${rem}m` : `${h}h`
-}
-
 /**
  * Surfaces the phase-1 north-star: time from making a key to the
  * first plain-English diagnosis. Target is "under 2 minutes" for a fresh
@@ -1096,16 +1090,16 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
   if (ms != null) {
     const underTarget = ms <= TARGET_MS
     return (
-      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-info/25 bg-info/5'}`}>
+      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-warn/30 bg-warn/5'}`} data-testid="ttfd-measured">
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <p className="text-3xs font-semibold text-fg-secondary">First report in your queue</p>
-            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-warn-foreground'}`}>
               {formatDiagnosisDuration(ms)}
             </p>
           </div>
-          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-info'}`}>
-            {underTarget ? 'Under the 2-minute target ✓' : 'Target: under 2 minutes'}
+          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-warn-foreground'}`}>
+            {underTarget ? 'Under the 2-minute target ✓' : 'Over the 2-minute target'}
           </span>
         </div>
         <p className="mt-2 text-xs text-fg-muted leading-relaxed">

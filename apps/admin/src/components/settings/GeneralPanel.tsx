@@ -674,7 +674,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
     <label className="block space-y-1">
       <span className="flex items-center gap-1 text-sm text-fg-secondary">
-        {label}: <span className="font-mono text-fg">{Math.round(value * 100)}%</span>
+        {label}: <span className="font-medium tabular-nums text-fg">{Math.round(value * 100)}%</span>
         {helpId && <ConfigHelp helpId={helpId} />}
       </span>
       <input
@@ -683,7 +683,7 @@ function Slider({ label, value, onChange, helpId }: SliderProps) {
         min="0.5"
         max="0.99"
         step="0.01"
-        className="w-full accent-brand"
+        className="w-full max-w-sm accent-brand"
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
       />
@@ -709,7 +709,7 @@ function RangeField({
   return (
     <label className="block space-y-1">
       <span className="text-sm text-fg-secondary">
-        {label}: <span className="font-mono text-fg">{value}</span>
+        {label}: <span className="font-medium tabular-nums text-fg">{value}</span>
       </span>
       <input
         type="range"
@@ -717,7 +717,7 @@ function RangeField({
         min={min}
         max={max}
         step={step}
-        className="w-full accent-brand"
+        className="w-full max-w-sm accent-brand"
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
       />

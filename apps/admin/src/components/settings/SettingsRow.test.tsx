@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { splitPurpose } from './SettingsRow'
+import { rowStatusMark, splitPurpose } from './SettingsRow'
 
 // Settings ran to 4,477px on two- and three-sentence row purposes (fresh-eyes 2026-11-18).
 describe('splitPurpose', () => {
@@ -27,5 +27,18 @@ describe('splitPurpose', () => {
   it('leaves one long sentence alone', () => {
     const one = 'A small line at the foot of the widget that links to Mushi Mushi and is shown by default on the Free plan only'
     expect(splitPurpose(one)).toEqual({ lead: one, more: null })
+  })
+})
+
+// Round-2 review (2026-11-18): "✓ Connected · not checked yet" drew a pass mark for a check that never ran.
+describe('rowStatusMark', () => {
+  it('draws a configured, never-tested connection grey, never a green ✓', () => {
+    expect(rowStatusMark({ state: 'checking' })).toEqual({ status: 'idle', label: 'Connected · not checked yet' })
+  })
+
+  it("keeps a caller's own words and mark", () => {
+    expect(rowStatusMark({ state: 'checking', label: 'Testing…' })).toBeNull()
+    expect(rowStatusMark({ state: 'attention', label: 'Replaced', mark: 'cancelled' })).toEqual({ status: 'cancelled', label: 'Replaced' })
+    expect(rowStatusMark({ state: 'working' })).toBeNull()
   })
 })

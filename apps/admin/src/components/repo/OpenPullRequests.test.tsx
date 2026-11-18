@@ -75,7 +75,7 @@ describe('openPrMergeBlocker', () => {
 describe('OpenPullRequests', () => {
   it('merges only after the confirmation, with the chosen method', async () => {
     const { reload } = render([pr(7, [check('gate', 'success')])])
-    expect(host.textContent).toContain('all 1 required checks passed')
+    expect(host.textContent).toContain('its required check passed')
     act(() => button('Merge')?.click())
     expect(mocks.apiFetchMutate).not.toHaveBeenCalled()
     mocks.apiFetchMutate.mockResolvedValueOnce({ ok: true, data: { merged: true, alreadyMerged: false } })

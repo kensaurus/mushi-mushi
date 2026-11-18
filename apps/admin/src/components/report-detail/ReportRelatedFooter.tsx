@@ -3,6 +3,7 @@ import { IconLink, IconExternalLink, IconArrowRight } from '../icons'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail } from './types'
 import { reporterReportsHref } from '../../lib/reportsListFilters'
+import { reportHasReporter } from './reporterPresence'
 
 interface RelatedLink {
   to: string
@@ -23,8 +24,10 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
   }
 
   // Same target as the header's Reporter chip; none for reports with no
-  // reporter (was /reports?reporter=null, an empty list).
-  const reporterHref = reporterReportsHref(report)
+  // reporter (was /reports?reporter=null, an empty list), and none for a
+  // Sentry import, alarm or check: its "reporter" is the intake
+  // ("sentry-webhook"), not a person (R2 sweep 2026-11-18).
+  const reporterHref = reportHasReporter(report) ? reporterReportsHref(report) : null
   if (reporterHref) {
     links.push({
       to: reporterHref,
@@ -33,11 +36,9 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
     })
   }
 
-  links.push({
-    to: '/graph',
-    label: 'Open knowledge graph',
-    description: 'Explore the dependency and regression graph for this project.',
-  })
+  // No generic "knowledge graph" or "All fixes" cards: the page's own
+  // "Related: Bug clusters · Fixes · Lessons" row already links there, and
+  // "Related" showed twice (R2 sweep 2026-11-18). Only links about this bug.
 
   if (report.status === 'fixing' || report.status === 'fixed' || dispatchState.status !== 'idle') {
     if (dispatchState.status === 'completed' && dispatchState.prUrl) {
@@ -49,17 +50,19 @@ export function ReportRelatedFooter({ report, dispatchState }: { report: ReportD
       })
     } else {
       links.push({
-        to: '/fixes',
-        label: 'All fixes',
-        description: 'Track the agentic fix attempts for this and other reports.',
+        to: `/fixes?report=${encodeURIComponent(report.id)}`,
+        label: 'Fixes for this bug',
+        description: 'Track the fix attempts for this report.',
       })
     }
   }
 
+  if (links.length === 0) return null
+
   return (
     <div className="mt-6">
       <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary mb-2">
-        <IconLink /> Related
+        <IconLink /> More on this bug
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         {links.map((l) => (

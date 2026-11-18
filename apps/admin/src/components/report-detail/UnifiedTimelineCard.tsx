@@ -46,6 +46,15 @@ export function UnifiedTimelineCard({ reportId }: { reportId: string }) {
   }
 
   const timeline = data?.timeline ?? []
+  // Only "Report submitted": its text repeats the description and the
+  // header's "Reported …" (R2 sweep 2026-11-18, a big card with one line).
+  if (timeline.length === 1 && timeline[0].lane === 'report') {
+    return (
+      <p className="text-xs text-fg-muted" data-testid="unified-timeline-only-report">
+        Only the report so far. Comments, fix events, QA runs and pipeline steps appear here as they happen.
+      </p>
+    )
+  }
   if (timeline.length === 0) {
     return (
       <EmptyState

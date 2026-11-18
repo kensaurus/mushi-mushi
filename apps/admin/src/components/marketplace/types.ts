@@ -131,6 +131,41 @@ export const INTEGRATIONS_HREF_BY_PLUGIN_SLUG: Record<string, string> = {
 }
 
 /**
+ * Round-2 sweep 2026-11-18: five of six catalogue cards were full cards that
+ * only said "Already on Integrations →", each with an "Official" chip. The
+ * catalogue now draws a card only for a plugin you can install (or have
+ * installed) here; the ones Integrations covers fold into one row of links.
+ */
+export function splitCatalog<T extends { slug: string }>(
+  catalog: readonly T[],
+  installedSlugs: ReadonlySet<string>,
+): { own: T[]; covered: Array<T & { href: string }> } {
+  const own: T[] = []
+  const covered: Array<T & { href: string }> = []
+  for (const p of catalog) {
+    const href = INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug]
+    if (href && !installedSlugs.has(p.slug)) covered.push({ ...p, href })
+    else own.push(p)
+  }
+  return { own, covered }
+}
+
+/** "Official" only tells plugins apart when some are not; on an all-official list it is noise. */
+export function showOfficialChip(catalog: ReadonlyArray<{ is_official: boolean }>): boolean {
+  return catalog.some((p) => p.is_official) && catalog.some((p) => !p.is_official)
+}
+
+/** The product is "Mushi Mushi", never "Mushi" (catalogue rows still carry the short name). */
+export function displayPublisher(publisher: string): string {
+  return ['mushi', 'mushi-mushi', 'mushi mushi'].includes(publisher.trim().toLowerCase()) ? 'Mushi Mushi' : publisher
+}
+
+/** Same rule for catalogue descriptions: "any Mushi event" → "any Mushi Mushi event". */
+export function displayPluginText(text: string): string {
+  return text.replace(/\bMushi( Mushi)?\b/g, 'Mushi Mushi')
+}
+
+/**
  * The empty-state copy for a project with no plugins (2026-11-18). "No plugins installed
  * yet" sat above cards that mostly said "Already on Integrations", so it names the plugins
  * that are actually left to install here instead.

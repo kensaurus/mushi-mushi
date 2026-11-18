@@ -292,6 +292,18 @@ describe('UxRunsPage, live progress and choices', () => {
     }
   })
 
+  it('in the cloud, never asks to run a command it does not show, nor repeats the model (round-2 sweep)', () => {
+    render({ runs: [] })
+    expect(host.textContent).toContain('Run the command below')
+    openCloud()
+    const steps = host.querySelector('[aria-label="Where each step happens"]')!.textContent ?? ''
+    expect(steps).not.toContain('Run the command below')
+    expect(steps).toContain('.github/workflows/mushi-ux.yml')
+    expect(host.textContent).not.toContain('model: ')
+    // The workflow file is named once, by the steps.
+    expect((host.textContent ?? '').split('mushi-ux.yml').length - 1).toBe(1)
+  })
+
   it('starts a cloud run with a model from the account, its settings, and a skill', async () => {
     render({ runs: [] })
     openCloud()

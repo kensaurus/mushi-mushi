@@ -10,9 +10,11 @@
  *          below". The verdicts come from connectionGridModel.ts, which reuses
  *          each card's own rules.
  *
- *          Every state is a StatusMark (colour plus glyph): ✓ working or
- *          connected and not checked yet (with a "Check now" beside it),
- *          ✕ needs you, ⧗ expiring, ◷ still loading, ○ not connected.
+ *          Every state is a StatusMark (colour plus glyph): ✓ checked and
+ *          working, ✕ needs you, ⧗ expiring, ◷ still loading, ○ not connected
+ *          or connected and never checked (with a "Check now" beside it). A
+ *          green ✓ only means a check ran and passed (round-2 review
+ *          2026-11-18: "✓ NOT CHECKED" on the GitHub tile).
  */
 
 import type { ReactNode } from 'react'
@@ -24,9 +26,10 @@ import type { InboundDeliveryLike } from '../../lib/integrationConnection'
 import { sentryConfiguredFromPlatform } from '../../lib/useSentryConnection'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
 import { HighlightProvider } from '../signal/linkedHighlight'
-import { STATUS_INK, StatusMark, type RunStatus } from '../signal/StatusMark'
+import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import {
+  alertChannelGap,
   brokenConnections,
   buildConnectionGrid,
   connectionGridSentence,
@@ -46,9 +49,9 @@ const CONNECTION_STATUS: Record<ConnectionState, RunStatus> = {
   not_connected: 'idle',
 }
 
-/** A tile's status mark (also the page drawer's header). */
+/** A tile's status mark (also the page drawer's header). Never checked is hollow ○, never ✓. */
 export function tileRunStatus(tile: Pick<GridTile, 'view' | 'neverChecked'>): RunStatus {
-  return tile.neverChecked ? 'passed' : CONNECTION_STATUS[tile.view.state]
+  return tile.neverChecked ? 'idle' : CONNECTION_STATUS[tile.view.state]
 }
 
 /** A connection state in words. */
@@ -115,6 +118,7 @@ export function ConnectionGrid({
   onConnect,
   onCheck,
   checkingId = null,
+  alertEventsOn = null,
 }: {
   tiles: readonly GridTile[]
   groups: readonly ConnectionGroup[]
@@ -126,6 +130,8 @@ export function ConnectionGrid({
   onCheck?: (tile: GridTile) => void
   /** The tool whose check is running now. */
   checkingId?: GridToolId | null
+  /** Alert events switched on (null while the prefs load). With no channel connected they go nowhere. */
+  alertEventsOn?: number | null
 }) {
   const broken = brokenConnections(tiles)
   const { sentence, tone } = connectionGridSentence(tiles)
@@ -133,32 +139,44 @@ export function ConnectionGrid({
   // One broken connection: its reason goes in the sentence. With more, each
   // gets an alert card with its own Fix, so the sentence only names them.
   const tally = connectionTally(tiles)
-  // Nothing broken: the counts as marks ("● 1 working · ○ 1 not checked"), not a sentence.
+  const gap = alertChannelGap(tiles, alertEventsOn)
+  const gapText = `No alert channel: ${alertEventsOn ?? 0} alert ${alertEventsOn === 1 ? 'event goes' : 'events go'} nowhere`
+  const showTally = broken.length === 0 && !gap && tally.working + tally.unchecked > 0
+  // Nothing broken: the counts as marks, not a sentence. The status row's own
+  // dot is the first mark (green when something works), so the tally never
+  // draws a second dot beside it ("● ● 1 working", round-2 review).
   const lead: ReactNode =
     broken.length === 1 && first.view.detail ? (
       `${first.label} needs you: ${first.view.detail}`
-    ) : broken.length === 0 && tally.working + tally.unchecked > 0 ? (
+    ) : broken.length === 0 && gap ? (
+      <span data-testid="integrations-channel-gap">{gapText}</span>
+    ) : showTally ? (
       <span className="inline-flex flex-wrap items-center gap-x-1.5" data-testid="integrations-tally">
-        {tally.working > 0 && (
+        {tally.working > 0 && <span>{tally.working} working</span>}
+        {tally.working > 0 && tally.unchecked > 0 && (
           <>
-            <StatusGlyph tone="ok" />
-            <span>{tally.working} working</span>
-          </>
-        )}
-        {tally.working > 0 && tally.unchecked > 0 && <span aria-hidden="true">·</span>}
-        {tally.unchecked > 0 && (
-          <>
+            <span aria-hidden="true">·</span>
             <StatusGlyph tone="off" />
-            <span>{tally.unchecked} not checked</span>
           </>
         )}
+        {tally.unchecked > 0 && <span>{tally.unchecked} not checked</span>}
       </span>
     ) : (
       sentence
     )
-  const alerts: SignalAlert[] =
-    broken.length > 1
-      ? broken.map((t) => ({
+  const leadTone = broken.length === 0 && gap ? 'warn' : showTally ? (tally.working > 0 ? 'ok' : 'neutral') : tone
+  const gapAlert: SignalAlert = {
+    id: 'alert-channel-gap',
+    severity: 'serious',
+    label: 'No channel',
+    title: gapText,
+    detail: 'Slack, Discord and Teams are all not connected. One channel is enough.',
+    metric: { value: String(alertEventsOn ?? 0), unit: 'events on' },
+    action: { label: 'Connect Slack', onClick: () => onConnect('slack') },
+  }
+  const alerts: SignalAlert[] = [
+    ...(broken.length > 1
+      ? broken.map((t): SignalAlert => ({
           id: t.id,
           severity: 'serious',
           label: t.view.label ?? CONNECTION_WORD[t.view.state],
@@ -167,19 +185,26 @@ export function ConnectionGrid({
           metric: ageMetric(t.lastAt),
           action: { label: `Fix ${t.label}`, onClick: () => onOpen(t.id) },
         }))
-      : []
+      : []),
+    // With a broken tool leading the status row, the gap gets its own card.
+    ...(gap && broken.length > 0 ? [gapAlert] : []),
+  ]
   const byId = new Map(tiles.map((t) => [t.id, t]))
 
   return (
     <section aria-label="Connections" className="space-y-3" data-testid="integrations-connection-grid">
       <PageStatus
         sentence={lead}
-        tone={tone}
+        tone={leadTone}
         ariaLabel="Connection status"
         action={
           broken.length === 1 ? (
             <Btn size="sm" variant="primary" onClick={() => onOpen(first.id)}>
               Fix {first.label}
+            </Btn>
+          ) : broken.length === 0 && gap ? (
+            <Btn size="sm" variant="primary" onClick={() => onConnect('slack')} data-testid="integrations-channel-gap-connect">
+              Connect Slack
             </Btn>
           ) : null
         }
@@ -189,8 +214,9 @@ export function ConnectionGrid({
           <AlertCards alerts={alerts} emptyText={null} label="Connections that need you" testIdPrefix="integrations" />
         </HighlightProvider>
       )}
-      {/* Groups sit side by side while they fit, so the whole picture is one screen. */}
-      <div className="flex flex-wrap gap-x-6 gap-y-4">
+      {/* Groups sit on one grid, so every heading starts on a shared column line
+          (a wrapping flex row left ERRORS at a different x than FIX AGENT). */}
+      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((g, gi) => {
           const groupTiles = g.tools.map((id) => byId.get(id)).filter((t): t is GridTile => Boolean(t))
           if (groupTiles.length === 0) return null
@@ -203,7 +229,7 @@ export function ConnectionGrid({
             <div
               key={gi}
               id={g.id}
-              className={`flex min-w-64 max-w-full flex-col scroll-mt-chrome ${lone ? 'basis-full sm:basis-auto' : ''}`}
+              className="flex min-w-0 max-w-full flex-col scroll-mt-chrome"
               data-testid="integrations-group"
             >
               {g.heading}
@@ -254,8 +280,9 @@ function OffChip({
   const word = tile.view.label ?? CONNECTION_WORD.not_connected
   return (
     // The open target and Connect are siblings: a button never sits inside a button.
+    // No box round the pair: Connect is the only bordered thing (a button in a dashed chip read as chip-in-chip).
     <li
-      className="inline-flex h-7 min-w-0 items-center gap-1 whitespace-nowrap rounded-sm border border-dashed border-edge-subtle bg-surface pl-1.5 pr-0.5"
+      className="inline-flex h-7 min-w-0 items-center gap-1.5 whitespace-nowrap pr-1"
       data-testid={`integration-tile-${tile.id}`}
     >
       <button
@@ -320,9 +347,11 @@ function ConnectionTile({
         <span className="flex min-w-0 items-center gap-1.5">
           <BrandIcon brand={tile.brand} size={16} decorative />
           <span className="min-w-0 flex-1 truncate text-xs font-bold text-fg">{tile.label}</span>
-          <StatusMark status={status} />
         </span>
-        <span className={`truncate whitespace-nowrap text-3xs font-bold tracking-wider uppercase ${STATUS_INK[status]}`}>{word}</span>
+        {/* The state is one pill (mark + word), not a mark plus a separate uppercase caption. */}
+        <span className="flex min-w-0">
+          <StatusPill status={status} label={word} className="max-w-full truncate" />
+        </span>
         {tile.lastAt && tile.lastLabel && state !== 'not_connected' ? (
           <span className="truncate text-3xs text-fg-secondary">
             {tile.lastLabel} <RelativeTime value={tile.lastAt} />

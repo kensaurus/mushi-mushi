@@ -66,6 +66,7 @@ import { ExploreUnderstandEmpty } from '../components/explore/ExploreUnderstandE
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
+import { layerTileText } from '../lib/exploreCounts'
 import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
 import { PageLoadError } from '../components/PageLoadError'
 import { apiFetch } from '../lib/supabase'
@@ -503,14 +504,10 @@ export function ExplorePage() {
       EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
         id: t.id,
         label: copy?.tabLabels?.[t.id] ?? t.label,
-        count:
-          t.id === 'map' && stats.indexedFiles > 0
-            ? stats.indexedFiles
-            : t.id === 'search' && stats.withEmbeddings > 0
-              ? stats.withEmbeddings
-              : undefined,
+        // No count badges: the file and chunk counts were on the banner, the tabs and the
+        // tiles at once (fresh-eyes 2026-11-18). The tiles and the banner carry them.
       })),
-    [copy?.tabLabels, stats.indexedFiles, stats.withEmbeddings, ux.hideIndexTab],
+    [copy?.tabLabels, ux.hideIndexTab],
   )
 
   const understandViewOptions = useMemo(
@@ -540,6 +537,9 @@ export function ExplorePage() {
     activeTab === 'layers' ||
     activeTab === 'diagram' ||
     activeTab === 'search'
+
+  const uiTile = layerTileText(stats.layers?.ui, stats.indexedFiles, uiLayerDetail())
+  const backendTile = layerTileText(stats.layers?.backend, stats.indexedFiles, backendLayerDetail())
 
   usePublishPageContext({
     route: '/explore',
@@ -863,6 +863,7 @@ export function ExplorePage() {
                 onRefresh={reloadAll}
                 refreshing={statsValidating || loading}
                 plainBanner={ux.plainBanner}
+                hideCounts={activeTab === 'overview' && !ux.hideExploreSnapshot}
               />
             ),
           },
@@ -930,20 +931,21 @@ export function ExplorePage() {
             detail={indexedFilesDetail(stats)}
             to={exploreLinks.files}
           />
+          {/* A layer of 0 says whether the index was read (none found) or not built (not checked). */}
           <StatCard
             label={copy?.statLabels?.uiLayer ?? 'UI layer'}
-            value={stats.layers?.ui ?? 0}
-            accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
+            value={uiTile.value}
+            accent={uiTile.hasCount ? 'text-fg' : 'text-fg-muted'}
             tooltip={uiLayerTooltip(stats)}
-            detail={uiLayerDetail()}
+            detail={uiTile.detail}
             to={exploreLinks.uiLayer}
           />
           <StatCard
             label={copy?.statLabels?.backend ?? 'Backend'}
-            value={stats.layers?.backend ?? 0}
-            accent={stats.layers.backend > 0 ? 'text-info' : undefined}
+            value={backendTile.value}
+            accent={backendTile.hasCount ? 'text-fg' : 'text-fg-muted'}
             tooltip={backendLayerTooltip(stats)}
-            detail={backendLayerDetail()}
+            detail={backendTile.detail}
             to={exploreLinks.backend}
           />
           <StatCard

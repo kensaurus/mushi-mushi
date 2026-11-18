@@ -52,9 +52,9 @@ import {
   type WorkerLane,
   type WorkLanesData,
 } from '../../lib/workers'
-import { WorkerFlags } from './WorkerFlags'
+import { WorkerFlags, flagTone, flagsSentence } from './WorkerFlags'
 import { WorkerKeyForm } from './WorkerKeyForm'
-import { WorkerLaneCard } from './WorkerLaneCard'
+import { WorkerLaneCard, commonLaneSettings, commonSettingsLine } from './WorkerLaneCard'
 import { SwitchCursorAccountDialog } from './SwitchCursorAccount'
 
 interface Props {
@@ -281,6 +281,7 @@ export function WorkersPanel({ projectId, now }: Props) {
 
   const hosts = new Map(data.hosts.map((h) => [h.id, h]))
   const sum = workersSummary(data, now)
+  const common = commonLaneSettings(data.lanes)
   const showApp = !projectId && new Set(data.lanes.map((l) => l.projectId)).size > 1
   const help = (
     <HelpPopover label="How local workers work" title="Local workers" align="start">
@@ -305,6 +306,7 @@ export function WorkersPanel({ projectId, now }: Props) {
   if (data.hosts.length === 0) {
     return (
       <div className="space-y-3" data-testid="workers-empty">
+        {flags.length > 0 && <p className="text-sm font-semibold text-fg">{flagsSentence(flags)}</p>}
         {flagList}
         <PageFirstStep
           marksPageEmpty={false}
@@ -317,9 +319,9 @@ export function WorkersPanel({ projectId, now }: Props) {
         <Section title="Set up a worker" id="workers-setup" action={help}>
           <div className="space-y-2 text-xs text-fg-muted">
             <p>On the machine, with the Cursor CLI and gh signed in:</p>
-            <CodeValue value={INSTALL_ONE} multiline />
+            <CodeValue value={INSTALL_ONE} className="w-full" />
             <p>Already run lanes from a lanes.conf file (name, profile, clone, app id, model, mode)? Import it; each lane keeps its model, and its queue now lives here:</p>
-            <CodeValue value={INSTALL_CONF} multiline />
+            <CodeValue value={INSTALL_CONF} className="w-full" />
             {showKeyForm && <WorkerKeyForm projects={data.projects} onCreated={reload} />}
           </div>
         </Section>
@@ -329,16 +331,19 @@ export function WorkersPanel({ projectId, now }: Props) {
 
   return (
     <div className="space-y-4" data-testid="workers-panel">
-      {flagList}
+      {/* Problems first: one status that counts them, then each card once. The status used to
+          sit below the cards restating the first one ("Cursor credits idle for 33 h. 1 more
+          problem above.", round-2 review 2026-11-18). */}
       <PageStatus
         data-testid="workers-status"
         ariaLabel="Local workers"
-        sentence={flags.length ? `${flags[0]!.title}.${flags.length > 1 ? ` ${flags.length - 1} more problem${flags.length === 2 ? '' : 's'} above.` : ''}` : sum.sentence}
-        tone={flags.some((f) => f.severity === 'danger') ? 'danger' : flags.length ? 'warn' : sum.tone}
+        sentence={flags.length ? flagsSentence(flags) : sum.sentence}
+        tone={flags.some((f) => flagTone(f) === 'danger') ? 'danger' : flags.length ? 'warn' : sum.tone}
         metrics={[
           { label: 'Workers online', value: sum.online },
           { label: 'Lanes taking reports', value: sum.taking },
-          { label: 'Reports queued', value: sum.queued },
+          // Distinct reports: one queued on two lanes is one report waiting (119 vs a lane's 117).
+          { label: 'Reports queued, all lanes', value: sum.queued, hint: 'Each report once, even when it sits in more than one lane’s queue.' },
         ]}
         action={
           <span className="flex flex-wrap items-center gap-2">
@@ -349,6 +354,7 @@ export function WorkersPanel({ projectId, now }: Props) {
           </span>
         }
       />
+      {flagList}
       {showKeyForm && (
         <Section title="New worker key" id="workers-new-key-form">
           <WorkerKeyForm projects={data.projects} onCreated={reload} />
@@ -367,11 +373,15 @@ export function WorkersPanel({ projectId, now }: Props) {
         {data.lanes.length === 0 ? (
           <p className="text-xs text-fg-muted">No lane registered yet: a machine registers its lanes at its first heartbeat.</p>
         ) : (
-          <ul className="space-y-2">
-            {data.lanes.map((l) => (
-              <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} onPatch={onPatch} onQueue={onQueue} onMove={onMove} onChanged={reload} />
-            ))}
-          </ul>
+          <>
+            {/* Settings every lane shares, said once (the same model, "1 at once" and stop date sat on all 20 cards). */}
+            {common && <p className="mb-2 text-2xs text-fg-muted" data-testid="workers-lanes-common">{commonSettingsLine(common, data.lanes.length)}</p>}
+            <ul className="space-y-2">
+              {data.lanes.map((l) => (
+                <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} common={common} onPatch={onPatch} onQueue={onQueue} onMove={onMove} onChanged={reload} />
+              ))}
+            </ul>
+          </>
         )}
       </Section>
     </div>

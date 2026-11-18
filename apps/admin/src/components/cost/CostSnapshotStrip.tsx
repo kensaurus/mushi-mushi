@@ -9,26 +9,18 @@ import type { CostStats } from './types'
 import {
   totalLoggedDetail,
   totalLoggedTooltip,
-  spend24hDetail,
   spend24hTooltip,
-  spendMonthDetail,
   spendMonthTooltip,
-  topDriverDetail,
   topDriverTooltip,
-  operationsDetail,
   operationsTooltip,
   modelsDetail,
   modelsTooltip,
-  keySourceDetail,
   keySourceTooltip,
 } from '../../lib/costStatTooltips'
 import { costLinks } from '../../lib/statCardLinks'
+import { costTileDetails, formatSpendUsd as fmtSpend, keySourceView } from '../../lib/costView'
 
-function fmtSpend(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`
-  if (n >= 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(6)}`
-}
+const KEY_SOURCE_ACCENT = { neutral: undefined, warn: 'text-warn', muted: 'text-fg-muted' } as const
 
 interface Props {
   stats: CostStats
@@ -47,6 +39,9 @@ export function CostSnapshotStrip({
   hint,
   statLabels,
 }: Props) {
+  // Details stay short so they are whole in a 390px tile; the ⓘ has the rest.
+  const details = costTileDetails(stats)
+  const keySource = keySourceView(stats)
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
@@ -62,24 +57,24 @@ export function CostSnapshotStrip({
           <StatCard
             label={statLabels?.day24h ?? '24h spend'}
             value={fmtSpend(stats.spend24hUsd)}
-            accent={stats.spendSpike24h ? 'text-warn' : stats.spend24hUsd > 0 ? 'text-ok' : undefined}
+            // A cost is ink, not green; amber only for a spike.
+            accent={stats.spendSpike24h ? 'text-warn' : undefined}
             tooltip={spend24hTooltip(stats)}
-            detail={spend24hDetail(stats)}
+            detail={details.spend24h}
             to={costLinks.spend24h}
           />
           <StatCard
             label={statLabels?.month ?? 'This month'}
             value={fmtSpend(stats.spendMonthUsd)}
             tooltip={spendMonthTooltip(stats)}
-            detail={spendMonthDetail(stats)}
+            detail={details.month}
             to={costLinks.spendMonth}
           />
           <StatCard
             label={statLabels?.topDriver ?? 'Top driver'}
             value={stats.topOperation ? stats.topOperation.split(':')[0] : '—'}
-            accent={stats.topOperation ? 'text-info' : undefined}
             tooltip={topDriverTooltip(stats)}
-            detail={topDriverDetail(stats)}
+            detail={details.topDriver}
             to={costLinks.topDriver}
           />
         </MetricStrip>
@@ -88,7 +83,7 @@ export function CostSnapshotStrip({
             label={statLabels?.operations ?? 'Operations'}
             value={stats.operationsCount}
             tooltip={operationsTooltip(stats)}
-            detail={operationsDetail()}
+            detail={details.operations}
             to={costLinks.operations}
           />
           <StatCard
@@ -100,10 +95,10 @@ export function CostSnapshotStrip({
           />
           <StatCard
             label={statLabels?.keySource ?? 'Key source · 24h'}
-            value={stats.byokCalls24h > 0 ? `${stats.byokCalls24h} BYOK` : `${stats.platformKeyCalls24h} platform`}
-            accent={stats.byokAnthropicConfigured ? 'text-ok' : 'text-warn'}
+            value={keySource.value}
+            accent={KEY_SOURCE_ACCENT[keySource.tone]}
             tooltip={keySourceTooltip(stats)}
-            detail={keySourceDetail(stats)}
+            detail={keySource.detail}
             to={costLinks.keySource}
           />
         </MetricStrip>

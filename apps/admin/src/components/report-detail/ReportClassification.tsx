@@ -8,12 +8,12 @@ import {
 } from '../ui'
 import { roundLongDecimals } from '../../lib/format'
 import {
-  CATEGORY_BADGE,
   CATEGORY_LABELS,
   SEVERITY,
   severityLabel,
-  confidenceBadgeClass,
 } from '../../lib/tokens'
+import { CATEGORY_NEUTRAL, confidenceChipTone } from './categoryTone'
+import { confidenceBarTone } from '../reports/reportMetricViz'
 import { IconCamera, IconIntelligence } from '../icons'
 import { summaryPlace } from './summaryPlace'
 import type { ReportDetail } from './types'
@@ -38,7 +38,7 @@ export function ClassificationFields({ report, showInternals = false }: { report
         data-testid="classification-rows"
       >
         <ClassRow label="Category" hint="Coarse-grained type assigned by the Stage-1 classifier.">
-          <Badge className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}>{categoryLabel}</Badge>
+          <Badge className={CATEGORY_NEUTRAL}>{categoryLabel}</Badge>
         </ClassRow>
         <ClassRow label="Severity" hint="Estimated user impact, used to drive routing and SLA.">
           {report.severity ? (
@@ -49,7 +49,7 @@ export function ClassificationFields({ report, showInternals = false }: { report
         </ClassRow>
         <ClassRow label="Confidence" hint="LLM self-reported confidence. Below 70% usually warrants human review.">
           <span className="inline-flex items-center gap-2">
-            <Badge className={confidenceBadgeClass(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
+            <Badge className={confidenceChipTone(conf)} title={conf != null ? `${(conf * 100).toFixed(1)}%` : undefined}>
               {confLabel}
             </Badge>
             {conf != null && (
@@ -62,7 +62,7 @@ export function ClassificationFields({ report, showInternals = false }: { report
                 aria-label="Classification confidence"
               >
                 <span
-                  className={`block h-full rounded-full transition-[width] ${conf >= 0.85 ? 'bg-ok' : conf >= 0.7 ? 'bg-warn' : 'bg-danger'}`}
+                  className={`block h-full rounded-full transition-[width] ${confidenceBarTone(conf)}`}
                   style={{ width: `${Math.min(100, Math.max(0, conf * 100))}%` }}
                 />
               </span>

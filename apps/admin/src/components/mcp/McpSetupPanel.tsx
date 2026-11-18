@@ -19,6 +19,7 @@ import { RevealedKeyCard } from '../RevealedKeyCard'
 import { docsUrl } from '../../lib/docsUrl'
 import { McpAccountKeyCard } from '../McpAccountKeyCard'
 import { McpAccountKeysList } from './McpAccountKeysList'
+import { StatusPill } from '../signal/StatusMark'
 import { buildSdkInitSnippet, buildSdkInstallSnippet } from '../../lib/mcpPageHelpers'
 import type { validateMcpJsonSyntax } from '../../lib/mcpPageHelpers'
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
@@ -40,7 +41,8 @@ export interface McpSetupPanelProps {
   onSnippetModeChange: (mode: 'cursor' | 'env' | 'http') => void
   copied: boolean
   snippet: string
-  syntaxCheck: ReturnType<typeof validateMcpJsonSyntax>
+  /** Null while nothing is pasted: no verdict, not a warning. */
+  syntaxCheck: ReturnType<typeof validateMcpJsonSyntax> | null
   testingConnection: boolean
   connectionTestResult: { ok: boolean; message: string; testedAt: number } | null
   onTestConnection: () => void
@@ -113,26 +115,13 @@ export function McpSetupPanel({
             <h3 className="text-sm font-semibold text-fg">Get an agent talking in 60 seconds</h3>
           </div>
           <div className="flex items-center gap-1.5" data-testid="mcp-status-strip">
-            <Badge
-              className={
-                hasReadKey
-                  ? CHIP_TONE.okSubtle
-                  : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-              }
-              data-testid="mcp-read-status"
-            >
-              {hasReadKey ? 'mcp:read ✓' : 'mcp:read —'}
-            </Badge>
-            <Badge
-              className={
-                hasWriteKey
-                  ? CHIP_TONE.okSubtle
-                  : 'bg-surface-overlay text-fg-muted border border-edge-subtle'
-              }
-              data-testid="mcp-write-status"
-            >
-              {hasWriteKey ? 'mcp:write ✓' : 'mcp:write —'}
-            </Badge>
+            {/* Drawn as marks: "mcp:read —" read as a broken chip (round-2 review 2026-11-18). */}
+            <span data-testid="mcp-read-status">
+              <StatusPill status={hasReadKey ? 'passed' : 'idle'} label={hasReadKey ? 'mcp:read' : 'No mcp:read key'} />
+            </span>
+            <span data-testid="mcp-write-status">
+              <StatusPill status={hasWriteKey ? 'passed' : 'idle'} label={hasWriteKey ? 'mcp:write' : 'No mcp:write key'} />
+            </span>
           </div>
         </div>
 
@@ -483,6 +472,7 @@ export function McpSetupPanel({
             spellCheck={false}
             data-testid="mcp-json-helper-input"
           />
+          {syntaxCheck && (
           <ContainedBlock tone={syntaxCheck.ok ? 'ok' : 'warn'}>
             <p className="text-xs font-semibold text-fg">{syntaxCheck.title}</p>
             <ul className="mt-1 list-disc pl-4 space-y-0.5 text-2xs text-fg-muted">
@@ -491,6 +481,7 @@ export function McpSetupPanel({
               ))}
             </ul>
           </ContainedBlock>
+          )}
         </div>
       </Card>
 
@@ -519,20 +510,21 @@ export function McpSetupPanel({
               return (
                 <div
                   key={p.id}
-                  className={`flex items-center justify-between gap-3 rounded-md border px-3 py-2.5 ${
+                  // Wraps on a phone: the name kept "mus…" beside two buttons (round-2 review 2026-11-18).
+                  className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border px-3 py-2.5 ${
                     isActive ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle bg-surface-raised/20'
                   }`}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-[11rem] flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-fg truncate">{p.name}</span>
+                      <span className="text-sm font-medium text-fg break-words">{p.name}</span>
                       {isActive && (
                         <Badge className="bg-brand/12 text-brand border border-brand/28 text-2xs">active</Badge>
                       )}
                     </div>
-                    <p className="text-2xs text-fg-faint font-mono truncate mt-0.5">{serverSlug}</p>
+                    <p className="text-2xs text-fg-faint font-mono break-words mt-0.5">{serverSlug}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <ClientConnectButton
                       client={CURSOR_CLIENT}
                       projectId={p.id}

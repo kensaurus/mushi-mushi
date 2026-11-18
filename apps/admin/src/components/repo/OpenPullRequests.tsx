@@ -92,6 +92,13 @@ const GROUPS: Array<{ id: OpenPrGroup; title: string; hint: string }> = [
   { id: 'waiting', title: 'Waiting', hint: 'CI or a review is still running, or the PR is a draft.' },
 ]
 
+/** "all 1 required checks passed" read as a template; say it for one or for many. @internal Exported for tests. */
+export function checksPassedText(passed: number, total: number, baseRef: string): string {
+  if (total === 0) return `${baseRef} requires no checks`
+  if (total === 1) return passed === 1 ? 'its required check passed' : 'its required check has not passed'
+  return passed === total ? `all ${total} required checks passed` : `${passed} of ${total} required checks passed`
+}
+
 /** How many open PRs can merge now: the page's status line leads with it. @internal Exported for tests. */
 export function countMergeable(prs: ReadonlyArray<Pick<OpenPullRequest, 'checks' | 'review' | 'draft'>>): number {
   return prs.filter((pr) => openPrGroup(pr) === 'mergeable').length
@@ -137,7 +144,9 @@ export function OpenPullRequests({ projectId, onCounts }: { projectId: string; o
           return (
             <section key={g.id} aria-label={g.title} data-testid={`open-prs-${g.id}`}>
               <h3 className="text-xs font-semibold text-fg">
-                {g.title} <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span>
+                {g.title}
+                {/* The page status line already leads with "N PRs ready to merge". */}
+                {g.id !== 'mergeable' ? <> <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span></> : null}
               </h3>
               <p className="text-2xs text-fg-muted">{g.hint}</p>
               <ul className="flex flex-col divide-y divide-edge-subtle">
@@ -233,7 +242,7 @@ function OpenPullRequestRow({
         {pr.headRef} → {pr.baseRef}
         {pr.author ? ` · ${pr.author}` : ''} · updated {formatRelative(pr.updatedAt)}
         {' · '}
-        {merged ? 'merged' : blocker ?? (checks.length ? `all ${passed} required checks passed` : `${pr.baseRef} requires no checks`)}
+        {merged ? 'merged' : blocker ?? checksPassedText(passed, checks.length, pr.baseRef)}
       </p>
       {confirming && !merged && blocker == null && (
         <Callout tone="warn">

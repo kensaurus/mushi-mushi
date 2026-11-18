@@ -26,6 +26,7 @@ import { OfflineBanner } from './components/OfflineBanner'
 import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
+import { setupCopilotRedirectTarget } from './lib/setupCopilotView'
 
 // SentryRoutes = Routes (no wrapper).
 //
@@ -179,9 +180,7 @@ function NotFoundPage() {
 
 function SetupCopilotRedirect() {
   const { search } = useLocation()
-  const params = new URLSearchParams(search)
-  params.set('tab', 'diagnose')
-  return <Navigate to={`/onboarding?${params.toString()}`} replace />
+  return <Navigate to={setupCopilotRedirectTarget(search)} replace />
 }
 
 /**
@@ -428,7 +427,7 @@ export function App() {
                   <Route path="/journeys" element={<JourneysPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />
-                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
+                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab?tab=fine-tuning" replace />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />

@@ -313,7 +313,17 @@ export interface FixOnceRow {
   /** What opens under the row: the gate, and one sample of the finding. */
   gateLabel: string | null
   explanation: string
+  /** The fix prompt the row's button copies; '' when the row's action is a link (`to`) or none. */
   fix: string
+  /** The row's action is a link instead of a copied prompt ("Upgrade" → /connect). */
+  to?: string
+  /** A tooltip per app instead of its name ("glot.it · on 1.33.0"). */
+  appTitles?: Record<string, string>
+}
+
+/** @internal Worst first for any FixOnceRow list: serious, then apps affected, then title. Exported for the one problem list. */
+export function sortProblemRows<T extends FixOnceRow>(rows: T[]): T[] {
+  return sortGroups(rows)
 }
 
 /**

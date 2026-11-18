@@ -1,10 +1,7 @@
 import { Badge, SegmentedControl } from '../ui'
 import { Card } from '../../components/ui'
 import { McpToolCard, scopeBadgeTone } from './McpToolCard'
-import {
-  ContainedBlock,
-  SignalChip,
-} from '../report-detail/ReportSurface'
+import { SignalChip } from '../report-detail/ReportSurface'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
@@ -71,7 +68,7 @@ export function McpCatalogPanel({
             <SignalChip tone="info" className="mb-2 uppercase tracking-wider font-medium">
               Read — always safe to loop on ({readTools.length})
             </SignalChip>
-            <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-read">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-read">
               {readTools.map((tool) => (
                 <McpToolCard key={tool.name} tool={tool} />
               ))}
@@ -81,7 +78,7 @@ export function McpCatalogPanel({
             <SignalChip tone="warn" className="mb-2 uppercase tracking-wider font-medium">
               Write — mutate project state ({writeTools.length})
             </SignalChip>
-            <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-write">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-write">
               {writeTools.map((tool) => (
                 <McpToolCard key={tool.name} tool={tool} />
               ))}
@@ -104,9 +101,7 @@ export function McpCatalogPanel({
                 </SignalChip>
                 <Badge className={scopeBadgeTone(r.scope)}>{r.scope}</Badge>
               </div>
-              <ContainedBlock tone="muted" className="text-xs leading-snug">
-                {r.description}
-              </ContainedBlock>
+              <p className="text-xs leading-snug text-fg-muted [overflow-wrap:anywhere]">{r.description}</p>
             </div>
           ))}
         </div>
@@ -124,9 +119,7 @@ export function McpCatalogPanel({
               <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5 mb-1">
                 /{p.name}
               </SignalChip>
-              <ContainedBlock tone="muted" className="text-xs leading-snug">
-                {p.description}
-              </ContainedBlock>
+              <p className="text-xs leading-snug text-fg-muted [overflow-wrap:anywhere]">{p.description}</p>
             </div>
           ))}
         </div>

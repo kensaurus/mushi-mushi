@@ -113,6 +113,14 @@ describe('SkillRunsCard app picker', () => {
     expect(mocks.loadSkillRuns).toHaveBeenCalledWith()
   })
 
+  // Round-2 review: "Start skill run" was greyed with no reason given.
+  it('says why Start skill run is greyed out', async () => {
+    await render('/credits')
+    const start = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Start skill run')!
+    expect(start.disabled).toBe(true)
+    expect(host.querySelector('[data-testid="skill-run-disabled-reason"]')?.textContent).toBe('Say what to work on first.')
+  })
+
   it('starts on the stored app when the URL has no project', async () => {
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, GLOT)
     await render('/credits?apps=all')
@@ -192,8 +200,9 @@ describe('SkillRunsCard finished runs', () => {
     await render('/credits')
     const stoppedGroup = host.querySelector<HTMLDetailsElement>('[data-testid="skill-runs-stopped"]')!
     expect(stoppedGroup.open).toBe(false)
-    expect(stoppedGroup.querySelector('summary')!.textContent).toBe('Stopped2')
-    expect(host.querySelector('[data-testid="skill-runs-done"] summary')!.textContent).toBe('Done1')
+    // Each fold says what its count means ("Stopped 18" was unexplained, round-2 review).
+    expect(stoppedGroup.querySelector('summary')!.textContent).toBe('Stopped2runs that ended early: stopped, a round not merged, or a limit hit')
+    expect(host.querySelector('[data-testid="skill-runs-done"] summary')!.textContent).toBe('Done1runs that finished')
     // The running one is outside the folds, with its Stop button.
     const live = Array.from(host.querySelectorAll('[data-testid="skill-runs"] > ul li'))
     expect(live).toHaveLength(1)

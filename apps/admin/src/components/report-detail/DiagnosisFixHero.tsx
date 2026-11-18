@@ -27,8 +27,8 @@ import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
 import {
   CATEGORY_LABELS,
-  confidenceBadgeClass,
 } from '../../lib/tokens'
+import { confidenceChipTone } from './categoryTone'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { FixWithAgentPanel } from './FixWithAgentPanel'
 import { modelLine } from '../../lib/reportInternals'
@@ -90,7 +90,7 @@ export function DiagnosisFixHero({
               {categoryText}
             </Badge>
             <Badge
-              className={confidenceBadgeClass(conf)}
+              className={confidenceChipTone(conf)}
               title={conf != null ? `Classifier confidence: ${(conf * 100).toFixed(1)}%` : 'No confidence score'}
             >
               {confLabel} sure

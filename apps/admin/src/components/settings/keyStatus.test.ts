@@ -3,6 +3,8 @@ import type { PoolKey } from './byokPool'
 import {
   keyStatusView,
   providerStatusView,
+  isReplacedKeyView,
+  duplicateKeyCopies,
   summarizeKeys,
   type LegacyKey,
 } from './keyStatus'
@@ -209,19 +211,46 @@ describe('providerStatusView', () => {
     expect(v.detail).toMatch(/· 1 old key to remove below$/)
   })
 
-  it('a working provider with a spare key out of quota still asks for attention', () => {
+  it('a working provider with a spare key out of quota still asks for attention, as a warning', () => {
     const v = providerStatusView(
       'anthropic',
       [pool(), pool({ id: 'k2', status: 'quota_exhausted', test_status: 'error_quota', cooldown_until: iso(H) })],
       [],
       opts,
     )
-    expect(v.state).toBe('attention')
+    // Round-2 review (2026-11-18): red "Needs attention" on a provider that
+    // works. Amber with the count; the broken key's own row stays red.
+    expect(v.state).toBe('expiring')
+    expect(v.label).toBe('1 key to fix')
+    expect(v.action).toBe('add_backup')
     expect(v.detail).toMatch(/^Working, but one key needs your attention/)
+  })
+
+  it('a replaced key is tidy-up, so it never draws red', () => {
+    const replaced = keyStatusView(pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' }), { pool: [pool(), pool({ id: 'k2', status: 'auth_failed', test_status: 'error_auth' })], now: NOW })
+    expect(isReplacedKeyView(replaced)).toBe(true)
+    const broken = keyStatusView(pool({ status: 'auth_failed', test_status: 'error_auth' }), { pool: [pool({ status: 'auth_failed', test_status: 'error_auth' })], now: NOW })
+    expect(isReplacedKeyView(broken)).toBe(false)
   })
 
   it('the only key failing makes the provider need attention with that key’s reason', () => {
     const v = providerStatusView('anthropic', [pool({ status: 'auth_failed', test_status: 'error_auth' })], [], opts)
     expect(v).toMatchObject({ state: 'attention', detail: 'The provider rejected this key — replace it.' })
+  })
+})
+
+describe('duplicateKeyCopies', () => {
+  it('marks the later copy of the same key, by provider and hint', () => {
+    const a = pool({ id: 'a', provider_slug: 'firecrawl', key_hint: 'fc-e1f5…7270', created_at: iso(-48 * H) })
+    const b = pool({ id: 'b', provider_slug: 'firecrawl', key_hint: 'fc-e1f5…7270', created_at: iso(-24 * H) })
+    const c = pool({ id: 'c', provider_slug: 'firecrawl', key_hint: 'fc-9999…0000' })
+    const other = pool({ id: 'd', provider_slug: 'openai', key_hint: 'fc-e1f5…7270' })
+    const copies = duplicateKeyCopies([b, c, a, other])
+    expect([...copies.keys()]).toEqual(['b'])
+    expect(copies.get('b')?.id).toBe('a')
+  })
+
+  it('never matches keys without a hint', () => {
+    expect(duplicateKeyCopies([pool({ id: 'a', key_hint: null }), pool({ id: 'b', key_hint: null })]).size).toBe(0)
   })
 })

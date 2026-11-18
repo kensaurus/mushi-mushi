@@ -134,7 +134,8 @@ describe('ConnectionStatus', () => {
     expect(status('working')).toBe('passed')
     expect(status('attention')).toBe('failed')
     expect(status('expiring')).toBe('slow')
-    expect(status('checking')).toBe('passed')
+    // Saved but never tested: hollow ○, never a passed ✓ (DESIGN-SYSTEM "Not checked yet").
+    expect(status('checking')).toBe('idle')
     expect(status('not_connected')).toBe('idle')
     // A check in flight (the card passes its own words) runs.
     const testing = render(<ConnectionStatus state="checking" label="Testing…" />).querySelector('[data-testid="status-pill"]')

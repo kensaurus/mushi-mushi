@@ -114,6 +114,30 @@ describe('SdkInstallKeyPanel rotation', () => {
     expect(legend.textContent).not.toContain('Cold: nothing')
   })
 
+  // Round-2 review (2026-11-18): the key used an hour ago read amber "Stale"
+  // and three rows each said "Never used".
+  it('draws a quiet key grey "Quiet" and groups never-used keys under one heading', async () => {
+    const hourAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    const quiet = { ...SDK_KEY, last_seen_at: hourAgo }
+    const never = (n: number) => ({ ...SDK_KEY, id: `5555555${n}-5555-4555-8555-555555555555`, key_prefix: `mushi_nev00${n}`, last_seen_at: null })
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: [{ id: PROJECT, api_keys: [never(1), quiet, never(2), never(3)] }] } }
+      return { ok: true, data: {} }
+    })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SdkInstallKeyPanel, { projectId: PROJECT, onRotatedKeyChange: () => {}, onError: () => {} })))
+    })
+    await flush()
+    const quietMark = container.querySelector('[data-key-status="stale"] [data-testid="status-pill"]')!
+    expect(quietMark.textContent).toContain('Quiet')
+    expect(quietMark.getAttribute('data-status')).toBe('idle')
+    expect(container.textContent).not.toContain('Stale')
+    const neverMarks = container.querySelectorAll('[data-key-status="never"]')
+    expect(neverMarks).toHaveLength(1)
+    expect(neverMarks[0].textContent).toContain('Never used · 3')
+    expect(container.querySelectorAll('[data-testid="sdk-key-row"]')).toHaveLength(4)
+  })
+
   it('has no project-wide "Rotate key" button, only one Rotate per key', async () => {
     await mount()
     expect(buttons().some((b) => b.textContent === 'Rotate key')).toBe(false)

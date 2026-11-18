@@ -42,11 +42,83 @@ import {
   type WriteResult,
 } from '../../lib/workers'
 
+/** Settings every lane shares, said once above the lanes; undefined where they differ. */
+export interface CommonLaneSettings {
+  model: string | null | undefined
+  concurrency: number | undefined
+  stopAt: string | null | undefined
+}
+
+/**
+ * What all lanes share (two or more lanes): each field is `undefined` when they differ. The same
+ * model, "Runs at once 1" and stop date sat in four inputs on every one of 20 lane cards (round-2
+ * review, 2026-11-18). Null when nothing is shared. @internal Exported for tests.
+ */
+export function commonLaneSettings(lanes: ReadonlyArray<Pick<WorkerLane, 'config'>>): CommonLaneSettings | null {
+  if (lanes.length < 2) return null
+  const same = <T,>(pick: (l: Pick<WorkerLane, 'config'>) => T): T | undefined => {
+    const first = pick(lanes[0]!)
+    return lanes.every((l) => pick(l) === first) ? first : undefined
+  }
+  const out: CommonLaneSettings = { model: same((l) => l.config.model ?? null), concurrency: same((l) => l.config.concurrency), stopAt: same((l) => l.config.stop_at ?? null) }
+  return out.model === undefined && out.concurrency === undefined && out.stopAt === undefined ? null : out
+}
+
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+
+/** "All 20 lanes: grok-4.7-xhigh-fast · 1 run at once · stop Dec 4." */
+export function commonSettingsLine(common: CommonLaneSettings, lanes: number): string {
+  const parts: string[] = []
+  if (common.model !== undefined) parts.push(common.model ?? "the agent's default model")
+  if (common.concurrency !== undefined) parts.push(`${common.concurrency} run${common.concurrency === 1 ? '' : 's'} at once`)
+  if (common.stopAt !== undefined) parts.push(common.stopAt ? `stop ${shortDate(common.stopAt)}` : 'no stop date')
+  return `All ${lanes} lanes: ${parts.join(' · ')}. A lane names only what differs; open its settings to change them.`
+}
+
+/** Normalised title: a queued report with the same title as one above it is a duplicate. */
+const titleKey = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ')
+
+/**
+ * For each queued report, the 1-based position of an earlier one with the same title, or null
+ * (queue items 104 and 109 were the same bug, round-2 review 2026-11-18). @internal Exported for tests.
+ */
+export function queueDuplicates(queue: ReadonlyArray<{ reportId: string; title: string }>): Array<number | null> {
+  const first = new Map<string, number>()
+  return queue.map((q, i) => {
+    const k = titleKey(q.title)
+    const at = first.get(k)
+    if (at != null) return at + 1
+    first.set(k, i)
+    return null
+  })
+}
+
+type RecentRun = WorkerLane['recent'][number]
+
+/**
+ * Last runs with the same outcome and the same error, grouped: ten "Failed · machine: git fetch
+ * failed: bad object …" rows were one problem (round-2 review, 2026-11-18). A run without a
+ * detail stands alone. Order is the newest run of each group. @internal Exported for tests.
+ */
+export function groupRecentRuns(recent: readonly RecentRun[]): Array<{ key: string; runs: RecentRun[] }> {
+  const groups = new Map<string, RecentRun[]>()
+  for (const r of recent) {
+    const key = r.detail ? `${r.outcome ?? ''}|${r.failureKind ?? ''}|${r.detail}` : `run:${r.claimId}`
+    groups.set(key, [...(groups.get(key) ?? []), r])
+  }
+  return [...groups].map(([key, runs]) => ({ key, runs }))
+}
+
+/** Queued reports shown before "Show all": 117 rows were 4,000 px of one lane (2026-11-18). */
+const QUEUE_SHOWN = 10
+
 interface Props {
   lane: WorkerLane
   host: WorkerHost | undefined
   now: number
   showApp: boolean
+  /** Settings every lane shares (said once above the lanes); this card names only what differs. */
+  common?: CommonLaneSettings | null
   onPatch: (lane: WorkerLane, patch: LaneSettings) => Promise<WriteResult>
   /** Add these to the queue's top or end (`add`), or replace the queue with this order. */
   onQueue: (lane: WorkerLane, reportIds: string[], add?: QueueAdd) => Promise<WriteResult>
@@ -137,7 +209,7 @@ function RunTitle({ reportId, title, className }: { reportId: string | null; tit
   )
 }
 
-export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onMove, onChanged }: Props) {
+export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatch, onQueue, onMove, onChanged }: Props) {
   const c = lane.config
   const [model, setModel] = useState(c.model ?? '')
   const [reviewModel, setReviewModel] = useState(lane.reviewModel ?? '')
@@ -149,7 +221,23 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
   const [pasted, setPasted] = useState('')
   const pastedIds = reportIdsIn(pasted)
   const modelError = model && !MODEL_RE.test(model) ? 'Letters, digits, ".", "_", ":" and "-" only.' : undefined
-  const state = c.paused ? 'paused' : c.drain ? 'draining' : String(lane.status.state ?? (host?.online ? 'starting' : 'offline'))
+  // The machine being offline wins: its last word ("idle") is stale and the lane takes nothing
+  // (lanes read "idle" and "Taking reports" on an offline machine, round-2 review 2026-11-18).
+  // A stop date in the past stops the lane too; it was not flagged.
+  const offline = !host || !host.online || host.revoked
+  const stopped = !!c.stop_at && Date.parse(c.stop_at) <= now
+  const state = offline ? 'offline' : c.paused ? 'paused' : stopped ? 'stopped' : c.drain ? 'draining' : String(lane.status.state ?? 'starting')
+  const [showAllQueue, setShowAllQueue] = useState(false)
+  const dupes = queueDuplicates(lane.queue)
+  const dupeCount = dupes.filter((d) => d != null).length
+  const queueShown = showAllQueue ? lane.queue : lane.queue.slice(0, QUEUE_SHOWN)
+  // What this lane sets differently from the lanes' shared settings, for its settings summary.
+  const differs = [
+    common?.model === undefined || (c.model ?? null) !== common.model ? (c.model ?? "agent's default model") : null,
+    LANE_MODES.find((m) => m.value === c.mode)?.label ?? c.mode,
+    common?.concurrency === undefined || c.concurrency !== common.concurrency ? `${c.concurrency} at once` : null,
+    common?.stopAt === undefined || (c.stop_at ?? null) !== common.stopAt ? (c.stop_at ? `stop ${shortDate(c.stop_at)}` : 'no stop date') : null,
+  ].filter((x): x is string => !!x)
   const testId = `worker-lane-${lane.id}`
   const runs = laneRuns(lane)
   const followups = runs.filter((r) => r.kind === 'followup')
@@ -188,6 +276,20 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
         </span>
       </div>
 
+      {stopped && (
+        <p className="text-2xs font-medium text-warn-foreground" data-testid={`${testId}-stopped`}>
+          Its stop date passed on {shortDate(c.stop_at!)}: it takes nothing. Move or clear the date in its settings to start it again.
+        </p>
+      )}
+
+      {/* Settings fold under one summary line: four inputs per lane, 20 lanes, mostly the same values. */}
+      <details className="group" data-testid={`${testId}-settings`}>
+        <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-2 text-2xs text-fg-secondary hover:text-fg">
+          <span className="inline-block transition-transform group-open:rotate-90" aria-hidden="true">▸</span>
+          <span className="font-medium">Settings</span>
+          <span className="text-fg-muted" data-testid={`${testId}-settings-summary`}>{differs.join(' · ')}</span>
+        </summary>
+      <div className="mt-2 space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex items-end gap-1.5">
           <div className="min-w-0 flex-1">
@@ -297,9 +399,11 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
           </Btn>
         </div>
       )}
+      </div>
+      </details>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <Toggle label={c.paused ? 'Paused' : 'Taking reports'} checked={!c.paused} disabled={busy === 'paused'} onChange={(on) => void save('paused', { paused: !on })} />
+        <Toggle label={c.paused ? 'Paused' : offline ? `Takes reports once ${host?.hostname ?? 'its machine'} is back` : 'Taking reports'} checked={!c.paused} disabled={busy === 'paused'} onChange={(on) => void save('paused', { paused: !on })} />
         <Toggle label="Drain: finish what runs, take nothing new" checked={c.drain} disabled={busy === 'drain'} onChange={(on) => void save('drain', { drain: on })} />
         {note && (
           <span className={`text-2xs ${note.ok ? 'text-ok-foreground' : 'text-danger-foreground'}`} role="status" data-testid={`${testId}-note`}>
@@ -334,7 +438,9 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
 
       {takesQueue && (
       <div className="space-y-1">
-        <p className="text-2xs font-medium text-fg-secondary">Queue ({lane.queue.length}): taken first, top to bottom</p>
+        <p className="text-2xs font-medium text-fg-secondary">
+          Queue ({lane.queue.length}{dupeCount > 0 ? `, ${dupeCount} with the same title as one above` : ''}): taken first, top to bottom
+        </p>
         {c.mode === 'fix' && lane.queue.length > 0 && (
           <p className="text-2xs text-fg-muted">Queued reports go whatever the lane&apos;s &ldquo;Takes&rdquo; setting; fixed or dismissed ones leave on their own.</p>
         )}
@@ -346,12 +452,17 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
           </p>
         ) : (
           <ol className="divide-y divide-edge-subtle rounded-sm border border-edge-subtle" data-testid={`${testId}-queue`}>
-            {lane.queue.map((q, i) => (
+            {queueShown.map((q, i) => (
               <li key={q.reportId} className="flex items-center gap-2 px-2 py-1" data-testid={`${testId}-queue-${q.reportId}`}>
-                <span className="w-5 shrink-0 text-right text-2xs tabular-nums text-fg-faint">{i + 1}</span>
-                <Link to={`/reports/${q.reportId}`} className="min-w-0 flex-1 truncate text-xs text-fg hover:underline">
+                <span className="w-6 shrink-0 text-right text-2xs tabular-nums text-fg-faint">{i + 1}</span>
+                <Link to={`/reports/${q.reportId}`} className={`min-w-0 flex-1 truncate text-xs hover:underline ${dupes[i] != null ? 'text-fg-muted' : 'text-fg'}`}>
                   {q.title}
                 </Link>
+                {dupes[i] != null && (
+                  <span className="shrink-0 whitespace-nowrap text-2xs text-warn-foreground" data-testid={`${testId}-queue-${q.reportId}-dupe`} title="Same title as a report above: probably the same bug. Remove one.">
+                    same as #{dupes[i]}
+                  </span>
+                )}
                 {q.severity && <Badge tone="neutral">{q.severity}</Badge>}
                 <span className="flex shrink-0 gap-0.5">
                   <Btn size="sm" variant="ghost" aria-label="Move to the top: fix it next" title="Move to the top: fix it next" disabled={i === 0 || busy != null} loading={busy === `top:${q.reportId}`} onClick={() => void move(q.reportId, 'top')} data-testid={`${testId}-queue-${q.reportId}-top`}>
@@ -369,6 +480,13 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
                 </span>
               </li>
             ))}
+            {lane.queue.length > QUEUE_SHOWN && (
+              <li className="px-2 py-1">
+                <Btn size="sm" variant="ghost" onClick={() => setShowAllQueue((v) => !v)} data-testid={`${testId}-queue-toggle`}>
+                  {showAllQueue ? `Show the first ${QUEUE_SHOWN}` : `Show all ${lane.queue.length}`}
+                </Btn>
+              </li>
+            )}
           </ol>
         )}
         <div className="flex flex-wrap items-end gap-1.5">
@@ -412,32 +530,53 @@ export function WorkerLaneCard({ lane, host, now, showApp, onPatch, onQueue, onM
           <div className="overflow-x-auto">
             <table className="w-full min-w-120 text-left text-2xs" data-testid={`${testId}-recent`}>
               <tbody className="divide-y divide-edge-subtle">
-                {lane.recent.slice(0, 10).map((r) => (
-                  <tr key={r.claimId}>
-                    <td className="py-1 pr-2 align-top">
-                      <StatusPill
-                        status={runOutcomeStatus(r.outcome, r.failureKind)}
-                        label={`${OUTCOME_LABEL[r.outcome ?? ''] ?? r.outcome ?? 'ended'}${r.failureKind ? ` · ${r.failureKind === 'infra' ? 'machine' : 'code'}` : ''}`}
-                      />
-                    </td>
-                    <td className="max-w-xs py-1 pr-2 align-top">
-                      <RunTitle reportId={r.reportId} title={r.title} className="block truncate text-fg" />
-                      {r.detail && (
-                        <span className="block truncate text-fg-muted" title={r.detail}>
-                          <VitalText text={r.detail} />
+                {groupRecentRuns(lane.recent.slice(0, 10)).map(({ key, runs }) => {
+                  const r = runs[0]!
+                  return (
+                    <tr key={key} data-testid={runs.length > 1 ? `${testId}-recent-group` : undefined}>
+                      <td className="py-1 pr-2 align-top">
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <StatusPill
+                            status={runOutcomeStatus(r.outcome, r.failureKind)}
+                            label={`${OUTCOME_LABEL[r.outcome ?? ''] ?? r.outcome ?? 'ended'}${r.failureKind ? ` · ${r.failureKind === 'infra' ? 'machine' : 'code'}` : ''}`}
+                          />
+                          {runs.length > 1 && <span className="font-mono font-bold tabular-nums text-fg">×{runs.length}</span>}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-1 pr-2 align-top">
-                      {r.prUrl && (
-                        <a href={r.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand hover:underline">
-                          PR <IconExternalLink size={10} />
-                        </a>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap py-1 align-top text-fg-faint">{sinceLabel(r.finishedAt ?? r.claimedAt, now)}</td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="max-w-xs py-1 pr-2 align-top">
+                        {runs.length > 1 ? (
+                          <details className="group">
+                            <summary className="cursor-pointer list-none truncate text-fg hover:underline">{runs.length} runs ended with the same error</summary>
+                            <ul className="mt-0.5 space-y-0.5">
+                              {runs.map((x) => (
+                                <li key={x.claimId}>
+                                  <RunTitle reportId={x.reportId} title={x.title} className="block truncate text-fg-secondary" />
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : (
+                          <RunTitle reportId={r.reportId} title={r.title} className="block truncate text-fg" />
+                        )}
+                        {r.detail && (
+                          <span className="block truncate text-fg-muted" title={r.detail}>
+                            <VitalText text={r.detail} />
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 pr-2 align-top">
+                        {r.prUrl && (
+                          <a href={r.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand hover:underline">
+                            PR <IconExternalLink size={10} />
+                          </a>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap py-1 align-top text-fg-faint">
+                        {runs.length > 1 ? `latest ${sinceLabel(r.finishedAt ?? r.claimedAt, now)}` : sinceLabel(r.finishedAt ?? r.claimedAt, now)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

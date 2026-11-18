@@ -134,7 +134,7 @@ function MetricItem({ metric }: { metric: PageStatusMetric }) {
   return (
     <div className="flex min-w-0 flex-col-reverse">
       <dt className="flex items-center gap-1 text-2xs text-fg-muted">
-        <span className="truncate">{metric.label}</span>
+        <span className="leading-tight wrap-break-word">{metric.label}</span>
         {metric.hint ? <InfoHint content={metric.hint} /> : null}
       </dt>
       <dd className="m-0">

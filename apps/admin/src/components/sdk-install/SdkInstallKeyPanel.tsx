@@ -23,15 +23,19 @@ const VISIBLE_KEY_LIMIT = 4
 
 /** What each key mark means, behind the (i) beside the list. */
 const KEY_LEGEND =
-  'Healthy: the SDK used this key in the last hour. Stale: no activity in the last hour (normal for a quiet app). ' +
+  'Healthy: the SDK used this key in the last hour. Quiet: no activity in the last hour (normal for a low-traffic app). ' +
   'Cold: nothing for over 7 days, so the deploy may have stopped shipping the SDK. Never used: no app has used it yet. ' +
   'Revoke stale keys takes only the keys marked unused 7d+, never the one your app used last.'
 
-/** A key's health as a status mark (2026-11-18): ✓ live, ✕ wrong endpoint, ⧗ quiet, ○ never used, ⊘ off. */
-const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
+/**
+ * A key's health as a status mark (2026-11-18): ✓ live, ✕ wrong endpoint,
+ * ○ quiet (grey: an hour without traffic is normal), ⧗ cold 7d+, ○ never used, ⊘ off.
+ * @internal Exported for tests.
+ */
+export const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
   healthy: 'passed',
   'endpoint-mismatch': 'failed',
-  stale: 'slow',
+  stale: 'idle',
   cold: 'slow',
   never: 'idle',
   inactive: 'cancelled',
@@ -134,6 +138,10 @@ export function SdkInstallKeyPanel({
   }
 
   const visibleKeys = showAll ? activeKeys : activeKeys.slice(0, VISIBLE_KEY_LIMIT)
+  // Never-used keys sort last; two or more share one "Never used · N" heading
+  // instead of the same pill on every row (round-2 review 2026-11-18).
+  const neverIds = visibleKeys.filter((k) => k.created_at && !k.last_seen_at).map((k) => k.id)
+  const groupNever = neverIds.length >= 2
   const hiddenCount = activeKeys.length - visibleKeys.length
 
   /**
@@ -204,8 +212,18 @@ export function SdkInstallKeyPanel({
           <ul className={flat ? 'divide-y divide-edge-subtle' : 'space-y-1.5'} aria-label="Active API keys">
             {visibleKeys.map((k) => {
               const diag = k.created_at ? diagnoseKey(k, null) : null
+              const inNeverGroup = groupNever && diag?.status === 'never'
               return (
                 <li key={k.id}>
+                  {inNeverGroup && k.id === neverIds[0] && (
+                    <div className="flex items-center gap-1.5 pt-1.5" data-testid="sdk-key-never-group">
+                      <Tooltip content={diag.description} side="top">
+                        <span className="shrink-0" data-key-status="never">
+                          <StatusPill status={KEY_STATUS.never} label={`Never used · ${neverIds.length}`} />
+                        </span>
+                      </Tooltip>
+                    </div>
+                  )}
                   {/* The key chip never wraps (at 390px it broke one character
                       per line). Prefix and label share the first line; on a
                       phone the status and buttons move to a second one. */}
@@ -234,7 +252,7 @@ export function SdkInstallKeyPanel({
                       )}
                     </div>
                     <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                    {diag && (
+                    {diag && !inNeverGroup && (
                       <Tooltip content={diag.description} side="top">
                         <span className="shrink-0" data-key-status={diag.status}>
                           <StatusPill status={KEY_STATUS[diag.status]} label={diag.label} />

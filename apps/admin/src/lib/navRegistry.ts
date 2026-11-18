@@ -1002,7 +1002,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     sectionId: 'start',
     iconKey: 'catalog',
     inSidebar: false,
-    paletteDescription: 'Browse 70+ agent skills from kenji skills by category.',
+    paletteDescription: 'Browse the agent skills catalog by category.',
     paletteKeywords: ['catalog', 'skill catalog', 'cursor-kenji', 'kenji skills'],
     paletteGroup: 'Start',
   },
@@ -1098,10 +1098,10 @@ export function checkEntriesBySubGroup(subGroup: CheckSubGroupId): NavRegistryEn
  * Listed before registry matchers so `/reports/:id` wins over `/reports`.
  */
 const EXTRA_ROUTE_TITLE_MATCHERS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/reports\/[^/]+$/, 'Report'],
+  [/^\/reports\/[^/]+$/, 'Bug report'],
   [/^\/content\/[^/]+$/, 'Content checks'],
   [/^\/projects\/[^/]+\/qa-coverage\/[^/]+$/, 'Scheduled tests'],
-  [/^\/rewards\/tester-review$/, 'Tester rewards'],
+  [/^\/rewards\/tester-review$/, 'Review submissions'],
   [/^\/integrations$/, 'Integrations'],
   [/^\/fine-tuning$/, 'AI prompts'],
   [/^\/console$/, 'Home'],
@@ -1267,7 +1267,7 @@ function cycleStepForStage(stage: PdcaStageId): { step: number; title: string; h
 export function stageChipCopy(chip: 'overview' | PdcaStageId): { glyph: string; label: string; hint: string; ariaLabel: string } {
   if (chip === 'overview') {
     const hint = 'Everything that needs you across your bugs, fixes and releases.'
-    return { glyph: '∞', label: 'Overview', hint, ariaLabel: `Overview: ${hint}` }
+    return { glyph: '∞', label: 'Home', hint, ariaLabel: `Home: ${hint}` }
   }
   const { step, title, hint } = cycleStepForStage(chip)
   return { glyph: String(step), label: title, hint, ariaLabel: `Step ${step}: ${title}. ${hint}` }

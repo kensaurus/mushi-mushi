@@ -25,7 +25,6 @@ import { JudgePipelineGuide } from '../components/judge/JudgePipelineGuide'
 import {
   ActionPill,
   ActionPillRow,
-  ContainedBlock,
   InlineProof,
   SignalChip,
 } from '../components/report-detail/ReportSurface'
@@ -41,7 +40,6 @@ import {
   LineSparkline,
   Histogram,
 } from '../components/charts'
-import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
 import { describeJudgeRun, useJudgeRunPrefill, type JudgeRunResponse } from '../lib/judgeRun'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -60,6 +58,13 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ListPager } from '../components/ListPager'
 import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
 import { PageLoadError } from '../components/PageLoadError'
+import { BarCell } from '../components/signal/BarCell'
+import {
+  canDrawTrend,
+  groupJudgePrompts,
+  promptGradesLinked,
+  type JudgePromptRow,
+} from '../components/judge/judgePrompts'
 
 interface WeekData {
   week_start: string
@@ -132,18 +137,7 @@ const DIMENSION_TOOLTIPS = Object.fromEntries(
   SCORE_DIMENSIONS.map((d) => [d.short, d.description] as const),
 ) as Record<string, string>
 
-interface PromptRow {
-  id: string
-  project_id: string | null
-  stage: string
-  version: string
-  is_active: boolean
-  is_candidate: boolean
-  traffic_percentage: number
-  avg_judge_score: number | null
-  total_evaluations: number
-  created_at: string
-}
+type PromptRow = JudgePromptRow
 
 interface Distribution {
   buckets: number[]
@@ -178,64 +172,33 @@ function resolveJudgeTab(value: string | null): JudgeTabId {
   return 'overview'
 }
 
+/**
+ * One dimension of the latest week's grade: full name, a bar on a 0–100% scale, the number.
+ * The old chip-in-a-box layout cut "Component" to "Compone…" and needed a colour legend to
+ * be read (round-2 review, 2026-11-18); the name is written out, so no legend is needed.
+ */
 function ScoreBar({
   label,
   value,
-  color,
   description,
 }: {
   label: string
   value: number
-  color: string
   description?: string
 }) {
-  const inner = (
-    <ContainedBlock tone="muted" className="py-1.5">
-      <div className="flex items-center gap-2">
-        <SignalChip tone="neutral" className="w-20 justify-center cursor-help">
-          {label}
-        </SignalChip>
-        <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full motion-safe:transition-[transform,opacity] motion-safe:duration-500"
-            style={{ width: `${(value * 100).toFixed(0)}%`, backgroundColor: color }}
-          />
-        </div>
-        <SignalChip tone="brand" className="w-9 justify-center font-mono tabular-nums">
-          {(value * 100).toFixed(0)}%
-        </SignalChip>
-      </div>
-    </ContainedBlock>
-  )
-  if (!description) return inner
-  return <Tooltip content={description}>{inner}</Tooltip>
-}
-
-/**
- * Compact legend that maps a dimension's color swatch to its human meaning.
- * Renders inline next to the score-trend sparkline so first-time users can
- * decode the colored bars without clicking around. Uses the same
- * SCORE_DIMENSIONS source the column tooltips use.
- */
-function ScoreTrendLegend() {
-  return (
-    <div className="mt-3 flex flex-wrap gap-1.5">
-      {SCORE_DIMENSIONS.map((d) => (
-        <Tooltip key={d.key} content={d.description}>
-          <span className="inline-flex cursor-help">
-            <SignalChip tone="neutral" className="gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ backgroundColor: SCORE_COLORS[d.key] }}
-                aria-hidden="true"
-              />
-              {d.label}
-            </SignalChip>
-          </span>
-        </Tooltip>
-      ))}
+  const pct = Math.round(value * 100)
+  const row = (
+    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas): name | bar | number
+    <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)_3rem] items-center gap-2 py-1 text-xs">
+      <span className={`text-fg-secondary ${description ? 'cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2' : ''}`}>
+        {label}
+      </span>
+      <BarCell value={pct} max={100} label={`${label} ${pct}%`} widthClass="w-full" className="w-full" />
+      <span className="text-right tabular-nums text-fg">{pct}%</span>
     </div>
   )
+  if (!description) return row
+  return <Tooltip content={description}>{row}</Tooltip>
 }
 
 /**
@@ -257,7 +220,7 @@ function HeaderTip({ short, full }: { short: string; full?: string }) {
 }
 
 function ScorePill({ value }: { value: number | null }) {
-  if (value == null) return <span className="text-fg-faint text-2xs font-mono">—</span>
+  if (value == null) return <span className="text-fg-faint text-2xs" title="Not graded">–</span>
   // Judge scores calibrate differently to operational rates. The PM
   // baseline is "≥0.80 agrees with humans (green), ≥0.60 borderline
   // (amber), <0.60 regression (red)". Delegating to <Pct>/pctToneClass
@@ -269,8 +232,23 @@ function ScorePill({ value }: { value: number | null }) {
   // shared higher-better tone ramp with a "sometimes-80-is-fine" knob.
   const tone = value >= 0.8 ? 'text-ok' : value >= 0.6 ? 'text-warn' : 'text-danger'
   return (
-    <span className={`font-mono tabular-nums ${tone}`}>{(value * 100).toFixed(0)}%</span>
+    <span className={`tabular-nums ${tone}`}>{(value * 100).toFixed(0)}%</span>
   )
+}
+
+/**
+ * Severity is a property of the report, not a problem with the grade: "low" in amber read as a
+ * warning (round-2 review, 2026-11-18). Only high and critical keep the warning colour.
+ */
+function severityChipTone(severity: string): 'warn' | 'neutral' {
+  const v = severity.toLowerCase()
+  return v === 'critical' || v === 'high' || v === 'p0' || v === 'p1' ? 'warn' : 'neutral'
+}
+
+/** "2026-11-09" → "Nov 9". */
+function shortWeek(iso: string): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
 const JUDGE_RUN_BUTTON_ID = 'judge-run-now'
@@ -546,6 +524,7 @@ export function JudgePage() {
       : 0
 
   const totalEvals = weeks.reduce((s, w) => s + w.eval_count, 0)
+  const drawTrend = canDrawTrend(weeks.length)
   const trendValues = [...weeks].reverse().map((w) => w.avg_score)
   // Wave T.4.7b: Each weekly bucket exposes a `week` ISO. We pass them
   // aligned with `trendValues` so brushing the sparkline emits concrete
@@ -568,7 +547,7 @@ export function JudgePage() {
       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <Section
-          title="Score trend (12w)"
+          title={drawTrend ? 'Grade by week (12 weeks)' : 'Latest grade'}
           action={
             <ChartActionsMenu
               label="Score trend"
@@ -597,55 +576,64 @@ export function JudgePage() {
             />
           ) : (
             <>
-              <div className="relative">
-                <LineSparkline
-                  values={trendValues}
-                  timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
-                  onRangeSelect={
-                    trendTimestamps.every(Boolean)
-                      ? ({ fromIso, toIso }) => {
-                          // Drill into the evaluations graded in the selected
-                          // weeks, through the router (QA 107).
-                          setSearchParams((prev) => {
-                            const next = new URLSearchParams(prev)
-                            next.set('tab', 'evaluations')
-                            next.set('from', fromIso)
-                            next.set('to', toIso)
-                            return next
-                          })
-                        }
-                      : undefined
-                  }
-                  accent="text-brand"
-                  height={72}
-                  showAxes
-                  scaleToData
-                  valueFormat="percent"
-                  yAxisCaption="Score"
-                  xAxisCaption="Week"
-                  showPeakLabel
-                  ariaLabel="Weekly judge score trend"
-                />
-                {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
-                  <ChartAnnotations
-                    events={chartEvents}
-                    fromIso={trendTimestamps[0]}
-                    toIso={trendTimestamps[trendTimestamps.length - 1]}
-                    ariaLabel="Judge score annotations"
+              {drawTrend ? (
+                <div className="relative">
+                  <LineSparkline
+                    values={trendValues}
+                    timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
+                    onRangeSelect={
+                      trendTimestamps.every(Boolean)
+                        ? ({ fromIso, toIso }) => {
+                            // Drill into the evaluations graded in the selected
+                            // weeks, through the router (QA 107).
+                            setSearchParams((prev) => {
+                              const next = new URLSearchParams(prev)
+                              next.set('tab', 'evaluations')
+                              next.set('from', fromIso)
+                              next.set('to', toIso)
+                              return next
+                            })
+                          }
+                        : undefined
+                    }
+                    accent="text-brand"
+                    height={72}
+                    showAxes
+                    scaleToData
+                    valueFormat="percent"
+                    yAxisCaption="Score"
+                    xAxisCaption="Week"
+                    showPeakLabel
+                    ariaLabel="Weekly judge score trend"
                   />
-                )}
-              </div>
+                  {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
+                    <ChartAnnotations
+                      events={chartEvents}
+                      fromIso={trendTimestamps[0]}
+                      toIso={trendTimestamps[trendTimestamps.length - 1]}
+                      ariaLabel="Judge score annotations"
+                    />
+                  )}
+                </div>
+              ) : latest ? (
+                // One week drew a single dot at the top edge of an empty 12-week chart
+                // (round-2 review, 2026-11-18): under two weeks, say the number.
+                <p className="text-sm text-fg" data-testid="judge-trend-single">
+                  <span className="text-lg font-semibold tabular-nums">{Math.round(latest.avg_score * 100)}%</span>{' '}
+                  <span className="text-fg-secondary">
+                    average grade, week of {shortWeek(latest.week_start)} ({latest.eval_count} grade{latest.eval_count === 1 ? '' : 's'}).
+                  </span>{' '}
+                  <span className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</span>
+                </p>
+              ) : null}
               {latest && (
-                <>
-                  <div className="mt-3 space-y-1">
-                    <ScoreBar label="Overall" value={latest.avg_score} color={SCORE_COLORS.overall} description={DIMENSION_TOOLTIPS.Score} />
-                    <ScoreBar label="Accuracy" value={latest.avg_accuracy} color={SCORE_COLORS.accuracy} description={DIMENSION_TOOLTIPS.Acc} />
-                    <ScoreBar label="Severity" value={latest.avg_severity} color={SCORE_COLORS.severity} description={DIMENSION_TOOLTIPS.Sev} />
-                    <ScoreBar label="Component" value={latest.avg_component} color={SCORE_COLORS.component} description={DIMENSION_TOOLTIPS.Comp} />
-                    <ScoreBar label="Repro" value={latest.avg_repro} color={SCORE_COLORS.repro} description={DIMENSION_TOOLTIPS.Repro} />
-                  </div>
-                  <ScoreTrendLegend />
-                </>
+                <div className="mt-3" aria-label={drawTrend ? 'Latest week by dimension' : 'By dimension'}>
+                  <ScoreBar label="Overall" value={latest.avg_score} description={DIMENSION_TOOLTIPS.Score} />
+                  <ScoreBar label="Accuracy" value={latest.avg_accuracy} description={DIMENSION_TOOLTIPS.Acc} />
+                  <ScoreBar label="Severity" value={latest.avg_severity} description={DIMENSION_TOOLTIPS.Sev} />
+                  <ScoreBar label="Component" value={latest.avg_component} description={DIMENSION_TOOLTIPS.Comp} />
+                  <ScoreBar label="Repro steps" value={latest.avg_repro} description={DIMENSION_TOOLTIPS.Repro} />
+                </div>
               )}
             </>
           )}
@@ -677,7 +665,8 @@ export function JudgePage() {
         </Section>
       </div>
 
-      {weeks.length > 0 && (
+      {/* One week is already the number and bars above; the table starts at two. */}
+      {drawTrend && (
         <Section title="Weekly history">
           <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs">
@@ -701,7 +690,7 @@ export function JudgePage() {
                     <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_severity} /></td>
                     <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_component} /></td>
                     <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_repro} /></td>
-                    <td className="py-1.5 px-3 text-right font-mono tabular-nums">{w.eval_count}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{w.eval_count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -872,15 +861,18 @@ export function JudgePage() {
         </DisclosurePanel>
       )}
 
+      {/* Said once, on Overview: it repeated under every tab (round-2 review, 2026-11-18). */}
+      {activeTab === 'overview' && (
       <p className="text-xs text-fg-muted">
         Grading scores one report at a time. A bug pattern that keeps coming back across reports becomes a rule under{' '}
         <Link to="/lessons" className={LINK_ACCENT}>Lessons</Link>.
       </p>
+      )}
 
       {activeTab === 'trend' && trendPanel}
 
       {activeTab === 'prompts' && (
-      <Section title="Prompt leaderboard">
+      <Section title="Prompt versions by step">
         {prompts.length === 0 ? (
           <div className="space-y-2">
             <EmptySectionMessage
@@ -894,75 +886,18 @@ export function JudgePage() {
             </ActionPillRow>
           </div>
         ) : (
-          <ResponsiveTable className="-mx-3">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-fg-muted text-left border-b border-edge">
-                  <th className="py-1.5 px-3 font-medium">Stage</th>
-                  <th className="py-1.5 px-3 font-medium">Version</th>
-                  <th className="py-1.5 px-3 font-medium">Status</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Score</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Evals</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Traffic</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prompts.map((p) => {
-                  const isSelected =
-                    promptFilter?.version === p.version && promptFilter?.stage === p.stage
-                  const toggle = () => {
-                    const next = isSelected ? null : { version: p.version, stage: p.stage }
-                    setPromptFilter(next)
-                    if (next) setActiveTab('evaluations')
-                  }
-                  return (
-                    <tr
-                      key={p.id}
-                      onClick={toggle}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          toggle()
-                        }
-                      }}
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={isSelected}
-                      aria-label={`Filter recent evaluations by prompt ${p.version}`}
-                      title={
-                        isSelected
-                          ? 'Click to clear the filter'
-                          : `Click to filter Recent evaluations by ${p.version}`
-                      }
-                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-opacity hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
-                        isSelected ? 'bg-brand/10 text-fg' : ''
-                      }`}
-                    >
-                      <td className="py-1.5 px-3 font-mono text-fg-faint">{p.stage}</td>
-                      <td className="py-1.5 px-3 font-mono text-fg">{p.version}</td>
-                      <td className="py-1.5 px-3">
-                        {p.is_active && (
-                          <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/25">active</Badge>
-                        )}
-                        {p.is_candidate && (
-                          <Badge className="bg-info-muted/50 text-info-foreground border border-info/25 ml-1">candidate</Badge>
-                        )}
-                      </td>
-                      <td className="py-1.5 px-3 text-right">
-                        <ScorePill value={p.avg_judge_score} />
-                      </td>
-                      <td className="py-1.5 px-3 text-right font-mono tabular-nums">
-                        {p.total_evaluations}
-                      </td>
-                      <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-faint">
-                        {p.traffic_percentage}%
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </ResponsiveTable>
+          <JudgePromptTable
+            prompts={prompts}
+            totalEvaluations={stats.totalEvaluations}
+            selected={promptFilter}
+            onToggle={(p) => {
+              const isSelected = promptFilter?.version === p.version && promptFilter?.stage === p.stage
+              const next = isSelected ? null : { version: p.version, stage: p.stage }
+              setPromptFilter(next)
+              if (next) setActiveTab('evaluations')
+            }}
+            onOpenGrades={() => setActiveTab('evaluations')}
+          />
         )}
       </Section>
       )}
@@ -1049,29 +984,31 @@ export function JudgePage() {
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
                   <th className="py-1.5 px-3 font-medium">Report</th>
-                  <th className="py-1.5 px-3 font-medium">When</th>
-                  <th className="py-1.5 px-3 font-medium">Model</th>
-                  <th className="py-1.5 px-3 font-medium">Prompt</th>
+                  {/* Grades first, so a phone sees them before the table scrolls; the
+                      dimensions are written out (round-2 review: "Acc/Sev/Comp" read as code). */}
                   <th className="py-1.5 px-3 font-medium text-right">
                     <HeaderTip short="Score" />
                   </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Acc" />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Sev" />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Comp" />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Repro" />
-                  </th>
                   <th className="py-1.5 px-3 font-medium">
-                    <Tooltip content="Did the classifier agree with the user's own category submission? ✓ = agreed, ✗ = overrode the user's pick.">
+                    <Tooltip content="Did the grader agree with the diagnosis? ✓ agreed, ✗ it would have diagnosed the report differently.">
                       <span className="cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2">Agreed</span>
                     </Tooltip>
                   </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Category" full={DIMENSION_TOOLTIPS.Acc} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Severity" full={DIMENSION_TOOLTIPS.Sev} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Component" full={DIMENSION_TOOLTIPS.Comp} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Repro steps" full={DIMENSION_TOOLTIPS.Repro} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium">Prompt</th>
+                  <th className="py-1.5 px-3 font-medium">Model</th>
+                  <th className="py-1.5 px-3 font-medium">When</th>
                 </tr>
               </thead>
               <tbody>
@@ -1089,7 +1026,7 @@ export function JudgePage() {
                   return (
                     <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
                       {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-                      <td className="py-1.5 px-3 max-w-[22rem]">
+                      <td className="py-1.5 px-3 min-w-[11rem] max-w-[14rem] sm:max-w-[22rem]">
                         <Link
                           to={`/reports/${e.report_id}`}
                           className="text-accent-foreground hover:text-accent line-clamp-1 leading-snug"
@@ -1102,7 +1039,7 @@ export function JudgePage() {
                           {e.report_severity && (
                             <>
                               {' '}
-                              <SignalChip tone="warn" className="ml-1 normal-case font-sans">
+                              <SignalChip tone={severityChipTone(e.report_severity)} className="ml-1 normal-case font-sans">
                                 {e.report_severity}
                               </SignalChip>
                             </>
@@ -1116,8 +1053,23 @@ export function JudgePage() {
                           </Tooltip>
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-fg-faint text-2xs">
-                        <RelativeTime value={e.created_at} />
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.judge_score} /></td>
+                      <td className="py-1.5 px-3">
+                        {e.classification_agreed === true && (
+                          <span className="text-ok text-xs">✓</span>
+                        )}
+                        {e.classification_agreed === false && (
+                          <span className="text-warn-foreground text-xs" title="The grader would have diagnosed this report differently">✗</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.accuracy_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.severity_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.component_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.repro_score} /></td>
+                      <td className="py-1.5 px-3">
+                        <SignalChip tone="neutral" className="font-mono">
+                          {e.prompt_version ?? '—'}
+                        </SignalChip>
                       </td>
                       <td className="py-1.5 px-3 truncate max-w-48">
                         <SignalChip tone="neutral" className="font-mono">
@@ -1131,23 +1083,8 @@ export function JudgePage() {
                           </Tooltip>
                         )}
                       </td>
-                      <td className="py-1.5 px-3">
-                        <SignalChip tone="neutral" className="font-mono">
-                          {e.prompt_version ?? '—'}
-                        </SignalChip>
-                      </td>
-                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.judge_score} /></td>
-                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.accuracy_score} /></td>
-                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.severity_score} /></td>
-                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.component_score} /></td>
-                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.repro_score} /></td>
-                      <td className="py-1.5 px-3">
-                        {e.classification_agreed === true && (
-                          <span className="text-ok text-xs">✓</span>
-                        )}
-                        {e.classification_agreed === false && (
-                          <span className="text-danger text-xs">✗</span>
-                        )}
+                      <td className="py-1.5 px-3 text-fg-faint text-2xs">
+                        <RelativeTime value={e.created_at} />
                       </td>
                     </tr>
                   )
@@ -1180,6 +1117,131 @@ export function JudgePage() {
           onCancel={() => setRunConfirmOpen(false)}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * Prompt versions grouped by step (round-2 review, 2026-11-18): the step is named once, the
+ * version in use shows the share the tests leave it, and when grades exist but none is linked
+ * to a version the Score and Grades columns give way to one line instead of fifteen false
+ * zeros. Score and Grades sit right after the version so a phone sees them without scrolling.
+ */
+function JudgePromptTable({
+  prompts,
+  totalEvaluations,
+  selected,
+  onToggle,
+  onOpenGrades,
+}: {
+  prompts: readonly PromptRow[]
+  totalEvaluations: number
+  selected: { version: string; stage: string } | null
+  onToggle: (p: PromptRow) => void
+  onOpenGrades: () => void
+}) {
+  const { steps, baselineOnly } = groupJudgePrompts(prompts)
+  const linked = promptGradesLinked(prompts, totalEvaluations)
+  const colCount = linked ? 5 : 3
+  const renderRow = (p: PromptRow & { share: number }, label: string) => {
+    const isSelected = selected?.version === p.version && selected?.stage === p.stage
+    return (
+      <tr
+        key={p.id}
+        onClick={() => onToggle(p)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onToggle(p)
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-pressed={isSelected}
+        aria-label={`Filter grades by ${label} ${p.version}`}
+        title={isSelected ? 'Click to clear the filter' : `Show the grades for ${label} ${p.version}`}
+        className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-opacity hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
+          isSelected ? 'bg-brand/10 text-fg' : ''
+        }`}
+      >
+        <td className="whitespace-nowrap py-1.5 px-3 font-mono text-fg">{p.version}</td>
+        {linked && (
+          <>
+            <td className="py-1.5 px-3 text-right"><ScorePill value={p.avg_judge_score} /></td>
+            <td className="py-1.5 px-3 text-right tabular-nums">{p.total_evaluations}</td>
+          </>
+        )}
+        <td
+          className="py-1.5 px-3 text-right tabular-nums text-fg-secondary"
+          title={p.is_active ? 'What the tests in this step leave it.' : 'Share of reports routed to this test.'}
+        >
+          {p.share}%
+        </td>
+        <td className="whitespace-nowrap py-1.5 px-3">
+          {p.is_active ? (
+            <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/25">in use</Badge>
+          ) : p.is_candidate ? (
+            <Badge className="bg-info-muted/50 text-info-foreground border border-info/25">testing</Badge>
+          ) : (
+            <span className="text-2xs text-fg-faint">idle</span>
+          )}
+        </td>
+      </tr>
+    )
+  }
+  return (
+    <div className="space-y-2" data-testid="judge-prompt-table">
+      {!linked && (
+        <p className="text-xs text-fg-secondary" data-testid="judge-prompt-unlinked">
+          {totalEvaluations} grade{totalEvaluations === 1 ? ' is' : 's are'} not linked to a prompt version yet, so per-version scores are not shown.{' '}
+          <button type="button" onClick={onOpenGrades} className={`${LINK_ACCENT} underline-offset-2 hover:underline`}>
+            Open the grades
+          </button>
+        </p>
+      )}
+      <ResponsiveTable className="-mx-3">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-fg-muted text-left border-b border-edge">
+              <th className="py-1.5 px-3 font-medium">Version</th>
+              {linked && (
+                <>
+                  <th className="py-1.5 px-3 font-medium text-right">Score</th>
+                  <th className="py-1.5 px-3 font-medium text-right">Grades</th>
+                </>
+              )}
+              <th className="py-1.5 px-3 font-medium text-right">Traffic</th>
+              <th className="py-1.5 px-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          {steps.map((step) => (
+            <tbody key={step.stage} data-testid="judge-prompt-step">
+              <tr className="border-b border-edge-subtle bg-surface-overlay/30">
+                <th scope="rowgroup" colSpan={colCount} className="py-1 px-3 text-left text-2xs font-semibold text-fg">
+                  {step.label}
+                </th>
+              </tr>
+              {step.rows.map((p) => renderRow(p, step.label))}
+            </tbody>
+          ))}
+          {baselineOnly.length > 0 && (
+            <tbody data-testid="judge-prompt-baseline">
+              <tr className="text-fg-secondary">
+                <td colSpan={colCount} className="py-1.5 px-3">
+                  <details>
+                    <summary className="cursor-pointer text-xs">
+                      <span className="font-medium text-fg">{baselineOnly.length} steps</span> run one version each, nothing being tested
+                    </summary>
+                    <p className="mt-1 text-2xs leading-relaxed text-fg-secondary">
+                      {baselineOnly.map((st) => `${st.label} (${st.rows.map((r) => r.version).join(', ')})`).join(' · ')}
+                    </p>
+                  </details>
+                </td>
+              </tr>
+            </tbody>
+          )}
+        </table>
+      </ResponsiveTable>
     </div>
   )
 }

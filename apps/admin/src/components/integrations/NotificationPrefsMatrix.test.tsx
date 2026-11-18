@@ -50,9 +50,9 @@ describe('NotificationPrefsMatrix', () => {
     container.remove()
   })
 
-  async function render(): Promise<void> {
+  async function render(extra: { channelConnected?: boolean; onEventsOnChange?: (n: number | null) => void } = {}): Promise<void> {
     await act(async () => {
-      root.render(createElement(NotificationPrefsMatrix, { projectId: PROJECT }))
+      root.render(createElement(NotificationPrefsMatrix, { projectId: PROJECT, ...extra }))
       await flush()
     })
   }
@@ -116,5 +116,28 @@ describe('NotificationPrefsMatrix', () => {
     const body = JSON.parse((patch![1] as { body: string }).body) as { notification_prefs: Record<string, unknown> }
     expect(body.notification_prefs['fix.merged']).toBe(false)
     expect(body.notification_prefs.report_severity_min).toBe('high')
+  })
+
+  // Round-2 review 2026-11-18: eight toggles ON with no channel connected.
+  it('disables the toggles and Save until a channel exists, and says why', async () => {
+    api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: null } })
+    await render({ channelConnected: false })
+    expect(switches(container).every((t) => t.disabled)).toBe(true)
+    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')?.textContent).toContain('Connect Slack, Discord or Teams')
+    const save = Array.from(container.querySelectorAll('button')).find((b) => /Save preferences/.test(b.textContent ?? ''))!
+    expect(save.disabled).toBe(true)
+  })
+
+  it('reports how many events are on once loaded, and null when the load fails', async () => {
+    const onEventsOnChange = vi.fn()
+    api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: { 'fix.failed': false } } })
+    await render({ onEventsOnChange })
+    expect(onEventsOnChange).toHaveBeenLastCalledWith(7)
+    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')).toBeNull()
+    api.apiFetch.mockResolvedValue({ ok: false, error: { code: 'INTERNAL' } })
+    act(() => root.unmount())
+    root = createRoot(container)
+    await render({ onEventsOnChange })
+    expect(onEventsOnChange).toHaveBeenLastCalledWith(null)
   })
 })

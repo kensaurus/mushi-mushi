@@ -16,6 +16,7 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Tooltip } from '../ui'
 import { closedRowAction } from './reportRowAction'
+import { variantChip } from './reportDisplayRows'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { reportDetailPath, reportPermalink } from '../../lib/reportUrl'
@@ -60,6 +61,8 @@ interface Props {
   /** When >1, this row is the canonical (newest) of a fingerprint group with
    *  N siblings. Renders the expand chevron + "+N variants" chip. */
   variantCount?: number
+  /** Apps the group spans (canonical rows only). */
+  appCount?: number
   /** Whether the canonical row's siblings are currently expanded. */
   expanded?: boolean
   /** True when this row is rendered as a variant under an expanded canonical. */
@@ -88,6 +91,7 @@ function ReportRowViewInner({
   isCursor,
   dispatchBusy = false,
   variantCount,
+  appCount = 1,
   expanded = false,
   isVariant = false,
   onToggleGroup,
@@ -219,8 +223,10 @@ function ReportRowViewInner({
             >
               <div className="w-full min-w-0 flex-1 min-w-0">
                 {/* Primary display: friendly title (non-engineer headline) */}
+                {/* Two lines, then clipped: one line cut titles mid-word
+                    ("…projects-to-organizations relatio…", R2 sweep 2026-11-18). */}
                 <div
-                  className="truncate text-sm font-medium leading-snug text-fg"
+                  className="line-clamp-2 break-words text-sm font-medium leading-snug text-fg"
                   title={typeof displayTitle === 'string' ? displayTitle : undefined}
                 >
                   {/* Where it came from: a user, Sentry, an alarm, a setup task, a test or a check. */}
@@ -264,9 +270,9 @@ function ReportRowViewInner({
                 </Tooltip>
               )}
               {variantCount && variantCount > 1 && !isVariant && (
-                <Tooltip portal content={`${variantCount - 1} sibling reports share this fingerprint`}>
-                  <span className="shrink-0 rounded-sm px-1.5 py-px text-2xs font-mono text-fg-muted cursor-help">
-                    +{variantCount - 1}
+                <Tooltip portal content={variantChip(variantCount, appCount).tooltip}>
+                  <span className="shrink-0 whitespace-nowrap rounded-sm px-1.5 py-px text-2xs text-fg-muted cursor-help">
+                    {variantChip(variantCount, appCount).label}
                   </span>
                 </Tooltip>
               )}

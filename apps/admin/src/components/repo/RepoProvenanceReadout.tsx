@@ -15,34 +15,19 @@ export interface RepoProvenanceReadoutProps {
   validating?: boolean
 }
 
+// fetchedAt/validating stay in the props for callers; "Updated" is shown once, in the status line.
 export function RepoProvenanceReadout({
   stats,
   repoUrl,
-  fetchedAt,
-  validating,
 }: RepoProvenanceReadoutProps) {
   if (!stats.projectId || !repoUrl) return null
 
   const rows: DetailRowItem[] = [
-    {
-      label: 'Open PRs',
-      value: String(stats.prOpen),
-      tone: stats.prOpen > 0 ? 'info' : 'muted',
-    },
-    {
-      label: 'Merged',
-      value: String(stats.merged),
-      tone: stats.merged > 0 ? 'ok' : 'muted',
-    },
-    {
-      label: 'CI failing',
-      value: String(stats.ciFailed),
-      tone: stats.ciFailed > 0 ? 'danger' : 'ok',
-    },
+    // Open PRs, merged and failing CI are in the page status line; not repeated here.
     {
       label: 'Stuck fixes',
       value: String(stats.failedToOpen),
-      tone: stats.failedToOpen > 0 ? 'warn' : 'ok',
+      tone: stats.failedToOpen > 0 ? 'warn' : 'muted',
     },
     {
       label: 'Project ref',
@@ -54,7 +39,7 @@ export function RepoProvenanceReadout({
   ]
 
   return (
-    <ReadoutPanel title="Repo readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    <ReadoutPanel title="Repo readout">
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Primary connected repository and fix-worker branch posture — copy the repo URL for support tickets or CI wiring.
       </p>

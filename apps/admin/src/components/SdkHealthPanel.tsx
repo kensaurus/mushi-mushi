@@ -146,12 +146,13 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
                 : notes.length > 0
                   ? // Never "all good" while a check could not run: unknown is ○, not a pass.
                     (
+                      // No green mark beside "0 problems" while a check did not run
+                      // (round-2 review 2026-11-18): the not-checked mark leads.
                       <span className="inline-flex flex-wrap items-center gap-x-1.5" data-testid="sdk-health-tally">
-                        <StatusGlyph tone="ok" />
-                        <span>0 problems</span>
-                        <span aria-hidden="true">·</span>
                         <StatusGlyph tone="off" />
-                        <span>{notes.length} not checked</span>
+                        <span className="font-medium text-fg-secondary">{notes.length} not checked</span>
+                        <span aria-hidden="true">·</span>
+                        <span>0 problems in the checks that ran</span>
                       </span>
                     )
                   : 'No SDK problems found.'

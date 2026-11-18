@@ -268,39 +268,43 @@ export function SdkInstallCard({
           </p>
         </div>
       )}
-      {/* Where the key comes from, in one line, on Set up and on Connect. */}
-      {!snippetKey ? (
-        <p className="text-xs text-fg-secondary" data-testid="sdk-snippet-key-hint">
-          The snippet needs your SDK key, which is shown only once: press{' '}
-          <span className="font-medium text-fg">Make a key and fill it in</span> above.
-        </p>
-      ) : null}
-      {stackRepo && (
-        <p className="text-2xs text-fg-muted" data-testid="sdk-stack-note">
-          Matched to <span className="font-mono text-fg-secondary">{stackRepo}</span>:{' '}
-          {framework === 'react' && detectedBundler === 'vite'
-            ? 'React on Vite (key from .env.local).'
-            : framework === 'react' && detectedBundler === 'next'
-              ? 'React on Next.js (key from .env.local).'
-              : `${framework}, from its package.json.`}
-        </p>
-      )}
-
-      {/* Fastest paths first, the no-coding one before the terminal one
+      {/* Three install paths as one labelled list, not five stacked
+          paragraphs (round-2 review 2026-11-18). The no-coding path leads
           (ADR 0056: Lovable / Bolt lead wherever install paths are listed). */}
-      <div className="space-y-1 text-xs text-fg-secondary" data-testid="sdk-install-fast-paths">
-        <p>
-          <span className="font-medium text-fg">No coding?</span> Use the Script tag below, or pick Lovable or Bolt
-          under &ldquo;Where does your app run?&rdquo; for one line to paste.
-        </p>
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          <span>
-            <span className="font-medium text-fg">Have a terminal?</span> Run this in your app&apos;s folder. It signs
-            you in, installs the SDK and writes both values to your env file:
-          </span>
+      <dl
+        className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-xs text-fg-secondary"
+        data-testid="sdk-install-fast-paths"
+      >
+        {/* Where the key comes from, in one row, on Set up and on Connect. */}
+        {!snippetKey ? (
+          <>
+            <dt className="font-medium text-fg">Key</dt>
+            <dd className="min-w-0" data-testid="sdk-snippet-key-hint">
+              Press <span className="font-medium text-fg">Make a key and fill it in</span> above; it is shown only once.
+            </dd>
+          </>
+        ) : null}
+        <dt className="font-medium text-fg">No coding</dt>
+        <dd className="min-w-0">Script tag below, or Lovable / Bolt under &ldquo;Where does your app run?&rdquo;</dd>
+        <dt className="font-medium text-fg">Terminal</dt>
+        <dd className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
           <CodeValue value="npx mushi-mushi" inline />
-        </p>
-      </div>
+          <span className="text-fg-muted">signs you in, installs the SDK, writes your env file</span>
+        </dd>
+        {stackRepo && (
+          <>
+            <dt className="font-medium text-fg">Detected</dt>
+            <dd className="min-w-0 text-fg-muted" data-testid="sdk-stack-note">
+              {framework === 'react' && detectedBundler === 'vite'
+                ? 'React on Vite (key from .env.local)'
+                : framework === 'react' && detectedBundler === 'next'
+                  ? 'React on Next.js (key from .env.local)'
+                  : `${framework}, from its package.json`}{' '}
+              in <span className="break-words font-mono text-fg-secondary">{stackRepo}</span>
+            </dd>
+          </>
+        )}
+      </dl>
 
       <div className="@container/sdk">
       {/* Compact (setup): snippet first, one column, widget settings folded

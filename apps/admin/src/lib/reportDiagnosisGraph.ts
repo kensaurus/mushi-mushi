@@ -22,6 +22,7 @@
  */
 
 import { NEEDS_LOOK_BELOW, type DiagnosisGraph, type DiagnosisNode } from './reportDiagnosisModel'
+import { reportDiagnosisView } from './reportDiagnosis'
 import { checkNodes, diagnosisNodes, evidenceNodes, fixNodes, signalNodes } from './reportDiagnosisNodes'
 import type { ReportDetail } from '../components/report-detail/types'
 
@@ -34,6 +35,9 @@ function verdictFor(report: ReportDetail, byId: Map<string, DiagnosisNode>): Dia
   if (cause?.state === 'failed') return { tone: 'danger', label: 'Diagnosis failed' }
   if (cause?.state === 'pending') return { tone: 'info', label: 'Diagnosis in progress' }
   if (judge?.title.startsWith('Judge disagrees')) return { tone: 'warn', label: 'Judge disagrees: check the triage' }
+  // Only the first check ran: it is sure of the kind of bug, not of a cause.
+  // "Confident diagnosis" over "no full diagnosis" contradicted itself.
+  if (reportDiagnosisView(report).kind === 'stage1_only') return { tone: 'info', label: 'Sorted; cause not diagnosed' }
   const confident = cause?.confidence != null && cause.confidence >= NEEDS_LOOK_BELOW
   if (confident && judge?.state === 'ok') return { tone: 'ok', label: 'Diagnosis confirmed by the judge' }
   if (confident) return { tone: 'info', label: 'Confident diagnosis, not graded yet' }

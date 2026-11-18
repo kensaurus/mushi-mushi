@@ -159,6 +159,19 @@ export function captureMode(
   }
 }
 
+/**
+ * True when the capture chip only repeats the source tag in front of the
+ * title: "◆ Sentry" + "sentry", "● User report" + "user", "◎ Mushi Mushi
+ * check" + "mushi" sat on every row of the Bugs list (R2 sweep 2026-11-18).
+ * The chip stays when it adds something (auto, server, shake, a trigger).
+ */
+export function captureRestatesSource(captureLabel: string, sourceKind: string): boolean {
+  if (captureLabel === 'sentry') return sourceKind === 'sentry'
+  if (captureLabel === 'user') return sourceKind === 'user'
+  if (captureLabel === 'mushi') return sourceKind === 'check'
+  return false
+}
+
 export function reporterWho(row: ReportRow): { label: string; tooltip: string; verified?: boolean } {
   const job = mushiJobFiler(row)
   if (job) return { label: job.label, tooltip: `Mushi Mushi's ${job.label} (${job.job}) filed this report.` }

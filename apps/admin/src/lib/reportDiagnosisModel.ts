@@ -15,8 +15,13 @@ export const DIAGNOSIS_LANES: ReadonlyArray<{ id: DiagnosisLane; label: string; 
   { id: 'fix', label: 'Fix', hint: 'What was tried, what is next' },
 ]
 
-/** observed: a fact; ok / weak / failed: a claim and how it held up; pending: not there yet; open: a step for you. */
-type DiagnosisNodeState = 'observed' | 'ok' | 'weak' | 'failed' | 'pending' | 'open' | 'done'
+/**
+ * observed: a fact; ok / weak / failed: a claim and how it held up; pending:
+ * running now; unchecked: never checked and nothing running (the judge grades
+ * a sample, so most reports are never graded: "Not graded yet · in progress"
+ * said both, R2 sweep 2026-11-18); open: a step for you.
+ */
+type DiagnosisNodeState = 'observed' | 'ok' | 'weak' | 'failed' | 'pending' | 'unchecked' | 'open' | 'done'
 
 export interface DiagnosisNode {
   id: string

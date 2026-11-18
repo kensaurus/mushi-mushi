@@ -23,6 +23,8 @@ import { plainApiError } from '../lib/humanizeApiError'
 import { EmptyState, ErrorAlert, Badge, Btn, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { TesterSubmissionCard } from '../components/report-detail/TesterSubmissionCard'
+import { usePageData } from '../lib/usePageData'
+import { listingState, reviewEmptyCopy } from '../components/rewards/rewardsView'
 
 interface QueueItem {
   id: string
@@ -99,9 +101,17 @@ export function TesterSubmissionsReviewPage() {
     void load()
   }
 
+  // Whether testers can reach the app at all: the page used to never say the listing
+  // was unpublished, and the Accepted filter told you to "Publish your app" (2026-11-18).
+  const listingQuery = usePageData<{ visibility: 'draft' | 'public' | 'paused' } | null>(
+    projectId ? `/v1/admin/published-apps/${projectId}` : null,
+  )
+  const listing = listingQuery.loading ? 'unknown' : listingState(listingQuery.data, listingQuery.error)
+  const empty = reviewEmptyCopy(status, listing)
+
   usePublishPageContext({
     route: '/rewards/tester-review',
-    title: 'Tester submissions',
+    title: 'Review submissions',
     summary: `${total} ${status === 'all' ? '' : `${status} `}submission${total === 1 ? '' : 's'}`,
     filters: { status, page: String(page) },
   })
@@ -117,8 +127,9 @@ export function TesterSubmissionsReviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Named like the Bounties button that opens it; the crumb's "Tester rewards" is its parent. */}
       <PageHeaderBar
-        title="Tester submissions"
+        title="Review submissions"
 
         helpTitle="About tester submissions"
         helpWhatIsIt="Org-scoped reviewer queue for bug reports submitted via Mushi Mushi Bounties — accept, mark informative, duplicate, or spam, and award points."
@@ -133,9 +144,22 @@ export function TesterSubmissionsReviewPage() {
           to="/rewards?tab=publishing"
           className="text-xs font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity shrink-0"
         >
-          ← Marketplace settings
+          ← Tester rewards · Bounties
         </Link>
       </PageHeaderBar>
+
+      {listing === 'unpublished' && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-secondary" role="status" data-testid="tester-review-unpublished">
+          <span aria-hidden="true" className="text-fg-faint">○</span>
+          <span>Your listing is not published, so testers cannot send submissions yet.</span>
+          <Link
+            to="/rewards?tab=publishing"
+            className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+          >
+            Publish it on Bounties
+          </Link>
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
@@ -159,22 +183,7 @@ export function TesterSubmissionsReviewPage() {
       {!loading && error && <ErrorAlert message={error} onRetry={load} />}
 
       {!loading && !error && items.length === 0 && (
-        <EmptyState
-          title={status === 'pending' ? 'Nothing to review' : 'No submissions yet'}
-          description={
-            status === 'pending'
-              ? 'When testers submit bugs for your published app, they appear here for grading.'
-              : 'Publish your app on the marketplace and invite testers to start receiving reports.'
-          }
-          action={
-            <Link
-              to="/rewards?tab=publishing"
-              className="text-sm font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
-            >
-              Open marketplace listing →
-            </Link>
-          }
-        />
+        <EmptyState title={empty.title} description={empty.description} />
       )}
 
       {!loading && !error && items.length > 0 && (

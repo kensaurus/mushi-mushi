@@ -124,10 +124,12 @@ interface MembersResponse {
   invitations: Invitation[]
 }
 
+// A role is a fact, not a status: no amber "owner" or green "member"
+// (round-2 review 2026-11-18; red/amber/green mean failure/warning/passing).
 const ROLE_TONE: Record<OrgRole, string> = {
-  owner: CHIP_TONE.warnSubtle,
-  admin: CHIP_TONE.brand,
-  member: CHIP_TONE.okSubtle,
+  owner: 'bg-surface-overlay text-fg font-semibold',
+  admin: 'bg-surface-overlay text-fg-secondary',
+  member: 'bg-surface-overlay text-fg-secondary',
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
@@ -147,7 +149,7 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
   founding_owner: {
     label: 'Founder',
     tooltip: 'Created this organization. Has been here since day one.',
-    tone: CHIP_TONE.warnSubtle,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
   // "Invited" in a status colour beside "Active 22 hours ago" read as a
   // pending invite. It is how they joined: a plain word, no status colour.
@@ -159,7 +161,7 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
   sso: {
     label: 'SSO',
     tooltip: 'Provisioned through your identity provider (SCIM/OIDC).',
-    tone: CHIP_TONE.okSubtle,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
   direct_admin: {
     label: 'Direct',
@@ -333,7 +335,8 @@ export function OrganizationSettingsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'roster' as const, label: 'Roster', count: stats.memberCount || undefined },
+      // No count on Roster: the Seats number above is the one member count.
+      { id: 'roster' as const, label: 'Roster' },
       {
         id: 'invites' as const,
         label: 'Invites',
@@ -662,7 +665,8 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
+        {/* The plan name is not a status: neutral unless teams are locked. */}
+        <Badge className={teamsEnabled ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle}>
           {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeaderBar>
@@ -675,7 +679,8 @@ export function OrganizationSettingsPage() {
               <MembersStatusBanner
                 stats={stats}
                 teamsEnabled={teamsEnabled}
-                onInvitesTab={() => setTab('invites')}
+                // On the Invites tab the form is right there: no second "Invite teammate".
+                onInvitesTab={activeTab === 'invites' ? undefined : () => setTab('invites')}
               />
             ),
           },
@@ -755,9 +760,9 @@ export function OrganizationSettingsPage() {
             </p>
           </div>
           {data?.organization?.slug && (
-            <code className="text-2xs font-mono text-fg-faint" title="Team handle (immutable)">
-              {data.organization.slug}
-            </code>
+            <span className="text-2xs text-fg-muted" title="Used in shareable links; it does not change when you rename the team.">
+              Link name <code className="font-mono text-fg-secondary">{data.organization.slug}</code>
+            </span>
           )}
         </div>
         {canRename ? (
@@ -784,11 +789,9 @@ export function OrganizationSettingsPage() {
                   renamingOrg || !orgNameDraft.trim() || orgNameDraft.trim() === orgName
                 }
                 loading={renamingOrg}
-                aria-label="Save team name"
                 title="Save team name"
-                className="px-2"
               >
-                <IconCheck />
+                Save
               </Btn>
               {orgNameDraft !== orgName && !renamingOrg && (
                 <Btn
@@ -865,9 +868,10 @@ export function OrganizationSettingsPage() {
               disabled={!teamsEnabled || !canManage}
             />
             <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as Invitation['role'])} disabled={!teamsEnabled || !canManage}>
-              <option value="admin">Admin — manage team + all projects</option>
-              <option value="member">Member — triage and fix work</option>
-              <option value="viewer">Viewer — read-only</option>
+              {/* Short names: the line under the form spells out the chosen role. */}
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
             </SelectField>
             <div className="flex items-end">
               {!canManage && teamsEnabled ? (
@@ -950,16 +954,8 @@ export function OrganizationSettingsPage() {
         </p>
       </Card>
 
-      {visibleInvitations.length === 0 ? (
-        <EmptyState
-          title="No pending invitations"
-          description={
-            teamsEnabled && canManage
-              ? 'Send an invite above — pending rows appear here with resend and copy-link actions.'
-              : 'Pending invitations show here once teams is enabled and you have admin access.'
-          }
-        />
-      ) : (
+      {/* No empty box: "Everyone you invited has joined" above already says there are none. */}
+      {visibleInvitations.length === 0 ? null : (
         <Card className="p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>

@@ -82,13 +82,16 @@ export function UxCloudRunCard({ projectId, embedded = false }: { projectId: str
   const Shell = embedded ? 'div' : Card
   return (
     <Shell className={embedded ? 'flex flex-col gap-3' : 'flex flex-col gap-3 p-4'}>
-      <div>
-        {!embedded && <h2 className="text-sm font-semibold text-fg">Run in the cloud</h2>}
-        <p className="text-xs text-fg-secondary">
-          Runs on your repo’s GitHub Actions with a Cursor Cloud agent and opens one draft PR. It sees your app signed
-          out. Needs <code className="font-mono">.github/workflows/mushi-ux.yml</code>.
-        </p>
-      </div>
+      {/* Embedded, the start card's steps already say where it runs and what it needs. */}
+      {!embedded && (
+        <div>
+          <h2 className="text-sm font-semibold text-fg">Run in the cloud</h2>
+          <p className="text-xs text-fg-secondary">
+            Runs on your repo’s GitHub Actions with a Cursor Cloud agent and opens one draft PR. It sees your app signed
+            out. Needs <code className="whitespace-nowrap font-mono">.github/workflows/mushi-ux.yml</code>.
+          </p>
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <SelectField label="Model" value={modelId} onChange={(e) => { setModelId(e.target.value); setParams({}) }}>
           <option value="">Cursor’s default</option>
@@ -120,12 +123,15 @@ export function UxCloudRunCard({ projectId, embedded = false }: { projectId: str
         </SelectField>
         <Input label="Screens" type="number" min={1} max={20} value={screens} onChange={(e) => setScreens(e.target.value)} />
       </div>
+      {/* The selects already show the model and skill; the line only speaks when
+          the model list could not load (round-2 sweep: "model: Cursor's default"
+          repeated the dropdown, in monospace). */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-mono text-2xs text-fg-muted">
-          {models.error
-            ? 'Add a Cursor key under Settings → AI keys to list your models; any id still works under “Other”.'
-            : `model: ${spec ?? 'Cursor’s default'}${skill ? ` · skill: ${skill}` : ''}`}
-        </p>
+        {models.error ? (
+          <p className="text-2xs text-fg-muted">Add a Cursor key under Settings → AI keys to list your models; any id still works under “Other”.</p>
+        ) : (
+          <span />
+        )}
         <Btn size="sm" onClick={start} loading={busy} disabled={busy || (modelId === OTHER && !customModel.trim())} leadingIcon={<IconPlay />}>
           Start a cloud run
         </Btn>

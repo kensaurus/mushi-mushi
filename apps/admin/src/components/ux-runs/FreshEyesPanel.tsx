@@ -178,29 +178,45 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
 
   return (
     <Card className="flex flex-col gap-3 p-4" data-testid="fresh-eyes-run-now">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-sm font-semibold text-fg">Run a first-time user test</h2>
-        <p className="max-w-3xl text-xs text-fg-secondary">
-          An AI that has never seen your app opens it and tries to do one thing, reading only what is on screen. Mushi Mushi times every step and shows you where it got stuck.
-        </p>
-      </div>
+      <h2 className="text-sm font-semibold text-fg">Run a first-time user test</h2>
 
-      <Callout tone={status.tone === 'ok' ? 'ok' : status.tone === 'warn' ? 'warn' : 'info'} className="text-xs">
-        <p className="text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
-        {status.setup === 'install' && (
-          <div className="mt-2 flex flex-col gap-2">
-            <CodeValue value="mushi worker install" />
-            <Link className="text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
-              Open Workers to see your computers →
-            </Link>
+      {/* Setup is step 1, above the form, when no computer can run the test
+          (round-2 sweep 2026-11-18: the blocker sat amber in the middle of the
+          card and the same instruction was repeated beside Run now). A machine
+          you set up that is now offline, paused or old is a warning; one never
+          set up is just the first step. */}
+      {!status.canRun ? (
+        <div
+          className={`flex gap-3 rounded-md border p-3 text-xs ${status.tone === 'warn' ? 'border-warn/40 bg-warn-muted' : 'border-edge-subtle bg-surface-overlay'}`}
+          data-testid="fresh-eyes-setup-step"
+        >
+          <StepNumber n={1} />
+          <div className="min-w-0 flex-1">
+            <p className="text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
+            {status.setup === 'install' && (
+              <div className="mt-2 flex flex-col gap-2">
+                <CodeValue value="mushi worker install" />
+                <Link className="text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
+                  Open Workers to see your computers →
+                </Link>
+              </div>
+            )}
+            {status.setup === 'workers' && (
+              <Link className="mt-1 inline-block text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
+                Open Workers →
+              </Link>
+            )}
           </div>
-        )}
-        {status.setup === 'workers' && (
-          <Link className="mt-1 inline-block text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
-            Open Workers →
-          </Link>
-        )}
-      </Callout>
+        </div>
+      ) : (
+        <p className="text-xs text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
+      )}
+
+      {!status.canRun && (
+        <p className="flex items-center gap-2 text-xs font-medium text-fg">
+          <StepNumber n={2} /> Choose what to test
+        </p>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <Input
@@ -219,7 +235,9 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           maxLength={120}
         />
         <div className="flex flex-col gap-1">
-          <span className="text-2xs font-medium text-fg-muted">Visitors</span>
+          <span className="text-2xs font-medium text-fg-muted" title="With 2 or more, an opinion such as “confusing” counts only when two visitors agree.">
+            Visitors
+          </span>
           <SegmentedControl
             size="sm"
             ariaLabel="Visitors"
@@ -228,7 +246,6 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
             onChange={setSessions}
             className="self-start"
           />
-          <span className="text-2xs text-fg-faint">With 2 or more, an opinion such as &quot;confusing&quot; counts only when two visitors agree.</span>
         </div>
       </div>
       {!successText.trim() && !url.startsWith('https://kensaur.us/mushi-mushi') && (
@@ -261,6 +278,14 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         )}
       </div>
     </Card>
+  )
+}
+
+function StepNumber({ n }: { n: number }) {
+  return (
+    <span aria-label={`Step ${n}`} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-edge text-2xs font-semibold tabular-nums text-fg">
+      {n}
+    </span>
   )
 }
 

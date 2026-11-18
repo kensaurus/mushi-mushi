@@ -41,15 +41,11 @@ export function StorageSnapshotStrip({ stats, statsFetchedAt, statsValidating, o
       sentence={verdict.sentence}
       action={action}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      // This app's numbers only: the team total is the usage table's own
+      // "All apps" row, so 63 is shown once, with its unit.
       metrics={[
         { label: 'Screenshots', value: stats.activeProjectObjects.toLocaleString(), to: storageLinks.screenshots, hint: 'Screenshots stored for this app.' },
         { label: 'Last saved', value: relativeTime(stats.activeProjectLastWrite) ?? 'Never', hint: 'When this app last stored a screenshot.' },
-        {
-          label: 'All apps',
-          value: stats.totalObjects.toLocaleString(),
-          to: storageLinks.screenshots,
-          hint: 'Screenshots stored across every app on your team.',
-        },
       ]}
     />
   )

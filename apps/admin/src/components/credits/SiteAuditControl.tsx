@@ -8,7 +8,6 @@
  *          without alt). One Firecrawl credit per page.
  */
 
-import { Link } from 'react-router-dom'
 import { useState } from 'react'
 import { Btn, FILTER_SELECT_CLASS, SegmentedControl, Toggle } from '../ui'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
@@ -169,11 +168,8 @@ export function SiteAuditControl({ projectId, name, audit, openFindings, url, fi
       )}
       {audit && <p className="text-xs text-fg-secondary">{auditLine(audit, openFindings)}</p>}
       {audit?.last_error && <p className="text-xs text-warn">{audit.last_error}</p>}
-      {on && openFindings > 0 && (
-        <p className="text-xs text-fg-muted">
-          Its reports are on <Link className="text-brand underline underline-offset-2" to="/reports">Reports</Link>; spend-down sends them to Cursor.
-        </p>
-      )}
+      {/* "Its reports are on Reports; spend-down sends them to Cursor" was repeated
+          under every app: it is said once, in the Firecrawl section's ⓘ. */}
     </div>
   )
 }

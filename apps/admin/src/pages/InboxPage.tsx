@@ -43,6 +43,9 @@ import {
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { PageLoadError } from '../components/PageLoadError'
+import type { PipelineData } from '../lib/pipeline'
+import { needsYouGroups } from '../lib/pipelineSignals'
+import { LANES_PATH, type WorkLanesData } from '../lib/workers'
 
 type Group = InboxCardGroup
 
@@ -97,6 +100,23 @@ export function InboxPage() {
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } =
     usePageData<DashboardData>('/v1/admin/dashboard')
+  // The same stuck pipeline groups Home's "Needs you" lists, and the local worker problems the
+  // Pipeline page shows: Home said "2 reports: triaged over 3 days ago" and Pipeline had two
+  // worker problems while this page listed one card and ticked "Integration health"
+  // (round-2 review, 2026-11-18).
+  const pipeline = usePageData<PipelineData>(activeProjectId ? `/v1/admin/pipeline?projectId=${encodeURIComponent(activeProjectId)}` : null, { scope: 'project' })
+  const lanes = usePageData<WorkLanesData>(LANES_PATH, { scope: 'enumeration' })
+  const pipelineNeedsYou = useMemo(() => {
+    if (!activeProjectId) return undefined
+    const stages = pipeline.data?.stages
+    if (!Array.isArray(stages)) return null
+    return needsYouGroups(stages).map((g) => ({ id: g.id, label: g.label, count: g.count }))
+  }, [activeProjectId, pipeline.data])
+  const workerProblems = useMemo(() => {
+    const flags = lanes.data?.flags
+    if (!lanes.data) return null
+    return (Array.isArray(flags) ? flags : []).filter((f) => f.projectId == null || f.projectId === activeProjectId).length
+  }, [lanes.data, activeProjectId])
   const cards = useMemo(
     () =>
       buildInboxCards(data ?? undefined, {
@@ -110,15 +130,19 @@ export function InboxPage() {
               integrationAmber: stats.integrationAmber,
             }
           : {}),
+        pipelineNeedsYou,
+        workerProblems,
       }),
-    [data, statsData, stats.judgeStale, stats.judgeStaleHours, stats.urgentOpenReports, stats.integrationRed, stats.integrationAmber],
+    [data, statsData, stats.judgeStale, stats.judgeStaleHours, stats.urgentOpenReports, stats.integrationRed, stats.integrationAmber, pipelineNeedsYou, workerProblems],
   )
   const [filter, setFilter] = useState<FilterValue>('all')
 
+  const reloadPipeline = pipeline.reload
   const reloadAll = useCallback(() => {
     reloadStats()
     reload()
-  }, [reloadStats, reload])
+    reloadPipeline()
+  }, [reloadStats, reload, reloadPipeline])
 
   // Not integration_health_history: probes write it about 150 times an hour
   // across the projects a user can see, which reloaded both of this page's
@@ -151,6 +175,8 @@ export function InboxPage() {
 
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)
+  // Only checked-and-passing cards are "settled"; nothing-yet and not-checked ones are listed, never counted as clear.
+  const settledCount = clearCards.filter((c) => c.state === 'pass').length
 
   const visibleOpen =
     filter === 'clear'
@@ -288,6 +314,8 @@ export function InboxPage() {
           options={tabOptions}
           ariaLabel="Inbox sections"
           size="sm"
+          // Its own width, not a full-width bordered strip holding three tabs (2026-11-18).
+          className="self-start"
         />
       )}
 
@@ -322,7 +350,7 @@ export function InboxPage() {
               label="Clear"
               active={filter === 'clear'}
               onClick={() => setFilter('clear')}
-              count={clearCards.length}
+              count={settledCount}
               tone={INBOX_FILTER_TONE.act}
             />
             <span aria-hidden className="mx-1 text-fg-faint">
@@ -332,13 +360,14 @@ export function InboxPage() {
               const groupOpen = openCards.filter((c) => c.group === g).length
               const groupTotal = cards.filter((c) => c.group === g).length
               if (groupTotal === 0) return null
+              // The open count only: a "1" on every stage chip counted cards, not work (2026-11-18).
               return (
                 <FilterChip
                   key={g}
                   label={GROUP_LABEL[g]}
                   active={filter === g}
                   onClick={() => setFilter(g)}
-                  count={groupTotal}
+                  count={groupOpen > 0 ? groupOpen : undefined}
                   tone={INBOX_FILTER_TONE[groupOpen > 0 ? 'do' : 'idle']}
                 />
               )
@@ -372,7 +401,7 @@ export function InboxPage() {
                   Clear stages
                 </h2>
                 <SignalChip tone="ok" className="tabular-nums">
-                  {visibleClear.length} settled
+                  {visibleClear.filter((c) => c.state === 'pass').length} settled
                 </SignalChip>
               </header>
               <ul className="flex flex-wrap gap-1.5">
@@ -424,9 +453,6 @@ export function InboxPage() {
                 <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
                   Recent activity
                 </h2>
-                <SignalChip tone="neutral" className="tabular-nums">
-                  Last {activity.length} events
-                </SignalChip>
               </header>
               <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised">
                 {activity.map((item) => (
@@ -453,21 +479,37 @@ export function InboxPage() {
   )
 }
 
+const SEVERITY_WORDS: ReadonlySet<string> = new Set(['critical', 'high', 'medium', 'low'])
+
+/**
+ * What an activity row's meta is: the server sends a report's severity (or its category or
+ * status) and a fix's model or agent. "Meta:" explained nothing (round-2 review, 2026-11-18).
+ * @internal Exported for tests.
+ */
+export function activityMetaLabel(item: Pick<ActivityItem, 'kind' | 'meta'>): string | null {
+  if (!item.meta) return null
+  if (item.kind === 'fix') return 'Agent'
+  return SEVERITY_WORDS.has(item.meta.toLowerCase()) ? 'Severity' : 'Status'
+}
+
 function ActivityFeedRow({ item }: { item: ActivityItem }) {
   const activeProjectId = useActiveProjectId()
   const to = item.kind === 'report' ? reportDetailPath(item.id, activeProjectId) : `/fixes`
+  const metaLabel = activityMetaLabel(item)
   return (
     <li>
+      {/* The title wraps (two lines at most) instead of cutting mid-word at 390 px; a report row
+          needs no "report" chip, only a fix row says what it is. */}
       <Link
         to={to}
-        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
+        className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-opacity"
       >
-        <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
-        <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
-        {item.meta ? (
-          <MetaChip label="Meta">{item.meta}</MetaChip>
-        ) : null}
-        <AgeChip at={item.at} />
+        {item.kind === 'fix' ? <SignalChip tone="neutral">fix</SignalChip> : null}
+        <span className="min-w-0 flex-1 basis-48 line-clamp-2 wrap-break-word text-fg-secondary">{item.label}</span>
+        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+          {item.meta && metaLabel ? <MetaChip label={metaLabel}>{item.meta}</MetaChip> : null}
+          <AgeChip at={item.at} />
+        </span>
       </Link>
     </li>
   )

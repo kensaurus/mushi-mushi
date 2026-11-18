@@ -31,3 +31,15 @@ describe('SQL query layout (2026-11-18 fresh-eyes)', () => {
     expect(library.match(/<LibraryEmpty/g)).toHaveLength(3)
   })
 })
+
+describe('SQL query schema list (round-2 review 2026-11-18)', () => {
+  it('never squeezes table names into a fixed 7rem column that their column list prints over', () => {
+    expect(src).not.toContain('grid-cols-[7rem_1fr]')
+    expect(src).toMatch(/function SchemaTableList[\s\S]*?grid-cols-1[\s\S]*?sm:grid-cols-\[minmax\(0,15rem\)_minmax\(0,1fr\)\][\s\S]*?break-all/)
+  })
+
+  it('keeps the developer details on the Schema tab instead of an Overview tab of their own', () => {
+    expect(src).toMatch(/activeTab === 'schema' && \(\s*<QueryReadout/)
+    expect(src).not.toContain("activeTab === 'overview'")
+  })
+})

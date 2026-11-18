@@ -59,6 +59,7 @@ function Harness(props: {
   onCheck?: (tile: GridTile) => void
   checkingId?: GridToolId | null
   routing?: Array<{ integration_type: string; is_active: boolean }>
+  alertEventsOn?: number | null
 }) {
   const tiles = useConnectionTiles({
     platform,
@@ -74,12 +75,13 @@ function Harness(props: {
     onConnect: props.onConnect,
     onCheck: props.onCheck,
     checkingId: props.checkingId,
+    alertEventsOn: props.alertEventsOn,
   })
 }
 
 function render(
   history: HealthRow[],
-  extra: { routing?: Array<{ integration_type: string; is_active: boolean }>; checkingId?: GridToolId | null } = {},
+  extra: { routing?: Array<{ integration_type: string; is_active: boolean }>; checkingId?: GridToolId | null; alertEventsOn?: number | null } = {},
 ) {
   const onOpen = vi.fn()
   const onConnect = vi.fn()
@@ -113,7 +115,8 @@ describe('ConnectionGrid', () => {
 
   // Owner, 2026-11-18: a connected repo nobody had checked read "Not tested
   // yet · Nothing yet" with a blue dot.
-  it('a connected tool nobody has checked reads connected with a passed mark and a Check now beside it', () => {
+  // Round-2 review 2026-11-18: a green check beside "NOT CHECKED" claimed a pass nobody ran.
+  it('a connected tool nobody has checked reads not checked with a hollow mark and a Check now beside it', () => {
     const { onCheck, onOpen } = render([])
     const tile = host.querySelector('[data-testid="integration-tile-github"]')!
     // The short word shows (the long one truncated to "CONNECTED · NOT …"); the full one is the tooltip.
@@ -122,7 +125,9 @@ describe('ConnectionGrid', () => {
     expect(tile.textContent).not.toContain('Nothing yet')
     // Nothing broken: the status is the counts as marks, not a sentence.
     expect(host.querySelector('[data-testid="integrations-tally"]')?.textContent).toContain('1 not checked')
-    expect(tile.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('passed')
+    expect(tile.querySelector('[data-testid="status-mark"]')?.getAttribute('data-status')).toBe('idle')
+    // The tally does not draw a second dot beside the status row's own one.
+    expect(host.querySelector('[data-testid="integrations-tally"] [data-tone="ok"]')).toBeNull()
     const check = host.querySelector<HTMLButtonElement>('[data-testid="integration-check-github"]')!
     expect(check.textContent).toBe('Check now')
     expect(check.closest('[data-state]')).toBeNull()
@@ -181,5 +186,29 @@ describe('ConnectionGrid', () => {
     expect(Array.from(host.querySelectorAll('[aria-label="Connection status"] button'))).toHaveLength(0)
     act(() => Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Fix PagerDuty')!.click())
     expect(onOpen).toHaveBeenCalledWith('pagerduty')
+  })
+
+  // Round-2 review 2026-11-18: eight alert events ON with Slack, Discord and
+  // Teams all unconnected read as "1 working". The gap leads the page.
+  it('leads with "No alert channel" and a Connect Slack button when events are on and no channel is connected', () => {
+    const { onConnect } = render([], { alertEventsOn: 8 })
+    const status = host.querySelector('[aria-label="Connection status"]')!
+    expect(status.querySelector('[data-testid="integrations-channel-gap"]')?.textContent).toBe('No alert channel: 8 alert events go nowhere')
+    expect(host.querySelector('[data-testid="integrations-tally"]')).toBeNull()
+    act(() => host.querySelector<HTMLButtonElement>('[data-testid="integrations-channel-gap-connect"]')!.click())
+    expect(onConnect).toHaveBeenCalledWith('slack')
+  })
+
+  it('has no gap while the prefs load or when every event is off', () => {
+    render([], { alertEventsOn: null })
+    expect(host.querySelector('[data-testid="integrations-channel-gap"]')).toBeNull()
+    render([], { alertEventsOn: 0 })
+    expect(host.querySelector('[data-testid="integrations-channel-gap"]')).toBeNull()
+  })
+
+  it('gives the gap its own card when a broken tool leads the status row', () => {
+    render(history, { alertEventsOn: 3 })
+    expect(host.querySelector('[aria-label="Connection status"]')?.textContent).toMatch(/GitHub needs you/)
+    expect(host.querySelector('[data-testid="integrations-alert-alert-channel-gap"]')?.textContent).toContain('No alert channel: 3 alert events go nowhere')
   })
 })

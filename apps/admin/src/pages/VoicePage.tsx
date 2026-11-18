@@ -39,7 +39,6 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { StatusBannerShell } from '../components/StatusBannerShell'
 import { NextStep } from '../components/NextStep'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { IconMic } from '../components/icons'
 import { VoiceRecorderCard, type SubmitStage } from '../components/voice/VoiceRecorderCard'
 import { VoiceSessionsList } from '../components/voice/VoiceSessionsList'
 import { fixesForReportPath } from '../lib/fixDeepLink'
@@ -217,7 +216,6 @@ export function VoicePage() {
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-voice">
       <PageHeaderBar
         title="Voice reports"
-        icon={<IconMic className="h-4 w-4" />}
         projectScope={projectName ?? undefined}
         description="Talk a bug or a fix request; confirm the transcript; the draft PR comes back to this phone."
         helpTitle={HELP.title}
@@ -237,8 +235,11 @@ export function VoicePage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 items-start">
         <div className={`space-y-4 min-w-0 ${intakeEnabled ? 'lg:col-span-3' : 'lg:col-span-5'}`}>
           {settingsKnown && !intakeEnabled ? (
-            // Off: the recorder only refuses, so it waits behind a closed disclosure.
-            <DisclosurePanel title="Talk (works once voice intake is on)">
+            // Off: the recorder only refuses, and the banner above says so: no dead
+            // "Talk" accordion (round-2 review). A memo shared into the app while
+            // off still shows, so it is not silently lost.
+            sharedText || sharedFile ? (
+            <DisclosurePanel title="Shared recording (turn on voice intake to send it)">
               <VoiceRecorderCard
                 onFile={(file) => void submitFile(file)}
                 onTranscript={(text) => void submitText(text)}
@@ -248,6 +249,7 @@ export function VoicePage() {
                 pendingFile={sharedFile}
               />
             </DisclosurePanel>
+            ) : null
           ) : (
             <VoiceRecorderCard
               onFile={(file) => void submitFile(file)}
@@ -274,7 +276,9 @@ export function VoicePage() {
         <PanelSkeleton rows={4} label="Loading voice requests" />
       ) : error ? (
         <PageLoadError error={error} resource="voice requests" onRetry={reload} />
-      ) : (
+      ) : settingsKnown && !intakeEnabled && sessions.length === 0 ? null : (
+        // Off with nothing recorded: the banner is the whole story; an empty list
+        // saying "turn on voice intake first" again is not drawn.
         <VoiceSessionsList sessions={sessions} onConfirm={(s) => void confirm(s)} onCancel={(s) => void cancel(s)} pendingId={pendingId} intakeEnabled={!settingsKnown || intakeEnabled} />
       )}
     </div>

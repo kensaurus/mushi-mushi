@@ -208,7 +208,10 @@ export function diagnoseKey(
   if (age <= SDK_COLD_MS) {
     return {
       status: 'stale',
-      label: 'Stale',
+      // "Quiet", not "Stale" (2026-11-18): an hour without a report is normal
+      // for a low-traffic app, and "stale" is the word for the revoke set
+      // ("unused 7d+"), so the key your app used an hour ago read as dead.
+      label: 'Quiet',
       description:
         'No SDK activity in the last hour. This is normal for a low-traffic app; investigate if you expect continuous traffic.',
     }
@@ -268,7 +271,7 @@ export function summarizeCardStatus(
 const SDK_CARD_CHIP_LABEL: Record<CardStatus, string> = {
   healthy: 'Connected',
   'endpoint-mismatch': 'Mismatch',
-  stale: 'Stale',
+  stale: 'Quiet',
   cold: 'Cold',
   never: 'Never used',
   'no-key': 'No key',
@@ -287,11 +290,12 @@ const STATUS_TONE: Record<CardStatus, { dot: string; chip: string; headline: str
     headline: 'SDK is pointed at the wrong backend',
     subtitle: 'Reports may be landing somewhere else. Fix your API endpoint env var and rebuild.',
   },
+  // Quiet (1 h – 7 d) is normal for a low-traffic app: neutral, not a warning (2026-11-18).
   stale: {
-    dot: 'bg-warn',
-    chip: CHIP_TONE.warnSubtle,
-    headline: 'App has not checked in recently',
-    subtitle: 'Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
+    dot: 'bg-fg-faint',
+    chip: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+    headline: 'App is quiet',
+    subtitle: 'No check-in in the last hour. Normal for low-traffic apps. If you just shipped an update, confirm SDK env vars are still in the build.',
   },
   cold: {
     dot: 'bg-warn',
@@ -320,7 +324,7 @@ const KEY_STATUS_CHIP: Record<
 > = {
   healthy: 'ok',
   'endpoint-mismatch': 'danger',
-  stale: 'warn',
+  stale: 'neutral',
   cold: 'warn',
   // A key the app hasn't used yet is a setup step, not a failure.
   never: 'neutral',
@@ -333,7 +337,7 @@ const CARD_BLOCK_TONE: Record<
 > = {
   healthy: 'ok',
   'endpoint-mismatch': 'danger',
-  stale: 'warn',
+  stale: 'neutral',
   cold: 'warn',
   never: 'muted',
   'no-key': 'muted',

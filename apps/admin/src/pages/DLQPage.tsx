@@ -251,8 +251,9 @@ export function DLQPage() {
         ]}
         helpHowToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
       >
+        {/* FilterSelect prints "All {label}": plural nouns read "All statuses", "All stages". */}
         <FilterSelect
-          label="Status"
+          label="statuses"
           value={filter}
           options={STATUS_OPTIONS as unknown as string[]}
           optionLabel={queueStatusLabel}
@@ -260,7 +261,7 @@ export function DLQPage() {
         />
         {summary && summary.stages.length > 0 && (
           <FilterSelect
-            label="Stage"
+            label="stages"
             value={stage}
             options={summary.stages}
             optionLabel={queueStageLabel}

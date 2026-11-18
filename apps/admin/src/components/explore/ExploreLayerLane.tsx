@@ -245,8 +245,10 @@ export function ExploreLayerLane({ nodes, edges, selectedId, highlightIds, onSel
                       ].join(' ')}
                       aria-pressed={isSelected}
                     >
-                      <div className="font-mono truncate leading-tight flex items-center gap-1">
-                        <span className="truncate flex-1">{node.label}</span>
+                      {/* File names wrap (at any character: they have no spaces) instead of
+                          being cut mid-word ("account-format.test.m…"). */}
+                      <div className="font-mono leading-tight flex items-start gap-1">
+                        <span className="min-w-0 flex-1 wrap-anywhere">{node.label}</span>
                         {ext && (
                           <span className="text-3xs text-fg-faint shrink-0">.{ext}</span>
                         )}

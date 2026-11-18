@@ -16,7 +16,8 @@ const LEGEND_EDGE_SPECS: Array<{ key: string; label: string; token: string }> = 
   { key: 'related', label: 'other', token: 'viz-graph-muted' },
 ]
 
-export function GraphLegend() {
+/** showEdges: the edge key is noise on a map with no links drawn. */
+export function GraphLegend({ showEdges = true }: { showEdges?: boolean } = {}) {
   // Open by default: a row of twelve unlabelled dots decoded nothing.
   const [open, setOpen] = useState(true)
   const edgeColors = LEGEND_EDGE_SPECS.map((spec) => ({
@@ -61,6 +62,7 @@ export function GraphLegend() {
               ))}
             </div>
           </div>
+          {showEdges ? (
           <div>
             <div className="text-3xs text-fg-secondary mb-0.5 font-semibold">Edges</div>
             <div className="space-y-0.5">
@@ -80,6 +82,7 @@ export function GraphLegend() {
               </div>
             </div>
           </div>
+          ) : null}
         </div>
       )}
     </div>

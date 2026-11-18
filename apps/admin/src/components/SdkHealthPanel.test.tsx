@@ -281,6 +281,10 @@ describe('SdkHealthPanel', () => {
     expect(text).not.toContain('No SDK problems found.')
     expect(text).toContain('0 problems')
     expect(text).toContain('1 not checked')
+    // No green pass mark while a check did not run (round-2 review 2026-11-18).
+    const tally = document.querySelector('[data-testid="sdk-health-tally"]')!
+    expect(tally.querySelector('[data-tone="ok"]')).toBeNull()
+    expect(tally.querySelector('[data-tone="off"]')).not.toBeNull()
     expect(text).not.toContain('No SDK problems found')
     expect(text).toContain('Not checked')
     expect(text).toContain('Site security policy: No live site address is known.')

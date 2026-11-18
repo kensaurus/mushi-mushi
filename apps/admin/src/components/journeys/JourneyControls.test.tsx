@@ -84,4 +84,28 @@ describe('journey controls', () => {
     render(createElement(RecordingCard, { data: data({}), projectId: 'p1', onChanged: vi.fn() }))
     expect(pill('[data-testid="journey-recording"]')?.textContent).toBe('Off')
   })
+
+  // Round-2 review: the field was empty although the SDK's origin was known,
+  // the reason was amber, the two choices had no names, and the on-demand
+  // card sat open for apps on the default.
+  it('falls back to the SDK origin, and the typed address wins', () => {
+    render(createElement(ScanBar, { data: data({ liveUrl: null }), projectId: 'p1', onStarted: vi.fn(), fallbackUrl: 'https://kensaur.us' }))
+    expect(host.querySelector<HTMLInputElement>('input[type="url"]')?.value).toBe('https://kensaur.us')
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="journey-scan"]')?.disabled).toBe(false)
+  })
+
+  it('gives the reason in neutral ink, not amber', () => {
+    render(createElement(ScanBar, { data: data({ liveUrl: null }), projectId: 'p1', onStarted: vi.fn() }))
+    expect(host.querySelector('[data-testid="journey-scan-why"]')?.className).not.toMatch(/warn/)
+  })
+
+  it('names Duration and Sample, and folds the card unless recording', () => {
+    render(createElement(RecordingCard, { data: data({}), projectId: 'p1', onChanged: vi.fn() }))
+    expect(host.querySelector('[data-testid="journey-recording-duration"]')?.textContent).toContain('Duration')
+    expect(host.querySelector('[data-testid="journey-recording-sample"]')?.textContent).toContain('Sample')
+    expect(host.querySelector<HTMLDetailsElement>('[data-testid="journey-recording"] details')?.open).toBe(false)
+    render(createElement(RecordingCard, { data: data({ recording: { until: '2026-11-19T00:00:00Z', sampleRate: 0.1 } }), projectId: 'p1', onChanged: vi.fn() }))
+    expect(host.querySelector<HTMLDetailsElement>('[data-testid="journey-recording"] details')?.open).toBe(true)
+  })
 })
+

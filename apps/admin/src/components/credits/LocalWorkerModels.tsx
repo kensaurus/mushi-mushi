@@ -42,7 +42,7 @@ export function groupOfflineLanes(
   return { live, offline: [...byHost.entries()].map(([host, ls]) => ({ host, lanes: ls })) }
 }
 
-export function LocalWorkerModels() {
+export function LocalWorkerModels({ idleShownAbove = false }: { idleShownAbove?: boolean } = {}) {
   const page = usePageData<WorkLanesData>(LANES_PATH, { scope: 'enumeration' })
   const data = page.data
   if (!data || !Array.isArray(data.lanes)) {
@@ -67,7 +67,8 @@ export function LocalWorkerModels() {
   const idle = (data.flags ?? []).find((f) => f.kind === 'credits_idle' && f.id !== 'credits_out')
   return (
     <div className="space-y-2" data-testid="credits-worker-models">
-      {idle && (
+      {/* The page leads with the idle-credits blocker (round-2 review); here it is not said again. */}
+      {idle && !idleShownAbove && (
         <Callout
           tone={idle.severity}
           label="Credits idle"
@@ -91,7 +92,7 @@ export function LocalWorkerModels() {
             <span className="font-semibold">
               {g.lanes.length} {g.lanes.length === 1 ? 'lane' : 'lanes'} offline
             </span>
-            <span className="min-w-0 truncate font-mono text-2xs text-fg-secondary">({g.host})</span>
+            <span className="min-w-0 truncate text-2xs text-fg-secondary">({g.host})</span>
           </summary>
           <LaneTable lanes={g.lanes} nowOf={nowOf} />
         </details>
@@ -123,8 +124,8 @@ function LaneTable({ lanes, nowOf }: { lanes: readonly WorkerLane[]; nowOf: (l: 
             return (
               <tr key={l.id} data-testid={`credits-worker-model-${l.id}`}>
                 <td className="py-1.5 pr-3 text-fg">{l.projectName}</td>
-                <td className="py-1.5 pr-3 font-mono text-fg-secondary">{l.name}</td>
-                <td className="hidden py-1.5 pr-3 font-mono text-fg-secondary sm:table-cell">{l.config.model ?? 'agent default'}</td>
+                <td className="py-1.5 pr-3 text-fg-secondary">{l.name}</td>
+                <td className="hidden py-1.5 pr-3 text-fg-secondary sm:table-cell">{l.config.model ?? 'agent default'}</td>
                 <td className="py-1.5 pr-3">
                   <Badge tone={now === 'taking' ? 'ok' : 'neutral'} className="whitespace-nowrap">{NOW_WORD[now]}</Badge>
                 </td>

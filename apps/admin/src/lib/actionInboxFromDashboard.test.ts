@@ -114,3 +114,41 @@ describe('buildInboxCards agrees with /inbox/stats', () => {
     expect(plan?.action?.title).toBe('2 critical reports need a decision')
   })
 })
+
+describe('buildInboxCards: one Needs-you source and honest ticks (round-2 review, 2026-11-18)', () => {
+  const ctx = { judgeStale: false, judgeStaleHours: null }
+  const card = (cards: ReturnType<typeof buildInboxCards>, id: string) => cards.find((c) => c.id === id)
+
+  it('lists the stuck pipeline groups Home lists, linked to that group', () => {
+    const groups = [{ id: 'no_fix_old', label: '2 reports: triaged over 3 days ago, no fix started', count: 2 }]
+    const pipe = card(buildInboxCards(emptyDashboard, { ...ctx, pipelineNeedsYou: groups }), 'pipeline-do')!
+    expect(pipe.state).toBe('open')
+    expect(pipe.action?.title).toBe('2 reports: triaged over 3 days ago, no fix started')
+    expect(pipe.action?.primary).toMatchObject({ to: '/pipeline?group=no_fix_old' })
+    const many = card(buildInboxCards(emptyDashboard, { ...ctx, pipelineNeedsYou: [...groups, { id: 'ci_red', label: '3 PRs: their own CI is red', count: 3 }] }), 'pipeline-do')!
+    expect(many.action?.title).toBe('5 items are stuck in the pipeline')
+  })
+
+  it('a pipeline read that failed is "not checked", never a tick; no read asked means no card', () => {
+    expect(card(buildInboxCards(emptyDashboard, { ...ctx, pipelineNeedsYou: null }), 'pipeline-do')!.state).toBe('unknown')
+    expect(card(buildInboxCards(emptyDashboard, { ...ctx, pipelineNeedsYou: [] }), 'pipeline-do')!.state).toBe('pass')
+    expect(card(buildInboxCards(emptyDashboard, ctx), 'pipeline-do')).toBeUndefined()
+  })
+
+  it('"Fixes in flight" with no fix at all has nothing to pass: no tick', () => {
+    expect(card(buildInboxCards(emptyDashboard, ctx), 'fixes-do')!.state).toBe('none')
+    const ran = { ...emptyDashboard, fixSummary: { total: 3, completed: 3, failed: 0, inProgress: 0, openPrs: 0 } }
+    expect(card(buildInboxCards(ran, ctx), 'fixes-do')!.state).toBe('pass')
+    expect(card(buildInboxCards(undefined, ctx), 'fixes-do')!.state).toBe('unknown')
+  })
+
+  it('local worker problems open Integration health instead of a tick', () => {
+    const health = card(buildInboxCards(emptyDashboard, { ...ctx, integrationRed: 0, integrationAmber: 0, workerProblems: 2 }), 'health-ops')!
+    expect(health.state).toBe('open')
+    expect(health.action?.title).toBe('2 local worker problems stop fixes')
+    expect(health.action?.primary).toMatchObject({ to: '/pipeline?tab=workers' })
+    // No integration and nothing counted: nothing yet, not a pass.
+    expect(card(buildInboxCards(emptyDashboard, ctx), 'health-ops')!.state).toBe('none')
+    expect(card(buildInboxCards(emptyDashboard, { ...ctx, integrationRed: 0, integrationAmber: 0, workerProblems: 0 }), 'health-ops')!.state).toBe('pass')
+  })
+})

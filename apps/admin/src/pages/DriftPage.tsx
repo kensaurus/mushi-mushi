@@ -109,6 +109,15 @@ const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
   { id: 'scanner', label: 'Run a scan', description: 'Scan your API and database now.' },
 ]
 
+/**
+ * Exported for tests; page modules are knip entries. Before the first scan, Changes and Scans are
+ * empty and "Run a scan" repeats the first step's "Run first scan": the bar stays away until there
+ * is a scan, except on the scanner itself so the way back stays (2026-11-18: a third stacked bar).
+ */
+export function showDriftTabs(snapshotCount: number, activeTab: DriftTabId): boolean {
+  return snapshotCount > 0 || activeTab !== 'overview'
+}
+
 function resolveDriftTab(value: string | null): DriftTabId {
   if (value === 'findings' || value === 'snapshots' || value === 'scanner') return value
   return 'overview'
@@ -477,7 +486,7 @@ export function DriftPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && showDriftTabs(stats.snapshotCount, activeTab) && (
       <SegmentedControl<DriftTabId>
         size="sm"
         ariaLabel="Drift sections"

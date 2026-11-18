@@ -39,6 +39,7 @@ import { ActivityCard, ActivitySkeleton } from '../components/home/ActivityCard'
 import { AccessCard, AccessSkeleton } from '../components/home/AccessCard'
 import { HowThisWorks } from '../components/home/HowThisWorks'
 import type { ProjectHome } from '../lib/projectHome'
+import { dedupeHomeSections } from '../lib/homeView'
 import { usePageCopy } from '../lib/copy'
 import { IconDashboard } from '../components/icons'
 
@@ -73,6 +74,8 @@ export function DashboardPage() {
     onFire: onFirstMergedFix,
   })
 
+  // One place per fact: a connect button or a count two sections both carried is kept once.
+  const shown = useMemo(() => (data ? dedupeHomeSections(data) : null), [data])
   const projectName = setup.activeProject?.project_name ?? data?.app.data?.name ?? null
   const needs = data?.needsYou.data ?? []
   const summary = useMemo(() => {
@@ -200,13 +203,13 @@ export function DashboardPage() {
           {!homeNeedsFirst(data) && needsRow}
 
           <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <SitemapCard section={data.sitemap} />
+            <SitemapCard section={(shown ?? data).sitemap} />
             <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
           </div>
 
           <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
             <WeekCard section={data.week} />
-            <ActivityCard section={data.activity} />
+            <ActivityCard section={(shown ?? data).activity} />
           </div>
 
           <HowThisWorks defaultOpen={!!project && project.report_count === 0} />

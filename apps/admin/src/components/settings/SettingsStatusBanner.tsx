@@ -143,7 +143,13 @@ export function SettingsStatusBanner({
       return (
         <StatusBannerShell
           tone="danger"
-          title={`${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`}
+          // The title counts every problem the banner lists: the keys, plus the
+          // branch pattern when it rides along (round-2 review 2026-11-18).
+          title={
+            branchPatternInvalid
+              ? `${plural(n, 'key')} and the fix branch pattern need your attention`
+              : `${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`
+          }
           subtitle={withBranch('Rejected, out of quota, expired or replaced. Each one says what to do in AI keys.')}
           action={go('byok', actions.byok ?? 'Fix keys')}
         />

@@ -5,8 +5,9 @@
  *          All mutations bubble back to the page through callbacks.
  *
  *          Group collapse: when `groupBy === 'fingerprint'`, rows sharing a
- *          report_group_id are collapsed under a single canonical row with a
- *          "+N variants" chip + expand chevron. Singletons render unchanged.
+ *          report_group_id (or one check's headline across apps) collapse
+ *          under a single canonical row with a "+N similar" chip + expand
+ *          chevron (reportDisplayRows.ts). Singletons render unchanged.
  *          Expand state lives in URL params so the back-button restores it.
  */
 
@@ -21,6 +22,7 @@ import type { ReportRow, SortDir, SortField } from './types'
 import { PAGE_SIZE } from './types'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { preflightForReportRow } from './allAppsRowActions'
+import { buildDisplayRows, type DisplayRow } from './reportDisplayRows'
 import { REPORTS_TABLE_COL, REPORTS_STICKY_LEAD, REPORTS_TABLE_MIN_W, TABLE_CELL } from './reportsTableLayout'
 
 interface Props {
@@ -63,17 +65,6 @@ interface Props {
   preflightProjectId?: string | null
 }
 
-interface DisplayRow {
-  row: ReportRow
-  /** Total siblings in this group, including the canonical (>=1). Only set
-   *  for canonical rows when group-collapse is on. */
-  variantCount?: number
-  /** Whether this canonical row's siblings are currently expanded. */
-  expanded?: boolean
-  /** True when this row is a sibling rendered under an expanded canonical. */
-  isVariantOf?: string
-}
-
 export function ReportsTable({
   reports,
   total,
@@ -106,44 +97,12 @@ export function ReportsTable({
     easing: 'ease-out',
   })
 
-  // Build the display list: when group-collapse is on, sibling rows that
-  // share a report_group_id collapse behind their canonical (newest) row.
-  // Singletons are unaffected. We preserve the BE-supplied sort by walking
-  // the array in order and only emitting the *first* row of each group.
-  const displayRows: DisplayRow[] = useMemo(() => {
-    if (!groupCollapse) return reports.map((r) => ({ row: r }))
-
-    const seen = new Set<string>()
-    const groupMembers = new Map<string, ReportRow[]>()
-    for (const r of reports) {
-      const gid = r.report_group_id
-      if (!gid) continue
-      const arr = groupMembers.get(gid) ?? []
-      arr.push(r)
-      groupMembers.set(gid, arr)
-    }
-
-    const out: DisplayRow[] = []
-    for (const r of reports) {
-      const gid = r.report_group_id
-      if (!gid) {
-        out.push({ row: r })
-        continue
-      }
-      if (seen.has(gid)) continue
-      seen.add(gid)
-      const members = groupMembers.get(gid) ?? [r]
-      const variantCount = members.length
-      const expanded = expandedGroups.has(gid)
-      out.push({ row: r, variantCount, expanded })
-      if (expanded && members.length > 1) {
-        for (const sib of members.slice(1)) {
-          out.push({ row: sib, isVariantOf: gid })
-        }
-      }
-    }
-    return out
-  }, [reports, groupCollapse, expandedGroups])
+  // Group-collapse: rows of one fingerprint (and a check filed in several
+  // apps) collapse behind their first row (reportDisplayRows.ts).
+  const displayRows: DisplayRow[] = useMemo(
+    () => buildDisplayRows(reports, groupCollapse, expandedGroups),
+    [reports, groupCollapse, expandedGroups],
+  )
 
   const visibleGroupCount = useMemo(
     () => displayRows.filter((d) => !d.isVariantOf).length,
@@ -154,7 +113,7 @@ export function ReportsTable({
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
       <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="block text-2xs text-fg-muted min-w-0 truncate">
-          {total} report{total === 1 ? '' : 's'} — click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
+          {total.toLocaleString('en-US')} report{total === 1 ? '' : 's'} — click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
         </span>
       </div>
       {/* Phone: stacked rows with status and severity inline; the table
@@ -169,6 +128,7 @@ export function ReportsTable({
               isSelected={selected.has(d.row.id)}
               dispatchBusy={dispatching.has(d.row.id)}
               variantCount={d.variantCount}
+              appCount={d.appCount}
               onToggleSelect={() => onToggleSelect(d.row.id)}
               onOpen={() => onOpen(d.row)}
               onDispatchFix={() => onDispatchFix(d.row)}
@@ -275,11 +235,12 @@ export function ReportsTable({
                 isCursor={i === cursor}
                 dispatchBusy={dispatching.has(d.row.id)}
                 variantCount={d.variantCount}
+                appCount={d.appCount}
                 expanded={d.expanded}
                 isVariant={Boolean(d.isVariantOf)}
                 onToggleGroup={
-                  d.row.report_group_id && d.variantCount && d.variantCount > 1
-                    ? () => onToggleGroup(d.row.report_group_id as string)
+                  d.groupKey && d.variantCount && d.variantCount > 1
+                    ? () => onToggleGroup(d.groupKey as string)
                     : undefined
                 }
                 onToggleSelect={() => onToggleSelect(d.row.id)}
@@ -300,7 +261,7 @@ export function ReportsTable({
 
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
         <span className="min-w-0">
-          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString('en-US')}
           {groupCollapse && visibleGroupCount !== reports.length && (
             <span className="ml-2 text-fg-faint">· grouped into {visibleGroupCount} fingerprint{visibleGroupCount === 1 ? '' : 's'}</span>
           )}

@@ -7,6 +7,7 @@
 import { PageStatus, formatRelative } from '../ui'
 import type { SkillsStats } from './SkillsStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
+import { skillsIdle } from '../../lib/skillPipelines'
 
 const skillsLinks = {
   catalog: '/skills?tab=catalog',
@@ -30,12 +31,26 @@ function skillsSentence(stats: SkillsStats): string {
     parts.push(`${pluralizeWithCount(stats.awaitingCheckin, 'step')} waiting for you to check in${since}`)
   }
   if (stats.failedRuns > 0) parts.push(`${stats.failedRuns} failed`)
-  if (parts.length === 0) return `No skill runs going; ${pluralizeWithCount(stats.catalogTotal, 'skill')} to choose from.`
+  // Idle: the "Skill runs" card below says nothing is running; this line
+  // gives the one number left (round-2 review: the empty state was said 4 ways).
+  if (parts.length === 0) return `${pluralizeWithCount(stats.catalogTotal, 'skill')} to choose from.`
   const s = parts.join('; ')
   return `${s.charAt(0).toUpperCase()}${s.slice(1)}.`
 }
 
 export function SkillsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
+  // With nothing running or waiting, "0 Running · 0 Waiting · 173 Skills"
+  // were two zero tiles and a count the sentence already gives: no tiles.
+  if (skillsIdle(stats)) {
+    return (
+      <PageStatus
+        ariaLabel="Agent skills status"
+        tone="neutral"
+        sentence={skillsSentence(stats)}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      />
+    )
+  }
   return (
     <PageStatus
       ariaLabel="Agent skills status"

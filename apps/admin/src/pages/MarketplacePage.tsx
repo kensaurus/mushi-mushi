@@ -6,7 +6,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -56,6 +56,8 @@ import {
   type MarketplaceTabId,
   type ReliabilityStats,
   INTEGRATIONS_HREF_BY_PLUGIN_SLUG,
+  showOfficialChip,
+  splitCatalog,
   marketplaceEmptyCopy,
 } from '../components/marketplace/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
@@ -521,22 +523,42 @@ export function MarketplacePage() {
   // banner, zero stats, readout and tabs that all said the same thing.
   const isEmpty = stats.topPriority === 'no_plugins_installed' && installed.length === 0
 
+  const { own: ownCatalog, covered: coveredCatalog } = splitCatalog(visibleCatalog, new Set(installedBySlug.keys()))
+  const officialChip = showOfficialChip(visibleCatalog)
   const catalogGrid = (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {visibleCatalog.map((p) => (
-        <PluginCard
-          key={p.slug}
-          plugin={p}
-          installed={installedBySlug.get(p.slug)}
-          stats={reliabilityBySlug.get(p.slug)}
-          busy={installing === p.slug}
-          onInstall={() => beginInstall(p)}
-          onUninstall={() => uninstall(p.slug, p.name)}
-          canManage={canManage}
-          pluginsUnlocked={pluginsUnlocked || entitlements.loading}
-          integrationsHref={INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug]}
-        />
-      ))}
+    <div className="space-y-3">
+      {ownCatalog.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {ownCatalog.map((p) => (
+            <PluginCard
+              key={p.slug}
+              plugin={p}
+              installed={installedBySlug.get(p.slug)}
+              stats={reliabilityBySlug.get(p.slug)}
+              busy={installing === p.slug}
+              onInstall={() => beginInstall(p)}
+              onUninstall={() => uninstall(p.slug, p.name)}
+              canManage={canManage}
+              pluginsUnlocked={pluginsUnlocked || entitlements.loading}
+              integrationsHref={INTEGRATIONS_HREF_BY_PLUGIN_SLUG[p.slug]}
+              showOfficial={officialChip}
+            />
+          ))}
+        </div>
+      )}
+      {coveredCatalog.length > 0 && (
+        <p className="text-2xs text-fg-muted" data-testid="marketplace-covered-row">
+          <span className="font-medium text-fg-secondary">Set up from Integrations:</span>{' '}
+          {coveredCatalog.map((p, i) => (
+            <span key={p.slug}>
+              {i > 0 && ' · '}
+              <Link to={p.href} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+                {p.name}
+              </Link>
+            </span>
+          ))}
+        </p>
+      )}
     </div>
   )
 

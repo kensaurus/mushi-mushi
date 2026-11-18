@@ -17,6 +17,7 @@ import {
 import type { PromptVersion } from './types'
 import { STAGE_LABELS, isCustomizablePromptStage } from './types'
 import { CHIP_TONE } from '../../lib/chipTone'
+import { effectiveTraffic } from './promptLabCounts'
 
 // Icon-only Btn override for the dense action column.
 //
@@ -79,7 +80,7 @@ export function PromptStageTable({
         <h3 className="text-xs font-semibold text-fg-secondary">
           {STAGE_LABELS[stage] ?? stage}
         </h3>
-        <span className="text-2xs text-fg-faint font-mono">
+        <span className="text-2xs text-fg-faint tabular-nums">
           {prompts.length} versions
         </span>
       </div>
@@ -96,7 +97,6 @@ export function PromptStageTable({
             <thead className="text-fg-faint">
               <tr>
                 <th className="whitespace-nowrap text-left font-normal px-2 py-1">Version</th>
-                <th className="whitespace-nowrap text-left font-normal px-2 py-1">State</th>
                 <th className="whitespace-nowrap text-right font-normal px-2 py-1">
                   <span className="inline-flex items-center gap-1">
                     Traffic
@@ -105,6 +105,7 @@ export function PromptStageTable({
                 </th>
                 <th className="whitespace-nowrap text-right font-normal px-2 py-1">Judge score</th>
                 <th className="whitespace-nowrap text-right font-normal px-2 py-1">Evals</th>
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">State</th>
                 <th className="whitespace-nowrap text-left font-normal px-2 py-1">Updated</th>
                 <th className="whitespace-nowrap text-right font-normal px-2 py-1">Actions</th>
               </tr>
@@ -113,10 +114,40 @@ export function PromptStageTable({
               {prompts.map((p) => {
                 const isGlobal = p.project_id == null
                 const score = p.avg_judge_score
+                const share = effectiveTraffic(p, prompts)
                 return (
                   <tr key={p.id} className="border-t border-edge-subtle">
                     <td className="whitespace-nowrap px-2 py-1.5 font-mono text-fg-secondary">
                       {p.version}
+                    </td>
+                    <td
+                      className="px-2 py-1.5 text-right tabular-nums text-fg-secondary"
+                      title={p.is_active
+                        ? `Keeps ${share} % of live traffic: what the tests below do not take.`
+                        : `Receives ${share} % of live traffic; the version in use keeps the rest.`}
+                    >
+                      {/* Traffic is a deliberate A/B split, not a quality
+                          signal. Rendering it through the higher-better tone
+                          ramp would paint 50/50 experiments and 0 % idle
+                          candidates red ("something's broken!") when they're
+                          working exactly as configured. Keep this neutral
+                          and match the JudgePage leaderboard treatment. */}
+                      {share}%
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {score == null ? (
+                        <span className="text-fg-faint text-2xs" title="No grades yet">no grades</span>
+                      ) : (
+                        <span
+                          className={`tabular-nums ${judgeScoreTone(score)}`}
+                          title="Judge score — higher is better. Uses the rolling 7-day eval window."
+                        >
+                          {(score * 100).toFixed(1)}%
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-fg-muted tabular-nums">
+                      {p.total_evaluations}
                     </td>
                     <td className="px-2 py-1.5">
                       {p.is_active ? (
@@ -127,7 +158,7 @@ export function PromptStageTable({
                         <Badge className="bg-fg-faint/15 text-fg-muted border border-edge-subtle">Idle</Badge>
                       )}
                       {isGlobal && (
-                        <Badge className={`ml-1 ${CHIP_TONE.warnSubtle}`}>Global</Badge>
+                        <Badge className="ml-1 bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Built-in version shared by every app; clone it to edit.">Global</Badge>
                       )}
                       {p.auto_generated && (
                         <Badge
@@ -137,35 +168,6 @@ export function PromptStageTable({
                           Auto
                         </Badge>
                       )}
-                    </td>
-                    <td
-                      className="px-2 py-1.5 text-right font-mono tabular-nums text-fg-faint"
-                      title={p.traffic_percentage === 100
-                        ? 'This version receives 100 % of live traffic for its stage.'
-                        : `Receives ${p.traffic_percentage} % of live traffic; the remainder routes to other candidates in the same stage.`}
-                    >
-                      {/* Traffic is a deliberate A/B split, not a quality
-                          signal. Rendering it through the higher-better tone
-                          ramp would paint 50/50 experiments and 0 % idle
-                          candidates red ("something's broken!") when they're
-                          working exactly as configured. Keep this neutral
-                          and match the JudgePage leaderboard treatment. */}
-                      {p.traffic_percentage}%
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      {score == null ? (
-                        <span className="text-fg-faint text-2xs font-mono">—</span>
-                      ) : (
-                        <span
-                          className={`font-mono tabular-nums ${judgeScoreTone(score)}`}
-                          title="Judge score — higher is better. Uses the rolling 7-day eval window."
-                        >
-                          {(score * 100).toFixed(1)}%
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-right font-mono text-fg-muted tabular-nums">
-                      {p.total_evaluations}
                     </td>
                     <td className="px-2 py-1.5 text-fg-muted">
                       <RelativeTime value={p.updated_at} />

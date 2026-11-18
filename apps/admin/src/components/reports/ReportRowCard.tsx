@@ -18,6 +18,7 @@ import { ReportSourceTag } from './ReportSourceTag'
 import { DispatchFixPreflight } from './DispatchFixPreflight'
 import { TableSeverityCell } from './ReportMetricCells'
 import { closedRowAction } from './reportRowAction'
+import { variantChip } from './reportDisplayRows'
 import { DISPATCH_ELIGIBLE_STATUSES, formatRelative, severityStripeClass, type ReportRow } from './types'
 import { reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { reportDetailPath } from '../../lib/reportUrl'
@@ -31,6 +32,8 @@ interface Props {
   dispatchBusy?: boolean
   /** Siblings sharing the fingerprint (canonical row only). */
   variantCount?: number
+  /** Apps the group spans (canonical rows only). */
+  appCount?: number
   onToggleSelect: () => void
   onOpen: () => void
   onDispatchFix: () => void
@@ -38,7 +41,7 @@ interface Props {
   dispatchScopeNote?: string | null
 }
 
-function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCount, onToggleSelect, onOpen, onDispatchFix, preflight, dispatchScopeNote = null }: Props) {
+function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCount, appCount = 1, onToggleSelect, onOpen, onDispatchFix, preflight, dispatchScopeNote = null }: Props) {
   const activeProjectId = useActiveProjectId()
   const detailPath = reportDetailPath(row.id, activeProjectId)
   const rawTitle = row.title ?? row.summary ?? row.description
@@ -70,7 +73,11 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
           <Link to={detailPath} className="line-clamp-2 text-sm font-medium leading-snug text-fg hover:underline" title={title}>
             <ReportSourceTag report={row} className="mr-1.5 align-middle" />
             {title}
-            {variantCount && variantCount > 1 ? <span className="ml-1 font-mono text-2xs font-normal text-fg-muted">+{variantCount - 1}</span> : null}
+            {variantCount && variantCount > 1 ? (
+              <span className="ml-1 whitespace-nowrap text-2xs font-normal text-fg-muted" title={variantChip(variantCount, appCount).tooltip}>
+                {variantChip(variantCount, appCount).label}
+              </span>
+            ) : null}
           </Link>
           <ReportRowMeta row={row} />
           <div className="flex min-w-0 items-center gap-2">

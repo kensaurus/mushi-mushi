@@ -12,6 +12,8 @@ import { Chip } from '../signal/Chip'
 import { ADMIN_ONLY_HINT } from '../../lib/orgPermissions'
 import {
   CATEGORY_LABEL,
+  displayPluginText,
+  displayPublisher,
   pluginEventLabel,
   type InstalledPlugin,
   type MarketplacePlugin,
@@ -31,6 +33,8 @@ interface Props {
   pluginsUnlocked?: boolean
   /** Set when Integrations already has a native card for this service. */
   integrationsHref?: string
+  /** Show the "Official" chip (only when the catalogue mixes official and community plugins). */
+  showOfficial?: boolean
 }
 
 export function PluginCard({
@@ -43,6 +47,7 @@ export function PluginCard({
   canManage = true,
   pluginsUnlocked = true,
   integrationsHref,
+  showOfficial = true,
 }: Props) {
   const blockedReason = !canManage
     ? ADMIN_ONLY_HINT
@@ -55,12 +60,12 @@ export function PluginCard({
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">{p.name}</h3>
-            {p.is_official ? (
+            {p.is_official && showOfficial ? (
               <Chip>Official</Chip>
             ) : null}
           </div>
           <p className="text-2xs text-fg-muted">
-            {p.publisher} · {CATEGORY_LABEL[p.category] ?? p.category}
+            {displayPublisher(p.publisher)} · {CATEGORY_LABEL[p.category] ?? p.category}
             {p.install_count > 0 && ` · ${p.install_count.toLocaleString()} installs`}
           </p>
         </div>
@@ -73,7 +78,7 @@ export function PluginCard({
         ) : null}
       </div>
 
-      <p className="text-xs opacity-80">{p.short_description}</p>
+      <p className="text-xs opacity-80">{displayPluginText(p.short_description)}</p>
 
       {p.manifest?.subscribes?.length ? (
         <div className="flex flex-wrap gap-1">

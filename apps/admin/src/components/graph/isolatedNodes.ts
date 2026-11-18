@@ -12,7 +12,7 @@ export interface IsolatedFilterResult {
   nodes: GraphNode[]
   /** How many isolated nodes were hidden. */
   hidden: number
-  /** Every node is isolated, so none were hidden even though the option is on. */
+  /** No node has an enabled link (a fact about the data, whatever the option says). */
   allIsolated: boolean
 }
 
@@ -22,7 +22,7 @@ export function filterIsolated(
   isEdgeEnabled: (edgeType: string) => boolean,
   hide: boolean,
 ): IsolatedFilterResult {
-  if (!hide || nodes.length === 0) return { nodes, hidden: 0, allIsolated: false }
+  if (nodes.length === 0) return { nodes, hidden: 0, allIsolated: false }
   const visible = new Set(nodes.map((n) => n.id))
   const connected = new Set<string>()
   for (const e of edges) {
@@ -33,6 +33,25 @@ export function filterIsolated(
     }
   }
   if (connected.size === 0) return { nodes, hidden: 0, allIsolated: true }
+  if (!hide) return { nodes, hidden: 0, allIsolated: false }
   const kept = nodes.filter((n) => connected.has(n.id))
   return { nodes: kept, hidden: nodes.length - kept.length, allIsolated: false }
+}
+
+export interface IsolatedToggleState {
+  /** What the checkbox shows: the filter actually in effect, never the stored wish alone. */
+  checked: boolean
+  disabled: boolean
+  /** Short reason shown beside a disabled box. */
+  reason: string | null
+}
+
+/**
+ * The "Hide isolated nodes" box must match the map. When no node has a link the
+ * filter cannot hide anything without emptying the map, so the box reads
+ * unticked and disabled with the reason, instead of ticked over visible nodes.
+ */
+export function isolatedToggleState(hide: boolean, result: IsolatedFilterResult): IsolatedToggleState {
+  if (result.allIsolated) return { checked: false, disabled: true, reason: 'no links yet' }
+  return { checked: hide, disabled: false, reason: null }
 }

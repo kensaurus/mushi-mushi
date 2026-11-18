@@ -202,9 +202,7 @@ export function EnvironmentFields({ environment, sessionId }: {
         />
       )}
 
-      {!sessionId && metaRows.length > 0 && (
-        <p className="text-2xs text-fg-faint">Session ID was not captured.</p>
-      )}
+      {/* A missing session ID is on the page's one "Not captured" line. */}
     </div>
   )
 }

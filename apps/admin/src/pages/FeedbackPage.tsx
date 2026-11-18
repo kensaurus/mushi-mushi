@@ -42,6 +42,7 @@ import {
   Badge,
   Btn,
   Card,
+  EmptyState,
   ErrorAlert,
   FreshnessPill,
   RelativeTime,
@@ -252,11 +253,16 @@ export function FeedbackPage() {
   }
   if (statsError) return <PageLoadError error={statsError} resource="feedback stats" onRetry={reloadAll} />
 
+  // Round-2 sweep 2026-11-18: with nothing sent yet the page showed four tabs,
+  // a Refresh and an empty state per tab. One empty state now carries both
+  // actions on every width (on a phone "Request feature" sits under More).
+  const nothingSent = stats.hasAnyProject && stats.totalTickets === 0
+
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-feedback">
       <PageHeaderBar
         title={copy?.title ?? 'Help & support'}
-        projectScope={stats.projectName ?? undefined}
+        // No app chip: tickets are account-wide (each row names its app).
 
         helpTitle={copy?.help?.title ?? 'About Help & support'}
         helpWhatIsIt={
@@ -298,6 +304,9 @@ export function FeedbackPage() {
         <span className="hidden sm:inline-flex">
           <FreshnessPill at={statsFetchedAt} isValidating={statsValidating || ticketsQuery.isValidating} />
         </span>
+        {/* Nothing sent yet: the empty state below carries both actions. */}
+        {!nothingSent && (
+        <>
         <Btn size="sm" className="whitespace-nowrap" onClick={() => openFeedback('bug')}>
           Report a bug
         </Btn>
@@ -313,6 +322,8 @@ export function FeedbackPage() {
             actions={[{ key: 'feature', label: 'Request feature', onSelect: () => openFeedback('feature'), testId: 'feedback-more-feature' }]}
           />
         </span>
+        </>
+        )}
       </PageHeaderBar>
 
       <PagePosture
@@ -330,6 +341,7 @@ export function FeedbackPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: !nothingSent,
             children: (
               <FeedbackSnapshotStrip
                 stats={stats}
@@ -342,6 +354,24 @@ export function FeedbackPage() {
         ]}
       />
 
+      {nothingSent && (
+        <EmptyState
+          title="Nothing sent yet"
+          description="Send the Mushi Mushi team a bug or an idea. Replies and shipped requests show here. Bugs from your own app's users go to Reports."
+          action={
+            <div className="flex flex-wrap gap-2" data-testid="feedback-empty-actions">
+              <Btn size="sm" className="whitespace-nowrap" onClick={() => openFeedback('bug')}>
+                Report a bug
+              </Btn>
+              <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => openFeedback('feature')}>
+                Request feature
+              </Btn>
+            </div>
+          }
+        />
+      )}
+
+      {!nothingSent && (
       <SegmentedControl
         value={activeTab}
         onChange={setActiveTab}
@@ -350,8 +380,9 @@ export function FeedbackPage() {
         size="sm"
         scrollable
       />
+      )}
 
-      {activeTab === 'overview' && (
+      {!nothingSent && activeTab === 'overview' && (
         <>
           <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
             <p className="text-2xs leading-relaxed text-fg-muted">
@@ -369,7 +400,7 @@ export function FeedbackPage() {
         </>
       )}
 
-      {(activeTab === 'active' || activeTab === 'shipped' || activeTab === 'all') && (
+      {!nothingSent && (activeTab === 'active' || activeTab === 'shipped' || activeTab === 'all') && (
         <Card className="space-y-3 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             {activeTab === 'all' ? (
@@ -415,7 +446,9 @@ export function FeedbackPage() {
                 hint={
                   activeTab === 'shipped'
                     ? 'When we credit your idea in a release, it appears here with a version chip.'
-                    : 'Found something broken or have an idea? Use Report a bug or Request feature at the top. We read every ticket.'
+                    : activeTab === 'active'
+                      ? 'Everything you sent is closed or shipped.'
+                      : 'Nothing of this type yet.'
                 }
               />
             </div>

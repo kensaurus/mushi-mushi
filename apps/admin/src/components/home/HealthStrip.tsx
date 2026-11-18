@@ -9,7 +9,8 @@
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
 import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
-import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
+import { StatusGlyph, TONE_INK } from '../signal/StatusGlyph'
+import { healthDisplayTone } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
@@ -47,9 +48,6 @@ const PLAIN_CONNECT: Record<string, string> = {
   'Set up the SDK': 'Add the report button',
 }
 
-/** Each light's shape as well as its colour (signal kit: colour never works alone). */
-const LIGHT_TONE: Record<HealthSignal['light'], SignalTone> = { good: 'ok', warn: 'warn', bad: 'danger', busy: 'info', off: 'off' }
-
 /**
  * @internal Exported for tests.
  * The detail line only when it adds something the mark does not: a problem
@@ -67,6 +65,7 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
     label: PLAIN_LABEL[server.id] ?? server.label,
     ...(server.connect ? { connect: { ...server.connect, label: PLAIN_CONNECT[server.connect.label] ?? server.connect.label } } : {}),
   }
+  const tone = healthDisplayTone(s)
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
       <PanelHeader
@@ -76,15 +75,18 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
             {s.label}
           </Link>
         }
-        action={
-          <span className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
-            <StatusGlyph tone={LIGHT_TONE[s.light]} />
-            <span>{s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]}</span>
-          </span>
-        }
       />
-      <Link to={s.href} className="text-base font-semibold leading-tight text-fg hover:underline" title={s.detail ?? undefined}>
-        {s.headline}
+      {/* The state is the value's mark and colour: a "Good" pill beside
+          "Passing" said it twice (round-2 sweep 2026-11-18). The word stays
+          for screen readers on the mark. */}
+      <Link
+        to={s.href}
+        className={`inline-flex min-w-0 items-center gap-1.5 text-base font-semibold leading-tight hover:underline ${TONE_INK[tone]}`}
+        title={s.detail ?? undefined}
+        data-tone={tone}
+      >
+        <StatusGlyph tone={tone} label={s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]} />
+        <span className="min-w-0">{s.headline}</span>
       </Link>
       {showHealthDetail(s) && <p className="line-clamp-2 text-xs leading-snug text-fg-muted">{s.detail}</p>}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">

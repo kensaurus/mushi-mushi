@@ -5,17 +5,25 @@
  *          live-site watch (ADR 0024) on or off or widen it to the most pages
  *          a check allows. The full card, with the broken pages it found,
  *          stays under Inventory → Discovery.
+ *
+ *          Round-2 review 2026-11-18: eight near-identical blocks became one
+ *          status table (app · live watch · audit · last audit · search rank),
+ *          worst first, with each app's switches and settings one click away
+ *          in its row. "Watch daily" and the audit's "Weekly" are two jobs,
+ *          named in their own columns, so they no longer read as a contradiction.
  */
 
 import { Link } from 'react-router-dom'
 import { StatusGlyph } from '../signal/StatusGlyph'
-import { useEffect, useState } from 'react'
-import { Btn, Input, ResultChip, Toggle } from '../ui'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Btn, InfoHint, Input, ResultChip, Toggle } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
+import { appsWorstFirst, auditRunStatus, auditScheduleSummary, watchSummary } from '../../lib/creditsView'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { apiFetch } from '../../lib/supabase'
 import { expiryLabel, firecrawlPace, paceLine, type WatchCost } from '../../lib/creditPlan'
 import { SiteAuditControl, type AuditRow } from './SiteAuditControl'
-import { SearchRankControl, type RankKeyword } from './SearchRankControl'
+import { RankChips, SearchRankControl, type RankKeyword } from './SearchRankControl'
 
 /** The most pages one check may read (PUT /v1/admin/projects/:id/site-watch). */
 const SITE_WATCH_MAX_PAGES = 100
@@ -48,9 +56,14 @@ interface Props {
   /** null while the project list is still loading. */
   projects: Array<{ id: string; name: string }> | null
   now: Date
+  /** The countdown card at the top already shows the balance: do not say the number twice. */
+  balanceShownAbove?: boolean
 }
 
-export function FirecrawlLevers({ balance, projects, now }: Props) {
+/** Columns of the app table (header and rows share them, so they line up). */
+const APP_GRID = 'sm:grid sm:grid-cols-[minmax(8rem,1.1fr)_minmax(7rem,0.9fr)_minmax(7rem,0.9fr)_minmax(6rem,auto)_minmax(0,2fr)] sm:items-center sm:gap-x-3'
+
+export function FirecrawlLevers({ balance, projects, now, balanceShownAbove = false }: Props) {
   const [apps, setApps] = useState<AppWatch[] | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [busy, setBusy] = useState<string | null>(null)
@@ -116,13 +129,17 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
   /** No watch, no audit, no keywords and no address to suggest: nothing to show but an empty field. */
   const notSetUp = (a: AppWatch): boolean => !a.watch && !a.audit && a.ranks.length === 0 && !a.suggestedUrl
 
-  const appBlock = (a: AppWatch) => {
+  const appBlock = (a: AppWatch, inTable = false) => {
     const w = a.watch
     const url = urls[a.projectId] ?? w?.base_url ?? a.suggestedUrl ?? ''
     return (
       <>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm text-fg">{a.name}</p>
+                  {inTable ? (
+                    <p className="text-xs font-semibold text-fg-secondary">Live watch: errors, 404s and blank screens, every day</p>
+                  ) : (
+                    <p className="text-sm text-fg">{a.name}</p>
+                  )}
                   <Toggle
                     label="Watch the live site daily"
                     checked={w != null}
@@ -132,7 +149,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                 </div>
                 {w ? (
                   <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-secondary">
-                    <span className="font-mono">{w.base_url}</span>
+                    <span>{w.base_url}</span>
                     <span>· up to {w.page_limit} pages a day</span>
                     {w.estimated_credits_per_month != null && <span>· about {w.estimated_credits_per_month.toLocaleString()} credits a month</span>}
                     {w.page_limit < SITE_WATCH_MAX_PAGES && (
@@ -176,6 +193,7 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
                   keywords={a.ranks}
                   target={a.rankTarget}
                   firecrawlReady={a.firecrawlReady}
+                  showChips={!inTable}
                   onChanged={(m) => {
                     setNotice(m)
                     if (m.ok) setReloadKey((n) => n + 1)
@@ -187,7 +205,10 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
 
   return (
     <div className="space-y-3">
-      {balance ? (
+      {balance && balanceShownAbove ? (
+        // The countdown card above has the balance; here only what it means for the reset.
+        resets ? <p className="text-sm text-fg">{`${resets.charAt(0).toUpperCase()}${resets.slice(1)}; unused credits do not roll over.`}</p> : null
+      ) : balance ? (
         <p className="text-sm text-fg">
           <span className="tabular-nums">{balance.remaining?.toLocaleString() ?? '?'}</span>
           {balance.limit != null && <span className="text-fg-muted"> of {balance.limit.toLocaleString()}</span>} credits left
@@ -202,11 +223,27 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
       {apps && <p className="text-xs text-fg-secondary tabular-nums">{paceLine(pace, balance?.periodEnd ?? null)}</p>}
 
       {!apps && <p className="text-xs text-fg-muted">Reading each app&apos;s site watch…</p>}
+      {apps && apps.some((a) => !notSetUp(a)) && (
+        <div
+          className={`hidden border-b border-edge-subtle pb-1 text-2xs font-medium text-fg-muted ${APP_GRID}`}
+          aria-hidden="true"
+          data-testid="firecrawl-table-head"
+        >
+          <span>App</span>
+          <span>Live watch</span>
+          <span>Audit</span>
+          <span>Last audit</span>
+          <span>Search rank</span>
+        </div>
+      )}
       {apps && (
         <ul className="divide-y divide-edge-subtle" aria-label="Site watch per app">
-          {apps.filter((a) => !notSetUp(a)).map((a) => (
-            <li key={a.projectId} className="space-y-1.5 py-2">
-              {appBlock(a)}
+          {/* Worst first: an app with failing rules leads; each row opens its switches and settings. */}
+          {appsWorstFirst(apps.filter((a) => !notSetUp(a))).map((a) => (
+            <li key={a.projectId} className="py-1" data-testid={`firecrawl-app-${a.projectId}`}>
+              <AppRow app={a} now={now}>
+                {appBlock(a, true)}
+              </AppRow>
             </li>
           ))}
           {/* Apps with no address and nothing on: one "Add address" row, not a block each. */}
@@ -233,10 +270,9 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
           )}
         </ul>
       )}
-      <p className="text-xs text-fg-muted">
-        The watch checks pages daily for errors, 404s and blank screens; a broken page becomes a bug report after a second check
-        confirms it. The audit reads every page on a schedule and files one report per failing rule. Spend-down can send both to
-        Cursor. Broken pages per app: Inventory → Discovery.
+      <p className="flex items-center gap-1 text-2xs text-fg-muted">
+        How the watch and the audit file reports
+        <InfoHint content="The watch checks pages daily for errors, 404s and blank screens; a broken page becomes a bug report after a second check confirms it. The audit reads every page on a schedule and files one report per failing rule; its reports are on Reports. Spend-down can send both to Cursor. Broken pages per app: Inventory → Discovery." />
       </p>
       {notice && <ResultChip tone={notice.ok ? 'success' : 'error'}>{notice.message}</ResultChip>}
       {confirmOff && (
@@ -250,5 +286,61 @@ export function FirecrawlLevers({ balance, projects, now }: Props) {
         />
       )}
     </div>
+  )
+}
+
+/**
+ * One app as a table row: the states as words and pills, the ranks as chips.
+ * Clicking the row opens its switches and settings below it (a <details>, so
+ * keyboard and screen readers get it for free).
+ */
+function AppRow({ app, now, children }: { app: AppWatch; now: Date; children: ReactNode }) {
+  const watch = watchSummary(app.watch)
+  const schedule = auditScheduleSummary(app.audit)
+  const last = auditRunStatus(app.audit, app.auditFindings, now.getTime())
+  return (
+    <details className="group">
+      <summary
+        className={`flex cursor-pointer list-none flex-col gap-1 rounded-sm py-1.5 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 [&::-webkit-details-marker]:hidden ${APP_GRID}`}
+        data-testid="firecrawl-app-row"
+      >
+        <span className="flex min-w-0 items-center justify-between gap-2 sm:block">
+          <span className="block min-w-0">
+            <span className="flex items-center gap-1 text-sm font-medium text-fg">
+              <span aria-hidden="true" className="text-fg-muted transition-transform group-open:rotate-90">›</span>
+              {app.name}
+            </span>
+            {app.watch || app.audit ? (
+              <span className="block truncate pl-3 text-2xs text-fg-muted" title={app.watch?.base_url ?? app.audit?.base_url}>
+                {(app.watch?.base_url ?? app.audit?.base_url ?? '').replace(/^https:\/\//, '')}
+              </span>
+            ) : null}
+          </span>
+          {/* Phone: the last audit sits beside the name (the columns stack below). */}
+          <span className="sm:hidden">
+            <StatusPill status={last.status} label={last.label} />
+          </span>
+        </span>
+        <span className="pl-3 text-xs text-fg-secondary sm:pl-0">
+          <span className="text-fg-muted sm:hidden">Live watch: </span>
+          {watch ?? <span className="text-fg-muted">Off</span>}
+        </span>
+        <span className="pl-3 text-xs text-fg-secondary sm:pl-0">
+          <span className="text-fg-muted sm:hidden">Audit: </span>
+          {schedule ?? <span className="text-fg-muted">Off</span>}
+        </span>
+        <span className="hidden sm:block" data-testid="firecrawl-last-audit">
+          <StatusPill status={last.status} label={last.label} />
+        </span>
+        <span className="min-w-0 pl-3 sm:pl-0">
+          {app.ranks.length > 0 ? (
+            <RankChips name={app.name} keywords={app.ranks} inline />
+          ) : (
+            <span className="text-xs text-fg-muted">No keywords</span>
+          )}
+        </span>
+      </summary>
+      <div className="mb-2 ml-3 mt-1 space-y-2 border-l border-edge-subtle pl-3">{children}</div>
+    </details>
   )
 }

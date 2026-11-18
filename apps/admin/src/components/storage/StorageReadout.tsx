@@ -44,7 +44,8 @@ export function StorageReadout({ stats, fetchedAt, isValidating }: Props) {
       value: stats.activeProjectConfigured
         ? `${storageVerdict(stats).chip} · ${stats.activeProjectProvider}`
         : 'Built-in storage (nothing to check)',
-      tone: stats.activeProjectConfigured ? healthTone(String(stats.activeProjectHealthStatus)) : 'ok',
+      // Not checked is not passing: the built-in storage reads muted, never green.
+      tone: stats.activeProjectConfigured ? healthTone(String(stats.activeProjectHealthStatus)) : 'muted',
       wrap: true,
     },
     {

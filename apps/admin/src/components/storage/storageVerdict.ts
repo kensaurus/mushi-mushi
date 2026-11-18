@@ -5,8 +5,10 @@
  *          failing" (every app's own buckets) beside "This project: not
  *          checked yet" (an app on the built-in storage, which has nothing to
  *          check), so the two read as a contradiction. The header chip, the
- *          status line and the readout now all read this verdict; other apps'
- *          failing buckets are a separate clause.
+ *          status line and the readout now all read this verdict. Other apps'
+ *          failing buckets are drawn as their own rows at the top of the page
+ *          (lib/storageView.ts storageProblems), not a trailing clause
+ *          (round-2 review 2026-11-18).
  */
 
 import type { StorageStats } from './types'
@@ -14,17 +16,12 @@ import type { StorageStats } from './types'
 type StorageAction = 'configure' | 'probe' | 'reprobe'
 
 export interface StorageVerdict {
-  tone: 'ok' | 'warn' | 'danger' | 'info'
+  /** neutral: the built-in storage is not something we check, so it gets no green. */
+  tone: 'ok' | 'warn' | 'danger' | 'info' | 'neutral'
   /** The header chip: this app's state in two or three words. */
   chip: string
   sentence: string
   action: StorageAction | null
-}
-
-function others(stats: StorageStats): string {
-  // failingCount counts every app's own bucket, this one's included.
-  const n = stats.failingCount - (stats.activeProjectHealthStatus === 'failing' ? 1 : 0)
-  return n > 0 ? ` ${n} other app${n === 1 ? "'s" : "s'"} own bucket${n === 1 ? ' is' : 's are'} failing.` : ''
 }
 
 export function storageVerdict(stats: StorageStats): StorageVerdict {
@@ -34,9 +31,9 @@ export function storageVerdict(stats: StorageStats): StorageVerdict {
   }
   if (!stats.activeProjectConfigured) {
     return {
-      tone: 'ok',
+      tone: 'neutral',
       chip: 'Built-in storage',
-      sentence: `${app} stores screenshots in Mushi Mushi's built-in storage. There's nothing to check.${others(stats)}`,
+      sentence: `${app} stores screenshots in Mushi Mushi's built-in storage.`,
       action: 'configure',
     }
   }
@@ -46,23 +43,23 @@ export function storageVerdict(stats: StorageStats): StorageVerdict {
       return {
         tone: 'danger',
         chip: 'Failing',
-        sentence: `${app}'s ${provider} bucket failed its last check, so screenshots may not be saved.${others(stats)}`,
+        sentence: `${app}'s ${provider} bucket failed its last check, so screenshots may not be saved.`,
         action: 'reprobe',
       }
     case 'degraded':
       return {
         tone: 'warn',
         chip: 'Having trouble',
-        sentence: `${app}'s ${provider} bucket saved screenshots, but recent checks reported errors.${others(stats)}`,
+        sentence: `${app}'s ${provider} bucket saved screenshots, but recent checks reported errors.`,
         action: 'reprobe',
       }
     case 'healthy':
-      return { tone: 'ok', chip: 'Working', sentence: `${app}'s ${provider} bucket is working.${others(stats)}`, action: null }
+      return { tone: 'ok', chip: 'Working', sentence: `${app}'s ${provider} bucket is working.`, action: null }
     default:
       return {
         tone: 'info',
         chip: 'Not checked yet',
-        sentence: `${app}'s ${provider} bucket is saved but hasn't been checked. Check it before real screenshots go there.${others(stats)}`,
+        sentence: `${app}'s ${provider} bucket is saved but hasn't been checked. Check it before real screenshots go there.`,
         action: 'probe',
       }
   }

@@ -35,8 +35,6 @@ import {
 } from '../components/ui'
 import { IconCheck, IconClose } from '../components/icons'
 import {
-  ActionPill,
-  ActionPillRow,
   ContainedBlock,
   InlineProof,
   SignalChip,
@@ -314,9 +312,12 @@ export function AnomaliesPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || anomaliesValidating || metricsValidating}>
           Refresh
         </Btn>
-        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('anomalies')}>
-          Check now
-        </Btn>
+        {/* Without numbers there is nothing to check: the page's one first step ("Add metrics") says so. */}
+        {stats.metricPointCount > 0 && (
+          <Btn size="sm" variant="ghost" onClick={() => setActiveTab('anomalies')}>
+            Check now
+          </Btn>
+        )}
           </>
         )}
       </PageHeaderBar>
@@ -413,7 +414,6 @@ export function AnomaliesPage() {
           onDismiss={dismiss}
           projectId={projectId ?? ''}
           noMetrics={stats.metricPointCount === 0}
-          onIngestMetrics={() => setActiveTab('metrics')}
         />
         </div>
       )}
@@ -435,7 +435,7 @@ export function AnomaliesPage() {
 }
 
 function AnomaliesTab({
-  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics,
+  anomalies, loading, error, errorCode, onRetry, onConfirm, onDismiss, projectId, noMetrics,
 }: {
   anomalies: AnomalyDetection[]
   loading: boolean
@@ -446,30 +446,17 @@ function AnomaliesTab({
   onDismiss: (id: string) => void
   projectId: string
   noMetrics: boolean
-  onIngestMetrics: () => void
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to view anomalies." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <PageLoadError error={error} code={errorCode} resource="anomalies" onRetry={onRetry} />
+  // No numbers: the page's first step at the top ("No metric data yet" + Add metrics) is the one
+  // empty state; a second "No numbers yet" and a second "Add metrics" here repeated it (2026-11-18).
+  if (!anomalies.length && noMetrics) return null
   if (!anomalies.length) {
     return (
       <div className="space-y-3">
-        <EmptySectionMessage
-          text={noMetrics ? 'No numbers yet' : 'No spikes right now'}
-          hint={
-            noMetrics
-              ? 'Send some numbers on the Metrics tab first.'
-              : 'Mushi Mushi checks every hour. No spikes is good news.'
-          }
-        />
-        {/* Check now is the card right above, so the only pill left is adding numbers. */}
-        {noMetrics ? (
-          <ActionPillRow>
-            <ActionPill tone="brand" onClick={onIngestMetrics}>
-              Add metrics
-            </ActionPill>
-          </ActionPillRow>
-        ) : null}
+        <EmptySectionMessage text="No spikes right now" hint="Mushi Mushi checks every hour. No spikes is good news." />
       </div>
     )
   }
@@ -675,6 +662,16 @@ function MetricsTab({ metrics, loading, error, errorCode, onRetry, projectId, on
   )
 }
 
+/**
+ * Exported for tests; page modules are knip entries. Why "Check now" cannot run, or null when it
+ * can. It stayed enabled with no numbers to check, under an amber box (2026-11-18).
+ */
+export function checkNowBlocker(projectId: string, hasMetrics: boolean): string | null {
+  if (!projectId) return 'Pick an app in the header first.'
+  if (!hasMetrics) return 'No numbers to check yet: add metrics first.'
+  return null
+}
+
 function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
@@ -683,6 +680,7 @@ function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; on
   // field is never sent as NaN → null.
   const [form, setForm] = useState({ metric_name: '', lookback_hours: '48' })
   const lookbackHours = parseBoundedInt(form.lookback_hours, 1, 720)
+  const blocker = checkNowBlocker(projectId, hasMetrics)
 
   const run = async () => {
     if (!projectId) { toast.error('Select a project'); return }
@@ -717,16 +715,14 @@ function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; on
       <p className="text-sm text-fg-secondary leading-relaxed">
         Looks for spikes in your numbers now, including ones that started with a release. What it finds is listed below.
       </p>
-      {!projectId && (
-        <ContainedBlock tone="warn">
-          <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
-        </ContainedBlock>
-      )}
-      {!hasMetrics && projectId && (
-        <ContainedBlock tone="warn">
-          <p className="text-xs text-warn">No numbers yet. Send some on the Metrics tab first.</p>
-        </ContainedBlock>
-      )}
+      {/* Blocked: the button stays visible, disabled, with its reason beside it; no form to fill. */}
+      {blocker ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="anomalies-check-blocked">
+          <Btn variant="primary" disabled aria-describedby="anomalies-check-reason">Check now</Btn>
+          <p id="anomalies-check-reason" className="text-xs text-fg-secondary">{blocker}</p>
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-4">
         <label className="block space-y-1">
           <SignalChip tone="neutral">Metric name (optional)</SignalChip>
@@ -738,7 +734,9 @@ function CheckNowCard({ projectId, onDone, hasMetrics }: { projectId: string; on
         </label>
       </div>
       {lookbackHours == null && <p className="text-xs text-danger">Enter a whole number of hours from 1 to 720.</p>}
-      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Check now</Btn>
+      <Btn variant="primary" onClick={run} loading={loading}>Check now</Btn>
+      </>
+      )}
       {result && (
         <ContainedBlock tone="info">
           <SignalChip tone="ok" className="font-medium">

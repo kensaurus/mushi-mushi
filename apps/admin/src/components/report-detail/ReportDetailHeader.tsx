@@ -1,14 +1,12 @@
-import { useState } from 'react'
-import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
+import { Badge, RelativeTime } from '../ui'
 import { ReportSourceTag } from '../reports/ReportSourceTag'
 import { REPORT_SOURCE_META, reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
-import { ContainedBlock, MetaChip } from './ReportSurface'
+import { MetaChip } from './ReportSurface'
 import { StatusPill } from '../signal/StatusMark'
 import { reportRunStatus } from '../reports/reportRunStatus'
 import {
   SEVERITY,
-  CATEGORY_BADGE,
   CATEGORY_LABELS,
   statusLabel,
   severityLabel,
@@ -21,6 +19,7 @@ import { reporterReportsHref } from '../../lib/reportsListFilters'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import { routePathname } from '../reports/reportRowAttribution'
 import type { ReportDeployLive, ReportDetail } from './types'
+import { CATEGORY_NEUTRAL } from './categoryTone'
 
 export function ReportDetailHeader({
   report,
@@ -36,9 +35,6 @@ export function ReportDetailHeader({
   // headline), fall back to technical summary, then raw description. Never
   // cut mid-word; the full text is on hover and behind "Show full".
   const heading = reportHeading(report)
-  const [headingExpanded, setHeadingExpanded] = useState(false)
-  // Breadcrumb still uses a compact technical summary (shorter context)
-  const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   // Provenance: page route where the bug was felt, path only (no query/fragment)
   const pageRoute = routePathname(
     (report.environment as { route?: string } | null)?.route
@@ -57,12 +53,9 @@ export function ReportDetailHeader({
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[transform,opacity]' : ''}`}
     >
-      <Breadcrumbs
-        items={[
-          { label: 'Reports', to: '/reports' },
-          { label: breadcrumbLabel, hint: report.id },
-        ]}
-      />
+      {/* No crumb in the card: the console's own crumb already reads
+          "Bugs › …", and a second "Reports › …" named the page twice, with
+          a different word (R2 sweep 2026-11-18). */}
       <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -71,15 +64,16 @@ export function ReportDetailHeader({
           {report.severity && showsSeverity(sourceKind) && (
             <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
           )}
+          {/* A category is a kind, not a failure: a red "Bug" chip read as an
+              alarm on every bug (R2 sweep 2026-11-18). */}
           {report.category && (
-            <Badge
-              className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
-            >
+            <Badge className={CATEGORY_NEUTRAL}>
               {CATEGORY_LABELS[report.category] ?? report.category}
             </Badge>
           )}
           {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
-          {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
+          {/* "◆ Sentry" already leads the row; "via Sentry" said it again. */}
+          {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && sourceKind !== 'sentry' && (
             <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi Mushi">
               via Sentry
             </Badge>
@@ -90,25 +84,11 @@ export function ReportDetailHeader({
             </Badge>
           )}
         </div>
-        <ContainedBlock tone="info" className="mt-2">
-          <h2
-            className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
-            title={heading.truncated ? heading.full : undefined}
-          >
-            {headingExpanded ? heading.full : heading.text}
-          </h2>
-          {heading.truncated && (
-            <Btn
-              variant="ghost"
-              size="sm"
-              className="mt-1"
-              aria-expanded={headingExpanded}
-              onClick={() => setHeadingExpanded((v) => !v)}
-            >
-              {headingExpanded ? 'Show less' : 'Show full'}
-            </Btn>
-          )}
-        </ContainedBlock>
+        {/* The whole title, as page text: it sat cut off in a cyan box
+            behind "Show full" (R2 sweep 2026-11-18). */}
+        <h2 className="mt-2 max-w-4xl text-lg font-semibold leading-snug text-balance text-fg wrap-break-word">
+          {heading.full}
+        </h2>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />

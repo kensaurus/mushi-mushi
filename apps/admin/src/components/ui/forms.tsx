@@ -745,7 +745,7 @@ interface EmptyStateProps {
  */
 function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-left border-dashed">
+    <div className="py-3 text-left" data-testid="empty-state">
       {icon && (
         <div
           aria-hidden="true"
@@ -754,24 +754,21 @@ function EditorialEmptyState({ title, description, action, hints, icon }: EmptyS
           {icon}
         </div>
       )}
-      <p className="font-serif text-xl leading-tight tracking-[-0.03em] text-fg">{title}</p>
+      <p className="text-sm font-semibold leading-snug text-fg">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-left text-xs text-fg-secondary">
           {hints.map((hint) => (
-            <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-brand">/</span>
-              <span>{hint}</span>
-            </li>
+            <li key={hint}>{hint}</li>
           ))}
         </ul>
       )}
       {action && <div className="mt-3">{action}</div>}
-    </Card>
+    </div>
   )
 }
 
@@ -784,7 +781,7 @@ function EditorialEmptyState({ title, description, action, hints, icon }: EmptyS
  */
 function CompactEmptyState({ title, description, action, hints }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-left border-dashed">
+    <div className="py-3 text-left" data-testid="empty-state">
       <p className="text-fg-muted text-sm">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose leading-relaxed text-pretty wrap-break-word">
@@ -792,17 +789,14 @@ function CompactEmptyState({ title, description, action, hints }: EmptyStateProp
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-left text-xs text-fg-secondary">
           {hints.map((hint) => (
-            <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-brand">/</span>
-              <span>{hint}</span>
-            </li>
+            <li key={hint}>{hint}</li>
           ))}
         </ul>
       )}
       {action && <div className="mt-3">{action}</div>}
-    </Card>
+    </div>
   )
 }
 

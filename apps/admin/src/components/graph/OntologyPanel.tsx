@@ -3,7 +3,7 @@ import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import { apiErrorMessage } from '../../lib/humanizeApiError'
-import { Card, Btn, ErrorAlert, EmptyState, Input } from '../ui'
+import { Card, Btn, ErrorAlert, Input } from '../ui'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 
 interface OntologyTag {
@@ -68,7 +68,7 @@ export function OntologyPanel() {
             Project-specific tags the LLM can apply to reports during Stage 2 classification.
           </p>
         </div>
-        <Btn size="sm" variant={adding ? 'ghost' : 'primary'} onClick={() => setAdding((v) => !v)}>
+        <Btn size="sm" variant={adding ? 'ghost' : 'primary'} onClick={() => setAdding((v) => !v)} className="shrink-0 whitespace-nowrap">
           {adding ? 'Cancel' : 'Add tag'}
         </Btn>
       </div>
@@ -106,17 +106,14 @@ export function OntologyPanel() {
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : tags.length === 0 ? (
-        <EmptyState
-          title="No ontology tags yet"
-          description="Add tags so the LLM can label reports with project-specific concepts (e.g. payment-flow, onboarding-step-3, dark-mode)."
-        />
+        <p className="text-2xs text-fg-muted">No tags yet. Examples: payment-flow, onboarding-step-3, dark-mode.</p>
       ) : (
         <ul className="text-2xs space-y-1 max-h-72 overflow-y-auto pr-1">
           {roots.map((root) => (
             <li key={root.tag}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-fg-secondary">{root.tag}</span>
-                <span className="font-mono text-fg-faint tabular-nums">×{root.usage_count}</span>
+                <span className="text-fg-faint tabular-nums whitespace-nowrap">{usesLabel(root.usage_count)}</span>
               </div>
               {root.description && (
                 <div className="text-fg-faint pl-2">{root.description}</div>
@@ -125,7 +122,7 @@ export function OntologyPanel() {
                 <div key={child.tag} className="pl-3 mt-0.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-fg-muted">↳ {child.tag}</span>
-                    <span className="font-mono text-fg-faint tabular-nums">×{child.usage_count}</span>
+                    <span className="text-fg-faint tabular-nums whitespace-nowrap">{usesLabel(child.usage_count)}</span>
                   </div>
                   {child.description && (
                     <div className="text-fg-faint pl-3">{child.description}</div>
@@ -138,4 +135,9 @@ export function OntologyPanel() {
       )}
     </Card>
   )
+}
+
+/** "x211" had no unit: the count is how many reports carry the tag. */
+export function usesLabel(n: number): string {
+  return `${n.toLocaleString()} report${n === 1 ? '' : 's'}`
 }

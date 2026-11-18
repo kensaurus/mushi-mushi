@@ -213,7 +213,7 @@ html[data-theme="light"] {
   --color-danger-foreground: oklch(0.45 0.20 25);
   --color-ok-foreground: oklch(0.42 0.17 155);
   --color-info-foreground: oklch(0.42 0.16 240);
-  --color-brand-foreground: oklch(0.48 0.16 80);
+  --color-brand-foreground: oklch(0.30 0.02 262); /* ink with the brand (2026-11-18); was amber */
   --color-lime-foreground: oklch(0.28 0.12 128);
 
   --color-ok:            oklch(0.48 0.19 155);

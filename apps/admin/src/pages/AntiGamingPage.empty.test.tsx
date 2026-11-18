@@ -13,6 +13,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mockState = vi.hoisted(() => ({ tracked: 0 }))
+
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useEntitlements', () => ({ useEntitlements: () => ({ has: () => false, isSuperAdmin: false, canEditProject: true }) }))
 vi.mock('../lib/realtime', () => ({ useRealtime: () => undefined }))
@@ -24,7 +26,7 @@ vi.mock('../lib/usePageData', () => ({
     if (path.startsWith('/v1/admin/anti-gaming/stats')) {
       return {
         ...base,
-        data: { hasAnyProject: true, projectId: 'p1', projectName: 'kensaur.us', trackedDevices: 0, flaggedDevices: 0, crossAccountDevices: 0, totalReports: 4, topPriority: 'waiting', topPriorityLabel: null, topPriorityTo: null },
+        data: { hasAnyProject: true, projectId: 'p1', projectName: 'kensaur.us', trackedDevices: mockState.tracked, flaggedDevices: 0, crossAccountDevices: 0, totalReports: 4, topPriority: 'waiting', topPriorityLabel: null, topPriorityTo: null },
       }
     }
     if (path.startsWith('/v1/admin/anti-gaming/devices')) return { ...base, data: { devices: [] } }
@@ -60,18 +62,35 @@ afterEach(async () => {
 })
 
 describe('AntiGamingPage with no tracked device', () => {
-  it('shows one zero line, a neutral not-checked state and flat empty lines', async () => {
+  beforeEach(() => {
+    mockState.tracked = 0
+  })
+
+  it('shows no zero counts and no controls over the empty list, a neutral not-checked state and flat empty lines', async () => {
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(AntiGamingPage))))
     })
-    expect(host.querySelector('[data-testid="anti-gaming-zero-line"]')?.textContent).toBe('0 tracked devices · 0 flagged · 0 cross-account · 4 reports')
-    expect(host.textContent).not.toContain('Tracked devices')
+    // Round 2 (2026-11-18): nothing tracked yet hides the zero line and the filter, group and search controls.
+    expect(host.querySelector('[data-testid="anti-gaming-zero-line"]')).toBeNull()
+    expect(host.textContent).not.toContain('0 tracked devices')
+    expect(host.querySelector('select')).toBeNull()
+    expect(host.querySelector('input[placeholder="Search devices…"]')).toBeNull()
+    expect(host.querySelector('[aria-label="Group devices by"]')).toBeNull()
+    expect(host.textContent).not.toContain('No flagged devices.')
+    expect(host.textContent).not.toContain('Cross-account')
     expect(host.querySelector('[data-testid="anti-gaming-not-checked"]')?.textContent).toContain('Not checked yet')
     expect(host.textContent).not.toContain('Waiting for SDK devices')
     expect(host.querySelectorAll('[data-testid="anti-gaming-empty-line"]').length).toBeGreaterThan(0)
     expect(host.querySelector('.border-dashed')).toBeNull()
-    // The filter reads in words, not the raw value.
+  })
+
+  it('keeps the filter in words once a device is tracked', async () => {
+    mockState.tracked = 3
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(AntiGamingPage))))
+    })
     const filter = host.querySelector('select') as HTMLSelectElement
     expect([...filter.options].map((o) => o.textContent)).toContain('Flagged')
+    expect(host.querySelector('input[placeholder="Search devices…"]')).not.toBeNull()
   })
 })

@@ -1042,11 +1042,6 @@ export function QaCoveragePage() {
                 />
               ),
             },
-            {
-              priority: POSTURE_PRIORITY.guide,
-              show: (data?.coverage?.length ?? 0) === 0,
-              children: <QaProviderGuideCard topPriority={qaStats.topPriority} stats={qaStats} />,
-            },
           ]}
         />
       )}
@@ -1121,6 +1116,11 @@ export function QaCoveragePage() {
           }
         />
       )}
+
+      {/* The runner guide sits under the call to action, collapsed: it answers
+          "which runner?" once someone is about to add a story, and never pushes
+          "+ New story" below the fold (round-2 sweep 2026-11-18). */}
+      {!loading && !error && coverage.length === 0 && <QaProviderGuideCard />}
 
       {!loading && coverage.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter stories">

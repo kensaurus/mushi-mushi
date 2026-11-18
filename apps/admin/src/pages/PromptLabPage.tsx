@@ -40,6 +40,7 @@ import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 import { reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
+import { opensFineTuning } from '../components/prompt-lab/fineTuneActions'
 
 export function PromptLabPage() {
   const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -110,6 +111,8 @@ export function PromptLabPage() {
   // dataset tile) scrolls to the dataset card.
   const tabParam = searchParams.get('tab')
   const stageParam = searchParams.get('stage')
+  const fineTuningLink = opensFineTuning(tabParam)
+  const [advancedOpen, setAdvancedOpen] = useState(fineTuningLink)
   // Applied once per link, so a background reload does not scroll again.
   const appliedLinkRef = useRef<string | null>(null)
   useEffect(() => {
@@ -122,6 +125,9 @@ export function PromptLabPage() {
       document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } else if (tabParam === 'dataset') {
       document.getElementById('prompt-lab-dataset')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else if (opensFineTuning(tabParam)) {
+      setAdvancedOpen(true)
+      document.getElementById('prompt-lab-fine-tuning')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [data, grouped, tabParam, stageParam])
 
@@ -352,12 +358,14 @@ export function PromptLabPage() {
       />
 
       {/* Rare-use tools: vendor fine-tuning jobs and synthetic test reports. */}
-      <DisclosurePanel title="Advanced: fine-tuning & synthetic">
-        <div className="space-y-4">
-          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
-          <SyntheticReportsCard />
-        </div>
-      </DisclosurePanel>
+      <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
+        <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <div className="space-y-4">
+            <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+            <SyntheticReportsCard />
+          </div>
+        </DisclosurePanel>
+      </div>
 
       {/* Endpoints and raw counts: developer detail, at the foot of the page. */}
       <PromptLabReadout

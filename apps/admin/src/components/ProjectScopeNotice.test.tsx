@@ -28,7 +28,7 @@ vi.mock('../lib/useSetupStatus', () => ({
   }),
 }))
 
-import { ProjectScopeNotice } from './ProjectScopeNotice'
+import { ProjectScopeNotice, isAllAppsHubView } from './ProjectScopeNotice'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { OPEN_PROJECT_SWITCHER_EVENT, setStoredProjectScopeMode } from '../lib/projectScope'
 
@@ -109,5 +109,15 @@ describe('ProjectScopeNotice', () => {
     expect(notice()).toBeNull()
     await render(`/portfolio?project=${PROJECT_A}&apps=all`)
     expect(notice()).toBeNull()
+  })
+})
+
+describe('isAllAppsHubView', () => {
+  it('treats Home Overview and Growth as all-apps views, every other view as one app', () => {
+    expect(isAllAppsHubView('/dashboard', '?view=apps')).toBe(true)
+    expect(isAllAppsHubView('/dashboard', '?view=growth')).toBe(true)
+    expect(isAllAppsHubView('/dashboard', '?view=today')).toBe(false)
+    expect(isAllAppsHubView('/dashboard', '')).toBe(false)
+    expect(isAllAppsHubView('/reports', '?view=apps')).toBe(false)
   })
 })
