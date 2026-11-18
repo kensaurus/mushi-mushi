@@ -6,8 +6,10 @@
  *          connecting "these reports" to "your project."
  *
  *          Renders something like:
- *            "Sing Along Completion is your most fragile area — 6 reports
- *             in the last 14 days. 1 fix already merged and 2 more drafted."
+ *            "Most bugs come from `next`: 6 reports in the last 14 days.
+ *             1 fix already merged and 2 more drafted."
+ *          with the area name as a code chip (it is often a package name,
+ *          and "next is your most fragile area" read as broken; 2026-11-18).
  *          The drafted and merged counts are that component's open and
  *          merged PRs, not the project's fix-attempt total.
  *
@@ -57,7 +59,7 @@ export function DogfoodNarrativeBanner() {
   const draftedFixes = top.draftedFixes ?? 0
   const mergedFixes = top.mergedFixes ?? 0
 
-  const sentence = renderDogfoodNarrative({
+  const narrative = renderDogfoodNarrative({
     projectName,
     component: top.component,
     componentReports: top.count,
@@ -74,11 +76,15 @@ export function DogfoodNarrativeBanner() {
       <span
         aria-hidden="true"
         className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${CHIP_TONE.infoSubtle} text-sm`}
-        title="Most fragile area"
+        title="Where most bugs come from"
       >
         ◆
       </span>
-      <p className="flex-1 min-w-0 text-xs text-fg-secondary leading-snug">{sentence}</p>
+      <p className="flex-1 min-w-0 text-xs text-fg-secondary leading-snug" data-testid="narrative-sentence">
+        {narrative.lead}{' '}
+        <code className="rounded-sm border border-edge-subtle bg-surface-overlay px-1 font-mono text-2xs font-semibold text-fg">{narrative.component}</code>
+        : {narrative.rest}
+      </p>
       <Link
         to={`/reports?component=${encodeURIComponent(top.component)}&status=new&sort=severity&dir=desc`}
         // A quiet link: "Open the worst" on Fix first above is the page's one

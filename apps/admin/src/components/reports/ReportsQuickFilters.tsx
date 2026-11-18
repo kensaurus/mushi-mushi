@@ -36,10 +36,15 @@ interface Props {
   /** `enumeration` counts every app (All apps). Default is the pinned app. */
   scope?: 'enumeration' | 'project'
   onSetFilter: (key: string, value: string) => void
+  /**
+   * Inside the filter bar's one row (owner, 2026-11-18: two filter rows became
+   * one): no sticky box of its own, and the chip groups flow inline.
+   */
+  inline?: boolean
 }
 
 
-export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter }: Props) {
+export function ReportsQuickFilters({ status, severity, scope = 'project', onSetFilter, inline = false }: Props) {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const activeProjectSignal = useActiveProjectSignal()
 
@@ -62,7 +67,11 @@ export function ReportsQuickFilters({ status, severity, scope = 'project', onSet
 
   return (
     <div
-      className="sticky top-0 z-10 -mx-1 mb-2 flex flex-col gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center"
+      className={
+        inline
+          ? 'flex min-w-0 flex-wrap items-center gap-1.5'
+          : 'sticky top-0 z-10 -mx-1 mb-2 flex flex-col gap-1.5 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-2 backdrop-blur-sm sm:flex-row sm:items-center'
+      }
       role="toolbar"
       aria-label="Quick filters"
     >
