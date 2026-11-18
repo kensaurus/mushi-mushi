@@ -28,6 +28,10 @@ export interface CheckCardView {
   detail: string | null
   setupTo: string | null
   tone: 'neutral' | 'okSubtle' | 'warnSubtle' | 'dangerSubtle'
+  /** When the run behind this state finished (ISO), when one was stored: grades staleness. */
+  lastRunAt?: string | null
+  /** How many findings the state counts (findings only). */
+  count?: number
 }
 
 /** One recipe / design / CI element, already reduced to the fields the card needs. */
@@ -161,7 +165,7 @@ function ran(iso: string | null | undefined, now: number): string | null {
 
 function withTime(view: CheckCardView, iso: string | null | undefined, now: number): CheckCardView {
   const detail = ran(iso, now)
-  return detail ? { ...view, detail } : view
+  return detail ? { ...view, detail, lastRunAt: iso ?? null } : view
 }
 
 function notSetUp(setupTo: string): CheckCardView {
@@ -177,6 +181,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
       detail: null,
       setupTo: null,
       tone: 'warnSubtle',
+      count: n,
     },
     iso,
     now,
@@ -186,7 +191,7 @@ function findings(count: number, iso: string | null | undefined, now: number): C
 function pass(iso: string, now: number): CheckCardView {
   const detail = ran(iso, now)
   if (!detail) return NOT_CHECKED
-  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'okSubtle' }
+  return { state: 'pass', chip: 'Pass', detail, setupTo: null, tone: 'okSubtle', lastRunAt: iso }
 }
 
 function failed(iso: string | null | undefined, now: number): CheckCardView {
