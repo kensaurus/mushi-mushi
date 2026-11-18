@@ -50,6 +50,8 @@ import { AlertCards } from '../components/signal/AlertCards'
 import { AgeCell, ChangeChip } from '../components/signal/AgeChips'
 import { HighlightProvider, useLinked } from '../components/signal/linkedHighlight'
 import { StatusMark, StatusPill, type RunStatus } from '../components/signal/StatusMark'
+import type { OpsReadResponse } from '../lib/kensaurusOpsTypes'
+import { providerState } from '../lib/providersView'
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
 const GROUP_OF: ReadonlyMap<string, CheckSubGroupId> = new Map(CHECK_GROUPS.flatMap((g) => g.paths.map((p) => [p, g.id] as const)))
@@ -155,13 +157,31 @@ function observed(el: RecipeElementSummary | undefined, fallback: string): Obser
   return { state: el.state, lastCheckedAt: el.lastCheckedAt, findingsCount: el.findingsCount, setupTo: setup }
 }
 
+/** The Providers card's input from the kensaurus-ops snapshot. */
+function providersCheck(data: OpsReadResponse | null, errorCode: string | null, error: string | null) {
+  if (!data) {
+    const phase = errorCode === 'NOT_FOUND' ? 'not_set_up' : error ? 'error' : 'loading'
+    return { phase, down: 0, warn: 0, critIncidents: 0, generatedAt: null } as const
+  }
+  const enabled = data.snapshot.providers.filter((p) => p.enabled)
+  return {
+    phase: 'ready',
+    down: enabled.filter((p) => providerState(p) === 'down').length,
+    warn: enabled.filter((p) => providerState(p) === 'warn').length,
+    critIncidents: data.snapshot.incidents.filter((i) => i.severity === 'crit').length,
+    generatedAt: data.snapshot.generated_at,
+  } as const
+}
+
 export function ChecksPage() {
-  const { has, isSuperAdmin } = useEntitlements()
+  const { has, isSuperAdmin, isOperator } = useEntitlements()
   const { isEnabled } = useLabs()
   const projectId = useActiveProjectId()
   const nav = usePageData<WorkspaceNavMetaResponse>(NAV_META_PATH, { deps: [projectId ?? ''] })
   const recipe = usePageData<RecipeResponse>(projectId ? `/v1/admin/projects/${projectId}/recipe` : null)
   const firstUserTest = usePageData<FreshEyesListData>(projectId ? `/v1/admin/projects/${projectId}/fresh-eyes` : null)
+  // Providers & AI routes: operators only (the route 403s for everyone else).
+  const ops = usePageData<OpsReadResponse>(isOperator ? '/v1/admin/kensaurus/ops' : null, { scope: 'none' })
 
   // No selected app: the recipe read never starts, so these cards must not stay blank.
   const recipePhase = !projectId
@@ -196,12 +216,14 @@ export function ChecksPage() {
       phase: !projectId ? 'no_project' : firstUserTest.data ? 'ready' : firstUserTest.error ? 'error' : 'loading',
       runs: firstUserTest.data?.runs ?? [],
     },
+    providers: isOperator ? providersCheck(ops.data, ops.errorCode, ops.error) : undefined,
   })
 
   const cards = sortCheckCards(
     ALL_PATHS.flatMap((path) => {
       const item = NAV_BY_PATH.get(path)
       if (!item) return []
+      if (path === '/providers' && !isOperator) return []
       // A Lab page the user has not turned on stays out of the grid, as it does in the sidebar.
       const lab = labForPath(path)
       if (lab && !isEnabled(lab.id)) return []

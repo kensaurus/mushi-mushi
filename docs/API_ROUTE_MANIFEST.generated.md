@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-17 · **822** routes.
+> Generated: 2026-11-18 · **824** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 222 |
 | `apiKeyAuth` | 60 |
-| `jwtAuth` | 419 |
+| `jwtAuth` | 421 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
 | `unknown` | 51 |
@@ -256,6 +256,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/judge/run` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/judge.ts` |
 | GET | `/v1/admin/judge/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/judge.ts` |
 | GET | `/v1/admin/judge/stats` | `public` | `packages/server/supabase/functions/api/routes/workspace-nav-meta.test.ts` |
+| GET | `/v1/admin/kensaurus/ops` | `jwtAuth` | `packages/server/supabase/functions/api/routes/kensaurus-ops.ts` |
+| POST | `/v1/admin/kensaurus/ops` | `jwtAuth` | `packages/server/supabase/functions/api/routes/kensaurus-ops.ts` |
 | GET | `/v1/admin/lessons` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | GET | `/v1/admin/lessons/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |
 | PATCH | `/v1/admin/lessons/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/lessons.ts` |

@@ -850,7 +850,7 @@ registerGrowthRoutes(app);
 // Daily GTM scorecard and the cookieless landing page-view beacon
 // (landing-visits.ts in api-ext; api only hashes the visitor IP into the
 // beacon's rate-limit bucket, page-view-forward.ts).
-forwardToApiExt(['/v1/admin/growth/daily']);
+forwardToApiExt(['/v1/admin/growth/daily', '/v1/admin/kensaurus/ops']);
 app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);

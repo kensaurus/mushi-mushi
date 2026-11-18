@@ -30,6 +30,7 @@ const MOVED: Array<{ file: string; register: string; count: number }> = [
   { file: 'spend-ledger', register: 'registerSpendLedgerRoutes', count: 3 },
   { file: 'ops', register: 'registerOpsRoutes', count: 10 },
   { file: 'accounts-register', register: 'registerAccountsRegisterRoutes', count: 4 },
+  { file: 'kensaurus-ops', register: 'registerKensaurusOpsRoutes', count: 1 },
 ]
 
 describe('route groups that run in api-ext', () => {

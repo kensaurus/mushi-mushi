@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-17T13:08:55.236Z",
+  "generatedAt": "2026-11-18T05:03:06.196Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -280,6 +280,15 @@
       "route_path": "/ci",
       "kind": "page",
       "content_hash": "065ce88af30e0b627cb54bb0c2eede80d67aa943f55991482936336b946740a3"
+    },
+    {
+      "doc_path": "pages/providers.md",
+      "section": "main",
+      "title": "Providers & AI routes",
+      "body": "# Providers & AI routes\n\nThe AI provider accounts behind every app: health and balance, spend against sales, the model each app tries first, and who changed what.\n\nRoute: /providers\nSection: Check\n\nKeywords: providers, ai providers, ai routes, model routes, routing, llm providers, provider health, balance, spend, margin, kensaurus, provider watch, models\n\nUse this page when the user asks about: providers, ai providers, ai routes, model routes, routing, llm providers",
+      "route_path": "/providers",
+      "kind": "page",
+      "content_hash": "de790f9111ac9abad23f81c9af80db3cd6a10419258fe9cc5ef8ca3aba4b88a8"
     },
     {
       "doc_path": "pages/health.md",
