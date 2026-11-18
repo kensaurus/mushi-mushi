@@ -28,7 +28,7 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Badge, Btn, Card, Skeleton } from '../components/ui'
+import { Btn, Card, Skeleton } from '../components/ui'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { IconShieldCheck } from '../components/icons'
 import { UpgradePill } from '../components/billing/UpgradeNudge'
@@ -49,7 +49,7 @@ import { useNow } from '../lib/useNow'
 import { AlertCards } from '../components/signal/AlertCards'
 import { AgeCell, ChangeChip } from '../components/signal/AgeChips'
 import { HighlightProvider, useLinked } from '../components/signal/linkedHighlight'
-import { StatusGlyph, type SignalTone } from '../components/signal/StatusGlyph'
+import { StatusMark, StatusPill, type RunStatus } from '../components/signal/StatusMark'
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
 const GROUP_OF: ReadonlyMap<string, CheckSubGroupId> = new Map(CHECK_GROUPS.flatMap((g) => g.paths.map((p) => [p, g.id] as const)))
@@ -76,15 +76,15 @@ const STATE_RANK: Record<CheckCardState, number> = {
   pass: 6,
 }
 
-/** The shape beside each state, so a state never depends on colour alone. */
-const STATE_TONE: Record<CheckCardState, SignalTone> = {
-  failed: 'danger',
-  findings: 'warn',
-  unavailable: 'off',
-  not_checked: 'off',
-  not_set_up: 'off',
-  watching: 'info',
-  pass: 'ok',
+/** Each state's status mark (colour plus glyph): ✕ failed, ⧗ findings, ● watching pulses, ✓ pass, ○ the rest. */
+const STATE_STATUS: Record<CheckCardState, RunStatus> = {
+  failed: 'failed',
+  findings: 'slow',
+  unavailable: 'idle',
+  not_checked: 'idle',
+  not_set_up: 'idle',
+  watching: 'running',
+  pass: 'passed',
 }
 
 /** Passing and watching checks fold into one line; everything else stays open. */
@@ -255,7 +255,7 @@ export function ChecksPage() {
           description="Every automatic check on this app, failing ones first."
           helpTitle="About Checks"
           helpWhatIsIt="Each row is one automatic check Mushi Mushi runs on your app or on its own triage: scheduled browser tests, app health, audits, user stories, the app blueprint, design tokens, content, a first-time user test, and how well the AI graded, learned from and prompted each fix."
-          helpHowToUse={`The cards on top are what needs you: ▲ failed, ◆ findings or a run older than ${STALE_DAYS} days, each with its count and its ▲/▼ change since your last visit. The age chip darkens as a run gets older. Grey ○ is not set up, not run yet, or could not be read: never a pass. Passing (●) and watching (■) checks fold into one line. A Pro pill means the check needs a plan upgrade.`}
+          helpHowToUse={`The cards on top are what needs you: ▲ failed, ◆ findings or a run older than ${STALE_DAYS} days, each with its count and its ▲/▼ change since your last visit. The age chip darkens as a run gets older. Grey ○ is not set up, not run yet, or could not be read: never a pass. Passing (✓) and watching (a pulsing ●) checks fold into one line. A Pro pill means the check needs a plan upgrade.`}
         />
 
         <PagePosture
@@ -296,7 +296,7 @@ export function ChecksPage() {
         {folded.length > 0 && (
           <details className="group rounded-md border border-edge bg-surface-raised" data-testid="checks-passing">
             <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-1.5 text-xs">
-              <StatusGlyph tone="ok" />
+              <StatusMark status="passed" />
               <span className="font-mono font-extrabold tabular-nums text-fg">{passing}</span>
               <span className="font-semibold text-fg">passing</span>
               {watching > 0 && (
@@ -304,7 +304,7 @@ export function ChecksPage() {
                   <span className="text-fg-faint" aria-hidden="true">
                     ·
                   </span>
-                  <StatusGlyph tone="info" />
+                  <StatusMark status="running" />
                   <span className="font-mono font-extrabold tabular-nums text-fg">{watching}</span>
                   <span className="font-semibold text-fg">watching</span>
                 </>
@@ -343,7 +343,7 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
     <li {...link} className={`${link.className} min-w-0`} data-testid={`checks-card-${path.slice(1)}`} data-state={view?.state ?? 'loading'}>
       <Card interactive className={`relative flex h-full flex-col gap-1.5 p-3 ${gated ? 'opacity-80' : ''}`}>
         <div className="flex min-w-0 items-center gap-2">
-          {view ? <StatusGlyph tone={STATE_TONE[view.state]} /> : <Skeleton className="h-3 w-3 shrink-0 rounded-full" />}
+          {view ? <StatusMark status={STATE_STATUS[view.state]} /> : <Skeleton className="h-3 w-3 shrink-0 rounded-full" />}
           <Icon className="h-4 w-4 shrink-0 text-fg-secondary" />
           <Link to={path} className={LINK}>
             {item.label}
@@ -352,15 +352,11 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
             {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
             <ChangeChip change={change} testId="checks-change" />
             {view ? (
-              <Badge tone={view.tone} title={view.detail ?? view.chip}>
-                {view.chip}
-              </Badge>
+              <StatusPill status={STATE_STATUS[view.state]} label={view.chip} title={view.detail ?? view.chip} />
             ) : (
               // App blueprint and Design system wait on a slow read (7–30 s,
               // 2026-10-30); a blank corner read as broken.
-              <Badge tone="neutral" className="motion-safe:animate-pulse">
-                Checking…
-              </Badge>
+              <StatusPill status="running" label="Checking…" />
             )}
           </span>
         </div>
@@ -395,7 +391,7 @@ function FoldedCheck({ card, gated, change, now }: RowProps) {
       data-testid={`checks-card-${path.slice(1)}`}
       data-state={view?.state ?? 'loading'}
     >
-      {view && <StatusGlyph tone={STATE_TONE[view.state]} />}
+      {view && <StatusMark status={STATE_STATUS[view.state]} />}
       <Icon className="h-3.5 w-3.5 shrink-0 text-fg-secondary" />
       <Link to={path} className={`${LINK} shrink-0`}>
         {item.label}
@@ -407,7 +403,7 @@ function FoldedCheck({ card, gated, change, now }: RowProps) {
         {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
         <ChangeChip change={change} testId="checks-change" />
         {view?.lastRunAt ? <RunAge lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="text-fg-secondary">{view.detail}</span> : null}
-        {view && <span className="font-semibold text-fg-secondary">{view.chip}</span>}
+        {view && <StatusPill status={STATE_STATUS[view.state]} label={view.chip} />}
       </span>
     </li>
   )

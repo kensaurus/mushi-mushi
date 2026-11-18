@@ -137,6 +137,10 @@ describe('ChecksPage', () => {
     // A card whose read is still running says so instead of leaving its corner blank (2026-10-30).
     const waiting = container.querySelector('[data-testid="checks-card-recipe"]')!
     if (waiting.getAttribute('data-state') === 'loading') expect(waiting.textContent).toContain('Checking…')
+    // Each state is a status pill (colour plus glyph): findings are slow, a pass passes (2026-11-18).
+    const pill = (id: string) => container.querySelector(`[data-testid="checks-card-${id}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(pill('qa-coverage')).toBe('slow')
+    expect(pill('fullstack-audit')).toBe('passed')
   })
 
   it('leads with one sentence and one action to the failing check', () => {
