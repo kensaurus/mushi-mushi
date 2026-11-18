@@ -38,12 +38,13 @@ beforeAll(async () => {
 })
 
 type Handler = (c: FakeContext, next?: () => Promise<void>) => Promise<unknown> | unknown
-interface JsonResult { body: { ok: boolean; data?: any; error?: any }; status: number }
+interface JsonResult { body: { ok: boolean; data?: any; error?: any }; status: number; headers: Record<string, string> }
 interface FakeContext {
   req: { header: (k: string) => string | undefined; param: (k: string) => string | undefined; query: (k: string) => string | undefined }
   get: (k: string) => unknown
   set: (k: string, v: unknown) => void
   json: (body: Record<string, unknown>, status?: number) => JsonResult
+  header: (k: string, v: string) => void
 }
 
 class FakeApp {
@@ -61,11 +62,13 @@ class FakeApp {
       const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]))
       const query = new URLSearchParams(qs ?? '')
       const v: Record<string, unknown> = { userId: 'user-a', authMethod: 'jwt', ...vars }
+      const headers: Record<string, string> = {}
       const c: FakeContext = {
         req: { header: () => undefined, param: (k) => params[k], query: (k) => query.get(k) ?? undefined },
         get: (k) => v[k],
         set: (k, val) => { v[k] = val },
-        json: (body, status = 200) => ({ body: body as JsonResult['body'], status }),
+        json: (body, status = 200) => ({ body: body as JsonResult['body'], status, headers }),
+        header: (k, val) => { headers[k] = val },
       }
       let result: unknown
       const run = async (i: number): Promise<void> => {
@@ -86,6 +89,21 @@ const NOW = new Date('2026-10-02T12:00:00Z')
 const pid = (n: number) => `1000000${n}-0000-4000-8000-000000000000`
 const NAMES = ['glot.it', 'solo-boss-cloud', 'yen-yen', 'the-wanting-mind', 'Help Her Take Photo', 'tsumagoi', 'mushi-demo']
 const P_OTHER = '2000000b-0000-4000-8000-000000000000'
+
+/** billing_llm_cost_by_project, as the SQL function sums it (rows with a cost only). */
+function costRpc(rows: Array<{ project_id: string; cost_usd: unknown; created_at: string }>) {
+  return (fn: string, args: Record<string, unknown>) => {
+    if (fn !== 'billing_llm_cost_by_project') return null
+    const ids = args.p_project_ids as string[]
+    const since = Date.parse(String(args.p_since))
+    const sums = new Map<string, number>()
+    for (const r of rows) {
+      if (!ids.includes(r.project_id) || r.cost_usd == null || Date.parse(r.created_at) < since) continue
+      sums.set(r.project_id, (sums.get(r.project_id) ?? 0) + Number(r.cost_usd))
+    }
+    return [...sums.entries()].map(([project_id, cost_usd]) => ({ project_id, cost_usd }))
+  }
+}
 
 function seed(extra: Record<string, unknown[]> = {}, options: Parameters<typeof makeFakeDb>[1] = {}): FakeDb {
   return makeFakeDb({
@@ -180,14 +198,15 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
   })
 
   it('sums 30 days of Mushi LLM spend and reports caps as facts', async () => {
+    const calls = [
+      { project_id: pid(1), cost_usd: '0.40', created_at: '2026-09-30T00:00:00Z' },
+      { project_id: pid(1), cost_usd: 0.11, created_at: '2026-09-20T00:00:00Z' },
+      { project_id: pid(1), cost_usd: 9, created_at: '2026-08-01T00:00:00Z' },
+    ]
     const db = seed({
-      llm_invocations: [
-        { project_id: pid(1), cost_usd: '0.40', created_at: '2026-09-30T00:00:00Z' },
-        { project_id: pid(1), cost_usd: 0.11, created_at: '2026-09-20T00:00:00Z' },
-        { project_id: pid(1), cost_usd: 9, created_at: '2026-08-01T00:00:00Z' },
-      ],
+      llm_invocations: calls,
       project_settings: [{ project_id: pid(1), autofix_max_spend_usd: '5.0000', monthly_llm_budget_usd: null }],
-    })
+    }, { rpc: costRpc(calls) })
     const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
     expect(glot.spend).toEqual({ llmUsd30d: 0.51, llmCalls30d: 2, partial: false, autofixCapUsd: 5, monthlyLlmBudgetUsd: null, capsKnown: true })
@@ -199,11 +218,32 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     const calls = Array.from({ length: 2_500 }, (_, i) => ({
       id: `call-${String(i).padStart(5, '0')}`, project_id: pid(1), cost_usd: 0.01, created_at: '2026-09-30T00:00:00Z',
     }))
-    const db = seed({ llm_invocations: calls }, { maxRows: 1_000 })
+    const db = seed({ llm_invocations: calls }, { maxRows: 1_000, rpc: costRpc(calls) })
     const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
     const glot = res.body.data.cards.find((c: { projectId: string }) => c.projectId === pid(1))
     expect(glot.spend).toMatchObject({ llmCalls30d: 2_500, llmUsd30d: 25, partial: false })
     expect(res.body.data.readErrors).toEqual([])
+    // One SQL sum and a head count per app, never a page-by-page read of every call (7 s live, 2026-11-18).
+    expect(db.rpcCalls.filter((r) => r.fn === 'billing_llm_cost_by_project')).toHaveLength(1)
+  })
+
+  it('leaves the public demo app out of the Fix once count', async () => {
+    const run = (id: string, project: number) => ({ id, project_id: pid(project), gate: 'code_health', status: 'fail', summary: {}, started_at: '2026-10-01T00:00:00Z', completed_at: '2026-10-01T00:00:00Z' })
+    const finding = (runId: string, project: number, rule: string) => ({ gate_run_id: runId, project_id: pid(project), rule_id: rule, severity: 'warn', message: rule, allowlisted: false })
+    const db = seed({
+      gate_runs: [run('r1', 1), run('r2', 2), run('r7', 7)],
+      // god_file: glot.it and solo-boss-cloud, a real repeat. demo_only: glot.it and the demo only.
+      gate_findings: [finding('r1', 1, 'god_file'), finding('r2', 2, 'god_file'), finding('r1', 1, 'demo_only'), finding('r7', 7, 'demo_only')],
+    })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.body.data.repeatedGroups).toBe(1)
+  })
+
+  it('times each read part in a Server-Timing header', async () => {
+    const res = await harness(seed()).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const parts = res.headers['Server-Timing']!.split(', ').map((p) => p.split(';')[0])
+    expect(parts).toEqual(expect.arrayContaining(['runs', 'sdk', 'reports', 'spend', 'presence', 'kind', 'releases', 'ci', 'findings', 'total']))
+    expect(res.headers['Server-Timing']).toMatch(/spend;dur=\d+/)
   })
 
   it('finds the latest SDK release even when the catalog is longer than one 1,000-row response', async () => {
@@ -222,6 +262,41 @@ describe('GET /v1/admin/orgs/:orgId/portfolio', () => {
     expect(glot.sdk[0]).toMatchObject({ version: '1.28.0', latest: '1.29.0', status: 'behind' })
     expect(glot.unreadable).not.toContain('sdk')
     expect(res.body.data.readErrors).toEqual([])
+  })
+})
+
+describe('portfolio CI failures today (Apps heat grid, 2026-11-18)', () => {
+  const job = (n: number, over: Record<string, unknown>) => ({ id: `job-${n}`, project_id: pid(1), ci_kind: 'code_failure', infra: false, completed_at: '2026-10-02T09:00:00Z', ...over })
+
+  it('counts code failures since UTC midnight per app with a repo; no repo reads null, not 0', async () => {
+    const db = seed({
+      project_repos: [{ id: 'r1', project_id: pid(1) }, { id: 'r3', project_id: pid(3) }],
+      ci_jobs: [
+        job(1, {}),
+        job(2, { completed_at: '2026-10-02T00:30:00Z' }),
+        // Yesterday (UTC), a lost runner, and a pass do not count.
+        job(3, { completed_at: '2026-10-01T23:59:00Z' }),
+        job(4, { ci_kind: 'runner_lost', infra: true }),
+        job(5, { ci_kind: 'passed' }),
+      ],
+    })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    const by = (id: string) => res.body.data.cards.find((c: { projectId: string }) => c.projectId === id)
+    expect(by(pid(1)).ciFailsToday).toBe(2)
+    expect(by(pid(3)).ciFailsToday).toBe(0)
+    expect(by(pid(2)).ciFailsToday).toBeNull()
+    expect(res.body.data.readErrors).toEqual([])
+  })
+
+  it('a failed CI read is unknown on every card and named, never 0', async () => {
+    const db = seed({ project_repos: [{ id: 'r1', project_id: pid(1) }] }, { failRead: (t: string) => (t === 'ci_jobs' ? 'relation "ci_jobs" is unavailable' : null) })
+    const res = await harness(db).app.call(`/v1/admin/orgs/${ORG_A}/portfolio`)
+    expect(res.status).toBe(200)
+    for (const card of res.body.data.cards) {
+      expect(card.ciFailsToday).toBeNull()
+      expect(card.unreadable).toContain('ci')
+    }
+    expect(res.body.data.readErrors).toEqual([expect.objectContaining({ part: 'ci', kind: 'failed' })])
   })
 })
 

@@ -58,6 +58,51 @@ export interface MachineNow {
   memPct: number | null
   /** The machine stopped reporting. */
   stale: boolean
+  /** Its runners' runs-on labels (generic ones like self-hosted / Linux / X64 left out). */
+  labels?: string[]
+  /** Labels waiting jobs need that this idle machine lacks: why it sits idle while jobs wait. */
+  missingLabels?: string[]
+  /** Highlight keys: its runners, so pointing at the tile lights their jobs. */
+  runnerNames?: string[]
+}
+
+/** A job waiting for a machine, with the specific labels it needs. */
+export interface WaitingNow {
+  job: CiJob
+  app: string
+  waitS: number
+  /** The job's non-generic runs-on labels ("kensaurus-local"); empty for GitHub's cloud. */
+  needs: string[]
+  /** True when an idle machine lacks a label this job needs (the mismatch to fix). */
+  mismatch: boolean
+}
+
+/**
+ * Waiting jobs that need the same machine labels, under one header (2026-11-18): "needs
+ * kensaurus-local" printed on eight rows in a row was the same fact eight times.
+ */
+export interface WaitingGroup {
+  /** The needed labels, lower-cased and sorted ('' for jobs that need no specific label). */
+  key: string
+  /** The specific labels these jobs need, as the first job spells them; empty for GitHub's cloud. */
+  needs: string[]
+  /** Oldest first. */
+  jobs: WaitingNow[]
+  /** An idle machine lacks one of these labels. */
+  mismatch: boolean
+}
+
+/** @internal Exported for tests. Waiting jobs by the labels they need: the biggest group first, then the longest wait. */
+export function groupWaiting(jobs: readonly WaitingNow[]): WaitingGroup[] {
+  const groups = new Map<string, WaitingGroup>()
+  for (const w of jobs) {
+    const key = w.needs.map((l) => l.toLowerCase()).sort().join(',')
+    const g = groups.get(key) ?? { key, needs: w.needs, jobs: [], mismatch: false }
+    g.jobs.push(w)
+    g.mismatch ||= w.mismatch
+    groups.set(key, g)
+  }
+  return [...groups.values()].sort((a, b) => b.jobs.length - a.jobs.length || (b.jobs[0]?.waitS ?? 0) - (a.jobs[0]?.waitS ?? 0))
 }
 
 export interface RunningNow {
@@ -102,6 +147,10 @@ export interface CiStatus {
   oldestWaitS: number | null
   /** Why the waiting jobs wait, when it can be read from the data (which machines take them). */
   waitWhy: string | null
+  /** Every waiting job, oldest first, with the labels it needs. */
+  waitingJobs: WaitingNow[]
+  /** The same jobs by the labels they need (`groupWaiting`): one header per label set. */
+  waitingGroups: WaitingGroup[]
   apps: AppTime[]
   /** The worst delay across apps this week, as a sentence; null when none stands out. */
   bottleneck: string | null
@@ -126,6 +175,48 @@ const GITHUB_LABEL = /^(ubuntu|windows|macos)(-|$)/i
 
 const labelKey = (labels: string[]) => labels.map((l) => l.toLowerCase()).sort().join(',')
 
+/** Labels every self-hosted runner has; they never tell machines apart. */
+const GENERIC_LABEL = /^(self-hosted|linux|x64|arm64|arm|windows|macos|wsl2?)$/i
+
+/** @internal Exported for tests. The labels that pick a machine, generic ones left out. */
+export function specificLabels(labels: readonly string[]): string[] {
+  return [...new Set(labels.filter((l) => !GENERIC_LABEL.test(l) && !GITHUB_LABEL.test(l)))]
+}
+
+/** Each machine's specific labels: its runners' labels plus those of jobs that ran on it. */
+function labelsByMachine(overview: CiOverview): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const add = (id: string, labels: readonly string[]) => {
+    const set = out.get(id) ?? new Set<string>()
+    for (const l of specificLabels(labels)) set.add(l.toLowerCase())
+    out.set(id, set)
+  }
+  for (const r of overview.runners) {
+    const host = hostOfRunner(overview.hosts, runnerKey(r.name), r.hostId)
+    if (host) add(host.hostId, r.labels)
+  }
+  for (const j of overview.jobs) {
+    const m = machineOfJob(overview, j)
+    if (m?.kind === 'self' && j.runnerName) add(m.id, j.labels)
+  }
+  return out
+}
+
+/** Runner names per machine (highlight keys). */
+function runnersByMachine(overview: CiOverview): Map<string, Set<string>> {
+  const out = new Map<string, Set<string>>()
+  const add = (id: string, name: string) => out.set(id, (out.get(id) ?? new Set<string>()).add(name))
+  for (const r of overview.runners) {
+    const host = hostOfRunner(overview.hosts, runnerKey(r.name), r.hostId)
+    if (host) add(host.hostId, r.name)
+  }
+  for (const j of overview.jobs) {
+    const m = machineOfJob(overview, j)
+    if (m && j.runnerName) add(m.id, j.runnerName)
+  }
+  return out
+}
+
 /**
  * Why the waiting jobs wait, read from this window's jobs: which machines have run a job
  * with the same runs-on labels. "3 jobs wait while 2 machines sit idle" was the first
@@ -133,22 +224,29 @@ const labelKey = (labels: string[]) => labels.map((l) => l.toLowerCase()).sort()
  * for those labels. No capacity figure exists, so it says "running N now", never "full".
  */
 function whyWaiting(overview: CiOverview, machines: MachineNow[], idle: string[]): string | null {
+  // Grouped by the labels that pick a machine (specificLabels), the same as the waiting headers
+  // and the alert's chips, so the sentence never names "self-hosted" where the chips say
+  // "kensaurus-local" (2026-11-18).
+  const need = (j: CiJob) => labelKey(specificLabels(j.labels))
   const groups = new Map<string, CiJob[]>()
   for (const j of overview.jobs) {
     if (jobOutcome(j) !== 'waiting') continue
-    groups.set(labelKey(j.labels), [...(groups.get(labelKey(j.labels)) ?? []), j])
+    groups.set(need(j), [...(groups.get(need(j)) ?? []), j])
   }
   const biggest = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
   if (!biggest) return null
   const [key, jobs] = biggest
-  const labels = jobs[0]!.labels
-  if (labels.length === 0) return null
+  const all = jobs[0]!.labels
+  const labels = specificLabels(all)
+  if (labels.length === 0) {
+    if (all.length > 0 && all.every((l) => GITHUB_LABEL.test(l))) return `They wait for GitHub's cloud (${all.map((l) => `“${l}”`).join(', ')}), not for your machines.`
+    return null
+  }
   const quoted = labels.map((l) => `“${l}”`).join(', ')
-  if (labels.every((l) => GITHUB_LABEL.test(l))) return `They wait for GitHub's cloud (${quoted}), not for your machines.`
   // Machines that ran a job with these labels this window.
   const takers = new Set<string>()
   for (const j of overview.jobs) {
-    if (labelKey(j.labels) !== key) continue
+    if (need(j) !== key) continue
     const m = machineOfJob(overview, j)
     if (m?.kind === 'self') takers.add(m.id)
   }
@@ -199,6 +297,8 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     for (const r of rs) counts.set(r.app, (counts.get(r.app) ?? 0) + 1)
     return [...counts.entries()].map(([app, count]) => ({ app, count })).sort((a, b) => b.count - a.count || a.app.localeCompare(b.app))
   }
+  const machineLabels = labelsByMachine(overview)
+  const machineRunners = runnersByMachine(overview)
   const machines: MachineNow[] = overview.hosts.map((h) => {
     const rs = byMachine.get(h.hostId) ?? []
     const load = h.metrics.load1
@@ -212,6 +312,9 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
       busyPct: load != null && h.cpuCount ? Math.min(100, Math.round((load / h.cpuCount) * 100)) : null,
       memPct: h.metrics.memUsedMb != null && h.memTotalMb ? Math.min(100, Math.round((h.metrics.memUsedMb / h.memTotalMb) * 100)) : null,
       stale: h.stale,
+      labels: [...(machineLabels.get(h.hostId) ?? [])].sort(),
+      missingLabels: [],
+      runnerNames: [...(machineRunners.get(h.hostId) ?? [])],
     }
   })
   for (const [id, rs] of byMachine) {
@@ -220,6 +323,31 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     machines.push({ id, name: m?.name ?? 'a machine that has not reported in', kind: m?.kind ?? 'unregistered', detail: null, running: rs.length, apps: appsOf(rs), busyPct: null, memPct: null, stale: false })
   }
   machines.sort((a, b) => b.running - a.running || a.name.localeCompare(b.name))
+
+  // Waiting jobs and the label gap: an idle machine of yours that lacks a label a waiting job
+  // needs is why "3 waiting" sits beside "2 idle" (owner, 2026-11-16 / 11-18).
+  const waitingJobs: WaitingNow[] = overview.jobs
+    .filter((j) => jobOutcome(j) === 'waiting')
+    .map((job) => ({
+      job,
+      app: appName(overview, job.repo),
+      waitS: Math.max(0, (now - Date.parse(job.createdAt)) / 1000),
+      needs: specificLabels(job.labels),
+      mismatch: false,
+    }))
+    .sort((a, b) => b.waitS - a.waitS)
+  for (const m of machines) {
+    if (m.kind !== 'self' || m.stale || m.running > 0) continue
+    const has = new Set((m.labels ?? []).map((l) => l.toLowerCase()))
+    const missing = new Set<string>()
+    for (const w of waitingJobs) {
+      const lacks = w.needs.filter((l) => !has.has(l.toLowerCase()))
+      if (lacks.length === 0) continue
+      lacks.forEach((l) => missing.add(l))
+      w.mismatch = true
+    }
+    m.missingLabels = [...missing].sort()
+  }
   const busy = machines.filter((m) => m.running > 0 || m.stale)
   const idle = machines.filter((m) => m.running === 0 && !m.stale).map((m) => m.name)
 
@@ -275,7 +403,7 @@ export function buildCiStatus(overview: CiOverview, now: number): CiStatus {
     tone = tone === 'bad' ? 'bad' : 'warn'
     parts.push(`Slower than usual: ${slowest.job.jobName} (${slowest.app}), ${minutes(slowest.elapsedS ?? 0)} so far, usually ${minutes(slowest.usualS ?? 0)}.`)
   }
-  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, waitWhy, apps, bottleneck }
+  return { tone, headline: parts.join(' '), machines: busy, allMachines: machines, idle, running, waiting, oldestWaitS, waitWhy, waitingJobs, waitingGroups: groupWaiting(waitingJobs), apps, bottleneck }
 }
 
 export interface FailureGroup {
@@ -353,7 +481,62 @@ export function groupFailures(overview: Pick<CiOverview, 'jobs' | 'repos'>, now:
   return out.sort((a, b) => b.at - a.at)
 }
 
-/** "about 3 min left", "usually 9 min", "no usual time yet": the running job's estimate in words. */
+/** One failing step seen across several pull requests: a pattern, not N paragraphs. */
+export interface FailureCause {
+  key: string
+  /** The failing step ("Dependency audit"), else the job name. */
+  step: string
+  /** The job(s) it failed in. */
+  jobs: string[]
+  /** Each pull request (or branch) it broke, newest first. */
+  hits: Array<{ group: FailureGroup; failure: RecentFailure }>
+  apps: Array<{ repo: string; app: string }>
+}
+
+/**
+ * Group the last two hours' failures by cause (2026-11-18; the owner: "you expect us to read a
+ * bunch of text wall?"). The same failing step in two or more pull requests becomes ONE cause
+ * ("Dependency audit · 5 PRs · 3 apps"); everything else stays a single compact row. Only code
+ * failures with a named step group: "the machine stopped" is never one cause across PRs.
+ */
+export function groupFailureCauses(groups: readonly FailureGroup[]): { causes: FailureCause[]; singles: Array<{ group: FailureGroup; failure: RecentFailure; step: string | null }> } {
+  const byStep = new Map<string, Array<{ group: FailureGroup; failure: RecentFailure; step: string | null }>>()
+  const loose: Array<{ group: FailureGroup; failure: RecentFailure; step: string | null }> = []
+  for (const g of groups) {
+    if (g.draftOnly) continue
+    for (const { failure, step } of g.broke) {
+      if (failure.kind !== 'code' || !step) {
+        loose.push({ group: g, failure, step })
+        continue
+      }
+      const key = step.trim().toLowerCase()
+      byStep.set(key, [...(byStep.get(key) ?? []), { group: g, failure, step }])
+    }
+  }
+  const causes: FailureCause[] = []
+  const singles = [...loose]
+  for (const [key, hits] of byStep) {
+    const prs = new Set(hits.map((h) => h.group.key))
+    if (prs.size < 2) {
+      singles.push(...hits)
+      continue
+    }
+    const apps = new Map<string, string>()
+    for (const h of hits) apps.set(h.group.repo, h.group.app)
+    causes.push({
+      key,
+      step: hits[0]!.step!,
+      jobs: [...new Set(hits.map((h) => h.failure.job.jobName))],
+      hits: [...hits].sort((a, b) => b.failure.at - a.failure.at).map(({ group, failure }) => ({ group, failure })),
+      apps: [...apps.entries()].map(([repo, app]) => ({ repo, app })),
+    })
+  }
+  causes.sort((a, b) => b.hits.length - a.hits.length || b.apps.length - a.apps.length)
+  singles.sort((a, b) => b.failure.at - a.failure.at)
+  return { causes, singles }
+}
+
+/** @internal Exported for tests. "about 3 min left", "usually 9 min", "no usual time yet": the running job's estimate in words. */
 export function estimateLine(r: Pick<RunningNow, 'elapsedS' | 'usualS' | 'slow' | 'leftS'>): string {
   if (r.usualS == null) return 'no usual time yet (fewer than 3 runs)'
   if (r.slow) return `slower than usual (usually ${minutes(r.usualS)})`

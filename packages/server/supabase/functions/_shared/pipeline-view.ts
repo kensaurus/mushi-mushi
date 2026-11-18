@@ -99,6 +99,13 @@ export interface PipelineGroup {
   settings: { label: string; to: string; hint?: string } | null
   items: PipelineItem[]
   /**
+   * Every item's time in its stage, in four buckets: [0–3 d, 3–7 d, 7–30 d, 30 d+]
+   * (`ageBuckets`). Counted over all `count` items before the list is cut to
+   * MAX_ITEMS_PER_GROUP, so the console's age bar adds up to the group. Absent on groups
+   * built elsewhere (intake, dispatcher): the console buckets their listed items.
+   */
+  ages?: AgeBuckets
+  /**
    * The Health check that explains this stuck group while it is a problem
    * for every item's app (`tagRootCauses`); `count` is how many wait on it.
    * Absent when no check explains it.
@@ -258,6 +265,30 @@ export const DEPLOY_STUCK_MS = 24 * HOUR
 export const RECENT_MS = 7 * 24 * HOUR
 /** Items listed per group; counts are always whole. */
 export const MAX_ITEMS_PER_GROUP = 100
+
+/** [0–3 d, 3–7 d, 7–30 d, 30 d+] items, by time in their stage. */
+type AgeBuckets = [number, number, number, number]
+
+const DAY = 24 * HOUR
+/** Bucket edges, half-open: exactly 3 days is in 3–7 d. */
+const AGE_EDGES = [3 * DAY, 7 * DAY, 30 * DAY] as const
+
+/**
+ * @internal Exported for tests.
+ * Count `since` timestamps into [0–3 d, 3–7 d, 7–30 d, 30 d+] against `now`. An unreadable
+ * timestamp counts as 0–3 d (it is still an item; the bar must add up to the group).
+ */
+export function ageBuckets(sinces: readonly string[], now: Date): AgeBuckets {
+  const out: AgeBuckets = [0, 0, 0, 0]
+  const t0 = now.getTime()
+  for (const since of sinces) {
+    const t = Date.parse(since)
+    const age = Number.isFinite(t) ? t0 - t : 0
+    const i = age < AGE_EDGES[0] ? 0 : age < AGE_EDGES[1] ? 1 : age < AGE_EDGES[2] ? 2 : 3
+    out[i]++
+  }
+  return out
+}
 
 export const FOLLOWUPS_SETTING = {
   label: 'Review follow-ups setting',
@@ -503,7 +534,7 @@ class Groups {
     g.items.push(item)
     this.map.set(id, g)
   }
-  build(): PipelineGroup[] {
+  build(now: Date): PipelineGroup[] {
     return [...this.map.entries()].map(([id, { spec, items }]) => {
       items.sort((a, b) => a.since.localeCompare(b.since))
       return {
@@ -516,6 +547,7 @@ class Groups {
         actions: spec.actions,
         settings: spec.settings ?? null,
         items: items.slice(0, MAX_ITEMS_PER_GROUP),
+        ages: ageBuckets(items.map((i) => i.since), now),
       }
     })
   }
@@ -829,7 +861,7 @@ export function buildPipeline(input: PipelineInput): PipelineStage[] {
     }
   }
 
-  const all = groups.build()
+  const all = groups.build(now)
   if (input.actionFacts) {
     const attemptsById = new Map(input.attempts.map((a) => [a.id, a]))
     const queueById = new Map(input.queue.map((q) => [q.fix_attempt_id, q]))
@@ -1235,7 +1267,7 @@ export interface InfraClaimRow {
  * their own: a person decides whether to queue them again ("Requeue").
  * Item ids are claim ids; never counted against the report.
  */
-export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>): PipelineGroup | null {
+export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, string>, laneNames: Map<string, string>, now: Date = new Date()): PipelineGroup | null {
   if (claims.length === 0) return null
   const items: PipelineItem[] = claims
     .map((cl) => ({
@@ -1268,5 +1300,6 @@ export function localInfraGroup(claims: InfraClaimRow[], titles: Map<string, str
     actions: ['requeue'],
     settings: WORKERS_SETTING,
     items: items.slice(0, MAX_ITEMS_PER_GROUP),
+    ages: ageBuckets(items.map((i) => i.since), now),
   }
 }

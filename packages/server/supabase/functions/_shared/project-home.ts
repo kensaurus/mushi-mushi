@@ -649,6 +649,34 @@ export interface WeekRow {
   /** For this row, is more better? Drives the arrow's colour. */
   moreIsBetter: boolean
   href: string
+  /**
+   * Daily counts over both weeks, oldest first (WEEK_SERIES_DAYS UTC days
+   * from last week's first midnight; the last entry is today so far). Absent
+   * when the rows behind it could not all be read: no sparkline beats a
+   * wrong shape. Added 2026-11-18 for Home's per-row sparkline.
+   */
+  daily?: number[]
+}
+
+/** Days in a week row's series: last week and this week. */
+const WEEK_SERIES_DAYS = 14
+
+/**
+ * Count timestamps per UTC day from `start` (a UTC midnight), oldest first.
+ * Anything before `start` or past the last day is ignored; so is a bad date.
+ */
+export function dailyCounts(timestamps: ReadonlyArray<string | null | undefined>, start: string, days: number = WEEK_SERIES_DAYS): number[] {
+  const out = new Array<number>(days).fill(0)
+  const t0 = Date.parse(start)
+  if (!Number.isFinite(t0)) return out
+  for (const ts of timestamps) {
+    if (!ts) continue
+    const t = Date.parse(ts)
+    if (!Number.isFinite(t) || t < t0) continue
+    const i = Math.floor((t - t0) / DAY)
+    if (i < days) out[i] += 1
+  }
+  return out
 }
 
 export function buildWeek(c: {
@@ -656,13 +684,19 @@ export function buildWeek(c: {
   critical: [number, number]
   merged: [number, number]
   sessions: [number, number] | null
+  /** Per-row daily series (dailyCounts); a row left out or null gets none. */
+  daily?: Partial<Record<WeekRow['id'], number[] | null>>
 }): WeekRow[] {
+  const series = (id: WeekRow['id']) => {
+    const d = c.daily?.[id]
+    return d && d.length > 0 ? { daily: d } : {}
+  }
   const rows: WeekRow[] = [
-    { id: 'reports', label: 'Bug reports', thisWeek: c.reports[0], lastWeek: c.reports[1], moreIsBetter: false, href: '/reports?days=7' },
-    { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical' },
-    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF },
+    { id: 'reports', label: 'Bug reports', thisWeek: c.reports[0], lastWeek: c.reports[1], moreIsBetter: false, href: '/reports?days=7', ...series('reports') },
+    { id: 'critical', label: 'Critical bugs', thisWeek: c.critical[0], lastWeek: c.critical[1], moreIsBetter: false, href: '/reports?days=7&severity=critical', ...series('critical') },
+    { id: 'merged', label: 'Fixes merged', thisWeek: c.merged[0], lastWeek: c.merged[1], moreIsBetter: true, href: FIXES_MERGED_HREF, ...series('merged') },
   ]
-  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users' })
+  if (c.sessions) rows.push({ id: 'sessions', label: 'User visits', thisWeek: c.sessions[0], lastWeek: c.sessions[1], moreIsBetter: true, href: '/dashboard?view=users', ...series('sessions') })
   return rows
 }
 

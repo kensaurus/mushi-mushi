@@ -98,7 +98,7 @@ function harness(seed: Record<string, Array<Record<string, unknown>>> = {}, regi
     },
     {
       autoId: true,
-      partialUniques: { ops_events: { keys: ['organization_id', 'dedupe_key'], where: (r) => r.dedupe_key != null } },
+      partialUniques: { ops_events: { keys: ['organization_id', 'project_id', 'dedupe_key'], where: (r) => r.dedupe_key != null } },
       rpc: (fn, args) => {
         if (fn === 'vault_get_secret') return VAULT[String(args.secret_id)] ?? null
         if (fn === 'vault_store_secret') return `vault-${String(args.secret_name).split('/').pop()}`

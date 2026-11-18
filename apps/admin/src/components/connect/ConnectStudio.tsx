@@ -11,7 +11,7 @@
  * - @mushi-mushi/mcp/clients, ClientConnectButton, admin ui primitives
  */
 
-import { Fragment } from 'react'
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { McpClientDef } from '@mushi-mushi/mcp/clients'
 import {
@@ -21,7 +21,8 @@ import {
   type ConnectLane,
 } from '@mushi-mushi/marketing-ui'
 import { ClientConnectButton } from '../ClientConnectButton'
-import { CopyButton, Panel } from '../ui'
+import { CopyButton, Panel, RelativeTime } from '../ui'
+import { StatusPill } from '../signal/StatusMark'
 import { BrandIcon, resolveBrand } from '../ui/BrandIcon'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { IconTerminal } from '../icons'
@@ -143,9 +144,21 @@ function SkillsLane({ client }: { client: McpClientDef }) {
 interface ConnectStudioProps {
   projectId?: string | null
   projectName?: string | null
+  /**
+   * An editor already connected (lib/connectEditor.ts): the picker folds to
+   * "Connected ✓ · add another" until opened (owner, 2026-11-18).
+   */
+  connectedEditor?: { lastSeenAt: string | null } | null
 }
 
-export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
+const FOLD_TOGGLE =
+  'inline-flex h-7 items-center rounded-sm border border-edge bg-surface-raised px-2 text-2xs font-semibold text-fg ' +
+  'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+
+export function ConnectStudio({ projectId, projectName, connectedEditor }: ConnectStudioProps) {
+  const [addingAnother, setAddingAnother] = useState(false)
+  const folded = Boolean(connectedEditor) && !addingAnother
   const {
     clients,
     selectedId,
@@ -212,8 +225,31 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
 
   return (
     <div className="space-y-4">
+      {connectedEditor && (
+        <div
+          className="ci-rise flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-ok/45 bg-ok-muted px-3 py-2"
+          data-testid="connect-editor-connected"
+        >
+          <StatusPill status="passed" label="Editor connected" />
+          {connectedEditor.lastSeenAt ? (
+            <span className="text-xs text-fg-secondary">
+              Last check-in <RelativeTime value={connectedEditor.lastSeenAt} />
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={`${FOLD_TOGGLE} ml-auto`}
+            aria-expanded={!folded}
+            aria-controls="connect-client-picker"
+            onClick={() => setAddingAnother((v) => !v)}
+          >
+            {folded ? 'Add another editor' : 'Hide the editor list'}
+          </button>
+        </div>
+      )}
+      {!folded && (
       <Panel>
-        <div className="p-4 sm:p-5">
+        <div className="p-4 sm:p-5" id="connect-client-picker">
           <ConnectLanePicker
             bordered={false}
             surface="operator"
@@ -233,6 +269,7 @@ export function ConnectStudio({ projectId, projectName }: ConnectStudioProps) {
           />
         </div>
       </Panel>
+      )}
 
       <div className="flex items-center gap-2 text-2xs text-fg-muted px-1">
         <IconTerminal size={12} aria-hidden />

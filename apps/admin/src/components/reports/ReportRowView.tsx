@@ -49,6 +49,7 @@ import {
   TableSeverityCell,
 } from './ReportMetricCells'
 import { reportHeadline } from '../../lib/format'
+import { VitalText } from '../signal/VitalText'
 
 interface Props {
   row: ReportRow
@@ -231,7 +232,7 @@ function ReportRowViewInner({
                       </span>
                     </Tooltip>
                   )}
-                  {typeof displayTitle === 'string' ? reportHeadline(displayTitle) : displayTitle}
+                  {typeof displayTitle === 'string' ? <VitalText text={reportHeadline(displayTitle)} /> : displayTitle}
                 </div>
                 {/* Subtext: technical summary, only when title differs (i.e. title exists) */}
                 {row.title && summary && row.title !== summary && (
@@ -239,7 +240,7 @@ function ReportRowViewInner({
                     className="mt-0.5 truncate text-xs leading-snug text-fg-faint"
                     title={typeof summary === 'string' ? summary : undefined}
                   >
-                    {summary}
+                    {typeof summary === 'string' ? <VitalText text={summary} /> : summary}
                   </div>
                 )}
               </div>

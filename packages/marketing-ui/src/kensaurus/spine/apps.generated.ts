@@ -130,7 +130,7 @@ export const KENSAURUS_MANIFEST = {
         en: 'Interactive webbook. 268 concepts, 242 citations.',
       },
       web: 'https://kensaur.us/the-wanting-mind/',
-      icon: 'https://kensaur.us/the-wanting-mind/pwa-512x512.png',
+      icon: 'https://kensaur.us/the-wanting-mind/pwa-192x192.png',
       ios: 'https://apps.apple.com/app/the-wanting-mind/id6761361305',
       iosAppId: '6761361305',
       android: 'https://play.google.com/store/apps/details?id=us.kensaur.thewantingmind',
@@ -140,7 +140,7 @@ export const KENSAURUS_MANIFEST = {
     },
     {
       id: 'help-her-take-photo',
-      name: 'help her take photo – Pose Cam',
+      name: 'help her take photo',
       brand: 'help her take photo',
       aliases: ['hhtp'],
       activationEvent: 'first_keeper',
@@ -149,7 +149,8 @@ export const KENSAURUS_MANIFEST = {
         universal: 'https://kensaur.us/help-her-take-photo/',
       },
       tagline: {
-        en: 'Direct her pose, nail the shot',
+        ja: 'ゲスト全員に、使い捨てカメラを',
+        en: 'Every guest gets a disposable camera',
       },
       web: 'https://kensaur.us/help-her-take-photo/',
       icon: 'https://kensaur.us/help-her-take-photo/assets/apple-touch-icon.png',

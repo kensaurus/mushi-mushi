@@ -58,7 +58,6 @@ import { registerPortfolioRoutes } from './routes/portfolio.ts';
 import { registerRadarRoutes } from './routes/radar.ts';
 import { registerDigestRoutes } from './routes/digest.ts';
 import { registerConnectorRoutes } from './routes/connectors.ts';
-import { registerAccountsRegisterRoutes } from './routes/accounts-register.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
 import { registerFindingExplainRoutes } from './routes/finding-explain.ts';
@@ -796,7 +795,14 @@ forwardToApiExt([
   '/v1/admin/orgs/:orgId/portfolio/resources',
   '/v1/admin/projects/:id/recipe/drift',
 ]);
-registerAccountsRegisterRoutes(app);
+// accounts-register.ts (the org's accounts and domains): served by api-ext (api size
+// budget, 2026-11-18); a few calls a day, and it alone pulls in the secret scanner.
+forwardToApiExt([
+  '/v1/admin/orgs/:orgId/accounts',
+  '/v1/admin/orgs/:orgId/accounts/export',
+  '/v1/admin/orgs/:orgId/accounts/:id',
+  '/v1/admin/orgs/:orgId/domains/:id',
+]);
 registerRecipeChangeRoutes(app);
 registerStoreOpsRoutes(app);
 registerFindingExplainRoutes(app);
@@ -844,7 +850,7 @@ registerGrowthRoutes(app);
 // Daily GTM scorecard and the cookieless landing page-view beacon
 // (landing-visits.ts in api-ext; api only hashes the visitor IP into the
 // beacon's rate-limit bucket, page-view-forward.ts).
-forwardToApiExt(['/v1/admin/growth/daily']);
+forwardToApiExt(['/v1/admin/growth/daily', '/v1/admin/kensaurus/ops']);
 app.post('/v1/public/page-view', forwardPageView);
 registerEventsAdminRoutes(app);
 registerLifecycleEmailRoutes(app);

@@ -12,7 +12,10 @@
  *   - one status sentence and one action: open the failing check;
  *   - a plan-gated check stays visible with an upgrade pill;
  *   - a Lab page the user has not turned on is not offered;
- *   - a nav-meta read that failed is "Status unavailable", never a pass.
+ *   - a nav-meta read that failed is "Status unavailable", never a pass;
+ *   - signals (2026-11-18): alert cards for failed / findings / stale checks with their
+ *     number and change since the last visit, a graded age chip, and the passing
+ *     checks folded into one line.
  */
 
 import { act, createElement } from 'react'
@@ -86,6 +89,7 @@ function render() {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   state.slices = slices()
   state.navError = null
   state.recipe = null
@@ -133,6 +137,10 @@ describe('ChecksPage', () => {
     // A card whose read is still running says so instead of leaving its corner blank (2026-10-30).
     const waiting = container.querySelector('[data-testid="checks-card-recipe"]')!
     if (waiting.getAttribute('data-state') === 'loading') expect(waiting.textContent).toContain('Checking…')
+    // Each state is a status pill (colour plus glyph): findings are slow, a pass passes (2026-11-18).
+    const pill = (id: string) => container.querySelector(`[data-testid="checks-card-${id}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(pill('qa-coverage')).toBe('slow')
+    expect(pill('fullstack-audit')).toBe('passed')
   })
 
   it('leads with one sentence and one action to the failing check', () => {
@@ -168,6 +176,70 @@ describe('ChecksPage', () => {
     // Never "nothing needs you" over checks that could not be read.
     expect(container.querySelector('[data-testid="checks-status"]')?.textContent).not.toContain('No check needs you')
     expect(container.querySelector('[data-testid="checks-status"]')?.textContent).toContain('could not read')
+  })
+})
+
+describe('ChecksPage signals (2026-11-18)', () => {
+  const DAYS = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+  const q = (id: string) => container.querySelector(`[data-testid="${id}"]`)
+
+  it('leads with an alert card for the check with findings, with its number', () => {
+    render()
+    const alert = q('checks-alert-qa-coverage')!
+    expect(alert.getAttribute('data-severity')).toBe('serious')
+    expect(alert.textContent).toContain('Scheduled tests: 1 to fix')
+    expect(alert.textContent).toContain('finding')
+    expect(alert.querySelector('a[href="/qa-coverage"]')?.textContent).toBe('Open')
+    // A passing check is not an alert.
+    expect(q('checks-alert-fullstack-audit')).toBeNull()
+  })
+
+  it('shows the change since the last visit against the remembered count, and keeps it while a check is unread', () => {
+    window.localStorage.setItem('mushi:checks-baseline:p1', JSON.stringify({ '/qa-coverage': 0 }))
+    render()
+    expect(q('checks-alert-qa-coverage')!.textContent).toContain('▲ +1')
+    expect(q('checks-card-qa-coverage')!.querySelector('[data-testid="checks-change"]')?.textContent).toBe('▲ +1')
+    // Several slices are unread in this fixture, so the remembered count is not overwritten.
+    expect(window.localStorage.getItem('mushi:checks-baseline:p1')).toBe(JSON.stringify({ '/qa-coverage': 0 }))
+  })
+
+  it('never shows a change without a remembered count', () => {
+    render()
+    expect(container.querySelector('[data-testid="checks-change"]')).toBeNull()
+  })
+
+  it('grades a 14-day-old run worse than a fresh one, with a shape', () => {
+    state.slices = slices({
+      qaCoverage: { totalStories: 4, failingStories: 2, pendingRuns: 0, lastRunAt: DAYS(14), topPriority: 'failing' as never },
+    })
+    render()
+    const old = q('checks-card-qa-coverage')!.querySelector('[data-testid="checks-age"]')!
+    expect(old.getAttribute('data-tone')).toBe('danger')
+    expect(old.className).toContain('ci-fail-5')
+    expect(old.textContent).toBe('▲14d')
+    const fresh = q('checks-card-fullstack-audit')!.querySelector('[data-testid="checks-age"]')!
+    expect(fresh.getAttribute('data-tone')).toBe('ok')
+    expect(fresh.className).toContain('ci-cell-0')
+  })
+
+  it('raises a stale alert for a pass whose run is over a week old', () => {
+    state.slices = slices({ fullstackAudit: { errorCount: 0, warnCount: 0, failedGateCount: 0, lastRunAt: DAYS(10), topPriority: 'healthy' } })
+    render()
+    const alert = q('checks-alert-fullstack-audit')!
+    expect(alert.textContent).toContain('Stale 10d')
+    expect(alert.textContent).toContain('since last run')
+  })
+
+  it('folds passing checks into one line, keeping the checks that need you open', () => {
+    render()
+    const fold = q('checks-passing') as HTMLDetailsElement
+    expect(fold.tagName).toBe('DETAILS')
+    expect(fold.open).toBe(false)
+    expect(fold.querySelector('summary')!.textContent).toContain('1passing')
+    expect(fold.querySelector('[data-testid="checks-card-fullstack-audit"]')).not.toBeNull()
+    expect(fold.querySelector('[data-testid="checks-card-qa-coverage"]')).toBeNull()
+    // The summary itself never claims a state.
+    expect(fold.querySelector('summary')!.hasAttribute('data-state')).toBe(false)
   })
 })
 

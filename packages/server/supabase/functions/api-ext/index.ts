@@ -26,8 +26,10 @@
  *          cookieless landing page-view count with the daily GTM scorecard
  *          (landing-visits.ts), the design CI push and recipe drift
  *          (recipe-ingest.ts) and the org's bill imports (spend-ledger.ts),
+ *          the org's accounts and domains register (accounts-register.ts, 2026-11-18),
  *          the Ops hub (ops.ts: app events, the Ops feed, the team's Slack
- *          bot commands and buttons, added 2026-11-17),
+ *          bot commands and buttons, added 2026-11-17), the operator's
+ *          Providers & AI routes proxy to kensaurus-ops (kensaurus-ops.ts, 2026-11-18),
  *          moved 2026-11-11 to make room in `api` for the runner push and the
  *          worker heartbeat, which `api` now serves itself (one invocation
  *          each instead of two). api-ext still registers those two routes for
@@ -84,7 +86,9 @@ import { registerLandingVisitRoutes } from '../api/routes/landing-visits.ts'
 import { registerBillingChangePlanRoutes } from '../api/routes/billing-change-plan.ts'
 import { registerRecipeIngestRoutes } from '../api/routes/recipe-ingest.ts'
 import { registerSpendLedgerRoutes } from '../api/routes/spend-ledger.ts'
+import { registerAccountsRegisterRoutes } from '../api/routes/accounts-register.ts'
 import { registerOpsRoutes } from '../api/routes/ops.ts'
+import { registerKensaurusOpsRoutes } from '../api/routes/kensaurus-ops.ts'
 
 ensureSentry('api-ext')
 
@@ -140,8 +144,12 @@ registerLandingVisitRoutes(app)
 registerBillingChangePlanRoutes(app)
 registerRecipeIngestRoutes(app)
 registerSpendLedgerRoutes(app)
+// The org's accounts and domains (accounts-register.ts), moved 2026-11-18 for the api size budget.
+registerAccountsRegisterRoutes(app)
 // The Ops hub: app events, the console feed, the team's Slack bot (docs/execplans/ops-hub-slack.md).
 registerOpsRoutes(app)
+// Providers & AI routes (operator only): proxy to the kensaurus-ops API on kenji.
+registerKensaurusOpsRoutes(app)
 
 app.notFound((c) => c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No such route.' } }, 404))
 

@@ -70,6 +70,13 @@ export interface PortfolioCard {
    * not mean "none" when the column is listed here.
    */
   unreadable: PortfolioReadPart[]
+  /**
+   * CI job failures on this app today (UTC calendar day, `ci_jobs.ci_kind =
+   * 'code_failure'`; a lost runner or an expired queue is not counted, ADR
+   * 0033). null when the app has no GitHub repo, or the read failed (then
+   * `unreadable` lists `ci`). Added 2026-11-18 for the Apps page heat grid.
+   */
+  ciFailsToday?: number | null
 }
 
 /** A part of the portfolio that is read with its own query. */
@@ -84,6 +91,7 @@ export type PortfolioReadPart =
   | 'kind'
   | 'integrations'
   | 'cross_project'
+  | 'ci'
 
 export interface PortfolioReadError {
   part: PortfolioReadPart

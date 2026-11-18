@@ -1,7 +1,9 @@
 /**
  * FILE: apps/admin/src/components/DogfoodNarrativeBanner.test.tsx
  * PURPOSE: The narrative banner keeps its box while its data loads, so the
- *          Bugs page does not jump when it arrives (layout shift, 2026-10-24).
+ *          Bugs page does not jump when it arrives (layout shift, 2026-10-24),
+ *          and names the area as a code chip after plain words ("next is your
+ *          most fragile area" read as broken, owner 2026-11-18).
  */
 
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -48,6 +50,16 @@ describe('DogfoodNarrativeBanner', () => {
     const out = html()
     expect(out).not.toContain('narrative-placeholder')
     expect(out).toContain('Checkout')
+  })
+
+  it('names the area as a code chip after plain words, never "most fragile area"', () => {
+    state.loading = false
+    state.data = { topComponents: [{ component: 'next', count: 6, draftedFixes: 2, mergedFixes: 1 }] }
+    const doc = new DOMParser().parseFromString(html(), 'text/html')
+    const p = doc.querySelector('[data-testid="narrative-sentence"]')!
+    expect(p.querySelector('code')?.textContent).toBe('next')
+    expect(p.textContent).toBe('Most bugs come from next: 6 reports in the last 14 days. 1 fix already merged and 2 more drafted.')
+    expect(doc.body.textContent).not.toContain('fragile')
   })
 
   it('renders nothing in advanced mode, loading or not', () => {

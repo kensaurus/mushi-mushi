@@ -97,6 +97,19 @@ describe('LabsPanel', () => {
     expect(open().getAttribute('href')).toBe('/graph')
   })
 
+  // Owner 2026-11-18: about twenty full-width rows became a compact grid.
+  // The groups sit side by side from a container query on a wrapper (never on
+  // the grid itself), one column below the breakpoint.
+  it('lays the groups out as a compact grid of one-line rows', () => {
+    render()
+    const grid = container.querySelector('[data-testid="settings-labs"] [class="@container"] > div')!
+    expect(grid.className).toContain('grid-cols-1')
+    expect(grid.className).toContain('@2xl:grid-cols-2')
+    expect(grid.querySelectorAll('section')).toHaveLength(Object.keys(LAB_GROUP_LABEL).length)
+    // Each row is its group's list item, named by its switch.
+    for (const f of LAB_FEATURES) expect(switchFor(f.label).closest('li')?.id).toBe(`lab-${f.id}`)
+  })
+
   it('shows a Lab already on from a previous visit as on', async () => {
     window.localStorage.setItem('mushi:labs', JSON.stringify(['releases']))
     // A previous visit means a fresh page load: the Labs module reads storage

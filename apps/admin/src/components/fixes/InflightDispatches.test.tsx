@@ -47,5 +47,8 @@ describe('InflightDispatches', () => {
     expect(text).toContain('Fix requests running')
     expect(text).toContain('2 fix requests stopped without a pull request')
     expect(text).not.toMatch(/dispatch/i)
+    // Each request's state is a status pill: running pulses, failed is ✕, no PR is slow.
+    const statuses = [...container.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.getAttribute('data-status'))
+    expect(statuses).toEqual(['running', 'failed', 'slow'])
   })
 })

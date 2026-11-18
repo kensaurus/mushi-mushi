@@ -516,7 +516,7 @@ async function keyMintRefusalDetails(
   const consoleBase = (Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://kensaur.us/mushi-mushi/admin').replace(/\/$/, '');
   const out: KeyMintRefusal = { signedInAs: email ?? null, role, organization: null, canPromote: [], teamUrl: `${consoleBase}/team` };
   try {
-    const { data: project } = await db.from('projects').select('organization_id, organizations(name)').eq('id', projectId).maybeSingle();
+    const { data: project } = await db.from('projects').select('organization_id, organizations!projects_organization_id_fkey(name)').eq('id', projectId).maybeSingle();
     const p = project as { organization_id?: string | null; organizations?: { name?: string | null } | null } | null;
     out.organization = p?.organizations?.name ?? null;
     if (p?.organization_id) {

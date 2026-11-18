@@ -288,6 +288,31 @@ describe('WeekCard', () => {
   })
 })
 
+describe('WeekCard sparkline', () => {
+  it("draws each row's 14 days, last week grey and this week dark, with the days in its label", async () => {
+    const daily = [0, 1, 0, 2, 0, 0, 1, 3, 0, 1, 0, 2, 4, 1]
+    await render(
+      createElement(WeekCard, {
+        section: ok<WeekRow[]>([
+          { id: 'reports', label: 'Bug reports', thisWeek: 11, lastWeek: 4, moreIsBetter: false, href: '/reports?days=7', daily },
+          { id: 'merged', label: 'Fixes merged', thisWeek: 1, lastWeek: 3, moreIsBetter: true, href: '/fixes' },
+        ]),
+      }),
+    )
+    const spark = byTestId('home-week-spark-Bug reports')!
+    expect(spark.getAttribute('role')).toBe('img')
+    expect(spark.getAttribute('aria-label')).toBe('Bug reports per day, last week: 0, 1, 0, 2, 0, 0, 1; this week: 3, 0, 1, 0, 2, 4, 1')
+    const bars = spark.querySelectorAll('rect')
+    expect(bars).toHaveLength(14)
+    expect([...bars].filter((b) => b.getAttribute('data-week') === 'this')).toHaveLength(7)
+    // The tallest day fills the height; an empty day is a 1 px tick, not a gap.
+    expect(bars[12]!.getAttribute('height')).toBe('16')
+    expect(bars[0]!.getAttribute('height')).toBe('1')
+    // A row without a series (an older server) draws nothing.
+    expect(byTestId('home-week-spark-Fixes merged')).toBeNull()
+  })
+})
+
 describe('ActivityCard', () => {
   it('lists grouped sentences with links, or says the week was quiet', async () => {
     await render(createElement(ActivityCard, { section: ok([{ id: 'm', text: '3 fixes merged today', to: '/fixes' }]) }))

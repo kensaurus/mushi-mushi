@@ -219,9 +219,13 @@ export async function probeIntegration(
       }
 
     } else if (kind === 'anthropic') {
-      // 1-token probe, costs < $0.0001.
-      const key = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
-      if (!key) {
+      // 1-token probe, costs < $0.0001. The platform key follows the
+      // organization's AI provider (ADR 0039 amendment): none on OpenAI.
+      const onOpenAi = !!projectId && (await aiProviderForProject(db, projectId)) === 'openai'
+      const key = onOpenAi ? '' : Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+      if (onOpenAi) {
+        detail = 'This organization runs AI on OpenAI, so the platform Claude key is not used.'
+      } else if (!key) {
         detail = 'ANTHROPIC_API_KEY is not set on the server.'
       } else {
         const res = await fetch('https://api.anthropic.com/v1/messages', {

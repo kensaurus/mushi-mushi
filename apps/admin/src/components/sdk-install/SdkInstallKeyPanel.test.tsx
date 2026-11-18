@@ -121,6 +121,60 @@ describe('SdkInstallKeyPanel rotation', () => {
   })
 })
 
+// Owner 2026-11-18: long-lived apps pile up old e2e/test keys. One action
+// revokes the stale ones (unused for over 7 days) behind a confirm that lists
+// them, one per-key revoke each; the key the app runs on is never on the list.
+describe('SdkInstallKeyPanel stale keys', () => {
+  let container: HTMLDivElement
+  let root: Root
+  const LIVE = { ...SDK_KEY, id: '55555555-5555-4555-8555-555555555555', key_prefix: 'mushi_live01', last_seen_at: new Date().toISOString() }
+  const NEVER = { ...SDK_KEY, id: '66666666-6666-4666-8666-666666666666', key_prefix: 'mushi_never1', last_seen_at: null, created_at: '2026-01-01T00:00:00Z' }
+
+  beforeEach(() => {
+    api.apiFetch.mockReset()
+    api.invalidateApiCache.mockReset()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+  })
+
+  it('revokes only the stale SDK keys, after a confirm that lists them', async () => {
+    api.apiFetch.mockImplementation(async (path: string) => {
+      if (path === '/v1/admin/projects') return { ok: true, data: { projects: [{ id: PROJECT, api_keys: [LIVE, SDK_KEY, NEVER, MCP_KEY] }] } }
+      return { ok: true, data: null }
+    })
+    act(() => {
+      root.render(createElement(MemoryRouter, null, createElement(SdkInstallKeyPanel, { projectId: PROJECT, onRotatedKeyChange: () => {}, onError: () => {} })))
+    })
+    await flush()
+    const action = document.body.querySelector<HTMLButtonElement>('[data-testid="revoke-stale-keys"]')!
+    expect(action.textContent).toBe('Revoke 2 stale keys')
+    // Each key's health is a status pill (2026-11-18): a live key passes, a never-used one is idle.
+    const keyStatus = (s: string) => document.body.querySelector(`[data-key-status="${s}"] [data-testid="status-pill"]`)?.getAttribute('data-status')
+    expect(keyStatus('healthy')).toBe('passed')
+    expect(keyStatus('never')).toBe('idle')
+    act(() => action.click())
+    // Nothing is revoked before the confirm.
+    expect(api.apiFetch.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
+    const list = document.body.querySelector('[aria-label="Keys to revoke"]')!.textContent ?? ''
+    expect(list).toContain('mushi_sdk001')
+    expect(list).toContain('mushi_never1')
+    expect(list).not.toContain('mushi_live01')
+    expect(list).not.toContain('mushi_mcp001')
+
+    act(() => buttons().find((b) => b.textContent === 'Revoke 2')!.click())
+    await flush()
+    const deleted = api.apiFetch.mock.calls.filter(([, init]) => init?.method === 'DELETE').map(([p]) => p)
+    expect(deleted).toEqual([`/v1/admin/projects/${PROJECT}/keys/${SDK_KEY.id}`, `/v1/admin/projects/${PROJECT}/keys/${NEVER.id}`])
+    expect(api.invalidateApiCache).toHaveBeenCalledWith('/v1/admin/projects')
+    expect(document.body.querySelector('[data-testid="revoke-stale-keys"]')).toBeNull()
+  })
+})
+
 describe('projectKeys helpers', () => {
   it('only rows with a real key id can be rotated', () => {
     expect(canRotateKey({ id: SDK_KEY.id })).toBe(true)

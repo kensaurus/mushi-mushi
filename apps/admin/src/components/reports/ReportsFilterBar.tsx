@@ -46,6 +46,11 @@ interface Props {
   onClearAll: () => void
   /** Saved views chip row — rendered in the control bar action slot. */
   savedViews?: ReactNode
+  /**
+   * The status and severity chips. They lead the same row as search and the
+   * selects: one filter row, not two (owner, 2026-11-18).
+   */
+  quickFilters?: ReactNode
 }
 
 export function ReportsFilterBar({
@@ -65,6 +70,7 @@ export function ReportsFilterBar({
   onSetFilter,
   onClearAll,
   savedViews,
+  quickFilters,
 }: Props) {
   // Compose the rail data: select-driven filters + bridged context chips.
   // Tone'd by semantic — severity uses warn/danger so a glance shows the
@@ -138,7 +144,18 @@ export function ReportsFilterBar({
 
   return (
     <div className="mb-3 space-y-2">
-      <div className="flex flex-wrap gap-2 items-center">
+      {/* One row: chips, search, selects. Sticky from lg, where it stays one or
+          two lines; on a phone it would take the screen. */}
+      <div
+        className={
+          quickFilters
+            ? 'z-10 -mx-1 flex flex-wrap items-center gap-2 rounded-sm border border-edge-subtle/60 bg-surface/95 px-2 py-1.5 backdrop-blur-sm lg:sticky lg:top-0'
+            : 'flex flex-wrap gap-2 items-center'
+        }
+        data-testid="reports-filter-row"
+      >
+        {quickFilters}
+        {quickFilters ? <span aria-hidden className="hidden h-4 w-px shrink-0 bg-edge/60 sm:inline-block" /> : null}
         <Input
           ref={searchInputRef}
           type="search"
@@ -153,7 +170,7 @@ export function ReportsFilterBar({
           aria-label="Search reports by summary or description"
           className="w-64"
         />
-        {/* Status and severity are filtered by the quick-filter chips above. */}
+        {/* Status and severity are filtered by the quick-filter chips. */}
         <FilterSelect
           label="Category"
           value={category}

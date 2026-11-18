@@ -13,10 +13,18 @@
  *          those call sites use instead of the env var.
  *
  * A failed read keeps the default ('anthropic'): one unreadable row must not
- * move an organization's spend to another vendor.
+ * move an organization's spend to another vendor. It logs a warning and is not
+ * cached. The read used to be one PostgREST embed,
+ * `projects?select=organizations(ai_provider)`. On 2026-11-17 the ops_mutes
+ * junction made that embed ambiguous (PGRST201), every read failed without a
+ * word, and the OpenAI organization ran Claude on its own keys. So the read is
+ * two plain selects.
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { log as rootLog } from './logger.ts'
+
+const log = rootLog.child('ai-provider')
 
 export type AiProvider = 'anthropic' | 'openai'
 export const AI_PROVIDERS: readonly AiProvider[] = ['anthropic', 'openai']
@@ -28,17 +36,29 @@ const cache = new Map<string, { value: AiProvider; at: number }>()
 export async function aiProviderForProject(db: SupabaseClient, projectId: string, now = Date.now()): Promise<AiProvider> {
   const hit = cache.get(projectId)
   if (hit && now - hit.at < TTL_MS) return hit.value
-  let value: AiProvider = 'anthropic'
   try {
-    const { data, error } = await db.from('projects').select('organizations(ai_provider)').eq('id', projectId).maybeSingle()
-    const org = (data as { organizations?: { ai_provider?: string | null } | Array<{ ai_provider?: string | null }> | null } | null)?.organizations
-    const raw = Array.isArray(org) ? org[0]?.ai_provider : org?.ai_provider
-    if (!error && raw === 'openai') value = 'openai'
-  } catch {
-    // Keep the default.
+    const value = await readAiProvider(db, projectId)
+    cache.set(projectId, { value, at: now })
+    return value
+  } catch (err) {
+    log.warn('AI provider unreadable; keeping the default', {
+      projectId,
+      default: 'anthropic',
+      err: err instanceof Error ? err.message : String(err),
+    })
+    return 'anthropic'
   }
-  cache.set(projectId, { value, at: now })
-  return value
+}
+
+/** Two plain selects, no embed (see the header). Throws on a failed read. */
+async function readAiProvider(db: SupabaseClient, projectId: string): Promise<AiProvider> {
+  const project = await db.from('projects').select('organization_id').eq('id', projectId).maybeSingle()
+  if (project.error) throw new Error(`projects read failed: ${project.error.message}`)
+  const organizationId = (project.data as { organization_id?: string | null } | null)?.organization_id
+  if (!organizationId) return 'anthropic'
+  const org = await db.from('organizations').select('ai_provider').eq('id', organizationId).maybeSingle()
+  if (org.error) throw new Error(`organizations read failed: ${org.error.message}`)
+  return (org.data as { ai_provider?: string | null } | null)?.ai_provider === 'openai' ? 'openai' : 'anthropic'
 }
 
 /** Forget cached choices (after the console changes one, and in tests). */

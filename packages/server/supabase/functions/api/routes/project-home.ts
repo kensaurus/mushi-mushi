@@ -39,6 +39,7 @@ import {
   buildSitemap,
   buildStations,
   buildWeek,
+  dailyCounts,
   ciSignal,
   setupSignal,
   type SetupInput,
@@ -95,6 +96,12 @@ const DAY = 24 * HOUR
 /** Each section's read budget; a slower section reads `error`. */
 const SECTION_MS = 12_000
 const PAGE_VIEW_SAMPLE = 5000
+/**
+ * Rows read for one week-row sparkline. At or above it the series is left
+ * out (a lower bound would draw a wrong shape). Kept at PostgREST's default
+ * page size, so a server-side row cap can never pass for a complete read.
+ */
+const WEEK_SERIES_ROW_CAP = 1000
 const MEMBER_LOOKUPS = 8
 
 export interface ProjectHomeDeps {
@@ -366,6 +373,24 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   const weekP = settle(
     (async () => {
       const sessions = () => db.from('end_user_sessions').select('id', { count: 'exact', head: true }).eq('project_id', id)
+      // The sparkline beside each row: the same rows per UTC day. Read
+      // apart from the counts (which stay exact), so a failed or capped read
+      // only drops that row's sparkline, never the section.
+      const capped = <T,>(list: T[] | null) => (list && list.length < WEEK_SERIES_ROW_CAP ? list : null)
+      const seriesP = Promise.all([
+        rows<{ created_at: string; severity: string | null }>(
+          'reports series',
+          db.from('reports').select('created_at, severity').eq('project_id', id).or(NOT_SAMPLE).gte('created_at', priorStart).order('created_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+        rows<{ merged_at: string | null }>(
+          'merged series',
+          db.from('fix_attempts').select('merged_at').eq('project_id', id).gte('merged_at', priorStart).order('merged_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+        rows<{ started_at: string | null }>(
+          'sessions series',
+          db.from('end_user_sessions').select('started_at').eq('project_id', id).gte('started_at', priorStart).order('started_at', { ascending: true }).limit(WEEK_SERIES_ROW_CAP),
+        ).catch(() => null),
+      ])
       const [r0, r1, c0, c1, m0, m1, s0, s1] = await Promise.all([
         count('reports 7d', reportCount().gte('created_at', weekStart)),
         count('reports prior 7d', reportCount().gte('created_at', priorStart).lt('created_at', weekStart)),
@@ -377,7 +402,22 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
         count('sessions 7d', sessions().gte('started_at', weekStart)).catch(() => null),
         count('sessions prior 7d', sessions().gte('started_at', priorStart).lt('started_at', weekStart)).catch(() => null),
       ])
-      return buildWeek({ reports: [r0, r1], critical: [c0, c1], merged: [m0, m1], sessions: s0 != null && s1 != null && s0 + s1 > 0 ? [s0, s1] : null })
+      const [reportRows, mergedRows, sessionRows] = await seriesP
+      const reportSeries = capped(reportRows)
+      const mergedSeries = capped(mergedRows)
+      const sessionSeries = capped(sessionRows)
+      return buildWeek({
+        reports: [r0, r1],
+        critical: [c0, c1],
+        merged: [m0, m1],
+        sessions: s0 != null && s1 != null && s0 + s1 > 0 ? [s0, s1] : null,
+        daily: {
+          reports: reportSeries ? dailyCounts(reportSeries.map((r) => r.created_at), priorStart) : null,
+          critical: reportSeries ? dailyCounts(reportSeries.filter((r) => r.severity === 'critical').map((r) => r.created_at), priorStart) : null,
+          merged: mergedSeries ? dailyCounts(mergedSeries.map((r) => r.merged_at), priorStart) : null,
+          sessions: sessionSeries ? dailyCounts(sessionSeries.map((r) => r.started_at), priorStart) : null,
+        },
+      })
     })(),
   )
   const activityP = settle(

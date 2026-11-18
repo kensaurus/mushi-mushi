@@ -481,6 +481,21 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     paletteGroup: 'Check',
   },
   {
+    id: 'nav:providers',
+    path: '/providers',
+    operatorOnly: true,
+    // The shared AI provider accounts and model routes of every Kensaurus app
+    // (kensaurus-ops on kenji, 2026-11-18). Operator only: route-guarded too.
+    label: 'Providers & AI routes',
+    sectionId: 'check',
+    pdcaStage: 'check',
+    checkSubGroup: 'system-health',
+    iconKey: 'cost',
+    paletteDescription: 'The AI provider accounts behind every app: health and balance, spend against sales, the model each app tries first, and who changed what.',
+    paletteKeywords: ['providers', 'ai providers', 'ai routes', 'model routes', 'routing', 'llm providers', 'provider health', 'balance', 'spend', 'margin', 'kensaurus', 'provider watch', 'models'],
+    paletteGroup: 'Check',
+  },
+  {
     id: 'nav:health',
     path: '/health',
     operatorOnly: true,
@@ -1217,13 +1232,13 @@ export function coreNavPathsFor(viewer: { isOperator: boolean }): readonly strin
  * open from a link, since product pages link to them.
  */
 /** @internal Exported for tests. */
-export const OPERATOR_ROUTES: readonly string[] = ['/queue', '/query', '/judge', '/prompt-lab']
+export const OPERATOR_ROUTES: readonly string[] = ['/queue', '/query', '/judge', '/prompt-lab', '/providers']
 
 /** Every check on the Checks page, in order within its group. Every path must exist in NAV_REGISTRY. */
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
+    paths: ['/qa-coverage', '/health', '/ci', '/providers', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
   },
   { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
 ]

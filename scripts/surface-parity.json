@@ -192,6 +192,8 @@
     "GET /v1/admin/groups": {"allow": "jwt-only"},
     "GET /v1/admin/growth/daily": {"cli": ["funnel daily"]},
     "GET /v1/admin/growth/funnel": {"cli": ["funnel growth"]},
+    "GET /v1/admin/kensaurus/ops": {"allow": "jwt-only", "note": "Operator only: the shared AI provider accounts, spend and model routes from kensaurus-ops (Providers & AI routes page)."},
+    "POST /v1/admin/kensaurus/ops": {"allow": "jwt-only", "note": "Operator only: one route or provider change, audited upstream with the operator as actor."},
     "GET /v1/admin/health/cron": {"allow": "jwt-only"},
     "GET /v1/admin/health/history": {"allow": "jwt-only"},
     "GET /v1/admin/health/llm": {"allow": "jwt-only"},

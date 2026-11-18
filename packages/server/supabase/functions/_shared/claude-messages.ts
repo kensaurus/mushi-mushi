@@ -66,6 +66,10 @@ interface FinalMessageLike {
 }
 
 async function client(opts: ClaudeCallOptions): Promise<InstanceType<AiSdk['Anthropic']>> {
+  // The SDK reads ANTHROPIC_API_KEY when apiKey is empty, past the
+  // organization's AI provider switch (ai-provider.ts). Callers pass the key
+  // they resolved; without one there is no call.
+  if (!opts.apiKey?.trim()) throw new Error('No Claude API key for this call')
   const { Anthropic } = await loadAiSdk()
   return new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
 }

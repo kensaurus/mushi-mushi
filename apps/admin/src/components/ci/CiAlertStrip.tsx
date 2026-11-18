@@ -5,99 +5,100 @@
  *          Pointing at a card lights the same app, job or machine in every panel below; a
  *          click pins it (the "Pinned" trail says what, Escape clears). Each card has icon
  *          actions: open the GitHub log, and jump to the evidence.
+ *
+ *          The cards themselves are the shared signal kit's AlertCards (2026-11-18); this file
+ *          ranks the CI problems and names the pinned key.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
 import type { CiStatus } from '../../lib/ciStatus'
-import { ALERTS_SHOWN, rankCiAlerts, type CiAlert } from '../../lib/ciAlerts'
-import { useCiLink, useCiPinned, type CiKey } from '../../lib/ciHighlight'
+import { ALERTS_SHOWN, rankCiAlerts, type CiAlert, type CiAlertBar } from '../../lib/ciAlerts'
+import { useCiLink, type CiKey } from '../../lib/ciHighlight'
 import { repoShortName } from '../../lib/ciView'
-import { IconArrowRight, IconCheck, IconClose, IconExternalLink } from '../icons'
+import { AlertCards, type SignalAlert } from '../signal/AlertCards'
+import { barPct } from '../signal/BarCell'
+import { StatusPill } from '../signal/StatusMark'
 
-/** Cards on a narrow screen before "Show more". */
-const ALERTS_SHOWN_NARROW = 3
-const MORE = 'self-start text-2xs font-medium text-fg-secondary underline decoration-dotted underline-offset-2 hover:text-fg'
-
-const ICON_LINK =
-  'inline-flex h-7 w-7 items-center justify-center rounded-sm border border-edge bg-surface-raised text-fg-secondary ' +
-  'motion-safe:transition-transform motion-safe:duration-150 hover:-translate-y-px hover:border-accent hover:text-accent ' +
-  'active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
-
-/** The severity's shape: a pulsing triangle for critical, a diamond for serious. */
-function SeverityMark({ severity }: { severity: CiAlert['severity'] }) {
-  if (severity === 'critical') {
-    return (
-      <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center" aria-hidden="true">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-60 motion-safe:animate-ping" />
-        <svg viewBox="0 0 12 12" className="relative h-3 w-3 text-danger" fill="currentColor">
-          <path d="M6 1 11.5 11H.5z" />
-        </svg>
-      </span>
-    )
-  }
+/** One app's bar in a grouped card; pointing at it lights that app across the page. */
+function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
+  const link = useCiLink([bar.key], bar.key)
+  const fill = bar.severity === 'critical' ? 'bg-st-failed' : 'bg-st-waiting'
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3 shrink-0 text-warn" fill="currentColor" aria-hidden="true">
-      <path d="M6 .5 11.5 6 6 11.5.5 6z" />
-    </svg>
+    <li {...link} className={`${link.className} grid grid-cols-subgrid col-span-3 items-center`} data-testid="ci-alert-bar">
+      <span className="truncate text-2xs font-semibold text-fg">{bar.label}</span>
+      <span className="relative block h-2 overflow-hidden rounded-xs bg-surface-overlay" aria-hidden="true">
+        <span className={`ci-grow-x absolute inset-y-0 left-0 ${fill}`} style={{ width: `${Math.max(4, barPct(bar.value, max))}%` }} />
+      </span>
+      <span className="text-right font-mono text-2xs font-bold text-fg tabular-nums">{bar.display}</span>
+    </li>
   )
 }
 
-function AlertCard({ alert, index, narrowHidden }: { alert: CiAlert; index: number; narrowHidden: boolean }) {
-  const link = useCiLink(alert.keys, alert.keys[0] ?? alert.id, true)
-  const critical = alert.severity === 'critical'
+const LABEL_CHIP = 'rounded-sm border border-edge-subtle bg-surface-overlay px-1.5 py-px font-mono text-2xs font-bold text-fg'
+
+/**
+ * The waiting card's label gap as chips: "needs kensaurus-local · has it: overseas-ci ·
+ * missing: alienware-ci, alienwarex16". The sentence stays for screen readers only.
+ */
+function WaitLabelChips({ alert, labels }: { alert: CiAlert; labels: NonNullable<CiAlert['labels']> }) {
   return (
-    <li
-      {...link}
-      className={`${link.className} ci-rise group relative flex min-w-0 cursor-pointer flex-col gap-1 overflow-hidden rounded-md border py-2 pr-2.5 pl-3.5 motion-safe:hover:-translate-y-0.5 ${narrowHidden ? 'hidden @xl:flex' : ''} ${
-        critical ? 'border-danger/55 bg-danger-muted' : 'border-warn/55 bg-warn-muted'
-      }`}
-      style={{ animationDelay: `${index * 60}ms` }}
-      data-testid={`ci-alert-${alert.id}`}
-      data-severity={alert.severity}
-    >
-      <span className={`absolute inset-y-0 left-0 w-1 ${critical ? 'bg-danger' : 'bg-warn'}`} aria-hidden="true" />
-      <span className="flex items-center gap-1.5">
-        <SeverityMark severity={alert.severity} />
-        <span className={`text-3xs font-bold tracking-wider uppercase ${critical ? 'text-danger-foreground' : 'text-warn-foreground'}`}>
-          {critical ? 'Critical' : alert.label}
-        </span>
-        {alert.app && <span className="ml-auto truncate text-3xs font-medium text-fg-secondary">{alert.app}</span>}
+    <span className="flex flex-col gap-1">
+      <span className="sr-only">{alert.detail}</span>
+      <span className="flex flex-wrap items-center gap-1 text-2xs" aria-hidden="true" data-testid="ci-alert-wait-labels">
+        needs
+        {labels.needs.map((l) => (
+          <span key={l} className={LABEL_CHIP} data-testid="ci-alert-needs">
+            {l}
+          </span>
+        ))}
+        <span className="ml-1">has it:</span>
+        {labels.has.map((m) => (
+          <StatusPill key={m} status="passed" label={m} className="font-mono" />
+        ))}
+        {/* No machine has the label: the most actionable case, so it is said, not left blank. */}
+        {labels.has.length === 0 && <StatusPill status="failed" label="none" />}
+        {labels.missing.length > 0 && <span className="ml-1">missing:</span>}
+        {labels.missing.map((m) => (
+          <StatusPill key={m} status="failed" label={m} className="font-mono" />
+        ))}
       </span>
-      <button
-        type="button"
-        className="text-left text-sm leading-snug font-bold text-fg focus-visible:outline-none focus-visible:underline"
-        aria-pressed={link['data-pinned'] ?? false}
-        title="Pin: light this up across the page"
-      >
-        {alert.title}
-      </button>
-      <span className="text-xs leading-snug text-fg-secondary">{alert.detail}</span>
-      <span className="mt-auto flex items-end justify-between gap-2 pt-1">
-        <span className="leading-none">
-          <span className="font-mono text-xl font-extrabold text-fg tabular-nums">{alert.metric.value}</span>
-          <span className="ml-0.5 text-2xs font-semibold text-fg-secondary">{alert.metric.unit}</span>
-        </span>
-        <span className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-          {alert.href && (
-            <a
-              href={alert.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={ICON_LINK}
-              aria-label="Open the log on GitHub"
-              title="Open the log on GitHub"
-            >
-              <IconExternalLink size={13} />
-            </a>
-          )}
-          <a href={alert.jump} className={ICON_LINK} aria-label="Show the evidence" title="Show the evidence">
-            <IconArrowRight size={13} className="rotate-90" />
-          </a>
-        </span>
-      </span>
-    </li>
+    </span>
   )
+}
+
+/** The card's picture: a bar per app for a grouped cause, one rate bar, or the waiting card's label chips. */
+function AlertDetail({ alert }: { alert: CiAlert }) {
+  if (alert.labels) return <WaitLabelChips alert={alert} labels={alert.labels} />
+  if (alert.bars && alert.bars.length > 0) {
+    const max = Math.max(...alert.bars.map((b) => b.value))
+    return (
+      <span className="flex flex-col gap-1">
+        <ul
+          // mushi-mushi-allowlist: app name / bar / value columns shared by every row (subgrid)
+          className="grid grid-cols-[minmax(0,6rem)_minmax(0,1fr)_auto] gap-x-1.5 gap-y-0.5"
+          aria-label={alert.bars.map((b) => `${b.label} ${b.display}`).join(', ')}
+        >
+          {alert.bars.slice(0, 6).map((b) => (
+            <AlertBarRow key={b.key} bar={b} max={max} />
+          ))}
+        </ul>
+        {alert.bars.length > 6 && <span className="text-3xs text-fg-secondary">+{alert.bars.length - 6} more</span>}
+      </span>
+    )
+  }
+  if (alert.rate != null) {
+    const pct = Math.round(alert.rate * 100)
+    return (
+      <span className="flex flex-col gap-1">
+        <span>{alert.detail}</span>
+        <span className="relative block h-2 overflow-hidden rounded-xs bg-st-passed-soft" role="img" aria-label={`${pct}% of runs fail`} data-testid="ci-alert-rate">
+          <span className="ci-grow-x absolute inset-y-0 left-0 bg-st-failed" style={{ width: `${Math.max(3, pct)}%` }} />
+        </span>
+      </span>
+    )
+  }
+  return <>{alert.detail}</>
 }
 
 /** A readable name for a highlight key. */
@@ -113,64 +114,25 @@ function keyLabel(overview: Pick<CiOverview, 'repos'>, key: CiKey): string {
 }
 
 export function CiAlertStrip({ overview, status, now }: { overview: CiOverview; status: CiStatus; now: number }) {
-  const alerts = useMemo(() => rankCiAlerts(overview, status, now), [overview, status, now])
-  const [all, setAll] = useState(false)
-  const { pinned, clear } = useCiPinned()
-  const shown = all ? alerts : alerts.slice(0, ALERTS_SHOWN)
-  const critical = alerts.filter((a) => a.severity === 'critical').length
-
+  const alerts = useMemo<SignalAlert[]>(
+    () =>
+      rankCiAlerts(overview, status, now).map((a) => ({
+        ...a,
+        detail: <AlertDetail alert={a} />,
+        hrefLabel: 'Open the log on GitHub',
+        jumpLabel: 'Show the evidence',
+      })),
+    [overview, status, now],
+  )
   return (
-    <section aria-label="What needs attention" className="flex flex-col gap-2" data-testid="ci-alerts">
-      {alerts.length === 0 ? (
-        <p className="ci-rise flex items-center gap-2 rounded-md border border-ok/45 bg-ok-muted px-3 py-2 text-sm font-semibold text-fg" role="status">
-          <IconCheck size={15} className="text-ok" />
-          Nothing needs you: no failing jobs, nothing stuck, no machine down.
-        </p>
-      ) : (
-        <>
-          <h2 className="sr-only">
-            {alerts.length} problem{alerts.length === 1 ? '' : 's'}, {critical} critical
-          </h2>
-          {/* The worst three on a phone, six on a wide screen, so the page itself is still in view. */}
-          <div className="@container flex flex-col gap-2">
-            <ul className="grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3 @min-[96rem]:grid-cols-6">
-              {shown.map((a, i) => (
-                <AlertCard key={a.id} alert={a} index={i} narrowHidden={!all && i >= ALERTS_SHOWN_NARROW} />
-              ))}
-            </ul>
-            {!all && alerts.length > ALERTS_SHOWN_NARROW && (
-              <button type="button" className={`${MORE} @xl:hidden`} onClick={() => setAll(true)}>
-                Show {alerts.length - ALERTS_SHOWN_NARROW} more
-              </button>
-            )}
-            {!all && alerts.length > ALERTS_SHOWN && (
-              <button type="button" className={`${MORE} hidden @xl:inline`} onClick={() => setAll(true)}>
-                Show {alerts.length - ALERTS_SHOWN} more
-              </button>
-            )}
-            {all && alerts.length > ALERTS_SHOWN_NARROW && (
-              <button type="button" className={MORE} onClick={() => setAll(false)}>
-                Show the worst only
-              </button>
-            )}
-          </div>
-        </>
-      )}
-      {/* Always in the layout while pinned, so nothing below jumps. */}
-      {pinned && (
-        <p
-          className="ci-rise flex items-center gap-2 rounded-md border border-dashed border-accent bg-accent-muted/40 px-2.5 py-1 text-xs"
-          aria-live="polite"
-          data-testid="ci-pinned"
-        >
-          <span className="text-3xs font-bold tracking-wider text-accent-foreground uppercase">Pinned</span>
-          <span className="font-semibold text-fg">{keyLabel(overview, pinned)}</span>
-          <span className="text-fg-secondary">is lit up in every panel below · Esc to clear</span>
-          <button type="button" onClick={clear} className={`${ICON_LINK} ml-auto h-6 w-6`} aria-label="Unpin" title="Unpin">
-            <IconClose size={12} />
-          </button>
-        </p>
-      )}
-    </section>
+    <AlertCards
+      alerts={alerts}
+      emptyText="Nothing needs you: no failing jobs, nothing stuck, no machine down."
+      maxShown={ALERTS_SHOWN}
+      columns={6}
+      testIdPrefix="ci"
+      pinWithoutKeys
+      keyLabel={(key) => keyLabel(overview, key)}
+    />
   )
 }

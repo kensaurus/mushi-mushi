@@ -902,10 +902,6 @@ export function ReportsPage() {
       )}
 
       {!emptyProject && (
-        <ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} />
-      )}
-
-      {!emptyProject && (
       <ReportsFilterBar
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -925,6 +921,7 @@ export function ReportsPage() {
           setSearchInput('')
           setSearchParams({})
         }}
+        quickFilters={<ReportsQuickFilters status={status} severity={severity} scope={fetchScope} onSetFilter={setFilter} inline />}
         savedViews={
           <SavedViewsRow
             scope="reports"

@@ -12,6 +12,9 @@
 
 import { useState } from 'react'
 import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField, Textarea, type BadgeTone } from '../ui'
+import { MoreActionsMenu } from '../signal/MoreActionsMenu'
+import { StatusMark } from '../signal/StatusMark'
+import { AppIconChips, type IconFor } from './AppIconChips'
 import { usePageData } from '../../lib/usePageData'
 import { ActionsCard } from './ActionsCard'
 import { BrandIcon } from '../ui/BrandIcon'
@@ -80,7 +83,18 @@ const ACT_COPY: Record<string, { name: string; note: string; label: string; done
   revenuecat: { name: 'Payment actions', note: 'Attaching products to a package, or granting a support entitlement, needs a separate RevenueCat v2 secret key with write permissions (project_configuration:packages:read_write, customer_information:customers:read_write). Each one still needs approval below.', label: 'Write key (v2 secret key)', done: 'Payment actions are on. Each one still needs approval.' },
 }
 
-export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: Array<{ projectId: string; name: string }> }) {
+export function ConnectorsCard({
+  orgId,
+  projects,
+  iconFor,
+  hiddenIds,
+}: {
+  orgId: string
+  projects: Array<{ projectId: string; name: string }>
+  iconFor?: IconFor
+  /** Apps kept but hidden (the public demo): never drawn as a bound app or offered to bind. */
+  hiddenIds?: ReadonlySet<string>
+}) {
   const path = `/v1/admin/orgs/${orgId}/connectors`
   const { data, loading, error, reload } = usePageData<ConnectorsResponse>(path)
   const [busy, setBusy] = useState(false)
@@ -94,6 +108,9 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
   const [writeKey, setWriteKey] = useState<Record<string, string>>({})
   const [bindDraft, setBindDraft] = useState<Record<string, { projectId: string; externalId: string }>>({})
   const nameOf = (id: string) => projects.find((p) => p.projectId === id)?.name ?? id.slice(0, 8)
+  const iconOf: IconFor = (id) => iconFor?.(id) ?? { project_id: id, project_name: nameOf(id), project_slug: '' }
+  // The one inline panel a row's More menu opened: bind another app, or the write actions.
+  const [open, setOpen] = useState<{ id: string; what: 'bind' | 'act' } | null>(null)
   const form = FORM[kind]
   // Every write here is for owners and admins (QA 177). Remove deletes the
   // stored credential, so it asks first (QA 44).
@@ -150,64 +167,78 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
             <ul className="flex flex-col divide-y divide-edge-subtle">
               {data.instances.map((i) => {
                 const st = STATUS[i.status] ?? STATUS.unknown
+                const canAct = (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0
+                const copy = ACT_COPY[i.kind] ?? ACT_COPY.play_console
+                const actOn = i.enabled_capabilities.includes('act')
+                const panel = open?.id === i.id ? open.what : null
+                const bound = new Map(i.bindings.filter((b) => !hiddenIds?.has(b.projectId)).map((b) => [b.projectId, b.externalId]))
                 return (
-                  <li key={i.id} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="flex items-center gap-2 text-sm font-medium text-fg">
-                        <BrandIcon brand={connectorBrand(i)} size={16} decorative />
-                        {i.display_name} <Badge tone={st.tone}>{st.label}</Badge>
-                      </p>
-                      {i.status_reason && <p className="text-xs text-fg-muted">{i.status_reason}</p>}
-                      {i.bindings.length > 0 && <p className="text-2xs text-fg-faint">{i.bindings.map((b) => `${nameOf(b.projectId)} → ${b.externalId}`).join(' · ')}</p>}
+                  <li key={i.id} className="py-1.5" data-testid={`connector-${i.id}`}>
+                    {/* One line: the source, its state, the apps bound to it as icons (✓), and one More
+                        menu. The "glot.it → 6761582648 · …" string and the two big dropdowns are gone;
+                        each app's id is its icon's tooltip (2026-11-18 preview). */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <BrandIcon brand={connectorBrand(i)} size={14} decorative />
+                      <span className="min-w-0 truncate text-xs font-semibold text-fg">{i.display_name}</span>
+                      <Badge tone={st.tone}>{st.label}</Badge>
+                      {bound.size > 0 && (
+                        <span className="inline-flex min-w-0 items-center gap-1" data-testid="connector-bindings">
+                          <StatusMark status="passed" label={`${bound.size} ${bound.size === 1 ? 'app' : 'apps'} bound`} />
+                          <AppIconChips projectIds={[...bound.keys()]} iconFor={iconOf} titleFor={(id) => `${nameOf(id)} → ${bound.get(id) ?? ''}`} />
+                        </span>
+                      )}
+                      {canManage !== false && (
+                        <span className="ml-auto shrink-0">
+                          <MoreActionsMenu
+                            label={i.display_name}
+                            testId={`connector-more-${i.id}`}
+                            actions={[
+                              { key: 'check', label: 'Check', disabled: busy, onSelect: () => void act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.') },
+                              ...(FORM[i.kind] ? [{ key: 'bind', label: 'Bind another app…', disabled: busy, onSelect: () => setOpen({ id: i.id, what: 'bind' }) }] : []),
+                              ...(canAct ? [{ key: 'act', label: `${copy.name} (${actOn ? 'on' : 'off'})…`, disabled: busy, onSelect: () => setOpen({ id: i.id, what: 'act' }) }] : []),
+                              { key: 'remove', label: 'Remove', danger: true, disabled: busy, onSelect: () => setConfirmRemove({ id: i.id, name: i.display_name }) },
+                            ]}
+                          />
+                        </span>
+                      )}
                     </div>
-                    {canManage !== false && (data.available.find((a) => a.kind === i.kind)?.actions.length ?? 0) > 0 && (() => {
-                      const copy = ACT_COPY[i.kind] ?? ACT_COPY.play_console
-                      return (
-                        <div className="w-full sm:w-auto">
-                          <DisclosurePanel title={`${copy.name}: ${i.enabled_capabilities.includes('act') ? 'on' : 'off'}`}>
-                            <div className="flex flex-col gap-2 p-3">
-                              <p className="text-2xs text-fg-muted">{copy.note}</p>
-                              <Textarea label={copy.label} rows={2} value={writeKey[i.id] ?? ''} onChange={(e) => setWriteKey({ ...writeKey, [i.id]: e.target.value })} spellCheck={false} />
-                              <div className="flex gap-2">
-                                <Btn size="sm" disabled={busy || !(writeKey[i.id] ?? '').trim()} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: writeKey[i.id], enabledCapabilities: [...new Set([...i.enabled_capabilities, 'act'])] }) }), copy.done)}>Turn on</Btn>
-                                {i.enabled_capabilities.includes('act') && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: null }) }), `${copy.name} are off and the write key is deleted.`)}>Turn off</Btn>}
-                              </div>
-                            </div>
-                          </DisclosurePanel>
+                    {i.status_reason && <p className="mt-0.5 text-2xs text-fg-muted">{i.status_reason}</p>}
+                    {panel === 'act' && (
+                      <div className="mt-1.5 flex flex-col gap-2 rounded-sm border border-edge-subtle p-2.5" data-testid={`connector-act-${i.id}`}>
+                        <p className="text-2xs text-fg-muted">{copy.note}</p>
+                        <Textarea label={copy.label} rows={2} value={writeKey[i.id] ?? ''} onChange={(e) => setWriteKey({ ...writeKey, [i.id]: e.target.value })} spellCheck={false} />
+                        <div className="flex gap-2">
+                          <Btn size="sm" disabled={busy || !(writeKey[i.id] ?? '').trim()} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: writeKey[i.id], enabledCapabilities: [...new Set([...i.enabled_capabilities, 'act'])] }) }), copy.done)}>Turn on</Btn>
+                          {actOn && <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ writeCredential: null }) }), `${copy.name} are off and the write key is deleted.`)}>Turn off</Btn>}
+                          <Btn size="sm" variant="ghost" onClick={() => setOpen(null)}>Close</Btn>
                         </div>
-                      )
-                    })()}
-                    {canManage !== false && FORM[i.kind] && (
-                      <div className="w-full sm:w-auto">
-                        <DisclosurePanel title="Bind another app">
-                          <div className="flex flex-col gap-2 p-3">
-                            <SelectField label="App" value={bindDraft[i.id]?.projectId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: e.target.value, externalId: bindDraft[i.id]?.externalId ?? '' } })}>
-                              <option value="">Choose…</option>
-                              {projects.filter((p) => !i.bindings.some((b) => b.projectId === p.projectId)).map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
-                            </SelectField>
-                            <Input label={FORM[i.kind].bindingLabel} value={bindDraft[i.id]?.externalId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: bindDraft[i.id]?.projectId ?? '', externalId: e.target.value } })} />
-                            <div>
-                              <Btn
-                                size="sm"
-                                disabled={busy || !bindDraft[i.id]?.projectId || !bindDraft[i.id]?.externalId.trim()}
-                                onClick={() => act(async () => {
-                                  const draft = bindDraft[i.id]
-                                  const res = await apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ bindings: [...i.bindings, { projectId: draft.projectId, externalId: draft.externalId.trim(), role: 'primary' }] }) })
-                                  if (res.ok) setBindDraft({ ...bindDraft, [i.id]: { projectId: '', externalId: '' } })
-                                  return res
-                                }, 'Bound. It is read with the next daily collection.')}
-                              >
-                                Bind
-                              </Btn>
-                            </div>
-                          </div>
-                        </DisclosurePanel>
                       </div>
                     )}
-                    {canManage !== false && (
-                      <div className="flex shrink-0 gap-2">
-                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => act(() => apiFetchMutate(`${path}/${i.id}/probe`, { method: 'POST', body: '{}' }), 'Checked again.')}>Check</Btn>
-                        <Btn size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmRemove({ id: i.id, name: i.display_name })}>Remove</Btn>
+                    {panel === 'bind' && FORM[i.kind] && (
+                      <div className="mt-1.5 grid grid-cols-1 gap-2 rounded-sm border border-edge-subtle p-2.5 sm:grid-cols-2" data-testid={`connector-bind-${i.id}`}>
+                        <SelectField label="App" value={bindDraft[i.id]?.projectId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: e.target.value, externalId: bindDraft[i.id]?.externalId ?? '' } })}>
+                          <option value="">Choose…</option>
+                          {projects.filter((p) => !bound.has(p.projectId)).map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}
+                        </SelectField>
+                        <Input label={FORM[i.kind].bindingLabel} value={bindDraft[i.id]?.externalId ?? ''} onChange={(e) => setBindDraft({ ...bindDraft, [i.id]: { projectId: bindDraft[i.id]?.projectId ?? '', externalId: e.target.value } })} />
+                        <div className="flex gap-2">
+                          <Btn
+                            size="sm"
+                            disabled={busy || !bindDraft[i.id]?.projectId || !bindDraft[i.id]?.externalId.trim()}
+                            onClick={() => act(async () => {
+                              const draft = bindDraft[i.id]
+                              const res = await apiFetchMutate(`${path}/${i.id}`, { method: 'PATCH', body: JSON.stringify({ bindings: [...i.bindings, { projectId: draft.projectId, externalId: draft.externalId.trim(), role: 'primary' }] }) })
+                              if (res.ok) {
+                                setBindDraft({ ...bindDraft, [i.id]: { projectId: '', externalId: '' } })
+                                setOpen(null)
+                              }
+                              return res
+                            }, 'Bound. It is read with the next daily collection.')}
+                          >
+                            Bind
+                          </Btn>
+                          <Btn size="sm" variant="ghost" onClick={() => setOpen(null)}>Close</Btn>
+                        </div>
                       </div>
                     )}
                   </li>
@@ -238,7 +269,7 @@ export function ConnectorsCard({ orgId, projects }: { orgId: string; projects: A
                 <Input label={form.configLabel} value={configValue} onChange={(e) => setConfigValue(e.target.value)} />
               ))}
               <Textarea label={form?.credentialLabel ?? 'Credential'} value={credential} onChange={(e) => setCredential(e.target.value)} rows={3} autoComplete="off" spellCheck={false} />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <SelectField label="For which app" value={bindProject} onChange={(e) => setBindProject(e.target.value)}>
                   <option value="">Not bound yet</option>
                   {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.name}</option>)}

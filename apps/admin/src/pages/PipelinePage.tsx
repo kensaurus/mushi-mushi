@@ -2,8 +2,12 @@
  * PipelinePage — /pipeline, "Pipeline".
  *
  * Every bug from report to deploy as one picture: Reported → Triaged → Fix
- * PR → Reviewed → CI → Release train → Merged → Deployed. Each stage shows
- * how many items sit in it, how many are stuck and the oldest one's age.
+ * PR → Reviewed → CI → Release train → Merged → Deployed, one segmented bar
+ * (2026-11-18) where only the jam takes a colour (lib/pipelineSignals.ts).
+ * Each stage shows how many items sit in it, how many are stuck and the
+ * oldest one's age; under it, how long the stuck work has waited (0–3 d,
+ * 3–7 d, 7–30 d, 30 d+; the server's per-group `ages`). Each stuck group
+ * has one primary button and a "More" menu for the rest.
  * A status line names the biggest stuck group and offers its first action
  * the server would take. Below, the stuck groups in plain words ("12 PRs:
  * their own CI is red"), each with its items, their evidence and only the
@@ -48,9 +52,10 @@ import { FixOpeners } from '../components/pipeline/FixOpeners'
 import { WorkersPanel } from '../components/pipeline/WorkersPanel'
 import { WorkerFlagsStrip } from '../components/pipeline/WorkerFlags'
 import { LANES_PATH, type WorkLanesData } from '../lib/workers'
+import { groupPrimary, stuckAges } from '../lib/pipelineSignals'
+import { StuckAgeBar } from '../components/signal/StuckAgeBar'
 import {
   ACTION_META,
-  actionableIds,
   ageLabel,
   openerSplit,
   openerSummary,
@@ -147,6 +152,8 @@ export function PipelinePage() {
   const openerParts = useMemo(() => (data?.dispatchers ? openerSplit(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
   const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
+  // How long the stuck work has waited; "Need you" adds up to the status line's count.
+  const ages = useMemo(() => stuckAges(stages, now), [stages, now])
   // "Nothing is stuck" was false while no agent could open a fix (audit
   // 2026-11-11: next to "Who opens fixes: nobody" and "credits idle").
   const agentCredits = useAgentCredits()
@@ -224,7 +231,7 @@ export function PipelinePage() {
         description="Every bug from report to deploy, where it is stuck, and the fix."
         helpTitle="About the pipeline"
         helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
-        helpHowToUse="Start with the red stages. Open a stuck group to see its PRs with the failing checks or review findings, then fix them in one click: CI repair, update branch, re-run review, or close with a reason. Every action asks first."
+        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. Open a stuck group to see its PRs with the failing checks or review findings; each group has one main fix, and More holds the rest (re-run, close with a reason). Every action asks first."
       >
         {tab === 'workers' ? null : page.isValidating && !page.loading ? (
           <span className="text-2xs text-fg-muted">Updating…</span>
@@ -308,6 +315,7 @@ export function PipelinePage() {
           <section className="space-y-2" aria-label="Stages">
             <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
             <FunnelLegend />
+            <StuckAgeBar ages={ages} />
           </section>
 
           {!data.ciReadable && (
@@ -457,14 +465,11 @@ export function PipelinePage() {
   )
 }
 
-/** The biggest stuck group, and the first of its actions the server would take for at least one item. */
+/** The biggest stuck group, and its one primary action when the server would take it for at least one item (the same choice as the group's own button). */
 function topStuck(groups: PipelineGroup[]): { group: PipelineGroup; action: PipelineAction | null; ids: string[] } | null {
   const stuck = groups.filter((g) => g.tone === 'stuck').sort((a, b) => b.count - a.count)
   const group = stuck[0]
   if (!group) return null
-  for (const action of group.actions) {
-    const ids = actionableIds(group.items, action)
-    if (ids.length > 0) return { group, action, ids }
-  }
-  return { group, action: null, ids: [] }
+  const primary = groupPrimary(group)
+  return primary ? { group, action: primary.action, ids: primary.ids } : { group, action: null, ids: [] }
 }

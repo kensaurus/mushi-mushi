@@ -7,7 +7,8 @@
 
 import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Callout, Card, CopyButton, SegmentedControl } from '../ui'
+import { Btn, Callout, Card, CopyButton, SegmentedControl } from '../ui'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { apiFetchMutate } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import {
@@ -61,8 +62,9 @@ export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; pr
           {running ? 'Scanning…' : scan ? 'Scan again' : 'Scan my site'}
         </Btn>
       </div>
-      <p className="mt-2 text-2xs text-fg-faint" aria-live="polite">
-        {scanStatusText(scan, data.mapScan)}
+      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-fg-faint" aria-live="polite" data-testid="journey-scan-state">
+        {scan ? <StatusPill status={SCAN_STATUS[scan.status]} label={SCAN_WORD[scan.status]} /> : null}
+        <span className="min-w-0">{scanStatusText(scan, data.mapScan)}</span>
       </p>
       {scan?.status === 'failed' && scan.error && (
         <Callout tone="danger" className="mt-2" label="The last scan failed">
@@ -112,7 +114,11 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
     <Card className="p-3" data-testid="journey-recording">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-medium text-fg">Record visits on demand</p>
-        {until ? <Badge tone="okSubtle">Recording until {new Date(until).toLocaleString()}</Badge> : <Badge tone="neutral">Off</Badge>}
+        {until ? (
+          <StatusPill status="running" label={`Recording until ${new Date(until).toLocaleString()}`} />
+        ) : (
+          <StatusPill status="idle" label="Off" />
+        )}
       </div>
       <p className="mt-1 text-2xs text-fg-muted">
         For apps that run the SDK with <code className="font-mono">trackSessions: &apos;on-demand&apos;</code>: nobody is recorded until you start, so real visitors pay nothing the rest of the time. Apps on the default already record every visit.
@@ -140,9 +146,13 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
   )
 }
 
+/** The latest scan's state as a mark: scanning pulses, done is ✓, failed ✕. */
+const SCAN_STATUS: Record<JourneyScan['status'], RunStatus> = { running: 'running', done: 'passed', failed: 'failed' }
+const SCAN_WORD: Record<JourneyScan['status'], string> = { running: 'Scanning', done: 'Scanned', failed: 'Scan failed' }
+
 function scanStatusText(scan: JourneyScan | null, mapScan: JourneyScan | null): string {
   if (!scan) return 'Reads up to 40 public pages with your Firecrawl key (about 41 credits). No AI model, nothing is changed on your site.'
-  if (scan.status === 'running') return `Scanning ${scan.baseUrl}… the map updates by itself when it is done.`
-  if (mapScan) return `Last scan: ${mapScan.pageCount} pages of ${mapScan.baseUrl}, ${new Date(mapScan.finishedAt ?? mapScan.createdAt).toLocaleString()}.`
+  if (scan.status === 'running') return `${scan.baseUrl}; the map updates by itself.`
+  if (mapScan) return `${scan.status === 'failed' ? 'The map is from the last good scan: ' : ''}${mapScan.pageCount} pages of ${mapScan.baseUrl}, ${new Date(mapScan.finishedAt ?? mapScan.createdAt).toLocaleString()}.`
   return 'No finished scan yet.'
 }

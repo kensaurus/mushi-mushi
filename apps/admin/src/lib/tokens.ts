@@ -7,18 +7,6 @@ export const SEVERITY: Record<string, string> = {
   low: CHIP_TONE.ok,
 }
 
-export const STATUS: Record<string, string> = {
-  new: CHIP_TONE.warnSubtle,
-  queued: 'bg-warn-muted/60 text-warn-foreground border border-warn/20',
-  classified: CHIP_TONE.okSubtle,
-  fixing: CHIP_TONE.accentSubtle,
-  fixed: CHIP_TONE.infoSubtle,
-  verified: CHIP_TONE.okSubtle,
-  reopened: CHIP_TONE.warnSubtle,
-  resolved: CHIP_TONE.okSubtle,
-  dismissed: CHIP_TONE.neutral,
-}
-
 export const PIPELINE_STATUS: Record<string, string> = {
   pending: CHIP_TONE.warnSubtle,
   running: CHIP_TONE.infoSubtle,

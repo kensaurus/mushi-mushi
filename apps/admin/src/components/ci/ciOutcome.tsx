@@ -5,10 +5,12 @@
  *          the queue, the timeline, the legend and the drawer, so an outcome
  *          looks and reads the same everywhere. Colour is never the only
  *          signal: every use pairs it with the icon and the name.
+ *          Colours are the run-status tokens (`st-*`, 2026-11-18) shared with
+ *          components/signal/StatusMark: running blue, passed green, failed red,
+ *          waiting amber, machine stopped orange, cancelled and skipped grey.
  */
 
 import type { ComponentType } from 'react'
-import { CHIP_TONE } from '../../lib/chipTone'
 import { CI_OUTCOME_META, type CiJobOutcome } from '../../lib/ciView'
 import { IconBan, IconCheck, IconClock, IconClose, IconPlay, IconServerOff, IconSkip } from '../icons'
 
@@ -33,63 +35,63 @@ export const CI_OUTCOME_STYLE: Record<CiJobOutcome, CiOutcomeStyle> = {
     meaning: 'Queued until a test machine is free.',
     action: 'A long wait means too few machines for the work.',
     Icon: IconClock,
-    chip: CHIP_TONE.neutral,
-    fill: 'bg-fg-faint',
-    text: 'text-fg-secondary',
+    chip: 'border border-st-waiting/45 bg-st-waiting-soft text-st-waiting-ink',
+    fill: 'bg-st-waiting',
+    text: 'text-st-waiting-ink',
   },
   running: {
     label: CI_OUTCOME_META.running.label,
     meaning: 'A test machine is running it now.',
     action: null,
     Icon: IconPlay,
-    chip: CHIP_TONE.infoSubtle,
-    fill: 'bg-info',
-    text: 'text-info',
+    chip: 'border border-st-running/45 bg-st-running-soft text-st-running-ink',
+    fill: 'bg-st-running',
+    text: 'text-st-running-ink',
   },
   passed: {
     label: CI_OUTCOME_META.passed.label,
     meaning: 'Every check passed.',
     action: null,
     Icon: IconCheck,
-    chip: CHIP_TONE.okSubtle,
-    fill: 'bg-ok',
-    text: 'text-ok',
+    chip: 'border border-st-passed/45 bg-st-passed-soft text-st-passed-ink',
+    fill: 'bg-st-passed',
+    text: 'text-st-passed-ink',
   },
   code_failure: {
     label: CI_OUTCOME_META.code_failure.label,
     meaning: 'A check failed on the code.',
     action: 'Read the logs, or open the fix to send it back.',
     Icon: IconClose,
-    chip: CHIP_TONE.dangerSubtle,
-    fill: 'bg-danger',
-    text: 'text-danger',
+    chip: 'border border-st-failed/45 bg-st-failed-soft text-st-failed-ink',
+    fill: 'bg-st-failed',
+    text: 'text-st-failed-ink',
   },
   infra: {
     label: CI_OUTCOME_META.infra.label,
     meaning: 'Not your code: the machine died or never picked the job up.',
     action: 'Re-run it. The code was never tested.',
     Icon: IconServerOff,
-    chip: CHIP_TONE.warnSubtle,
-    fill: 'bg-warn',
-    text: 'text-warn-foreground',
+    chip: 'border border-st-slow/45 bg-st-slow-soft text-st-slow-ink',
+    fill: 'bg-st-slow',
+    text: 'text-st-slow-ink',
   },
   cancelled: {
     label: CI_OUTCOME_META.cancelled.label,
     meaning: 'Stopped on purpose, usually by a newer push.',
     action: null,
     Icon: IconBan,
-    chip: CHIP_TONE.neutral,
-    fill: 'bg-fg-faint',
-    text: 'text-fg-muted',
+    chip: 'border border-st-cancelled/45 bg-st-cancelled-soft text-st-cancelled-ink',
+    fill: 'bg-st-cancelled',
+    text: 'text-st-cancelled-ink',
   },
   skipped: {
     label: CI_OUTCOME_META.skipped.label,
     meaning: "The workflow's rules skipped it.",
     action: null,
     Icon: IconSkip,
-    chip: CHIP_TONE.neutral,
-    fill: 'bg-fg-faint',
-    text: 'text-fg-muted',
+    chip: 'border border-st-idle/45 bg-st-idle-soft text-st-idle-ink',
+    fill: 'bg-st-idle',
+    text: 'text-st-idle-ink',
   },
 }
 

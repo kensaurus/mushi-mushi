@@ -22,6 +22,7 @@ import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
+import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
 
@@ -61,6 +62,7 @@ const ChecksPage = lazy(() => import('./pages/ChecksPage').then(m => ({ default:
 const RecipePage = lazy(() => import('./pages/RecipePage').then(m => ({ default: m.RecipePage })))
 const CiPage = lazy(() => import('./pages/CiPage').then(m => ({ default: m.CiPage })))
 const OpsPage = lazy(() => import('./pages/OpsPage').then(m => ({ default: m.OpsPage })))
+const ProvidersPage = lazy(() => import('./pages/ProvidersPage').then(m => ({ default: m.ProvidersPage })))
 const CreditsPage = lazy(() => import('./pages/CreditsPage').then(m => ({ default: m.CreditsPage })))
 const DesignPage = lazy(() => import('./pages/DesignPage').then(m => ({ default: m.DesignPage })))
 const TeamPage = lazy(() => import('./pages/TeamPage').then(m => ({ default: m.TeamPage })))
@@ -266,7 +268,12 @@ function TesterRoute({ children }: { children: ReactNode }) {
 
 function ResilienceLayer() {
   useSessionWatcher()
-  return <OfflineBanner />
+  return (
+    <>
+      <OfflineBanner />
+      <NewVersionBanner />
+    </>
+  )
 }
 
 /** Lazy-initialises the Mushi self-dogfood SDK.
@@ -410,6 +417,7 @@ export function App() {
                   <Route path="/checks" element={<ChecksPage />} />
                   <Route path="/recipe" element={<RecipePage />} />
                   <Route path="/ci" element={<CiPage />} />
+                  <Route path="/providers" element={<OperatorRoute><ProvidersPage /></OperatorRoute>} />
                   <Route path="/ops" element={<OpsPage />} />
                   <Route path="/credits" element={<CreditsPage />} />
                   <Route path="/design" element={<DesignPage />} />

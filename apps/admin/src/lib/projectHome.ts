@@ -123,6 +123,12 @@ export interface WeekRow {
   lastWeek: number
   moreIsBetter: boolean
   href: string
+  /**
+   * Daily counts over both weeks, oldest first (14 UTC days, the last is
+   * today so far). Absent on an older server or when the server could not
+   * read every row behind it; the row then shows no chart.
+   */
+  daily?: number[]
 }
 
 export interface ActivityLine {

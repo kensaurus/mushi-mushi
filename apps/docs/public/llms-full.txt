@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 239
+Pages: 240
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -16004,8 +16004,8 @@ curl -X POST "$MUSHI_API_URL/v1/ops/events" \
 | `facts` | no | Up to 8 `{ label, value }` pairs |
 | `url` | no | `https://` only: the **Open** button |
 | `amount_minor`, `currency` | together | The amount in the currency's smallest unit (yen, cents) and its ISO code. A `kind` with `refund` in it counts as money out. |
-| `thread_key` | no | Groups an incident with its follow-ups, for example `invoice:in_123` or `deploy::production` |
-| `dedupe_key` | no | A retried request with the same key stores and posts once (answers `200` with `status: duplicate`) |
+| `thread_key` | no | Groups an incident with its follow-ups within this app, for example `invoice:in_123` or `deploy::production` |
+| `dedupe_key` | no | A retried request with the same key from the same app stores and posts once (answers `200` with `status: duplicate`). Two apps may use the same key |
 | `occurred_at` | no | ISO time, within the last 30 days |
 
 Answers: `202` once stored (the Slack post happens right after), `400 VALIDATION_ERROR`,
@@ -24604,6 +24604,34 @@ Mushi Mushi only **reads** your apps here. The page builds on each app's [Recipe
 
 ## What you see
 
+The page has five tabs. Each has its own address (`/portfolio?tab=spend`), so you can link to one.
+
+| Tab | What is on it |
+|-----|---------------|
+| **Apps** | The apps table or cards, and **Fix once** |
+| **Releases** | Releases, the funnel across apps and the CI runners summary |
+| **Payments** | Payments across apps |
+| **Spend & accounts** | Spend per app, accounts and resilience, shared resources and connected sources |
+| **Digest** | The daily digest |
+
+**Apps that need you** stays above the tabs: one short card per problem, worst first, each
+with one number and one action. Point at a card to light the same app everywhere on the
+page. Click to pin it; Escape clears it.
+
+On the **Apps** tab, switch between **Table** and **Cards**, and sort **Worst first** or
+**A to Z**. The table has one row per app and one column per signal. A darker cell is worse.
+
+| Column | What it shows |
+|--------|---------------|
+| **Open bugs** | Open bug reports. A count cut short ends in `+`. |
+| **Risks** | Open risks from the daily checks. |
+| **SDK** | The Mushi Mushi SDK against its latest release. |
+| **Release age** | Days since the latest release shipped. Darkest at 60 days. |
+| **CI fails today** | CI job failures since midnight UTC. A lost machine or an expired queue is not counted. |
+| **Last check-in** | When the SDK last called Mushi Mushi: live under 1 hour, quiet up to 7 days, then silent. |
+
+A hatched cell means no data. It never means 0.
+
 | Section | What it means |
 |---------|---------------|
 | **Cards** | One per app: the worst recipe state, open reports, the latest release, the Mushi Mushi SDK against the latest version, and the hole checks. |
@@ -25064,6 +25092,29 @@ DELETE /v1/admin/prompt-lab/prompts/:id
 - [Triage grading](/admin/judge) — nightly judge scores
 - [Fine-tuning](/admin/fine-tuning) — train a small model from your classified reports
 - [Mushi Mushi health](/admin/health) — check Mushi Mushi's AI calls before testing prompt changes
+
+---
+
+## Providers & AI routes
+
+Source: https://kensaur.us/mushi-mushi/docs/admin/providers
+
+---
+title: Providers & AI routes
+description: Operator-only page in the Mushi Mushi console showing each app's AI provider accounts, their health and spend, and the ordered model routes each app tries.
+robots:
+  index: false
+  follow: true
+---
+
+# Providers & AI routes
+
+**Route:** `/providers` (operators only; other accounts never see it)
+
+- **Providers:** one row per provider account, worst first: ✕ down, ⧗ warn, ✓ ok, ◷ stale. Each row shows its balance or quota bar.
+- **Spend:** what each app's AI calls cost against what the app sells, with the margin as ▲/▼.
+- **Routes:** the models each app tries, in order. Toggle, reorder or edit a route; a change that would leave an app with no enabled default route is refused.
+- **History:** every change, who made it, and when.
 
 ---
 
@@ -26676,6 +26727,16 @@ Supabase. Keys are stored encrypted in Supabase Vault, and after saving the list
 only a short hint of each key. A key can belong to one app or be shared with your other
 apps; an app's own key is tried first. The Cursor row also holds spend-down mode (see
 [Spend credits](/admin/credits)).
+
+**Run AI on** picks Claude or OpenAI for every app in the organization. An owner or
+admin can change it.
+
+| Choice | What runs |
+| --- | --- |
+| **Claude** | Your Claude keys first. Your OpenAI keys are used only when Claude has no working key. |
+| **OpenAI** | Everything runs on your OpenAI keys. No Claude key is used, yours or the platform's. |
+
+If you pick OpenAI with no OpenAI key saved, the add-key form opens so you can add one first.
 
 ### Web tools
 

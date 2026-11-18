@@ -4,8 +4,9 @@ import { ReportSourceTag } from '../reports/ReportSourceTag'
 import { REPORT_SOURCE_META, reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
 import { ContainedBlock, MetaChip } from './ReportSurface'
+import { StatusPill } from '../signal/StatusMark'
+import { reportRunStatus } from '../reports/reportRunStatus'
 import {
-  STATUS,
   SEVERITY,
   CATEGORY_BADGE,
   CATEGORY_LABELS,
@@ -66,9 +67,7 @@ export function ReportDetailHeader({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <ReportSourceTag report={sourceRow} />
-          <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>
-            {statusLabel(report.status)}
-          </Badge>
+          <StatusPill status={reportRunStatus(report.status)} label={statusLabel(report.status)} />
           {report.severity && showsSeverity(sourceKind) && (
             <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
           )}

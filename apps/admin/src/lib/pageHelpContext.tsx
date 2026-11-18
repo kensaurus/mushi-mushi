@@ -68,7 +68,10 @@ export function usePageHelpRegistration(): PageHelpRegistration | null {
   return useContext(PageHelpContext)?.registration ?? null
 }
 
-/** True while the page shows a first-step (empty) card. */
+/**
+ * True while the page shows a first-step (empty) card.
+ * @internal Read by tests; RoutePageHelp stopped expanding on empty pages (2026-11-18).
+ */
 export function usePageIsEmpty(): boolean {
   return useContext(PageHelpContext)?.empty ?? false
 }

@@ -32,6 +32,7 @@ import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagn
 import { FixWithAgentPanel } from './FixWithAgentPanel'
 import { modelLine } from '../../lib/reportInternals'
 import type { ReportDetail } from './types'
+import { VitalText } from '../signal/VitalText'
 
 /** Below this, we hedge instead of asserting a root cause. */
 const LOW_CONFIDENCE = 0.7
@@ -97,7 +98,7 @@ export function DiagnosisFixHero({
         {stage2 ? (
           <Stage2DiagnosisBody diagnosis={stage2} summary={summary ?? null} streaming={view.kind === 'streaming'} showInternals={showInternals} />
         ) : isConfident ? (
-          <p className="text-sm leading-relaxed text-fg-secondary">{summary}</p>
+          <p className="text-sm leading-relaxed text-fg-secondary"><VitalText text={summary ?? ''} /></p>
         ) : (
           <div className="text-sm leading-relaxed text-fg-secondary">
             <p>

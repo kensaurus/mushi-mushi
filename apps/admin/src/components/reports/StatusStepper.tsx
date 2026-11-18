@@ -26,6 +26,8 @@
 
 import { Tooltip } from '../ui'
 import { SEVERITY_TRAFFIC } from '../../lib/severityTraffic'
+import { STATUS_INK, StatusMark } from '../signal/StatusMark'
+import { reportRunStatus } from './reportRunStatus'
 
 /** Canonical stage order. `dismissed` is a terminal off-loop state and
  *  rendered as a single muted bar instead of a stepper. */
@@ -87,8 +89,13 @@ export function StatusStepper({
           aria-label={showCaption ? undefined : 'Dismissed'}
           className="h-1 w-full rounded-full bg-surface-overlay"
         />
-        {showCaption && (
-          <span className="text-2xs text-fg-faint ml-1">Dismissed</span>
+        {showCaption ? (
+          <span className="ml-1 inline-flex items-center gap-1 text-2xs text-fg-faint">
+            <StatusMark status="cancelled" size={10} />
+            Dismissed
+          </span>
+        ) : (
+          <StatusMark status="cancelled" size={10} />
         )}
       </div>
     )
@@ -103,6 +110,8 @@ export function StatusStepper({
   const isTable = size === 'table'
   const barHeight = size === 'full' ? 'h-2.5' : isTable ? 'h-2' : 'h-1.5'
   const tableSummary = `${activeLabel} · step ${activeIdx + 1} of 4`
+  // The step's word carries the status mark: fixing pulses, fixed is ✓, reopened ✕.
+  const runStatus = reportRunStatus(status)
 
   const barRow = (
     <div
@@ -143,7 +152,8 @@ export function StatusStepper({
       className={`flex items-stretch w-full min-w-0 ${size === 'full' ? 'flex-col gap-1' : isTable ? 'flex-row items-center gap-1' : 'flex-col gap-1'} ${className}`}
     >
       {size === 'compact' && (
-        <span aria-hidden="true" className="text-2xs text-fg-muted leading-none font-medium">
+        <span aria-hidden="true" className={`inline-flex items-center gap-1 text-2xs leading-none font-semibold ${STATUS_INK[runStatus]}`}>
+          <StatusMark status={runStatus} size={10} />
           {activeLabel}
         </span>
       )}
@@ -157,9 +167,11 @@ export function StatusStepper({
       {isTable && (
         <span
           aria-hidden="true"
-          className="shrink-0 text-2xs text-fg-muted leading-none font-medium"
+          className={`inline-flex shrink-0 items-center gap-1 text-2xs leading-none font-semibold ${STATUS_INK[runStatus]}`}
           title={tableSummary}
+          data-testid="status-stepper-word"
         >
+          <StatusMark status={runStatus} size={10} />
           {activeLabel}
         </span>
       )}

@@ -123,7 +123,7 @@ export function ActionsCard({ orgId, connectors }: { orgId: string; connectors: 
       {actable.length > 0 && (
         <DisclosurePanel title="Ask for an action">
           <div className="flex flex-col gap-2 p-3">
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <SelectField label="Connector" value={connectorId} onChange={(e) => { setConnectorId(e.target.value); setAction('') }}>
                 <option value="">Choose…</option>
                 {actable.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
