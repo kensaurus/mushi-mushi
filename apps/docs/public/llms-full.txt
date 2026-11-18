@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 240
+Pages: 243
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -186,7 +186,12 @@ description: Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read 
 
 ### Add the Mushi Mushi server [#add-the-mushi-server]
 
-One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+One click:
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8ifQ%3D%3D)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_Mushi_Mushi-0098FF?logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22mushi%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fkensaur.us%2Fmushi-mushi%2Fhosted-mcp%2F%22%7D)
+
+Other editors: pick yours on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
 No signup needed for the read-only demo. Or run one command:
 
 ```bash
@@ -210,6 +215,18 @@ projects it may see, and click **Approve**. In Claude Code, run `claude mcp logi
 Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** the Mushi Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+
+**Prefer your AI editor to do it?** Paste this into Cursor or Claude Code:
+
+```text
+Set up Mushi Mushi in this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it. It sends a test report at the end. If it prints code and names a
+file, add the code there. Then run `npx mushi-mushi doctor` and tell me what it
+reports. Last, run `npx mushi-mushi setup --ide cursor` (or `--ide claude`) so
+you can read Mushi Mushi reports over MCP.
+```
 
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
@@ -449,6 +466,19 @@ npx mushi-mushi
 ```
 
 **You'll see:** a report button in your app, and a new project in the [console](https://kensaur.us/mushi-mushi/admin).
+
+Prefer your AI editor to run it? Paste this into Cursor or Claude Code:
+
+```text
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
+```
+
+No SDK fits your stack? File reports with [one curl](/quickstart/http-api).
 
 ### Send your first report
 
@@ -814,6 +844,102 @@ export class FeedbackButtonComponent {
 ```
 
 API detail: [`mushi-mushi/angular`](/sdks/angular). Widget behavior: [`mushi-mushi`](/sdks/web).
+
+---
+
+## Ask Bolt why it broke
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/bolt-mcp
+
+---
+title: Ask Bolt why it broke
+description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what your users reported. Bolt reads the plain-English diagnosis and fixes the bug.
+---
+
+# Ask Bolt why it broke
+
+A user says your app is broken. Ask Bolt *"what did my users report?"* and it
+reads Mushi Mushi's diagnosis of each report, gets the fix prompt and fixes
+the code.
+
+- Add Mushi Mushi in Bolt as a custom MCP connector: one URL, sign in, approve.
+- Turn the connector on in your project.
+- Ask in the chat: "what did my users report?"
+
+You need a Mushi Mushi project that receives reports. No report button in
+your app yet? Add it with one prompt first:
+[Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+
+### Open your connectors
+
+On the Bolt home page, click the **+** in the chatbox, then
+**Connectors** → **Manage connectors**
+([Bolt docs](https://support.bolt.new/integrations/mcp)).
+
+### Add Mushi Mushi as a custom MCP server
+
+Click **Custom MCP server** and fill in the form:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `Mushi Mushi` |
+| **URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Transport type** | `HTTP` |
+| **Authentication** | `MCP OAuth` |
+
+Click **Connect**.
+
+### Sign in and approve
+
+A Mushi Mushi page opens. Sign in, choose which projects Bolt may see, and
+click **Approve**. You never copy a key, and you can revoke this connection
+from the Mushi Mushi console at any time.
+
+**You'll see:** a **Connected** status at the top right of the connector page.
+
+### Turn it on in your project
+
+Open your project, click the **+** in the chatbox, then **Connectors**, and
+switch Mushi Mushi on. Or tick **Auto-enable for all projects** on the
+connector page.
+
+### Ask Bolt
+
+```text
+Using the Mushi Mushi connector, what did my users report this week?
+```
+
+```text
+Get the Mushi Mushi fix context for the top report and fix it.
+```
+
+No reports yet? Ask for a test one:
+
+```text
+Using Mushi Mushi, file a test report: "The Save button on the settings page does nothing."
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Bolt's edit.
+
+## Which tools Bolt gets
+
+The `?features=vibe` part of the URL keeps the list to the 12 tools a builder
+uses: list and search reports, read one, get the fix prompt, mark it fixed,
+reply to the reporter, file a report, a setup check and the docs. Bolt turns
+every tool on by default. To stop Bolt changing anything, open the connector,
+click **⋯** → **Edit**, and untick `transition_status`, `reply_to_reporter`
+and `file_report`.
+
+  Bolt notes that many connectors at once can slow it down. Turn Mushi Mushi
+  on only in the projects that need it.
+
+## If it does not connect
+
+- **Use the `kensaur.us` URL above.** The sign-in needs it; a `supabase.co`
+  URL fails the OAuth lookup.
+- **Pick `MCP OAuth`, not `API key`.** An API key works too, but it must be
+  an `mcp:read` key, never the key in your app's script tag.
+- **Still stuck:** ask Bolt to call `diagnose_setup`. It says what is missing.
 
 ---
 
@@ -1274,6 +1400,121 @@ Full API: [`mushi_mushi` (Flutter)](/sdks/flutter).
 
 ---
 
+## HTTP API: file a bug report with one curl
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/http-api
+
+---
+title: "HTTP API: file a bug report with one curl"
+description: Send a bug report to Mushi Mushi with one HTTP call, no SDK. How to get a key, the scopes, the rate limits, and the OpenAPI 3.1 spec for code generators.
+---
+
+# HTTP API: one curl, no SDK
+
+Use the API when an SDK does not fit: a server, a cron job, a script, a
+no-code tool, or a language Mushi Mushi has no SDK for. One `POST` files a
+report. Mushi Mushi diagnoses it like a report from the widget.
+
+- Get a key with `npx mushi-mushi`, or in the console under **Manage apps**.
+- `POST /v1/reports` with the key in the `X-Mushi-Api-Key` header.
+- The report shows up in the console with a plain-English cause, and your editor can read it over MCP.
+
+### Get your project ID and key
+
+Run `npx mushi-mushi` in your app's folder. It signs you in through your
+browser and writes both values to `.env.local` (`*_MUSHI_PROJECT_ID` and
+`*_MUSHI_API_KEY`). No app folder? Open **Manage apps** in the
+[console](https://kensaur.us/mushi-mushi/admin), pick your project and click
+**Generate API key**.
+
+This key can only send reports. It cannot read them, so it is safe in a page
+or a public script.
+
+### Send a report
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports -H "Content-Type: application/json" -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -d '{"projectId":"'"$MUSHI_PROJECT_ID"'","category":"bug","description":"The Save button on the settings page does nothing.","reporterToken":"curl-test-1","createdAt":"2026-11-18T09:00:00Z","environment":{"url":"https://example.com/settings","userAgent":"curl","platform":"server","language":"en","viewport":{"width":0,"height":0},"referrer":"","timestamp":"2026-11-18T09:00:00Z","timezone":"UTC"}}'
+```
+
+**You'll see:** `{"ok":true,"data":{"reportId":"…","status":"submitted"}}`, then the report in the [console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause, usually within a minute.
+
+### Check it
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports/REPORT_ID/status -H "X-Mushi-Api-Key: $MUSHI_API_KEY"
+```
+
+**You'll see:** the status (`new`, then `classified`), the category, the severity and a one-line summary.
+
+## The fields
+
+Every field below is required. The rest of the body is optional.
+
+| Field | What to send |
+| --- | --- |
+| `projectId` | Your project ID. It must match the key's project. |
+| `category` | `bug`, `slow`, `visual`, `confusing`, `other`, `feedback`, `question` or `feature` |
+| `description` | What the user saw, in their words. Up to 5,000 characters. |
+| `reporterToken` | A random ID for the person reporting, with no name or email in it. Reports with the same token group together. |
+| `createdAt` | The time, in ISO 8601 with a time zone, for example `2026-11-18T09:00:00Z`. |
+| `environment` | `url`, `userAgent`, `platform`, `language`, `viewport` (`width`, `height`), `referrer`, `timestamp`, `timezone`. Send `""` or `0` when you have no value. |
+
+Optional fields that make the diagnosis better: `severity`
+(`low` to `critical`), `consoleLogs`, `networkLogs`, `screenshotDataUrl`
+(a `data:` URL, about 1.5 MB at most), `metadata`, and `environment.route`.
+
+A missing field returns `400` with the field named, for example
+`{"ok":false,"error":{"code":"INGEST_ERROR","message":"environment.timezone: Required"}}`.
+
+## Keys and scopes
+
+Each key has scopes. Use the smallest one that does the job.
+
+| Scope | What it can do | Where it can live |
+| --- | --- | --- |
+| `report:write` | Send reports, spans and metrics; read its own report's status | In your app or a public script |
+| `mcp:read` | Read reports, diagnoses and lessons (`/v1/sync/*`, MCP) | On your computer or a server only |
+| `mcp:write` | Everything `mcp:read` can, plus replying to reporters and starting fixes | On your computer or a server only |
+
+  Never put an `mcp:read` or `mcp:write` key in a web page. Mushi Mushi
+  refuses such a key once it has been seen in a browser
+  (`KEY_EXPOSED_IN_BROWSER`).
+
+## Rate limits
+
+| Route | Limit, per project |
+| --- | --- |
+| `POST /v1/reports` and `/v1/reports/batch` | 120 reports a minute (you can change it per project); a batch counts each report |
+| `POST /v1/ingest/spans` | 500 calls a minute |
+| `POST /v1/ingest/metrics` | 60 calls a minute |
+
+Over the limit you get `429 RATE_LIMITED` with a `Retry-After` header in
+seconds. When the plan's monthly reports run out you get
+`402 QUOTA_EXCEEDED`, also with `Retry-After`. Wait that long, then retry.
+
+To make a retry safe, add an `id` to the body (a UUID you make once per
+report). Sending the same `id` again returns the report already stored instead
+of filing a second one. The same reporter, text and category within 60 seconds
+is also merged into the first report.
+
+## More than one report
+
+`POST /v1/reports/batch` takes `{"reports":[…]}`. It keeps the first 10 and
+drops the rest, and checks each report on its own, so one bad report does not
+fail the others.
+
+## OpenAPI spec
+
+The full machine-readable spec (OpenAPI 3.1) is at
+[`/functions/v1/api/openapi.json`](https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json).
+Point a code generator or an agent at it. It covers ingest, the
+`/v1/sync/*` read routes, fix dispatch and the A2A task routes.
+
+Want your editor to read reports instead of calling the API by hand? Use the
+[MCP server](/quickstart/mcp).
+
+---
+
 ## iOS (Swift) quickstart
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/ios
@@ -1571,7 +1812,7 @@ servers. Ask them to turn on **Custom MCP** under **Connectors → Admin setting
 
 | Field | Value |
 | --- | --- |
-| **Server name** | `Mushi` |
+| **Server name** | `Mushi Mushi` |
 | **Connection** (shown only on some workspaces) | **Direct connection** |
 | **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
 | **Authentication** | **OAuth** (the default) |
@@ -1591,21 +1832,21 @@ and you can revoke it from the Mushi Mushi console at any time.
 In a project chat, try:
 
 ```text
-Using the Mushi connector, what did my users report this week?
+Using the Mushi Mushi connector, what did my users report this week?
 ```
 
 ```text
-Get the Mushi fix context for the checkout report and fix it.
+Get the Mushi Mushi fix context for the checkout report and fix it.
 ```
 
 ```text
-That's deployed. Mark the report fixed in Mushi and tell the reporter.
+That's deployed. Mark the report fixed in Mushi Mushi and tell the reporter.
 ```
 
 No reports yet? Ask for a test one. Mushi Mushi diagnoses it like a real user report:
 
 ```text
-Using Mushi, file a test report: "The Save button on the settings page does nothing."
+Using Mushi Mushi, file a test report: "The Save button on the settings page does nothing."
 ```
 
 **You'll see:** the report, the likely cause in plain English and the files to change, then Lovable's edit.
@@ -2078,6 +2319,94 @@ If nothing arrives:
   their own [plugin](/quickstart/capacitor); a step-by-step
   [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
   covers porting an existing Capacitor app.
+
+---
+
+## Mushi Mushi in Replit
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/replit
+
+---
+title: Mushi Mushi in Replit
+description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Mushi Mushi to Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
+---
+
+# Mushi Mushi in Replit
+
+Two parts, about five minutes each. First your app gets a report button.
+Then Replit Agent gets Mushi Mushi as an MCP server, so you can ask it what
+broke and have it fix the code.
+
+- Ask Replit Agent to add one script tag: your app gets a report button.
+- Add Mushi Mushi under Integrations as a custom MCP server: one URL, sign in, approve.
+- Ask Agent: "what did my users report?"
+
+## Add the report button
+
+1. [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-replit) and create a project.
+2. In the console, open **Set up** → **Install widget** → **Script tag** and copy the line.
+3. Send this to Replit Agent, with your line in place of the example:
+
+```text
+Add this script tag inside the <head> of the app's main HTML page exactly as written, and change nothing else:
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>
+```
+
+4. Open the app, tap the report button and send one sentence.
+
+**You'll see:** the report in your [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause.
+
+What your users see, what it collects and how to remove it: the same as in
+[Lovable or Bolt](/quickstart/lovable-bolt#what-your-users-will-see).
+
+## Connect Replit Agent
+
+### Add the server
+
+One click: [Add Mushi Mushi to Replit](https://replit.com/integrations?mcp=eyJkaXNwbGF5TmFtZSI6Ik11c2hpIE11c2hpIiwiYmFzZVVybCI6Imh0dHBzOi8va2Vuc2F1ci51cy9tdXNoaS1tdXNoaS9ob3N0ZWQtbWNwLz9mZWF0dXJlcz12aWJlIn0=).
+
+Or by hand ([Replit docs](https://docs.replit.com/build/connect-via-mcp#add-a-custom-mcp-server)):
+open **Settings** → **Integrations** → **Your integrations**, choose
+**Add custom** → **Add personal MCP server**, and fill in:
+
+| Field | Value |
+| --- | --- |
+| **Display name** | `Mushi Mushi` |
+| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+
+Leave **Advanced settings** empty. Click **Test & save**.
+
+### Sign in and approve
+
+A Mushi Mushi page opens. Sign in, choose which projects Replit may see, and
+click **Approve**. You never copy a key.
+
+**You'll see:** Mushi Mushi under **MCP Servers** with a connected status.
+
+### Ask Agent
+
+```text
+Use the Mushi Mushi MCP server: what did my users report this week?
+```
+
+```text
+Use Mushi Mushi to get the fix context for the top report, then fix it.
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Agent's edit.
+
+  Custom MCP servers depend on your Replit plan and workspace permissions. If
+  **Add custom** is missing, ask your workspace admin.
+
+## If it does not connect
+
+- **Use the `kensaur.us` URL above.** The sign-in needs it; a `supabase.co`
+  URL fails the OAuth lookup.
+- **Signing in is not an option?** Open **Advanced settings** and add the
+  header `X-Mushi-Api-Key` with an `mcp:read` key (**Manage apps** →
+  **Generate API key** → **MCP read-only**). Never use the key from your
+  script tag here.
+- **Still stuck:** ask Agent to call `diagnose_setup`. It says what is missing.
 
 ---
 
@@ -9909,7 +10238,7 @@ without installing it for good.
 2. **Signs you in** through your browser, and makes a project and a key that can only send reports.
 3. **Installs `mushi-mushi`** with the package manager your lockfile uses. React Native and Capacitor apps get their own package, `@mushi-mushi/react-native` or `@mushi-mushi/capacitor`.
 4. **Writes two settings** (your project ID and key) to `.env.local`, or to `.env` if you already have one. Each name gets the prefix your framework needs, such as `VITE_` or `NEXT_PUBLIC_`.
-5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first. For React, Vue and the others it prints the code, because that code has to wrap your app and a wizard that rewrites your components can break them.
+5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first (with `--yes` it adds it). For React, Next.js, Vue and the others it prints the code and one line naming the file to paste it into, because that code has to wrap your app and a wizard that rewrites your components can break them.
 6. **Offers to send a test report**, so you see your first report in the [console](https://kensaur.us/mushi-mushi/admin).
 
 Apart from that offer, it doesn't change your app's code. It warns you if
@@ -9927,10 +10256,12 @@ Mushi Mushi setting that is already there, except with `--yes`
 Paste this into Cursor, Claude Code or any AI editor that can run commands:
 
 ```text
-Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
-It prints a sign-in link: show it to me and wait while I approve it in my
-browser. Then add the code it prints to the file it names, and tell me which
-file you changed.
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
 ```
 
 `--yes` takes the default answers, which an AI editor's terminal needs because
@@ -9979,6 +10310,7 @@ short `mushi` command.
 ## Flags
 
 ```bash
+npx mushi-mushi --dry-run                      # show what it would do: no sign-in, no install, no writes
 npx mushi-mushi --framework next               # skip framework detection
 npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
 npx mushi-mushi --skip-install                 # print the install command, don't run it

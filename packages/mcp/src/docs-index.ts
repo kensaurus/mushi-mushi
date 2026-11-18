@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 240 pages, generated from llms.txt. */
+/** 243 pages, generated from llms.txt. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -1510,6 +1510,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue.",
   },
   {
+    title: "Ask Bolt why it broke",
+    url: docUrl("/quickstart/bolt-mcp"),
+    route: "/quickstart/bolt-mcp",
+    markdown: "quickstart/bolt-mcp.md",
+    keywords: ["quickstart", "bolt-mcp", "bolt", "mcp", "ask", "broke"],
+    headings: ["Open your connectors", "Add Mushi Mushi as a custom MCP server", "Sign in and approve", "Turn it on in your project", "Ask Bolt", "Which tools Bolt gets", "If it does not connect"],
+    excerpt: "Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what your users reported. Bolt reads the plain-English diagnosis and fixes the bug.",
+  },
+  {
     title: "Bug report widget for Capacitor and Ionic",
     url: docUrl("/quickstart/capacitor"),
     route: "/quickstart/capacitor",
@@ -1535,6 +1544,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "flutter", "bug", "report", "widget"],
     headings: ["Get your project ID and API key", "Install", "Initialize", "Open the widget or submit a report"],
     excerpt: "Free, open-source bug report widget for Flutter (preview): shake-to-report, a Material bottom sheet and an offline queue. A git dependency, not on pub.dev yet.",
+  },
+  {
+    title: "HTTP API: file a bug report with one curl",
+    url: docUrl("/quickstart/http-api"),
+    route: "/quickstart/http-api",
+    markdown: "quickstart/http-api.md",
+    keywords: ["quickstart", "http-api", "http", "api", "file", "bug", "report", "one", "curl"],
+    headings: ["Get your project ID and key", "Send a report", "Check it", "The fields", "Keys and scopes", "Rate limits", "More than one report", "OpenAPI spec"],
+    excerpt: "Send a bug report to Mushi Mushi with one HTTP call, no SDK. How to get a key, the scopes, the rate limits, and the OpenAPI 3.1 spec for code generators.",
   },
   {
     title: "Incident loop: from bug report to fix prompt",
@@ -1607,6 +1625,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "react-native", "react", "native", "bug", "report", "widget", "expo"],
     headings: ["Get your project ID and API key", "1. Install", "2. Mount the provider", "Optional native modules", "3. Verify"],
     excerpt: "Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report.",
+  },
+  {
+    title: "Mushi Mushi in Replit",
+    url: docUrl("/quickstart/replit"),
+    route: "/quickstart/replit",
+    markdown: "quickstart/replit.md",
+    keywords: ["quickstart", "replit"],
+    headings: ["Add the report button", "Connect Replit Agent", "Add the server", "Sign in and approve", "Ask Agent", "If it does not connect"],
+    excerpt: "Add the Mushi Mushi report button to a Replit app with one prompt, then connect Mushi Mushi to Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.",
   },
   {
     title: "Bug report widget for Svelte and SvelteKit",

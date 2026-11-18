@@ -14,8 +14,15 @@
  * Scope
  * ─────
  * Hand-curated, narrow on purpose. We document the endpoints that
- * external orchestrators actually use:
+ * integrators and external orchestrators actually use:
  *
+ *   - SDK-less ingest: /v1/reports (single + batch + status + by-trace),
+ *     /v1/ingest/spans, /v1/ingest/metrics, /v1/sdk/config, /v1/health.
+ *     The report body schema mirrors BOTH validators the route runs
+ *     (ApiReportBodySchema in _shared/validate.ts, then reportSubmissionSchema
+ *     in _shared/schemas.ts inside ingestReport); openapi-spec.test.ts keeps
+ *     the required lists in step with the Zod shapes.
+ *   - The CLI/MCP read mirror /v1/sync/* (API key with mcp:read / mcp:write)
  *   - /v1/admin/fixes/dispatch (POST + GET stream + cancel)
  *   - /v1/admin/reports (list + detail + similarity)
  *   - /v1/admin/inventory/{id} (snapshot + findings + diff)
@@ -43,6 +50,30 @@ import { PUBLIC_CORS_HEADERS } from '../../_shared/cors.ts'
 import type { Hono } from 'npm:hono@4'
 import type { Variables } from '../types.ts'
 import { API_ERROR_CODES } from '../../_shared/error-codes.ts'
+import { REPORT_CATEGORY_UNION } from '../../_shared/report-category.ts'
+
+/**
+ * A request body that passes both report validators — the same minimal body
+ * `mushi test` sends (packages/cli/src/commands/diagnostics.ts). The docs
+ * curl quickstart (apps/docs/content/quickstart/http-api.mdx) uses it too.
+ */
+export const REPORT_REQUEST_EXAMPLE = {
+  projectId: 'YOUR_PROJECT_ID',
+  category: 'bug',
+  description: 'The Save button on the settings page does nothing.',
+  reporterToken: 'curl-test-1',
+  createdAt: '2026-11-18T09:00:00.000Z',
+  environment: {
+    url: 'https://example.com/settings',
+    userAgent: 'curl/8',
+    platform: 'server',
+    language: 'en',
+    viewport: { width: 0, height: 0 },
+    referrer: '',
+    timestamp: '2026-11-18T09:00:00.000Z',
+    timezone: 'UTC',
+  },
+} as const
 
 const OPENAPI_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -85,20 +116,53 @@ function buildSpec(apiBase: string): Record<string, unknown> {
       summary:
         'Public REST surface for the Mushi Mushi autofix platform. Pair with the MCP transport at /functions/v1/mcp for richer agent flows.',
       description:
-        'Documents the endpoints external orchestrators (LangGraph, OpenAI Agents SDK, CrewAI, A2A agents) ' +
-        'are expected to call. Internal admin-UI-only endpoints (settings forms, billing) are intentionally ' +
-        'omitted — see /.well-known/agent-card for the discovery doc that advertises this spec.',
+        'Documents the endpoints an integrator needs without an SDK (file a report with one POST /v1/reports, ' +
+        'read reports back over /v1/sync/*) and the ones external orchestrators (LangGraph, OpenAI Agents SDK, ' +
+        'CrewAI, A2A agents) are expected to call. Get a key: run `npx mushi-mushi` (it signs you in and writes ' +
+        'the SDK key, scope report:write) or mint one in the console under Manage apps. Internal ' +
+        'admin-UI-only endpoints (settings forms, billing) are intentionally omitted — see ' +
+        '/.well-known/agent-card for the discovery doc that advertises this spec.',
       contact: { name: 'Mushi Mushi', url: 'https://kensaur.us/mushi-mushi' },
       license: { name: 'MIT', url: 'https://opensource.org/licenses/MIT' },
     },
     servers: [{ url: apiBase }],
     components: {
+      headers: {
+        RetryAfter: {
+          description: 'Seconds to wait before retrying.',
+          schema: { type: 'integer', minimum: 1 },
+        },
+      },
+      responses: {
+        Unauthorized: {
+          description: 'MISSING_API_KEY (no X-Mushi-Api-Key header) or INVALID_API_KEY (unknown or revoked key).',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        ForbiddenKey: {
+          description:
+            'INSUFFICIENT_SCOPE (the key lacks the scope this route needs), KEY_EXPOSED_IN_BROWSER (an mcp:* key was seen in a browser), or an org-scoped account key on an ingest route.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        RateLimited: {
+          description: 'RATE_LIMITED. Wait for Retry-After seconds, then retry.',
+          headers: { 'Retry-After': { $ref: '#/components/headers/RetryAfter' } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        QuotaExceeded: {
+          description: 'QUOTA_EXCEEDED: the plan’s monthly report quota is used up. Retry-After says when to try again.',
+          headers: { 'Retry-After': { $ref: '#/components/headers/RetryAfter' } },
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/QuotaExceededError' } } },
+        },
+      },
       securitySchemes: {
         mushiApiKey: {
           type: 'apiKey',
           in: 'header',
           name: 'X-Mushi-Api-Key',
-          description: 'Per-project API key with mcp:read or mcp:write scope (voice:write and runner:write keys reach only their own routes).',
+          description:
+            'Per-project API key. Scopes: report:write (the public SDK key; safe in a browser bundle; ingest routes only), ' +
+            'mcp:read (read reports, /v1/sync/*), mcp:write (implies mcp:read; reply, dispatch fixes). voice:write, ' +
+            'runner:write and ops:write keys reach only their own routes. Org-scoped account keys are refused on ingest (403).',
         },
         bearerAuth: {
           type: 'http',
@@ -217,10 +281,558 @@ function buildSpec(apiBase: string): Record<string, unknown> {
             },
           },
         },
+        // ── SDK-less ingest ────────────────────────────────────────────────
+        ValidationError: {
+          type: 'object',
+          description: 'The first validator’s 400 (ApiReportBodySchema). Note `error` is a string here, not an object.',
+          required: ['error', 'message', 'fields'],
+          properties: {
+            error: { type: 'string', const: 'VALIDATION_ERROR' },
+            message: { type: 'string' },
+            fields: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['path', 'message'],
+                properties: { path: { type: 'string' }, message: { type: 'string' } },
+              },
+            },
+          },
+        },
+        IngestError: {
+          type: 'object',
+          description:
+            'Ingest-specific 400/413 envelope. Codes: INGEST_ERROR (the full report schema rejected the body; message names the field, e.g. "environment.timezone: Required"), PROJECT_MISMATCH (body projectId is not the key’s project), INVALID_JSON, INVALID_PAYLOAD, SPAN_TOO_LARGE.',
+          required: ['ok', 'error'],
+          properties: {
+            ok: { type: 'boolean', const: false },
+            error: {
+              type: 'object',
+              required: ['code', 'message'],
+              properties: { code: { type: 'string' }, message: { type: 'string' } },
+            },
+          },
+        },
+        QuotaExceededError: {
+          type: 'object',
+          required: ['ok', 'error'],
+          properties: {
+            ok: { type: 'boolean', const: false },
+            error: {
+              type: 'object',
+              required: ['code', 'message'],
+              properties: {
+                code: { type: 'string', const: 'QUOTA_EXCEEDED' },
+                message: { type: 'string' },
+                used: { type: 'integer' },
+                limit: { type: ['integer', 'null'] },
+                periodResetsAt: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+        ReportEnvironment: {
+          type: 'object',
+          description: 'Where the report came from. Every listed field is required; send "" or 0 when you have no value. Extra keys are kept.',
+          required: ['url', 'userAgent', 'platform', 'language', 'viewport', 'referrer', 'timestamp', 'timezone'],
+          additionalProperties: true,
+          properties: {
+            url: { type: 'string', description: 'Page or screen the user was on.' },
+            userAgent: { type: 'string' },
+            platform: { type: 'string' },
+            language: { type: 'string', example: 'en' },
+            viewport: {
+              type: 'object',
+              required: ['width', 'height'],
+              properties: { width: { type: 'number' }, height: { type: 'number' } },
+            },
+            referrer: { type: 'string' },
+            timestamp: { type: 'string', description: 'ISO 8601 time the report was made.' },
+            timezone: { type: 'string', example: 'UTC' },
+            route: { type: 'string', maxLength: 500, description: 'Optional app route (helps the diagnosis find the screen).' },
+            nearestTestid: { type: 'string', maxLength: 120 },
+          },
+        },
+        ReportSubmission: {
+          type: 'object',
+          description:
+            'One bug report. The SDKs fill this in for you; send it yourself from a server, a script or a no-code tool. Unknown top-level keys are accepted but not stored (extra keys inside environment are kept).',
+          required: ['projectId', 'category', 'description', 'reporterToken', 'createdAt', 'environment'],
+          additionalProperties: true,
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Optional client id for safe retries (a UUID, or any string, mapped to one). A repeat of a stored id returns that report.',
+            },
+            projectId: { type: 'string', description: 'Your project id. Must match the key’s project (else 400 PROJECT_MISMATCH).' },
+            category: {
+              type: 'string',
+              enum: [...REPORT_CATEGORY_UNION],
+              description: 'feedback / question / feature are kept as the reporter’s own word and mapped onto the triage categories.',
+            },
+            description: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 5000,
+              description: 'What the user saw, in their words. Under 20 characters is accepted and padded.',
+            },
+            reporterToken: {
+              type: 'string',
+              description: 'A stable random id for the reporter (no name or email). Reports with the same token group together.',
+            },
+            createdAt: { type: 'string', format: 'date-time', description: 'ISO 8601 with a time zone offset, e.g. 2026-11-18T09:00:00Z.' },
+            environment: { $ref: '#/components/schemas/ReportEnvironment' },
+            severity: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+            userCategory: { type: 'string', maxLength: 128 },
+            userIntent: { type: 'string', description: 'What the user was trying to do.' },
+            sessionId: { type: 'string' },
+            metadata: { type: 'object', additionalProperties: true, description: 'Free-form host data. Reporter identity may ride under `user`.' },
+            consoleLogs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['level', 'message', 'timestamp'],
+                properties: {
+                  level: { type: 'string', enum: ['log', 'warn', 'error', 'info', 'debug'] },
+                  message: { type: 'string' },
+                  timestamp: { type: 'number' },
+                  stack: { type: 'string' },
+                },
+              },
+            },
+            networkLogs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['method', 'url', 'status', 'duration', 'timestamp'],
+                properties: {
+                  method: { type: 'string' },
+                  url: { type: 'string' },
+                  status: { type: 'number' },
+                  duration: { type: 'number' },
+                  timestamp: { type: 'number' },
+                  error: { type: 'string' },
+                },
+              },
+            },
+            screenshotDataUrl: { type: 'string', maxLength: 2_100_000, description: 'data: URL, about 1.5 MB decoded at most.' },
+          },
+          examples: [REPORT_REQUEST_EXAMPLE],
+        },
+        ReportAccepted: {
+          type: 'object',
+          required: ['ok', 'data'],
+          properties: {
+            ok: { type: 'boolean', const: true },
+            data: {
+              type: 'object',
+              required: ['reportId', 'status'],
+              properties: {
+                reportId: { type: 'string', format: 'uuid' },
+                status: { type: 'string', enum: ['submitted', 'deduplicated'] },
+                deduplicated: { type: 'boolean' },
+              },
+            },
+          },
+        },
       },
     },
     security: [{ mushiApiKey: [] }, { bearerAuth: [] }],
     paths: {
+      // ── SDK-less ingest (any active project key; the SDK key is report:write) ──
+      '/v1/reports': {
+        post: {
+          summary: 'File one bug report',
+          description:
+            'The call every SDK makes. Send it yourself with one curl from a server, a script or a no-code tool. Returns 201 with the report id; the plain-English diagnosis follows in the console and over MCP within about a minute. Rate limit: 120 reports a minute per project by default (project_settings.report_ingest_max_per_minute). The same reporterToken, description and category again within 60 seconds returns 200 status=deduplicated with the first report id. Send a stable `id` to make retries safe: a repeat of an id already stored returns that report instead of filing a second one.',
+          operationId: 'createReport',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ReportSubmission' },
+                example: REPORT_REQUEST_EXAMPLE,
+              },
+            },
+          },
+          responses: {
+            '201': { description: 'Filed', content: { 'application/json': { schema: { $ref: '#/components/schemas/ReportAccepted' } } } },
+            '200': { description: 'Deduplicated into an existing report', content: { 'application/json': { schema: { $ref: '#/components/schemas/ReportAccepted' } } } },
+            '400': {
+              description: 'VALIDATION_ERROR (first check) or INGEST_ERROR / PROJECT_MISMATCH (full report schema).',
+              content: {
+                'application/json': {
+                  schema: { oneOf: [{ $ref: '#/components/schemas/ValidationError' }, { $ref: '#/components/schemas/IngestError' }] },
+                },
+              },
+            },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '402': { $ref: '#/components/responses/QuotaExceeded' },
+            '403': { $ref: '#/components/responses/ForbiddenKey' },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+      '/v1/reports/batch': {
+        post: {
+          summary: 'File up to 10 reports in one call (offline queues)',
+          description:
+            'Only the first 10 entries are kept; the rest are dropped without an error. Each entry is a ReportSubmission and is checked on its own, so one bad entry does not fail the others. Each entry counts against the per-minute rate limit.',
+          operationId: 'createReportBatch',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['reports'],
+                  properties: { reports: { type: 'array', minItems: 1, items: { $ref: '#/components/schemas/ReportSubmission' } } },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: '{ ok, data: { sent, failed, results: [{ ok, reportId?, error? }] } }',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      ok: { type: 'boolean' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          sent: { type: 'integer' },
+                          failed: { type: 'integer' },
+                          results: {
+                            type: 'array',
+                            items: {
+                              type: 'object',
+                              properties: { ok: { type: 'boolean' }, reportId: { type: 'string', format: 'uuid' }, error: { type: 'string' } },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '400': { description: 'VALIDATION_ERROR: reports array required', content: { 'application/json': { schema: { $ref: '#/components/schemas/IngestError' } } } },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '402': { $ref: '#/components/responses/QuotaExceeded' },
+            '403': { $ref: '#/components/responses/ForbiddenKey' },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+      '/v1/reports/{id}/status': {
+        get: {
+          summary: 'Status of one report this project filed',
+          operationId: 'getReportStatus',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            '200': {
+              description: 'Status and, once triaged, the diagnosis summary',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      ok: { type: 'boolean' },
+                      data: {
+                        type: 'object',
+                        properties: {
+                          status: { type: 'string', example: 'classified' },
+                          category: { type: 'string' },
+                          severity: { type: ['string', 'null'] },
+                          summary: { type: ['string', 'null'] },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '404': { description: 'NOT_FOUND (not this project’s report)', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+          },
+        },
+      },
+      '/v1/reports/by-trace': {
+        get: {
+          summary: 'Reports that share a W3C or Sentry trace id (Sentry → Mushi Mushi deep links)',
+          operationId: 'getReportsByTrace',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          parameters: [
+            { name: 'traceId', in: 'query', schema: { type: 'string', pattern: '^[0-9a-fA-F]{32}$' } },
+            { name: 'sentryTraceId', in: 'query', schema: { type: 'string', pattern: '^[0-9a-fA-F]{32}$' } },
+          ],
+          responses: {
+            '200': { description: '{ ok, data: { reports } } (at most 25)' },
+            '400': { description: 'MISSING_TRACE (neither id given) | INVALID_TRACE (not 32 hex)' },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+          },
+        },
+      },
+      '/v1/ingest/spans': {
+        post: {
+          summary: 'Backend OpenTelemetry-style spans, joined to reports by trace id',
+          description:
+            'Body { spans: [ { traceId (32 hex), sessionId?, name?, attributes?, … } ] } (1–100), or one span object. Spans without a valid traceId are skipped. Attribute keys that look like secrets or personal data (password, token, authorization, cookie, email, phone, ssn) are redacted. 500 a minute per project.',
+          operationId: 'ingestSpans',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    spans: {
+                      type: 'array',
+                      minItems: 1,
+                      maxItems: 100,
+                      items: {
+                        type: 'object',
+                        required: ['traceId'],
+                        additionalProperties: true,
+                        properties: {
+                          traceId: { type: 'string', pattern: '^[0-9a-fA-F]{32}$' },
+                          sessionId: { type: 'string' },
+                          attributes: { type: 'object', additionalProperties: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': { description: '{ ok, data: { inserted, total } }' },
+            '400': { description: 'INVALID_JSON | INVALID_PAYLOAD', content: { 'application/json': { schema: { $ref: '#/components/schemas/IngestError' } } } },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '413': { description: 'SPAN_TOO_LARGE (each span ≤ 8 KB)', content: { 'application/json': { schema: { $ref: '#/components/schemas/IngestError' } } } },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+      '/v1/ingest/metrics': {
+        post: {
+          summary: 'Code-health and bundle-size metrics from CI (feeds the code_health gate)',
+          description: 'Strict body: unknown top-level keys are rejected. At least one metric or one finding. 60 a minute per project.',
+          operationId: 'ingestMetrics',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  additionalProperties: false,
+                  properties: {
+                    metrics: {
+                      type: 'array',
+                      maxItems: 50,
+                      items: {
+                        type: 'object',
+                        required: ['metric_name', 'value'],
+                        properties: {
+                          metric_name: { type: 'string', maxLength: 120, pattern: '^(bundle|code_health)\\.', description: 'Starts with bundle. or code_health.' },
+                          dimension: { type: 'string', maxLength: 60 },
+                          value: { type: 'number' },
+                          ts: { type: 'string', format: 'date-time' },
+                        },
+                      },
+                    },
+                    findings: {
+                      type: 'array',
+                      maxItems: 200,
+                      items: {
+                        type: 'object',
+                        required: ['rule_id', 'severity', 'message'],
+                        properties: {
+                          rule_id: { type: 'string', maxLength: 80 },
+                          severity: { type: 'string', enum: ['error', 'warn', 'info'] },
+                          file_path: { type: 'string', maxLength: 500 },
+                          line: { type: 'integer', minimum: 0 },
+                          message: { type: 'string', maxLength: 500 },
+                          suggested_fix: { type: 'object', additionalProperties: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': { description: '{ ok, data: { metrics_inserted, findings_inserted, gate_run_id } }' },
+            '400': { description: 'INVALID_JSON | INVALID_PAYLOAD', content: { 'application/json': { schema: { $ref: '#/components/schemas/IngestError' } } } },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '429': { $ref: '#/components/responses/RateLimited' },
+          },
+        },
+      },
+      '/v1/sdk/config': {
+        get: {
+          summary: 'Runtime widget config the console set for this project (the SDK merges it over its own defaults)',
+          operationId: 'getSdkConfig',
+          tags: ['ingest'],
+          security: [{ mushiApiKey: ['report:write'] }],
+          responses: {
+            '200': { description: '{ ok, data: { widget, capture, assistant, … } } — cached privately for 60 s' },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+          },
+        },
+      },
+      '/v1/health': {
+        get: {
+          summary: 'Liveness: is the API up (no key needed)',
+          operationId: 'health',
+          tags: ['ingest'],
+          security: [],
+          responses: { '200': { description: '{ status: "ok", version, deployed_at, region, hosting_region }' } },
+        },
+      },
+      // ── CLI / MCP read mirror (API key; mcp:read unless noted) ───────────────
+      '/v1/sync/whoami': {
+        get: {
+          summary: 'Which project this key belongs to, with report counts and linked repos (any project key)',
+          operationId: 'syncWhoami',
+          tags: ['sync'],
+          security: [{ mushiApiKey: [] }],
+          responses: { '200': { description: '{ ok, data: { project_id, project_name, repos, … } }' }, '401': { $ref: '#/components/responses/Unauthorized' } },
+        },
+      },
+      '/v1/sync/ingest-setup': {
+        get: {
+          summary: 'Is ingest wired up: key, first report, SDK heartbeat (any project key; what `mushi doctor` and diagnose_setup read)',
+          operationId: 'syncIngestSetup',
+          tags: ['sync'],
+          security: [{ mushiApiKey: [] }],
+          responses: { '200': { description: '{ ok, data } setup checklist' }, '401': { $ref: '#/components/responses/Unauthorized' } },
+        },
+      },
+      '/v1/sync/stats': {
+        get: {
+          summary: 'Report counts by status and severity',
+          operationId: 'syncStats',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          responses: { '200': { description: '{ ok, data }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' } },
+        },
+      },
+      '/v1/sync/reports': {
+        get: {
+          summary: 'List this project’s reports, newest first',
+          operationId: 'syncListReports',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          parameters: [
+            { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+            { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+            { name: 'status', in: 'query', schema: { type: 'string' } },
+            { name: 'severity', in: 'query', schema: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] } },
+            { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Substring match on summary and description' },
+          ],
+          responses: { '200': { description: '{ ok, data: { reports, total } }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' } },
+        },
+      },
+      '/v1/sync/reports/{id}': {
+        get: {
+          summary: 'One report with its diagnosis',
+          operationId: 'syncGetReport',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: {
+            '200': { description: '{ ok, data: { report } }' },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '403': { $ref: '#/components/responses/ForbiddenKey' },
+            '404': { description: 'NOT_FOUND' },
+          },
+        },
+      },
+      '/v1/sync/reports/{id}/timeline': {
+        get: {
+          summary: 'Everything that happened on one report, oldest first',
+          operationId: 'syncReportTimeline',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: '{ ok, data: { events } }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' } },
+        },
+      },
+      '/v1/sync/reports/{id}/reply': {
+        post: {
+          summary: 'Reply to the person who filed the report (mcp:write)',
+          operationId: 'syncReplyToReporter',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:write'] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['message'],
+                  properties: {
+                    message: { type: 'string', minLength: 1, maxLength: 10_000 },
+                    author_name: { type: 'string', maxLength: 100 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: '{ ok, data }' },
+            '400': { description: 'BAD_REQUEST | VALIDATION_ERROR' },
+            '401': { $ref: '#/components/responses/Unauthorized' },
+            '403': { $ref: '#/components/responses/ForbiddenKey' },
+          },
+        },
+      },
+      '/v1/sync/lessons': {
+        get: {
+          summary: 'Lessons: rules learned from repeated bugs, for your editor to read before a fix',
+          operationId: 'syncListLessons',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          responses: { '200': { description: '{ ok, data }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' } },
+        },
+      },
+      '/v1/sync/lessons/{id}': {
+        get: {
+          summary: 'One lesson',
+          operationId: 'syncGetLesson',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '{ ok, data }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' }, '404': { description: 'NOT_FOUND' } },
+        },
+      },
+      '/v1/sync/two-way-health': {
+        get: {
+          summary: 'Reporter two-way health: latest SDK heartbeat, unread reporter notifications, admin replies in the last 7 days',
+          operationId: 'syncTwoWayHealth',
+          tags: ['sync'],
+          security: [{ mushiApiKey: ['mcp:read'] }],
+          responses: { '200': { description: '{ ok, data }' }, '401': { $ref: '#/components/responses/Unauthorized' }, '403': { $ref: '#/components/responses/ForbiddenKey' } },
+        },
+      },
       '/v1/admin/fixes/dispatch': {
         post: {
           summary: 'Dispatch a fix attempt',

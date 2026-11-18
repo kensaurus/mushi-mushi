@@ -175,6 +175,7 @@ npx mushi-mushi --framework next      # skip framework detection
 npx mushi-mushi --cwd apps/web        # run inside a monorepo package
 npx mushi-mushi --skip-install        # print the install command instead
 npx mushi-mushi --audit               # health-check an existing install
+npx mushi-mushi --dry-run             # show what it would install and write; change nothing
 npx mushi-mushi --endpoint https://mushi.your-company.com   # self-hosted
 npx mushi-mushi -y --project-id <uuid> --api-key mushi_xxx  # CI, no prompts
 npx mushi-mushi --help

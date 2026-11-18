@@ -150,17 +150,30 @@ Run it in your app's folder. What happens next:
 Prefer to have your AI editor run it? Paste this into Cursor or Claude Code:
 
 ```text
-Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
-It prints a sign-in link: show it to me and wait while I approve it in my
-browser. Then add the code it prints to the file it names, and tell me which
-file you changed.
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
 ```
 
 Starting from nothing? `npx mushi-mushi --template vue my-app` (or `svelte`, `node`) makes a starter app with Mushi Mushi already in it. Want your linter to catch the buttons that do nothing and the fake data AI tools leave behind? Add [`mushi-mushi/eslint`](https://kensaur.us/mushi-mushi/docs/sdks/eslint-plugin) to `eslint.config.js`.
 
-Then connect your editor so it can read diagnoses: one click on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
+Then connect your editor so it can read diagnoses. You sign in once in your browser; there is no key to paste.
 
-Building in Lovable or Bolt, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt).
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8ifQ%3D%3D)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_Mushi_Mushi-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22mushi%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fkensaur.us%2Fmushi-mushi%2Fhosted-mcp%2F%22%7D)
+
+```bash
+claude mcp add --transport http mushi https://kensaur.us/mushi-mushi/hosted-mcp/
+```
+
+Other editors: the [Connect page](https://kensaur.us/mushi-mushi/docs/connect), or `npx mushi-mushi setup --ide cursor` (or `--ide claude`). Ask it: *"Get the latest Mushi Mushi report and fix it."*
+
+No SDK for your stack? [File a report with one curl](https://kensaur.us/mushi-mushi/docs/quickstart/http-api) ([OpenAPI spec](https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json)).
+
+Building in Lovable, Bolt or Replit, with no terminal? Paste one script tag through your prompt instead: [Mushi Mushi in Lovable or Bolt](https://kensaur.us/mushi-mushi/docs/quickstart/lovable-bolt), [in Replit](https://kensaur.us/mushi-mushi/docs/quickstart/replit).
 
 The SDK needs two env vars (`VITE_MUSHI_PROJECT_ID` / `VITE_MUSHI_API_KEY`, or `NEXT_PUBLIC_MUSHI_*`; see [`examples/sdk.env.example`](./examples/sdk.env.example)). No Sentry, no LLM key, no monitoring stack.
 
@@ -291,7 +304,7 @@ Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker Compose
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~640K TS lines · ~2,800 source files · 45 workspace / 37 npm packages · 78 edge functions · 575 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~650K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 575 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

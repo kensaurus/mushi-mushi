@@ -233,6 +233,34 @@ export function loadConfig(path = CONFIG_PATH, opts: { profile?: string } = {}):
 }
 
 /**
+ * Read-only view of the saved config, for `mushi init --dry-run`. Unlike
+ * loadConfig it never fixes file permissions, migrates ~/.mushirc or asks
+ * the OS keychain, so a dry run changes nothing. Env vars overlay the file
+ * the same way.
+ */
+export function peekConfig(path = CONFIG_PATH): CliConfig {
+  let file: CliConfig = {}
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'))
+    if (isMultiProfileFile(parsed)) {
+      file = parsed.profiles[resolveProfileName(undefined, parsed.activeProfile)] ?? {}
+    } else if (resolveProfileName(undefined, undefined) === DEFAULT_PROFILE) {
+      file = (parsed ?? {}) as CliConfig
+    }
+  } catch {
+    // missing or malformed: nothing saved
+  }
+  const endpointFromEnv =
+    process.env['MUSHI_API_ENDPOINT']?.trim() || process.env['MUSHI_ENDPOINT']?.trim() || undefined
+  return {
+    ...file,
+    ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
+    ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),
+    ...(endpointFromEnv ? { endpoint: normalizeEndpoint(endpointFromEnv) } : {}),
+  }
+}
+
+/**
  * Return the persistent per-machine client id, minting and saving one on
  * first use. Best-effort: if the config file cannot be written (read-only
  * home, sandbox), a fresh id is still returned so device-auth works — it

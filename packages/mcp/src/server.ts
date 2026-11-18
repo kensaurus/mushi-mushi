@@ -39,6 +39,7 @@ import {
 import { findMushiDoc, mushiDocMarkdownUrl, searchMushiDocs } from './docs-index.js';
 import { wrapUntrustedJson, type UntrustedContentRole } from './wrap-untrusted.js';
 import { installStdoutGuard } from './stdout-guard.js';
+import { sdkKeyNextAction, type SdkKeyFixContext } from './key-scopes.js';
 import { normalizeArgAliases, snakeAliasOf } from './arg-aliases.js';
 import {
   JOURNEY_FINDING_KINDS,
@@ -5839,6 +5840,8 @@ export interface SetupModeServerConfig {
    * key without mcp:read or mcp:write, such as the report:write SDK key.
    */
   reason?: 'missing-key' | 'sdk-key';
+  /** For `sdk-key`: the project and key source, so the fix is one exact command. */
+  sdkKeyFix?: SdkKeyFixContext;
   fetch?: typeof fetch;
   timeoutMs?: number;
 }
@@ -5862,8 +5865,8 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
     instructions:
       config.reason === 'sdk-key'
         ? 'Mushi is running in setup mode: the configured API key is an SDK key (report:write). It can send bug ' +
-          'reports but not read them, so only search_mushi_docs, get_mushi_doc and diagnose_setup work. Call ' +
-          'diagnose_setup for how to mint an MCP key (mcp:read), then restart the MCP server.'
+          'reports but not read them, so only search_mushi_docs, get_mushi_doc and diagnose_setup work. Fix: ' +
+          sdkKeyNextAction(MUSHI_CONSOLE_URL, config.sdkKeyFix)
         : 'Mushi is running in setup mode: no API key is configured, so only search_mushi_docs, get_mushi_doc and ' +
           'diagnose_setup work. Call diagnose_setup for the exact steps to connect (run `npx mushi-mushi` or ' +
           '`mushi login`, or put MUSHI_API_KEY in this server\'s env block), then restart the MCP server.',
@@ -5891,8 +5894,7 @@ export function createSetupModeServer(config: SetupModeServerConfig): McpServer 
   if (!spec) throw new Error('[mushi-mcp] diagnose_setup is missing from TOOL_CATALOG');
   const sdkKey = config.reason === 'sdk-key';
   const nextAction = sdkKey
-    ? `Mint an MCP key in the console (${MUSHI_CONSOLE_URL}/mcp → "Mint mcp:read key") or run \`mushi login\`, ` +
-      'put it in MUSHI_API_KEY for this server, then restart it.'
+    ? sdkKeyNextAction(MUSHI_CONSOLE_URL, config.sdkKeyFix)
     : 'Run `npx mushi-mushi` in your project (signs you in and writes the key) or `mushi login`, then restart this MCP server.';
   server.registerTool(
     'diagnose_setup',
