@@ -468,7 +468,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 </PanelErrorBoundary>
                 <div id="portfolio-connectors" className="scroll-mt-20">
                   <PanelErrorBoundary label="Connected sources">
-                    <ConnectorsCard orgId={orgId} projects={appList} />
+                    <ConnectorsCard orgId={orgId} projects={appList} iconFor={iconFor} />
                   </PanelErrorBoundary>
                 </div>
               </section>
