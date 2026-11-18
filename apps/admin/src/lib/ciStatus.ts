@@ -499,7 +499,7 @@ export function groupFailureCauses(groups: readonly FailureGroup[]): { causes: F
   return { causes, singles }
 }
 
-/** "about 3 min left", "usually 9 min", "no usual time yet": the running job's estimate in words. */
+/** @internal Exported for tests. "about 3 min left", "usually 9 min", "no usual time yet": the running job's estimate in words. */
 export function estimateLine(r: Pick<RunningNow, 'elapsedS' | 'usualS' | 'slow' | 'leftS'>): string {
   if (r.usualS == null) return 'no usual time yet (fewer than 3 runs)'
   if (r.slow) return `slower than usual (usually ${minutes(r.usualS)})`

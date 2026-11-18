@@ -27,6 +27,7 @@ export function registerServiceWorker(): void {
   registerSW({
     immediate: true,
     // Never reload on our behalf: lib/swUpdate.ts reloads once, after Reload.
+    // mushi-mushi-allowlist: deliberately empty; the default handler would reload mid-form
     onNeedReload: () => undefined,
     onRegisteredSW(swUrl, registration) {
       debugLog('pwa', `service worker registered: ${swUrl}`)

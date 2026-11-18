@@ -32,7 +32,7 @@ export const STATUS_WORD: Record<RunStatus, string> = {
 }
 
 /** Bright mark colour (text-* so the SVG's currentColor picks it up). */
-export const STATUS_MARK: Record<RunStatus, string> = {
+const STATUS_MARK: Record<RunStatus, string> = {
   running: 'text-st-running',
   passed: 'text-st-passed',
   failed: 'text-st-failed',
@@ -75,7 +75,7 @@ export const STATUS_FILL: Record<RunStatus, string> = {
   cancelled: 'bg-st-cancelled',
 }
 
-/** A plain-text glyph per state, for titles and places an SVG can't go. */
+/** @internal A plain-text glyph per state, for titles and places an SVG can't go (exported for tests). */
 export const STATUS_CHAR: Record<RunStatus, string> = {
   running: '●',
   passed: '✓',
