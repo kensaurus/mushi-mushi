@@ -123,8 +123,8 @@ describe('ConnectionStatus', () => {
     expect(render(<ConnectionStatus state="expiring" expiresAt={in3} />).textContent).toContain('Expires in 3 days')
   })
 
-  it('says "Not checked yet" for checking', () => {
-    expect(render(<ConnectionStatus state="checking" />).textContent).toContain('Not checked yet')
+  it('reads a configured, never-checked connection as connected, the same words as its tile', () => {
+    expect(render(<ConnectionStatus state="checking" />).textContent).toContain('Connected · not checked yet')
   })
 
   // 2026-11-18: each state is the console's status pill, colour plus glyph.
@@ -134,7 +134,10 @@ describe('ConnectionStatus', () => {
     expect(status('working')).toBe('passed')
     expect(status('attention')).toBe('failed')
     expect(status('expiring')).toBe('slow')
-    expect(status('checking')).toBe('waiting')
+    expect(status('checking')).toBe('passed')
     expect(status('not_connected')).toBe('idle')
+    // A check in flight (the card passes its own words) runs.
+    const testing = render(<ConnectionStatus state="checking" label="Testing…" />).querySelector('[data-testid="status-pill"]')
+    expect(testing?.getAttribute('data-status')).toBe('running')
   })
 })

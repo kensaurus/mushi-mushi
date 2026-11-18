@@ -60,7 +60,8 @@ function daysUntil(iso: string | null | undefined, now: number = Date.now()): nu
  * - the last check failed          → attention
  * - the credential already expired → attention
  * - expires within EXPIRY_WARNING_DAYS → expiring
- * - never verified                 → checking ("Not checked yet")
+ * - never verified                 → checking ("Connected · not checked yet":
+ *                                    configured, so it reads connected, never unknown)
  * - verified longer ago than fresh → attention (re-test)
  * - otherwise                      → working
  */
@@ -112,15 +113,26 @@ function defaultLabel(state: ConnectionState, expiresAt: string | null | undefin
     case 'not_connected':
       return 'Not connected'
     case 'checking':
-      return 'Not checked yet'
+      // Configured but never verified (connectionStateFrom), so it reads connected, the same
+      // words as its Integrations tile (connectionGridModel NEVER_CHECKED_LABEL), 2026-11-18.
+      return 'Connected · not checked yet'
   }
+}
+
+/**
+ * "checking" with the default words is a configured connection nobody tested yet: ✓ connected.
+ * With a caller's label ("Testing…", "Sending a test…") a check is in flight: running.
+ */
+function pillStatus(state: ConnectionState, label: string | undefined): RunStatus {
+  if (state === 'checking') return label ? 'running' : 'passed'
+  return STATUS[state]
 }
 
 export function ConnectionStatus({ state, label, detail, expiresAt, action, className = '' }: ConnectionStatusProps) {
   const text = label ?? defaultLabel(state, expiresAt)
   return (
     <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 ${className}`} data-connection-state={state}>
-      <StatusPill status={STATUS[state]} label={text} className="shrink-0" />
+      <StatusPill status={pillStatus(state, label)} label={text} className="shrink-0" />
       {detail ? <span className="text-xs text-fg-secondary leading-snug min-w-0">{detail}</span> : null}
       {action ? (
         <Btn
