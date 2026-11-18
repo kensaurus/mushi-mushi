@@ -37,7 +37,7 @@ export type GridToolId =
   | 'pagerduty'
 
 /** The kinds POST /v1/admin/health/integration/:kind can check without sending anything. */
-export type GridCheckKind =
+type GridCheckKind =
   | 'github'
   | 'slack'
   | 'cursor_cloud'

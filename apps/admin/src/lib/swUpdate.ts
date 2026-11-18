@@ -64,7 +64,10 @@ export function createSwUpdater(reg: SwRegistrationLike, deps: Deps): () => void
     const waiting = reg.waiting
     // Nothing waiting (another tab already let it take over): this page still
     // runs the old bundle, so a plain reload picks up the new one.
-    if (!waiting) return reloadOnce()
+    if (!waiting) {
+      reloadOnce()
+      return
+    }
     waiting.postMessage({ type: 'SKIP_WAITING' })
   }
 
