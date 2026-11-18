@@ -117,6 +117,15 @@ describe('why jobs wait', () => {
     expect(s.headline).toContain('3 jobs waiting for a machine; the oldest for 15 min. They need a “kensaurus-local” machine')
   })
 
+  it('names only the labels that pick a machine, the same as the chips', () => {
+    const o = waitingForLocal()
+    o.jobs = o.jobs.map((j) => ({ ...j, labels: ['self-hosted', 'Linux', 'X64', 'kensaurus-local'] }))
+    o.runners = o.runners.map((r) => ({ ...r, labels: ['self-hosted', 'Linux', 'X64', 'kensaurus-local'] }))
+    const why = buildCiStatus(o, FIXTURE_NOW).waitWhy!
+    expect(why).toContain('“kensaurus-local”')
+    expect(why).not.toMatch(/self-hosted|Linux|X64/)
+  })
+
   it('says when no machine ever ran the label, and when the wait is on GitHub', () => {
     const o = waitingForLocal()
     o.jobs = o.jobs.filter((j) => j.id !== 'r1')

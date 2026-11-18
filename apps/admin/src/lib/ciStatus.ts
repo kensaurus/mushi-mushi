@@ -224,22 +224,29 @@ function runnersByMachine(overview: CiOverview): Map<string, Set<string>> {
  * for those labels. No capacity figure exists, so it says "running N now", never "full".
  */
 function whyWaiting(overview: CiOverview, machines: MachineNow[], idle: string[]): string | null {
+  // Grouped by the labels that pick a machine (specificLabels), the same as the waiting headers
+  // and the alert's chips, so the sentence never names "self-hosted" where the chips say
+  // "kensaurus-local" (2026-11-18).
+  const need = (j: CiJob) => labelKey(specificLabels(j.labels))
   const groups = new Map<string, CiJob[]>()
   for (const j of overview.jobs) {
     if (jobOutcome(j) !== 'waiting') continue
-    groups.set(labelKey(j.labels), [...(groups.get(labelKey(j.labels)) ?? []), j])
+    groups.set(need(j), [...(groups.get(need(j)) ?? []), j])
   }
   const biggest = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)[0]
   if (!biggest) return null
   const [key, jobs] = biggest
-  const labels = jobs[0]!.labels
-  if (labels.length === 0) return null
+  const all = jobs[0]!.labels
+  const labels = specificLabels(all)
+  if (labels.length === 0) {
+    if (all.length > 0 && all.every((l) => GITHUB_LABEL.test(l))) return `They wait for GitHub's cloud (${all.map((l) => `“${l}”`).join(', ')}), not for your machines.`
+    return null
+  }
   const quoted = labels.map((l) => `“${l}”`).join(', ')
-  if (labels.every((l) => GITHUB_LABEL.test(l))) return `They wait for GitHub's cloud (${quoted}), not for your machines.`
   // Machines that ran a job with these labels this window.
   const takers = new Set<string>()
   for (const j of overview.jobs) {
-    if (labelKey(j.labels) !== key) continue
+    if (need(j) !== key) continue
     const m = machineOfJob(overview, j)
     if (m?.kind === 'self') takers.add(m.id)
   }
