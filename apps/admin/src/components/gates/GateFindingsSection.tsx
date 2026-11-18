@@ -75,6 +75,7 @@ type Severity = 'error' | 'warn' | 'info'
  * Exported for tests. A check's open findings by severity in words, worst first: "1 error ·
  * 1 warning · 2 notes". "4 open" beside a header of "2 errors · 5 warnings" did not add up: the
  * header counts errors and warnings, "open" counted notes too (2026-11-18).
+ * @internal Exported for tests.
  */
 export function severityParts(findings: ReadonlyArray<{ severity?: string | null }>): string {
   const n: Record<Severity, number> = { error: 0, warn: 0, info: 0 }
@@ -94,6 +95,7 @@ export function severityParts(findings: ReadonlyArray<{ severity?: string | null
  * Exported for tests. What a check looks at, without repeating its title: "App hole checks,
  * daily (04:05 UTC): store listings…" under the title "App hole checks" → "Daily (04:05 UTC):
  * store listings…" (2026-11-18).
+ * @internal Exported for tests.
  */
 export function checksLine(title: string, checks: string): string {
   const base = title.replace(/ checks$/i, '')

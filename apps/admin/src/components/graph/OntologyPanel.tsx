@@ -137,7 +137,7 @@ export function OntologyPanel() {
   )
 }
 
-/** "x211" had no unit: the count is how many reports carry the tag. */
+/** "x211" had no unit: the count is how many reports carry the tag. @internal Exported for tests. */
 export function usesLabel(n: number): string {
   return `${n.toLocaleString()} report${n === 1 ? '' : 's'}`
 }

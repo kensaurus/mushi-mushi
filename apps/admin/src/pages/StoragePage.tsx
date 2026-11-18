@@ -715,6 +715,7 @@ export function StoragePage() {
                 type="button"
                 aria-expanded={open}
                 onClick={() => setOpenApp(open ? null : st.project_id)}
+                // mushi-mushi-allowlist: row columns line up with the table header
                 className="grid w-full min-w-0 grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 px-3 py-2 text-left text-xs hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 md:grid-cols-[minmax(8rem,1.2fr)_minmax(8rem,1fr)_minmax(8rem,1fr)_auto]"
               >
                 <span className="min-w-0 truncate font-semibold text-fg">

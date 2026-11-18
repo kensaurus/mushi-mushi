@@ -36,6 +36,7 @@ const BACKEND_LABEL: Record<GraphBackendStatus['backend'], string> = {
  * (fresh-eyes 2026-11-18 found it four times on the tab). AGE is optional, so
  * "not installed" is neutral, and the SQL to AGE sync rows only exist when AGE is
  * in use: "Sync pending" in SQL-only mode described a copy that does not run.
+ * @internal Exported for tests.
  */
 export function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
   const ageInUse = data.backend !== 'sql_only' && data.ageAvailable

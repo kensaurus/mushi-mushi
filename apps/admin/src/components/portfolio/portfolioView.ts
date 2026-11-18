@@ -65,6 +65,7 @@ function firstSentence(text: string): string {
  * The heading of a "Fix once" row: the rule's catalog title, else the first
  * sentence of the finding's own message (plain English from the rule), never
  * the raw rule id. The id stays available for a tooltip.
+ * @internal Exported for tests.
  */
 export function findingGroupTitle(g: Pick<FindingGroup, 'ruleId' | 'title' | 'sampleMessage' | 'gateLabel'>): string {
   if (g.title) return g.title
@@ -380,6 +381,7 @@ export function sortPortfolioCards(cards: readonly PortfolioCard[], by: Portfoli
  * as ONE row ("A connected key stopped working · AI key rejected", 9 apps): two rows with the
  * same nine dots and the same "Fix key" said the same thing twice (2026-11-18 sweep). Order is
  * kept (the first row of a merge holds its place); the fix prompts and explanations are joined.
+ * @internal Exported for tests.
  */
 export function mergeSameAppRows(rows: readonly FixOnceRow[]): FixOnceRow[] {
   const out: FixOnceRow[] = []

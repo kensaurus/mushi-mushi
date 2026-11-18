@@ -36,7 +36,7 @@ function hashText(text: string): string {
   return h.toString(36)
 }
 
-/** The group a row collapses into, or null for a row that stands alone. */
+/** The group a row collapses into, or null for a row that stands alone. @internal Exported for tests. */
 export function displayGroupKey(row: ReportRow): string | null {
   if (reportSourceKind(row) === 'check') {
     const headline = (row.title ?? row.summary ?? row.description ?? '').trim().replace(/\s+/g, ' ').toLowerCase()

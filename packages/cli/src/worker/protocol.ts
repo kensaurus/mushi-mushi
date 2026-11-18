@@ -241,7 +241,7 @@ function parseFreshEyesTarget(raw: unknown): Parsed<FreshEyesTarget> {
 }
 
 /**
- * @internal Exported for tests. A claim answer, checked by kind. A fix claim's
+ * A claim answer, checked by kind. A fix claim's
  * report goes on to `workOne` as it always did (a claim without `kind` is a fix
  * claim from a server that predates P3). A conflict claim names a PR of the
  * lane's repository and the head Mushi saw; its branch is checked so it can

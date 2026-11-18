@@ -9,7 +9,7 @@
 
 import type { GraphStats } from './GraphStatsTypes'
 
-export type GraphSnapshotKey = 'clusters' | 'links' | 'fragile' | 'inventory'
+type GraphSnapshotKey = 'clusters' | 'links' | 'fragile' | 'inventory'
 
 export interface GraphSnapshotPlan {
   /** Tiles worth drawing, in display order. */

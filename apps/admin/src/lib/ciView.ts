@@ -610,6 +610,7 @@ export interface CiOutcomeCounts {
  * Outcome counts for the summary bar. `passed` is jobs that finished testing
  * and passed. Machine stops stay in `infra`: they never finished testing, so
  * they are not folded into the pass rate.
+ * @internal Exported for tests.
  */
 export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
   const failed = stats.codeFailures + stats.infraFailures

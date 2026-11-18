@@ -91,7 +91,7 @@ export function ProvidersPage() {
   const firstRead = useReadTimedOut(ops.loading && !ops.data && !ops.error)
   // The ops registry names apps by repo slug; the console names them as every other page does.
   const setup = useSetupStatus(useActiveProjectId())
-  const appName = useMemo(() => makeAppNamer(setup.projects ?? []), [setup.projects])
+  const appName = useMemo(() => makeAppNamer(setup.data?.projects ?? []), [setup.data?.projects])
   const toast = useToast()
   const now = useNow(30_000)
   const [snapshot, addPatch] = useOptimistic(ops.data?.snapshot ?? null, applyOptimistic)

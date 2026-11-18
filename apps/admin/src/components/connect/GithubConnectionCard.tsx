@@ -66,7 +66,7 @@ export function GithubConnectionCard({
         <BrandIcon brand="github" size={20} decorative className="text-fg" />
         {/* A floor width so the actions wrap below on a phone instead of
             squeezing the name to "GitHub rep" under them (round-2 review 2026-11-18). */}
-        <div className="min-w-[11rem] flex-1">
+        <div className="min-w-44 flex-1">
           <p className="text-sm font-medium text-fg">
             {linked.length > 1 ? `GitHub repositories (${linked.length})` : 'GitHub repository'}
           </p>

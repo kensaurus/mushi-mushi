@@ -72,7 +72,7 @@ export const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
   ok: 'okSubtle',
 }
 
-/** @internal Exported for tests. `null` = no badge (the stats row says it). */
+/** `null` = no badge (the stats row says it). */
 export function healthBadgeLabel(card: Pick<OverviewCardCounts, 'critical_reports' | 'open_reports'>, tone: HealthTone): string | null {
   switch (tone) {
     case 'critical':

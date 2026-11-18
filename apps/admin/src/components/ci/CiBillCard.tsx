@@ -89,9 +89,8 @@ function Connect({ bill }: { bill: CiBill }) {
  * yet: then "$0.00 charged in 2026-11" sat beside "$102.29" per repo for the last 30 days
  * (2026-11-18), so the headline is the window's charge and says why.
  *
- * @internal Exported for tests.
  */
-export function billHeadline(bill: Pick<CiBill, 'month' | 'totals' | 'window' | 'dataThrough'>): { usd: number; text: string } {
+function billHeadline(bill: Pick<CiBill, 'month' | 'totals' | 'window' | 'dataThrough'>): { usd: number; text: string } {
   if (bill.dataThrough && bill.dataThrough < bill.month.from) {
     return {
       usd: bill.totals.netUsd,

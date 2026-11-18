@@ -20,7 +20,7 @@ export function renderInlineCode(text: string): ReactNode {
   if (parts.length < 3) return text
   return parts.map((part, i) =>
     i % 2 === 1 ? (
-      <code key={i} className="rounded-sm bg-surface-overlay px-1 font-mono text-[0.95em] text-fg">
+      <code key={i} className="rounded-sm bg-surface-overlay px-1 font-mono text-fg">
         {part}
       </code>
     ) : (

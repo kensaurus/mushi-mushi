@@ -7,7 +7,7 @@
  *          usage table sorts by screenshots with zero rows last.
  */
 
-export type StorageProvider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
+type StorageProvider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 export type StorageHealth = 'unknown' | 'healthy' | 'degraded' | 'failing'
 
 export interface StorageRowLike {
@@ -49,7 +49,7 @@ export function storageProblems(settings: readonly StorageRowLike[], nameOf: (pr
  * Rank for the per-app list: failing, having trouble, saved but never
  * checked, working, then apps still on the built-in storage.
  */
-export function storageRank(row: { existing: boolean; health_status: StorageHealth }): number {
+function storageRank(row: { existing: boolean; health_status: StorageHealth }): number {
   if (!row.existing) return 4
   switch (row.health_status) {
     case 'failing':
@@ -112,7 +112,7 @@ export function sortUsageRows<T extends { name: string; objects: number }>(rows:
 }
 
 /** A health check older than a week is called out, not shown as current. */
-export const STORAGE_CHECK_STALE_MS = 7 * 24 * 60 * 60 * 1000
+const STORAGE_CHECK_STALE_MS = 7 * 24 * 60 * 60 * 1000
 
 export function isStaleCheck(checkedAt: string | null, now: number = Date.now()): boolean {
   if (!checkedAt) return false

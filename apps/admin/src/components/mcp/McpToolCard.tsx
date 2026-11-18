@@ -35,7 +35,7 @@ export function toolCardChips(spec: Pick<ToolSpec, 'scope' | 'hints'>): Array<{ 
   return chips
 }
 
-/** The description's first sentence; the rest (the API detail) folds away. */
+/** The description's first sentence; the rest (the API detail) folds away. @internal Exported for tests. */
 export function splitToolDescription(text: string): { lead: string; more: string | null } {
   const m = /^(.+?[.!?])\s+(.+)$/s.exec(text.trim())
   return m ? { lead: m[1], more: m[2] } : { lead: text.trim(), more: null }

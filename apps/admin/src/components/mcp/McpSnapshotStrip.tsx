@@ -5,7 +5,7 @@
  */
 
 import { PageStatus } from '../ui'
-import type { PageStatusMetric, PageStatusMetrics } from '../ui/page-status'
+import { toMetrics, type PageStatusMetric, type PageStatusMetrics } from '../ui/page-status'
 import type { McpStats } from './types'
 import { formatRelative } from '../ui'
 import { pluralizeWithCount } from '../../lib/format'
@@ -31,7 +31,7 @@ function mcpSentence(stats: McpStats): string {
 
 /** @internal Exported for tests: the tiles, without any that would read 0. */
 export function mcpSnapshotMetrics(...tiles: Array<PageStatusMetric | null>): PageStatusMetrics {
-  return tiles.filter((t): t is PageStatusMetric => t !== null) as PageStatusMetrics
+  return toMetrics(tiles.filter((t): t is PageStatusMetric => t !== null))
 }
 
 export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {

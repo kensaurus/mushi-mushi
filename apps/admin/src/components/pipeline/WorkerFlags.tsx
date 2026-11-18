@@ -39,7 +39,6 @@ const KIND_LABEL: Record<string, string> = {
 /**
  * The tone a flag is drawn in. Idle credits are money left unspent, a warning, never a failure:
  * the server sends them as `danger` and the card was red (round-2 review, 2026-11-18).
- * @internal Exported for tests.
  */
 export function flagTone(flag: Pick<WorkerFlag, 'kind' | 'severity'>): 'danger' | 'warn' {
   if (flag.kind === 'credits_idle') return 'warn'
@@ -49,9 +48,9 @@ export function flagTone(flag: Pick<WorkerFlag, 'kind' | 'severity'>): 'danger' 
 /**
  * A flag's small label and duration, only where they add to its title: "Credits idle" over
  * "Cursor credits idle for 33 h", then "for 33 h" again, said one thing three times
- * (2026-11-18). @internal Exported for tests.
+ * (2026-11-18).
  */
-export function flagHeading(flag: Pick<WorkerFlag, 'id' | 'kind' | 'title' | 'sinceSec'>): { label: string | null; since: string | null } {
+function flagHeading(flag: Pick<WorkerFlag, 'id' | 'kind' | 'title' | 'sinceSec'>): { label: string | null; since: string | null } {
   const label = flag.id === 'credits_out' ? 'Out of credits' : (KIND_LABEL[flag.kind] ?? 'Worker problem')
   const title = flag.title.toLowerCase()
   const since = flag.sinceSec != null ? durationLabel(flag.sinceSec) : null

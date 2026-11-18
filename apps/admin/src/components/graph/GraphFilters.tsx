@@ -85,7 +85,7 @@ export function QuickViewsRow({
   )
 }
 
-/** "12/12 · 19/19" read as nothing; name what is counted, and say "all" when nothing is filtered. */
+/** "12/12 · 19/19" read as nothing; name what is counted, and say "all" when nothing is filtered. @internal Exported for tests. */
 export function typeCountsLabel(nodeOn: number, nodeAll: number, edgeOn: number, edgeAll: number): string {
   if (nodeOn === nodeAll && edgeOn === edgeAll) return 'All item and link types'
   return `${nodeOn} of ${nodeAll} item types · ${edgeOn} of ${edgeAll} link types`

@@ -29,7 +29,7 @@ const TAB_LABELS: Record<HealthTabId, string> = {
   activity: 'Recent traces',
 }
 
-/** @internal Exported for tests. Which view a URL opens: an unknown `?view=` is the first one. */
+/** Which view a URL opens: an unknown `?view=` is the first one. */
 export function resolveHealthView(params: URLSearchParams): HealthView {
   const v = params.get('view')
   return VIEW_IDS.includes(v as HealthView) ? (v as HealthView) : 'integrations'

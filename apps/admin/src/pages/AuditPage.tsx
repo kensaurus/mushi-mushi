@@ -693,7 +693,9 @@ export function AuditPage() {
         {shownGroups.map((group) => {
           const open = expanded === group.id
           return (
-            <li key={group.id} className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2 text-xs">
+            <li key={group.id}
+              // mushi-mushi-allowlist: a list row in a grouped list, not a card
+              className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-2 text-xs">
               <button
                 type="button"
                 className="flex w-full min-w-0 flex-col items-start gap-1 text-left"
@@ -895,7 +897,9 @@ export function AuditPage() {
               ].map((r) => {
                 const max = Math.max(stats.humanCount24h, stats.agentCount24h, stats.systemCount24h)
                 return (
-                  <li key={r.key} className={`grid grid-cols-[5rem_auto_1fr] items-center gap-3 text-xs ${r.value === 0 ? 'text-fg-faint' : 'text-fg'}`}>
+                  <li key={r.key}
+                    // mushi-mushi-allowlist: label / bar / value columns shared by the three rows
+                    className={`grid grid-cols-[5rem_auto_1fr] items-center gap-3 text-xs ${r.value === 0 ? 'text-fg-faint' : 'text-fg'}`}>
                     <Link to={r.to} className="font-medium underline decoration-edge underline-offset-4 hover:decoration-brand">{r.label}</Link>
                     <BarCell value={r.value} max={max} text={r.value.toLocaleString()} widthClass="w-24" />
                     <span className="min-w-0 truncate text-2xs text-fg-muted">{r.detail}</span>

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-18T05:03:06.196Z",
+  "generatedAt": "2026-11-18T14:40:30.302Z",
   "docs": [
     {
       "doc_path": "recipes/connect-github-and-sdk.md",
@@ -663,10 +663,10 @@
       "doc_path": "pages/skills--tab-catalog.md",
       "section": "main",
       "title": "Skill catalog",
-      "body": "# Skill catalog\n\nBrowse 70+ agent skills from kenji skills by category.\n\nRoute: /skills?tab=catalog\nSection: Start\n\nKeywords: catalog, skill catalog, cursor-kenji, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, cursor-kenji, kenji skills",
+      "body": "# Skill catalog\n\nBrowse the agent skills catalog by category.\n\nRoute: /skills?tab=catalog\nSection: Start\n\nKeywords: catalog, skill catalog, cursor-kenji, kenji skills\n\nUse this page when the user asks about: catalog, skill catalog, cursor-kenji, kenji skills",
       "route_path": "/skills",
       "kind": "page",
-      "content_hash": "a97f6622ed17368768609a68095290c7170c7b9c8e70e2135b307b532545a10c"
+      "content_hash": "ebb220b33e9ac04b342c16df1dc70c13cff6b7f9bfa544fcb6ea07b87f9cd9be"
     },
     {
       "doc_path": "pages/skills--tab-pipelines.md",

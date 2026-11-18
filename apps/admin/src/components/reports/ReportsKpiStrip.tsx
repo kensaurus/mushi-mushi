@@ -72,6 +72,7 @@ interface Props {
  * the rows beside them drew Medium yellow and Low green (R2 sweep
  * 2026-11-18). Each tile's trend line takes its severity's hue; only the two
  * problem severities colour the number itself (critical red, high amber).
+ * @internal Exported for tests.
  */
 export function severityTileSparkAccent(key: SeverityKey): string {
   return SEVERITY_TRAFFIC[key].bg.replace(/^bg-/, 'text-')

@@ -4,7 +4,7 @@
  *          which recurring patterns are ready to become one (PageStatus, P1).
  */
 
-import { PageStatus } from '../ui'
+import { PageStatus, toMetrics } from '../ui'
 import type { LessonsStats } from './LessonsStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
 import { lessonsLinks } from '../../lib/statCardLinks'
@@ -37,11 +37,11 @@ export function lessonsNothingYet(stats: LessonsStats): boolean {
 }
 
 /**
- * @internal Exported for tests. Only the numbers that are not 0 show (round-2
+ * Only the numbers that are not 0 show (round-2
  * sweep: a row of 0/0 tiles), and the labels fit a third of a 390px phone
  * without being cut ("Ready to pr…", "Reports gro…").
  */
-export function lessonsMetrics(stats: LessonsStats, statLabels?: Record<string, string>) {
+function lessonsMetrics(stats: LessonsStats, statLabels?: Record<string, string>) {
   return [
     {
       label: statLabels?.activeLessons ?? 'Lessons in use',
@@ -74,7 +74,7 @@ export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, s
       tone={stats.criticalLessons > 0 ? 'warn' : stats.readyToPromote > 0 ? 'info' : stats.activeLessons > 0 ? 'ok' : 'neutral'}
       sentence={lessonsSentence(stats)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-      metrics={lessonsMetrics(stats, statLabels)}
+      metrics={toMetrics(lessonsMetrics(stats, statLabels))}
     />
   )
 }

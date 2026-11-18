@@ -219,7 +219,7 @@ export function projectsHealthOverlay(
   return { posture: 'clear' }
 }
 
-/** QA provider row overlay — highlights failing provider context. */
+/** QA provider row overlay — highlights failing provider context. @internal Exported for tests. */
 export function qaProviderOverlay(
   providerId: string,
   stats: {

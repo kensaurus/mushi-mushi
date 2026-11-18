@@ -40,8 +40,8 @@ export function agentTraceTotalCost(rows: ReadonlyArray<Pick<LlmInvocationRow, '
   return known.reduce((sum, r) => sum + Number(r.cost_usd), 0)
 }
 
-/** @internal Exported for tests. A pause longer than this between two calls starts a new run. */
-export const TRACE_RUN_GAP_MS = 60_000
+/** A pause longer than this between two calls starts a new run. */
+const TRACE_RUN_GAP_MS = 60_000
 
 /**
  * @internal Exported for tests.

@@ -36,7 +36,7 @@ type WhereStep = { where: string; what: ReactNode }
 
 const MERGE_STEP: WhereStep = { where: 'Merge · this page', what: 'Kept changes land on a branch as a draft PR. Merge it here once its checks pass.' }
 
-export function uxRunSteps(mode: UxRunWhere): WhereStep[] {
+function uxRunSteps(mode: UxRunWhere): WhereStep[] {
   if (mode === 'cloud') {
     return [
       {

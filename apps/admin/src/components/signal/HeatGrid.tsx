@@ -67,7 +67,7 @@ const STATE_CELL: Record<SignalTone, string> = {
 const LEGEND_HEAT = ['ci-heat-1', 'ci-heat-2', 'ci-heat-3', 'ci-heat-4', 'ci-heat-5', 'ci-heat-6']
 const LEGEND_BAD = ['ci-fail-1', 'ci-fail-2', 'ci-fail-3', 'ci-fail-4', 'ci-fail-5']
 
-/** @internal The colour class of one cell (exported for tests). */
+/** The colour class of one cell (exported for tests). */
 export function heatCellClass(col: HeatColumn, cell: HeatCellValue | undefined, colMax: number): string {
   if (!cell || cell.value == null) {
     if (col.scale === 'state' && cell?.tone) return STATE_CELL[cell.tone]
@@ -78,7 +78,7 @@ export function heatCellClass(col: HeatColumn, cell: HeatCellValue | undefined, 
   return heatClass(cell.value, colMax)
 }
 
-/** @internal The largest value in a column (or its fixed max). */
+/** The largest value in a column (or its fixed max). */
 export function columnMax(col: HeatColumn, rows: readonly HeatRow[]): number {
   if (col.max != null) return col.max
   let max = 0

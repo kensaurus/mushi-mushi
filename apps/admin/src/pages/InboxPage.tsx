@@ -484,7 +484,6 @@ const SEVERITY_WORDS: ReadonlySet<string> = new Set(['critical', 'high', 'medium
 /**
  * What an activity row's meta is: the server sends a report's severity (or its category or
  * status) and a fix's model or agent. "Meta:" explained nothing (round-2 review, 2026-11-18).
- * @internal Exported for tests.
  */
 export function activityMetaLabel(item: Pick<ActivityItem, 'kind' | 'meta'>): string | null {
   if (!item.meta) return null

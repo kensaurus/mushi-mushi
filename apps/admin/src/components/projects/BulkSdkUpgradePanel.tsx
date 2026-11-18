@@ -238,7 +238,7 @@ function ReleaseStatusPill({
   )
 }
 
-export interface RowReleaseMeta {
+interface RowReleaseMeta {
   releaseStatus?: string
   jobId?: string
   checkRunConclusion?: string

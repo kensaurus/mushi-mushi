@@ -380,7 +380,7 @@ function RestoreCard({ items, canRequest, busy, onRestore }: {
   )
 }
 
-/** The rules of a clean-up, for the info mark (it was a five-line box above the list). */
+/** The rules of a clean-up, for the info mark (it was a five-line box above the list). @internal Exported for tests. */
 export function howCleanupWorks(limits: CleanupView['limits']): string {
   return [
     'Mushi Mushi lists only branches and pull requests it opened itself, each with the reason and the commit it points at.',

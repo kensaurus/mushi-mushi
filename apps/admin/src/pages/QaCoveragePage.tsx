@@ -172,7 +172,7 @@ const ACTIVE_STATUSES = new Set(['pending', 'running'])
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
-/** @internal Exported for the nested-control test. */
+/** Exported for the nested-control test. */
 export function StoryCard({
   coverage,
   isQueued,

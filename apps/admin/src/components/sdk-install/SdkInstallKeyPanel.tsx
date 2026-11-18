@@ -30,9 +30,8 @@ const KEY_LEGEND =
 /**
  * A key's health as a status mark (2026-11-18): ✓ live, ✕ wrong endpoint,
  * ○ quiet (grey: an hour without traffic is normal), ⧗ cold 7d+, ○ never used, ⊘ off.
- * @internal Exported for tests.
  */
-export const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
+const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
   healthy: 'passed',
   'endpoint-mismatch': 'failed',
   stale: 'idle',

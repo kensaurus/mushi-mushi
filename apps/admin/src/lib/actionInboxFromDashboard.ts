@@ -38,7 +38,7 @@ export type InboxCardGroup = 'plan' | 'do' | 'check' | 'act' | 'ops'
  * fine. `none` has nothing to check yet (no fix ever ran); `unknown` was not read. "Fixes in
  * flight ✓" showed with no fixes at all (round-2 review, 2026-11-18).
  */
-export type InboxCardState = 'open' | 'pass' | 'none' | 'unknown'
+type InboxCardState = 'open' | 'pass' | 'none' | 'unknown'
 
 export interface InboxCard {
   id: string

@@ -92,7 +92,6 @@ function Gauge({ label, pct }: { label: string; pct: number | null }) {
  * Labels two or more idle machines lack: one line under the tiles instead of the same red chip on
  * each ("missing kensaurus-local" twice, 2026-11-18). Label → the machines that lack it.
  *
- * @internal Exported for tests.
  */
 export function sharedMissingLabels(machines: ReadonlyArray<Pick<MachineNow, 'name' | 'missingLabels'>>): Map<string, string[]> {
   const by = new Map<string, string[]>()

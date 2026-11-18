@@ -52,7 +52,7 @@ export interface CommonLaneSettings {
 /**
  * What all lanes share (two or more lanes): each field is `undefined` when they differ. The same
  * model, "Runs at once 1" and stop date sat in four inputs on every one of 20 lane cards (round-2
- * review, 2026-11-18). Null when nothing is shared. @internal Exported for tests.
+ * review, 2026-11-18). Null when nothing is shared.
  */
 export function commonLaneSettings(lanes: ReadonlyArray<Pick<WorkerLane, 'config'>>): CommonLaneSettings | null {
   if (lanes.length < 2) return null

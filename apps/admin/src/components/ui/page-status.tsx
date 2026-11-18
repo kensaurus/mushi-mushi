@@ -44,6 +44,11 @@ export type PageStatusMetrics =
   | readonly [PageStatusMetric, PageStatusMetric]
   | readonly [PageStatusMetric, PageStatusMetric, PageStatusMetric]
 
+/** A built list of tiles as the strip's 0-3 tuple: at most three, the first three win. */
+export function toMetrics(list: readonly PageStatusMetric[]): PageStatusMetrics {
+  return list.slice(0, 3) as unknown as PageStatusMetrics
+}
+
 export interface PageStatusProps {
   /** How things stand, in one plain sentence. */
   sentence: ReactNode

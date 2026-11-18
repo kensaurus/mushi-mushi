@@ -13,7 +13,7 @@
 import type { IntelligenceStats } from '../components/intelligence/IntelligenceStatsTypes'
 
 /** A digest is stale after a week, the same rule the server's banner uses. */
-export const DIGEST_STALE_DAYS = 7
+const DIGEST_STALE_DAYS = 7
 
 /** "Week of Nov 2" for an ISO date; null when it does not parse. */
 export function formatDigestWeek(iso: string | null | undefined): string | null {

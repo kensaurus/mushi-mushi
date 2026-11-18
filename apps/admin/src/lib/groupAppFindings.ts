@@ -321,7 +321,7 @@ export interface FixOnceRow {
   appTitles?: Record<string, string>
 }
 
-/** @internal Worst first for any FixOnceRow list: serious, then apps affected, then title. Exported for the one problem list. */
+/** Worst first for any FixOnceRow list: serious, then apps affected, then title. Exported for the one problem list. */
 export function sortProblemRows<T extends FixOnceRow>(rows: T[]): T[] {
   return sortGroups(rows)
 }

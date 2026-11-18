@@ -74,7 +74,7 @@ export interface CoverageRowView {
  * The columns that have data first (most apps reporting first), the all-hatched ones last, so a
  * phone that shows one column at a time shows one that says something. Stable for ties.
  */
-export function orderOpsColumns(rows: readonly CoverageRowView[]): OpsColumn[] {
+function orderOpsColumns(rows: readonly CoverageRowView[]): OpsColumn[] {
   const filled = (id: OpsColumn) => rows.filter((r) => r.cells.some((c) => c.column === id && c.lastAt)).length
   return OPS_COLUMNS.map((c, i) => ({ id: c.id, i, n: filled(c.id) }))
     .sort((a, b) => b.n - a.n || a.i - b.i)

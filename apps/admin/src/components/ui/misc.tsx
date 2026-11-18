@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import { pctToneClass } from '../../lib/tokens';
 import { Btn } from './forms';
 import { Card } from './layout';
@@ -179,69 +178,6 @@ export function DisclosurePanel({
         <div className="border-t border-edge-subtle px-4 pb-4 pt-3">{children}</div>
       )}
     </div>
-  )
-}
-
-/* ── Breadcrumbs ────────────────────────────────────────────────────────── */
-
-export interface BreadcrumbItem {
-  /** Display label. Kept short — a breadcrumb is a trail, not a sentence. */
-  label: string
-  /** Destination route. Omit for the current page (rendered plain text). */
-  to?: string
-  /** Optional tooltip shown on hover, e.g. the full report title when the
-   *  label is a truncated id. */
-  hint?: string
-}
-
-/**
- * Thin, single-line breadcrumb trail intended for detail pages. Sits above
- * the page title so users always know which list they came from and can
- * walk back one click at a time — important on deep links from Slack /
- * email where the browser back-button takes you out of the SPA.
- *
- * Design notes:
- *   - Uses `›` (U+203A) separator instead of `/` — reads faster and avoids
- *     visual collision with URL paths shown nearby (e.g. branch names).
- *   - Leaf item (current page) is rendered as plain text with aria-current
- *     so screen readers don't mis-read it as an active link.
- *   - Truncates each item independently with min-w-0 so a long title in
- *     one slot doesn't push the rest off-screen.
- */
-export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
-  if (!items.length) return null
-  return (
-    <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1 text-2xs text-fg-muted">
-      <ol className="flex items-center gap-1 min-w-0 flex-wrap">
-        {items.map((item, i) => {
-          const isLast = i === items.length - 1
-          return (
-            <li key={`${item.label}-${i}`} className="flex items-center gap-1 min-w-0">
-              {item.to && !isLast ? (
-                <Link
-                  to={item.to}
-                  title={item.hint}
-                  className="truncate max-w-[16rem] hover:text-fg-secondary motion-safe:transition-opacity focus-visible:outline-none focus-visible:underline"
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <span
-                  className={`truncate max-w-[24rem] ${isLast ? 'text-fg-secondary' : ''}`}
-                  title={item.hint}
-                  aria-current={isLast ? 'page' : undefined}
-                >
-                  {item.label}
-                </span>
-              )}
-              {!isLast && (
-                <span aria-hidden className="text-fg-faint">›</span>
-              )}
-            </li>
-          )
-        })}
-      </ol>
-    </nav>
   )
 }
 

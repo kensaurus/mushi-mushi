@@ -11,7 +11,7 @@ import type { PromptLabStats } from './PromptLabStatsTypes'
 import { STAGE_LABELS, type PromptVersion } from './types'
 
 /** Where one step's test stands. */
-export type StepTestState = 'none' | 'not_started' | 'running_ungraded' | 'running_graded'
+type StepTestState = 'none' | 'not_started' | 'running_ungraded' | 'running_graded'
 
 export interface StepTest {
   active: PromptVersion | null

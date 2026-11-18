@@ -126,9 +126,8 @@ function loadSecret(account: string): string | null {
 /**
  * Remove the stored key for `profile` from the OS keychain.
  * Best-effort — errors are swallowed (key may not be present).
- * @internal Exported for tests only.
  */
-export function tryDeleteKeyFromKeychain(profile = 'default'): void {
+function tryDeleteKeyFromKeychain(profile = 'default'): void {
   deleteSecret(accountName(profile))
 }
 

@@ -120,7 +120,7 @@ export function repoIdle(b: Pick<RepoBatch, 'mode' | 'members' | 'train'>): bool
 }
 
 /** Repos where no deploy was seen in 14 days: reporters are never told their fix is live. */
-export function deployGaps(repos: readonly RepoBatch[]): RepoBatch[] {
+function deployGaps(repos: readonly RepoBatch[]): RepoBatch[] {
   return repos.filter((r) => Boolean(r.deploy.setupGapHref))
 }
 

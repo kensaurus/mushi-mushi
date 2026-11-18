@@ -95,7 +95,7 @@ function statusBadge(visibility: PublishedApp['visibility']) {
 // ─── Main component ──────────────────────────────────────────
 
 /** `paused`: the app's rewards are off, so enabled bounties pay nothing right now. */
-export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
+export function PublishingTab({ paused = false }: { paused?: boolean }) {
   const projectId = getActiveProjectIdSnapshot()
   const toast = useToast()
   const navigate = useNavigate()
@@ -592,7 +592,9 @@ export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
           <TableSkeleton rows={5} />
         ) : (
           <div data-testid="rewards-bounty-rows">
-            <div className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem] sm:gap-3 border-b border-edge-subtle pb-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
+            <div
+              // mushi-mushi-allowlist: bounty columns shared by the header and every row
+              className="hidden sm:grid sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem] sm:gap-3 border-b border-edge-subtle pb-2 text-2xs font-medium uppercase tracking-wide text-fg-muted">
               <span>Severity</span>
               <span className="text-right">Points</span>
               <span className="text-right">Daily cap</span>
@@ -604,6 +606,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
                 return (
                   <li
                     key={row.action}
+                    // mushi-mushi-allowlist: bounty columns shared by the header and every row
                     className="grid grid-cols-2 items-end gap-x-3 gap-y-2 py-2.5 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_5rem] sm:items-center"
                     data-testid="rewards-bounty-row"
                   >
@@ -615,6 +618,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
                         min={0}
                         max={10000}
                         aria-label={`${row.label} points`}
+                        // mushi-mushi-allowlist: points input sized to its digits (7 digits, never clipped)
                         className="min-w-[7ch] text-right tabular-nums"
                         value={row.points_per_event}
                         onChange={e => {
@@ -631,6 +635,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean } = {}) {
                         type="number"
                         min={1}
                         aria-label={`${row.label} daily cap`}
+                        // mushi-mushi-allowlist: points input sized to its digits (7 digits, never clipped)
                         className="min-w-[7ch] text-right tabular-nums"
                         placeholder="No cap"
                         value={row.daily_cap}

@@ -515,7 +515,7 @@ export function McpSetupPanel({
                     isActive ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle bg-surface-raised/20'
                   }`}
                 >
-                  <div className="min-w-[11rem] flex-1">
+                  <div className="min-w-44 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-fg break-words">{p.name}</span>
                       {isActive && (

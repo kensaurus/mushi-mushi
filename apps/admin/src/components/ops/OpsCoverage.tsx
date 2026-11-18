@@ -92,7 +92,9 @@ export function OpsCoverageMatrix({ data, now }: { data: OpsCoverageResponse; no
                 </a>
               )}
             </p>
-            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-2xs">
+            <dl
+              // mushi-mushi-allowlist: term / definition columns: the term sizes to its words
+              className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-2xs">
               {cellsOf(r).map((cell, k) => (
                 <div key={cell.column} className="contents">
                   <dt className="font-semibold text-fg-secondary">

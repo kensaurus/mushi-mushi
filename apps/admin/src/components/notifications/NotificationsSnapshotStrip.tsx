@@ -8,7 +8,7 @@
  *          "Sent today" is not drawn.
  */
 
-import { Btn, PageStatus, formatRelative } from '../ui'
+import { Btn, PageStatus, formatRelative, toMetrics } from '../ui'
 import type { NotificationStats, NotificationTabId } from './types'
 import { notificationsLinks } from '../../lib/statCardLinks'
 import { notificationsStatusAction, notificationsStatusSentence } from '../../lib/notificationsView'
@@ -37,7 +37,7 @@ export function NotificationsSnapshotStrip({ stats, fetchedAt, isValidating, sta
           </Btn>
         ) : null
       }
-      metrics={[
+      metrics={toMetrics([
         {
           label: statLabels?.total ?? 'Sent',
           value: stats.total,
@@ -60,7 +60,7 @@ export function NotificationsSnapshotStrip({ stats, fetchedAt, isValidating, sta
               },
             ]
           : []),
-      ]}
+      ])}
     />
   )
 }

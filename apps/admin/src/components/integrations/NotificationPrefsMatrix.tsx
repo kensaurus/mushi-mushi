@@ -50,8 +50,9 @@ const EVENTS: Array<{ key: keyof Omit<NotifPrefs, 'report_severity_min'>; label:
 ]
 
 /** How many alert events are switched on (the page's "No alert channel" row counts them). */
-export function alertEventsOn(prefs: Partial<Record<string, unknown>>): number {
-  return EVENTS.filter((e) => prefs[e.key] !== false).length
+function alertEventsOn(prefs: object): number {
+  const on = prefs as Partial<Record<string, unknown>>
+  return EVENTS.filter((e) => on[e.key] !== false).length
 }
 
 const SEVERITY_OPTIONS = ['low', 'medium', 'high', 'critical'] as const

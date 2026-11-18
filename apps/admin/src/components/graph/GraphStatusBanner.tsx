@@ -158,7 +158,7 @@ export function GraphStatusBanner({
   )
 }
 
-/** One neutral sentence for the no-problem state; never repeats the server's label. */
+/** One neutral sentence for the no-problem state; never repeats the server's label. @internal Exported for tests. */
 export function graphClearTitle(stats: Pick<GraphStats, 'reportNodes' | 'edgeCount'>, projectLabel: string): string {
   const groups = `${stats.reportNodes} bug group${stats.reportNodes === 1 ? '' : 's'}`
   if (stats.edgeCount === 0) return `${projectLabel}: ${groups}, no links between them yet`

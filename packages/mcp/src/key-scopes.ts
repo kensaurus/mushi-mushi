@@ -74,7 +74,7 @@ export interface SdkKeyFixContext {
  * mcp:read key through a browser approval and saves it to the CLI config,
  * which this server reads when MUSHI_API_KEY is unset.
  */
-export function mcpKeyLoginCommand(projectId?: string): string {
+function mcpKeyLoginCommand(projectId?: string): string {
   return `npx mushi-mushi login${projectId ? ` --project-id ${projectId}` : ''}`
 }
 

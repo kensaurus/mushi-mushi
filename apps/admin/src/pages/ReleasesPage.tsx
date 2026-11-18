@@ -577,7 +577,7 @@ function ReleasesList({
   )
 }
 
-/** The tabs whose empty state is the snapshot's "No releases yet" first step. @internal Exported for tests. */
+/** The tabs whose empty state is the snapshot's "No releases yet" first step. */
 export function releasesListTab(tab: ReleasesTabId): boolean {
   return tab === 'drafts' || tab === 'published'
 }

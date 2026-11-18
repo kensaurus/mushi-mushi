@@ -272,6 +272,7 @@ export function SdkInstallCard({
           paragraphs (round-2 review 2026-11-18). The no-coding path leads
           (ADR 0056: Lovable / Bolt lead wherever install paths are listed). */}
       <dl
+        // mushi-mushi-allowlist: label / value pairs: the label column sizes to its words
         className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-xs text-fg-secondary"
         data-testid="sdk-install-fast-paths"
       >

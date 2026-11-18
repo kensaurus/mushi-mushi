@@ -337,7 +337,7 @@ const CARD_BLOCK_TONE: Record<
 > = {
   healthy: 'ok',
   'endpoint-mismatch': 'danger',
-  stale: 'neutral',
+  stale: 'muted',
   cold: 'warn',
   never: 'muted',
   'no-key': 'muted',

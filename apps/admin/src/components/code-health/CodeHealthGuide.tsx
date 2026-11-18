@@ -22,6 +22,7 @@ interface Props {
  * Exported for tests. A size metric with nothing measured yet: grey "No data", never a green
  * "Within budget" or an amber chip under "No code size data yet" (2026-11-18). The ingest key
  * row keeps its amber "Not wired": that one is a setup step to do.
+ * @internal Exported for tests.
  */
 export function isCodeHealthMetricUnmeasured(metricId: string, live: Pick<CodeHealthStats, 'hasRun'>): boolean {
   return !live.hasRun && (metricId === 'bundle' || metricId === 'god_file')

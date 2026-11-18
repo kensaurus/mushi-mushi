@@ -584,6 +584,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
                       value={String(cur.points_threshold)}
                       onChange={(ev) => patch(tier.id, 'points_threshold', parseInt(ev.target.value, 10))}
                       disabled={!canEdit}
+                      // mushi-mushi-allowlist: threshold input sized to its digits (8 digits, never clipped)
                       className="min-w-[8ch]"
                     />
                     <Input
@@ -602,6 +603,7 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
                         value={String(cur.monetary_reward_usd)}
                         onChange={(ev) => patch(tier.id, 'monetary_reward_usd', parseFloat(ev.target.value))}
                         disabled={!canEdit}
+                        // mushi-mushi-allowlist: threshold input sized to its digits (8 digits, never clipped)
                         className="min-w-[8ch]"
                       />
                     )}
@@ -977,7 +979,7 @@ interface LeaderboardPage { data: Contributor[]; meta: LeaderboardMeta }
 
 const PAGE_SIZE = 25
 
-export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {}) {
+export function ContributorsTab({ canEdit = false }: { canEdit?: boolean }) {
   const { data: tiers } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
 
   const [range,   setRange]   = useState<ContributorRange>('30d')

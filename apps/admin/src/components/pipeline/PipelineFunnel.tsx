@@ -46,9 +46,9 @@ const GRID_COLS: Record<number, string> = {
 /**
  * Which stages get a box. An empty stage was a full box reading "0 · empty" (7 of 8 on a quiet
  * app, round-2 review 2026-11-18): when at least two stages are empty they fold into one line
- * under the boxes. A selected stage keeps its box. @internal Exported for tests.
+ * under the boxes. A selected stage keeps its box.
  */
-export function splitEmptyStages<T extends { id: string; count: number }>(stages: readonly T[], selected: string | null): { boxes: T[]; empty: T[] } {
+function splitEmptyStages<T extends { id: string; count: number }>(stages: readonly T[], selected: string | null): { boxes: T[]; empty: T[] } {
   const empty = stages.filter((s) => s.count === 0 && s.id !== selected)
   if (empty.length < 2) return { boxes: [...stages], empty: [] }
   return { boxes: stages.filter((s) => !empty.includes(s)), empty }

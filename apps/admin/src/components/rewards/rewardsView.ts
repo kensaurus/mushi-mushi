@@ -20,7 +20,7 @@ export interface RetentionData {
 }
 
 /** Below this many users in a cohort its median says nothing. */
-export const RETENTION_MIN_COHORT = 5
+const RETENTION_MIN_COHORT = 5
 
 export type RetentionLift =
   | { kind: 'insufficient'; reason: string }
@@ -68,7 +68,7 @@ export function points30dCell(points30d: number, lastSeenAt: string | null | und
 }
 
 /** The server counts tier holders from its first 500 rows. */
-export const TIER_DISTRIBUTION_ROW_CAP = 500
+const TIER_DISTRIBUTION_ROW_CAP = 500
 
 export function tierHoldersLabel(totalHolders: number): string {
   if (totalHolders >= TIER_DISTRIBUTION_ROW_CAP) return `First ${TIER_DISTRIBUTION_ROW_CAP.toLocaleString()} tier holders counted`
