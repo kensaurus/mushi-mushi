@@ -377,12 +377,13 @@ describe('ProvidersPage routes', () => {
     expect(q(`${sel} [data-testid="pending-mark"]`)).not.toBeNull()
     expect(state.writes[0]).toEqual({ action: 'disable_route', app: 'yen-yen', feature: '*', priority: 1 })
     await act(async () => {
-      answer({ ok: false, error: { code: 'last_default_route', message: 'x' } })
+      // Upstream's 409 message is what the toast reads (contract confirmed 2026-11-18).
+      answer({ ok: false, error: { code: 'last_default_route', message: 'yen-yen would have no enabled default route' } })
     })
     await flush()
     expect(q(sel)?.getAttribute('data-enabled')).toBe('true')
     expect(q(`${sel} [data-testid="pending-mark"]`)).toBeNull()
-    expect(state.toasts).toEqual([{ tone: 'error', title: 'Enable another default first: an app needs one enabled default route' }])
+    expect(state.toasts).toEqual([{ tone: 'error', title: 'yen-yen would have no enabled default route' }])
   })
 
   it('offers only priced models of the route’s provider', async () => {
