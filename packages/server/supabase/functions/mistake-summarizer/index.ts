@@ -110,10 +110,12 @@ ${reportContext || '(none available)'}`
     }
 
     async function callClaude(model: 'fast' | 'sonnet', prompt: string) {
+      // Before both paths: with no key, createAnthropic falls back to the
+      // ANTHROPIC_API_KEY env var, past the organization's AI provider switch.
+      if (!anthropicKey) throw new Error('No Anthropic key for this project')
       if (model === 'fast') {
         return generateText({ model: anthropicFast(ANTHROPIC_HAIKU), prompt, maxTokens: 200 })
       }
-      if (!anthropicKey) throw new Error('No Anthropic key for this project')
       return claudeGenerateText({
         apiKey: anthropicKey,
         model: MISTAKE_MODEL,
