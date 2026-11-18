@@ -226,7 +226,7 @@ describe('ThresholdBar and Chip', () => {
   })
 
   it('draws a problem chip in the failed colours', () => {
-    const host = mount(createElement(Chip, { tone: 'danger' }, 'tried last'))
+    const host = mount(createElement(Chip, { tone: 'danger', children: 'tried last' }))
     expect(host.querySelector('span')!.className).toContain('text-st-failed-ink')
   })
 })
