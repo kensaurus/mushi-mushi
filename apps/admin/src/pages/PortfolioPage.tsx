@@ -156,7 +156,10 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // portfolio reads start at once instead of queuing behind project-groups.
   const waitForGroups = requested != null && groups.loading && !groups.data
   const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
-  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
+  // Each tab reads only its own routes, and none waits for the portfolio read
+  // (about 8 s on a big team): Spend's, Payments' and Digest's cards mount at
+  // once and start beside it (2026-11-18). Fix once belongs to the Apps tab.
+  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups || tab !== 'apps' ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
   // Refresh also looks up the app icons again (a new store icon shows now,
   // not after the daily check). The flagged request answers the whole
@@ -185,7 +188,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // The public demo stays out of the cards and every count ("All 10 apps need you").
   const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
   const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
-  const names = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c.name])), [portfolio])
+  // Names from the team's project list until the portfolio read lands, so the other tabs can draw first.
+  const names = useMemo(
+    () => new Map([...teamApps.map((a): [string, string] => [a.projectId, a.name]), ...(portfolio?.cards ?? []).map((c): [string, string] => [c.projectId, c.name])]),
+    [teamApps, portfolio],
+  )
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
   // App icons and SDK check-ins: the team's project list knows each app's SDK origin, repo and last call.
   const setup = useSetupStatus()
@@ -217,7 +224,10 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   // Every app, the demo included: spend, connectors and the digest still name it.
-  const appList = useMemo(() => (portfolio?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [portfolio])
+  // The team's project list stands in until the portfolio read lands.
+  const appList = useMemo(() => (portfolio ? portfolio.cards.map((c) => ({ projectId: c.projectId, name: c.name })) : teamApps), [portfolio, teamApps])
+  // Only a finished read that holds no app hides the tabs; while it runs, every tab but Apps draws.
+  const knownEmpty = portfolio != null && cards.length === 0
   const faviconFor = useCallback(
     (card: PortfolioCard): ProjectFaviconSource => {
       const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
@@ -310,29 +320,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           />
         )}
 
-        {/* The apps are known before their details: list them at once instead of
-            a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
-        {page.loading && !portfolio ? (
-          teamApps.length > 0 ? (
-            <Card className="px-3 py-1">
-              <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
-                {teamApps.map((app) => (
-                  <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
-                    <span className="font-medium text-fg">{app.name}</span>
-                    <span className="text-2xs text-fg-faint">Checking…</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : (
-            <Loading text="Checking each app…" />
-          )
-        ) : null}
         {page.error && (
           <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
         )}
         {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
-        {portfolio && cards.length === 0 && (
+        {knownEmpty && (
           <Card className="px-4 py-8 text-center text-sm text-fg-faint">
             <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
             <p className="mt-1 text-xs">
@@ -344,14 +336,34 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             </p>
           </Card>
         )}
-        {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
-        {cards.length > 0 && portfolio && (
+        {knownEmpty && demo.length > 0 && <PublicDemoLine demo={demo} />}
+        {!knownEmpty && (
           <>
             <TabbedSubNav
               ariaLabel="Apps sections"
               tabs={PORTFOLIO_TABS.map((t) => ({ to: tabHref(t.id), label: t.label, match: () => tab === t.id }))}
             />
-            {tab === 'apps' && (
+            {tab === 'apps' && !portfolio && page.loading && (
+              // The apps are known before their details: list them at once instead of
+              // a bare spinner, which sat for 5 s on a first load (2026-10-28).
+              <section aria-label="Apps" data-testid="portfolio-tab-apps">
+                {teamApps.length > 0 ? (
+                  <Card className="px-3 py-1">
+                    <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
+                      {teamApps.map((app) => (
+                        <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
+                          <span className="font-medium text-fg">{app.name}</span>
+                          <span className="text-2xs text-fg-faint">Checking…</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                ) : (
+                  <Loading text="Checking each app…" />
+                )}
+              </section>
+            )}
+            {tab === 'apps' && portfolio && (
               <section id="portfolio-apps" aria-label="Apps" className="space-y-3" data-testid="portfolio-tab-apps">
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <SegmentedControl
