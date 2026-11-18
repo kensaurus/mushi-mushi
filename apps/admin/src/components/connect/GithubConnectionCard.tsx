@@ -5,10 +5,9 @@
  */
 
 import { Card, Btn, Badge } from '../ui'
-import { JobStatusPill } from '../ui/job-status-pill'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { StatusPill } from '../signal/StatusMark'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
-import { IconCheck, IconArrowRight, IconIntegrations } from '../icons'
+import { IconArrowRight, IconIntegrations } from '../icons'
 import { BrandIcon } from '../ui/BrandIcon'
 import { usePageData } from '../../lib/usePageData'
 import { repoRoleMeta } from '../../lib/repoRoles'
@@ -101,13 +100,10 @@ export function GithubConnectionCard({
           )}
         </div>
         {loading ? (
-          <JobStatusPill status="running" runningLabel="Loading" />
+          <StatusPill status="running" label="Checking" />
         ) : hasGithub ? (
           <div className="flex items-center gap-2 shrink-0">
-            <span className={`inline-flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${CHIP_TONE.okSubtle}`}>
-              <IconCheck className="h-3.5 w-3.5" aria-hidden />
-              Connected
-            </span>
+            <StatusPill status="passed" label="Connected" />
             <Btn to="/repo" size="sm" variant="ghost" className="gap-1.5">
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}
               <IconArrowRight className="h-3.5 w-3.5" aria-hidden />

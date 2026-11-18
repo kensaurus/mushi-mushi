@@ -6,7 +6,7 @@ import { Btn, Tooltip, CopyButton, RelativeTime } from '../ui'
 import { CodeInline } from '../CodePanel'
 import { apiFetch, invalidateApiCache } from '../../lib/supabase'
 import { diagnoseKey, type SdkHealthApiKey } from '../SdkHealthSummary'
-import { CHIP_TONE } from '../../lib/chipTone'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { RotateKeyDialog } from '../RotateKeyDialog'
 import { canRotateKey } from '../../lib/projectKeys'
 import { describeActionError } from '../../lib/actionError'
@@ -21,13 +21,14 @@ import { staleKeysToRevoke } from '../../lib/staleKeys'
  */
 const VISIBLE_KEY_LIMIT = 4
 
-const KEY_CHIP_CLASS: Record<ReturnType<typeof diagnoseKey>['status'], string> = {
-  healthy: CHIP_TONE.okSubtle,
-  'endpoint-mismatch': CHIP_TONE.dangerSubtle,
-  stale: CHIP_TONE.warnSubtle,
-  cold: CHIP_TONE.warnSubtle,
-  never: CHIP_TONE.neutral,
-  inactive: CHIP_TONE.neutral,
+/** A key's health as a status mark (2026-11-18): ✓ live, ✕ wrong endpoint, ⧗ quiet, ○ never used, ⊘ off. */
+const KEY_STATUS: Record<ReturnType<typeof diagnoseKey>['status'], RunStatus> = {
+  healthy: 'passed',
+  'endpoint-mismatch': 'failed',
+  stale: 'slow',
+  cold: 'slow',
+  never: 'idle',
+  inactive: 'cancelled',
 }
 
 export function SdkInstallKeyPanel({
@@ -223,10 +224,8 @@ export function SdkInstallKeyPanel({
                     </div>
                     {diag && (
                       <Tooltip content={diag.description} side="top">
-                        <span
-                          className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-3xs font-medium ${KEY_CHIP_CLASS[diag.status]}`}
-                        >
-                          {diag.label}
+                        <span className="shrink-0" data-key-status={diag.status}>
+                          <StatusPill status={KEY_STATUS[diag.status]} label={diag.label} />
                         </span>
                       </Tooltip>
                     )}

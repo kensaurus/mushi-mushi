@@ -88,5 +88,9 @@ describe('ConnectStatusPills', () => {
     act(() => root.render(createElement(MemoryRouter, null, createElement(ConnectStatusPills, { ...base, sdkVersion: '0.24.4' }))))
     expect(host.querySelectorAll('button')).toHaveLength(0)
     expect(host.querySelectorAll('[data-pill]')).toHaveLength(3)
+    // Each pill leads with a status mark, colour plus glyph (2026-11-18): no editor is idle.
+    expect(host.querySelector('[data-pill="editor"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('idle')
+    act(() => root.render(createElement(MemoryRouter, null, createElement(ConnectStatusPills, { ...base, sdkVersion: '0.24.3' }))))
+    expect(host.querySelector('[data-pill="version"] [data-testid="status-pill"]')?.getAttribute('data-status')).toBe('slow')
   })
 })
