@@ -459,11 +459,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Tell the Kensaurus Slack #releases which packages went out (2026-11-17). Never fails the release.
-      - name: Tell Slack what was published
+      # Tell the Kensaurus Slack #releases which packages went out (2026-11-17): an Ops event through
+      # Mushi Mushi's own project when MUSHI_OPS_KEY is set, else the Slack webhook. Never fails the release.
+      - name: Tell Mushi Mushi what was published
         if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.published == 'true' }}
         continue-on-error: true
         env:
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL || 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api' }}
           SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
           JOB_STATUS: success

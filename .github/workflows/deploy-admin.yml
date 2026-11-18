@@ -389,11 +389,15 @@ jobs:
         run: node scripts/verify-auth-providers.mjs
 
       # Tell the Kensaurus Slack (2026-11-17): #releases when it is live, #alerts when it failed.
-      # Never fails the deploy; a missing secret skips it.
-      - name: Tell Slack what shipped
+      # An Ops event through Mushi Mushi's own project when MUSHI_OPS_KEY is set; otherwise, or
+      # when Mushi Mushi does not take it, the Slack webhooks as before. Never fails the deploy;
+      # a missing secret skips it.
+      - name: Tell Mushi Mushi what shipped
         if: ${{ !cancelled() }}
         continue-on-error: true
         env:
+          MUSHI_OPS_KEY: ${{ secrets.MUSHI_OPS_KEY }}
+          MUSHI_API_URL: ${{ vars.MUSHI_API_URL || 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api' }}
           SLACK_RELEASES_WEBHOOK_URL: ${{ secrets.SLACK_RELEASES_WEBHOOK_URL }}
           SLACK_ALERTS_WEBHOOK_URL: ${{ secrets.SLACK_ALERTS_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
