@@ -439,7 +439,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                   <AccountsRegisterCard orgId={orgId} />
                 </PanelErrorBoundary>
                 <PanelErrorBoundary label="Shared resources">
-                  <SharedResourcesCard orgId={orgId} names={names} />
+                  <SharedResourcesCard orgId={orgId} iconFor={iconFor} />
                 </PanelErrorBoundary>
                 <div id="portfolio-connectors" className="scroll-mt-20">
                   <PanelErrorBoundary label="Connected sources">

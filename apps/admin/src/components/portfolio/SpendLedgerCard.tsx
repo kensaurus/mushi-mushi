@@ -52,7 +52,7 @@ function Cell({ source, title }: { source: LedgerSource; title?: string }) {
 /** The four spend kinds: a fill and a legend glyph each, so the split never relies on colour. */
 const PART_STYLE: Record<SpendPart['key'], { fill: string; ink: string; glyph: string }> = {
   mushi: { fill: 'bg-st-running', ink: 'text-st-running', glyph: '■' },
-  provider: { fill: 'bg-accent', ink: 'text-accent', glyph: '●' },
+  provider: { fill: 'bg-viz-heat-4', ink: 'text-viz-heat-4', glyph: '●' },
   ci: { fill: 'bg-st-slow', ink: 'text-st-slow', glyph: '▲' },
   cloud: { fill: 'bg-fg-secondary', ink: 'text-fg-secondary', glyph: '◆' },
 }

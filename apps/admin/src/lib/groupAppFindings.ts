@@ -41,6 +41,8 @@ function escapeRegExp(s: string): string {
  * name goes too. "has no X" becomes "No X"; the closing full stop goes.
  *
  *   normaliseAppSentence('yen-yen (app) has no version probe.', ['yen-yen']) → 'No version probe'
+ *
+ * @internal Exported for tests; the page reaches it through groupAcrossApps.
  */
 export function normaliseAppSentence(message: string, ownNames: readonly string[]): string {
   let text = message
@@ -59,7 +61,7 @@ export function normaliseAppSentence(message: string, ownNames: readonly string[
 }
 
 /** A finding with its app sentence, as the page lists it. */
-export interface GroupedFinding {
+interface GroupedFinding {
   key: string
   ruleId: string
   severity: Severity
@@ -230,6 +232,11 @@ const FIX_ONCE: Record<string, { title: string; action: string }> = {
   spend_down_idle: { title: 'Spend-down key is idle', action: 'Check key' },
 }
 
+/** A rule's problem title and action word; null when the rule has none here. */
+export function ruleProblem(ruleId: string): { title: string; action: string } | null {
+  return Object.prototype.hasOwnProperty.call(FIX_ONCE, ruleId) ? FIX_ONCE[ruleId]! : null
+}
+
 /** The action word for a gate when the rule is not in FIX_ONCE. */
 const GATE_ACTION: Record<string, string> = {
   ci_drift: 'Fix CI',
@@ -268,7 +275,7 @@ export interface FixOnceRow {
  */
 export function fixOnceRows(groups: readonly FindingGroup[], fallbackTitle: (g: FindingGroup) => string): FixOnceRow[] {
   const rows = groups.map((g): FixOnceRow => {
-    const known = FIX_ONCE[g.ruleId]
+    const known = ruleProblem(g.ruleId)
     return {
       ruleId: g.ruleId,
       severity: g.severity,
