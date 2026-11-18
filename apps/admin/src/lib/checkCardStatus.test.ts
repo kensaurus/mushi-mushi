@@ -315,3 +315,24 @@ describe('first-time user test card', () => {
     })
   })
 })
+
+describe('Providers & AI routes card', () => {
+  const base = { down: 0, warn: 0, critIncidents: 0, generatedAt: RECENT }
+  const view = (p: CheckCardsInput['providers']) => buildCheckCardViews(input({ providers: p }), NOW)['/providers']
+
+  it('is absent for a viewer without the read, blank while it loads', () => {
+    expect(view(undefined)).toBeNull()
+    expect(view({ ...base, phase: 'loading' })).toBeNull()
+  })
+
+  it('reads down as Failed, a warning or crit incident as findings, else Pass', () => {
+    expect(view({ ...base, phase: 'ready', down: 1 })?.state).toBe('failed')
+    expect(view({ ...base, phase: 'ready', warn: 1, critIncidents: 1 })).toMatchObject({ state: 'findings', chip: '2 findings' })
+    expect(view({ ...base, phase: 'ready' })?.state).toBe('pass')
+  })
+
+  it('reads an unconfigured install as Not set up and a failed read as unavailable, never a pass', () => {
+    expect(view({ ...base, phase: 'not_set_up' })).toMatchObject({ state: 'not_set_up', setupTo: '/providers' })
+    expect(view({ ...base, phase: 'error' })?.state).toBe('unavailable')
+  })
+})

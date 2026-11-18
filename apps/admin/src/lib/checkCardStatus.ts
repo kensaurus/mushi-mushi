@@ -117,6 +117,17 @@ export interface CheckCardsInput {
       detail?: string | null
     }>
   }
+  /**
+   * Providers & AI routes (operators only; absent for everyone else): enabled
+   * accounts down or warning and open critical incidents, from kensaurus-ops.
+   */
+  providers?: {
+    phase: 'loading' | 'error' | 'not_set_up' | 'ready'
+    down: number
+    warn: number
+    critIncidents: number
+    generatedAt: string | null
+  }
 }
 
 /** Matches the inbox: a judge run older than this is not a fresh pass. */
@@ -353,6 +364,16 @@ function statusFromElements(elements: ObservedElement[], fallbackSetup: string, 
   return withTime(NOT_CHECKED, at, now)
 }
 
+/** Providers: a provider down is Failed; a warning or a critical incident is a finding. */
+function fromProviders(p: NonNullable<CheckCardsInput['providers']>, now: number): CheckCardView | null {
+  if (p.phase === 'loading') return null
+  if (p.phase === 'error') return UNAVAILABLE
+  if (p.phase === 'not_set_up') return notSetUp('/providers')
+  if (p.down > 0) return failed(p.generatedAt, now)
+  if (p.warn + p.critIncidents > 0) return findings(p.warn + p.critIncidents, p.generatedAt, now)
+  return p.generatedAt ? pass(p.generatedAt, now) : NOT_CHECKED
+}
+
 /** One view per checks-page path. Null while that card's read has not finished. */
 export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): Record<string, CheckCardView | null> {
   const pending = input.recipePhase === 'loading'
@@ -373,5 +394,6 @@ export function buildCheckCardViews(input: CheckCardsInput, now = Date.now()): R
     '/lessons': slice(input.lessons, (lessons) => fromLessons(lessons)),
     '/prompt-lab': slice(input.prompts, (prompts) => fromPrompts(prompts)),
     '/first-user-test': input.firstUserTest ? fromFirstUserTest(input.firstUserTest, now) : null,
+    '/providers': input.providers ? fromProviders(input.providers, now) : null,
   }
 }
