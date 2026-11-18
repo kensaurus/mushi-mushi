@@ -47,8 +47,9 @@ import { buildCheckCardViews, type CheckCardState, type CheckCardView, type Obse
 import { baselineSnapshot, checkAlerts, countChange, readBaseline, staleness, STALE_DAYS, writeBaseline, type CheckBaseline } from '../lib/checkSignals'
 import { useNow } from '../lib/useNow'
 import { AlertCards } from '../components/signal/AlertCards'
+import { AgeCell, ChangeChip } from '../components/signal/AgeChips'
 import { HighlightProvider, useLinked } from '../components/signal/linkedHighlight'
-import { StatusGlyph, TONE_CHAR, type SignalTone } from '../components/signal/StatusGlyph'
+import { StatusGlyph, type SignalTone } from '../components/signal/StatusGlyph'
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
 const GROUP_OF: ReadonlyMap<string, CheckSubGroupId> = new Map(CHECK_GROUPS.flatMap((g) => g.paths.map((p) => [p, g.id] as const)))
@@ -89,37 +90,12 @@ const STATE_TONE: Record<CheckCardState, SignalTone> = {
 /** Passing and watching checks fold into one line; everything else stays open. */
 const FOLDED: ReadonlySet<CheckCardState> = new Set(['pass', 'watching'])
 
-/** The last run's age as a graded cell: neutral under a day, darker red as it ages, with ● ◆ ▲. */
-function AgeChip({ lastRunAt, now }: { lastRunAt: string | null | undefined; now: number }) {
+/** The last run's age as a graded cell (components/signal/AgeChips). */
+function RunAge({ lastRunAt, now }: { lastRunAt: string | null | undefined; now: number }) {
   const age = staleness(lastRunAt, now)
   if (!age) return null
   const words = age.short === 'now' ? 'Last run just now' : `Last run ${age.short} ago${age.stale ? ', stale' : ''}`
-  return (
-    <span
-      className={`${age.cellClass} ci-pop inline-flex shrink-0 items-center gap-0.5 rounded-sm px-1 font-mono text-3xs font-bold tabular-nums`}
-      title={lastRunAt ? `${words} (${new Date(lastRunAt).toLocaleString()})` : words}
-      aria-label={words}
-      data-testid="checks-age"
-      data-tone={age.tone}
-    >
-      <span aria-hidden="true">{TONE_CHAR[age.tone]}</span>
-      {age.short}
-    </span>
-  )
-}
-
-/** "▲ +3" since your last visit, red when worse, green when better. */
-function ChangeChip({ change }: { change: { text: string; worse: boolean } | null }) {
-  if (!change) return null
-  return (
-    <span
-      className={`shrink-0 font-mono text-2xs font-bold tabular-nums ${change.worse ? 'text-danger-foreground' : 'text-ok-foreground'}`}
-      title="Change since your last visit"
-      data-testid="checks-change"
-    >
-      {change.text}
-    </span>
-  )
+  return <AgeCell age={age} words={words} title={lastRunAt ? `${words} (${new Date(lastRunAt).toLocaleString()})` : words} testId="checks-age" />
 }
 
 interface CheckCard {
@@ -374,7 +350,7 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
           </Link>
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
-            <ChangeChip change={change} />
+            <ChangeChip change={change} testId="checks-change" />
             {view ? (
               <Badge tone={view.tone} title={view.detail ?? view.chip}>
                 {view.chip}
@@ -390,7 +366,7 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
         </div>
         <p className="text-xs leading-snug text-fg-secondary">{item.description}</p>
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-muted">
-          <AgeChip lastRunAt={view?.lastRunAt} now={now} />
+          <RunAge lastRunAt={view?.lastRunAt} now={now} />
           {view?.detail && !view.lastRunAt ? <span className="text-fg-secondary">{view.detail}</span> : null}
           {group ? <span>{CHECK_SUB_GROUPS[group].title}</span> : null}
           {view?.state === 'not_set_up' && view.setupTo ? (
@@ -429,8 +405,8 @@ function FoldedCheck({ card, gated, change, now }: RowProps) {
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-2xs">
         {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
-        <ChangeChip change={change} />
-        {view?.lastRunAt ? <AgeChip lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="text-fg-secondary">{view.detail}</span> : null}
+        <ChangeChip change={change} testId="checks-change" />
+        {view?.lastRunAt ? <RunAge lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="text-fg-secondary">{view.detail}</span> : null}
         {view && <span className="font-semibold text-fg-secondary">{view.chip}</span>}
       </span>
     </li>

@@ -237,6 +237,31 @@ html[data-theme="light"] {
   --color-info:          oklch(0.48 0.17 240);
   --color-info-fg:       oklch(0.99 0.02 240);
   --color-info-muted:    oklch(0.94 0.05 240);
+  /* Run status, light (see theme-tokens.css). Validated: ink on soft
+     running 7.4:1, passed 8.5:1, failed 6.5:1, waiting 7.5:1, slow 7.0:1,
+     idle 7.9:1, cancelled 6.9:1; marks at least 3:1 on white except the
+     deliberately faint cancelled grey (its glyph and strike carry it). */
+  --color-st-running: #2563eb;
+  --color-st-running-ink: #1e3fae;
+  --color-st-running-soft: #e3ecfd;
+  --color-st-passed: #12a150;
+  --color-st-passed-ink: #0a4f20;
+  --color-st-passed-soft: #dff5e7;
+  --color-st-failed: #dc2626;
+  --color-st-failed-ink: #a3161a;
+  --color-st-failed-soft: #fde4e4;
+  --color-st-waiting: #c98500;
+  --color-st-waiting-ink: #6e4304;
+  --color-st-waiting-soft: #fbf0d6;
+  --color-st-slow: #e8590c;
+  --color-st-slow-ink: #8a3205;
+  --color-st-slow-soft: #fde8da;
+  --color-st-idle: #8b95a3;
+  --color-st-idle-ink: #3f4a58;
+  --color-st-idle-soft: #eef1f4;
+  --color-st-cancelled: #a8b0bb;
+  --color-st-cancelled-ink: #4b5560;
+  --color-st-cancelled-soft: #f2f4f6;
   /* Light-mode rose: chroma kept at ~0.20 for a true salmon-pink against
      paper, lightness lowered to L=0.55 so it clears AA against
      `--color-surface-raised`. */

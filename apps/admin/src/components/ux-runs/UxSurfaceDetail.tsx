@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { Badge, Btn, Callout, Card, SegmentedControl } from '../ui'
 import { IconCheck, IconFlag } from '../icons'
 import { apiFetchMutate } from '../../lib/supabase'
-import { VitalText } from '../reports/VitalText'
+import { VitalText } from '../signal/VitalText'
 import { foldSteps, problemLines, UX_PLAN_STEP_META, UX_STATUS_META, type UxIterationRow, type UxSurfaceRow, type UxViewport } from '../../lib/uxRuns'
 
 const OUTCOME: Record<UxIterationRow['outcome'], { label: string; tone: 'okSubtle' | 'dangerSubtle' | 'neutral' }> = {

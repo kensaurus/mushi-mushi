@@ -1,5 +1,5 @@
 /**
- * FILE: apps/admin/src/components/pipeline/MoreActionsMenu.tsx
+ * FILE: apps/admin/src/components/signal/MoreActionsMenu.tsx
  * PURPOSE: The "More" menu beside a pipeline group's one primary button (2026-11-18: some rows
  *          showed five buttons). Same dismissal as ChartActionsMenu (a click outside or Escape
  *          closes it, focus returns to the trigger), but its items keep what the old buttons

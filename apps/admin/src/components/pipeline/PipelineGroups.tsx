@@ -18,7 +18,7 @@ import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOut
 import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
-import { MoreActionsMenu } from './MoreActionsMenu'
+import { MoreActionsMenu } from '../signal/MoreActionsMenu'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import type { WorkerLane } from '../../lib/workers'
 

@@ -2399,7 +2399,13 @@ html[data-theme="light"] .report-path-code {
   background-size: 24px 100%;
   animation: ci-stripes 1s linear infinite;
 }
+/* Status marks (components/signal/StatusMark): running breathes a ring, a
+   running bar carries moving stripes in the running colour. */
+@keyframes st-ring { 0% { transform: scale(0.6); opacity: 0.75; } 100% { transform: scale(1.9); opacity: 0; } }
+.st-ring { animation: st-ring 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+.st-run-bar { background-color: var(--color-st-running); }
 @media (prefers-reduced-motion: reduce) {
   .ci-lk, .ci-heatcell { transition: none; }
-  .ci-rise, .ci-grow-x, .ci-pop, .ci-stripes { animation: none; }
+  .ci-rise, .ci-grow-x, .ci-pop, .ci-stripes, .st-ring { animation: none; }
+  .st-ring { opacity: 0; }
 }

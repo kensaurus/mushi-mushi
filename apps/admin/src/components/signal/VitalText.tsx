@@ -1,13 +1,13 @@
 /**
- * FILE: apps/admin/src/components/reports/VitalText.tsx
+ * FILE: apps/admin/src/components/signal/VitalText.tsx
  * PURPOSE: Text with every Web Vital in it shown as a graded badge (owner,
  *          2026-11-18): "Homepage LCP 6408ms" reads [▲ LCP 6.4 s] in the poor
  *          colour and shape. The words around it stay as they are. Text with
  *          no vital renders unchanged. No sparkline here: these sit in dense
- *          rows. (A candidate for components/signal/ once the kit takes it.)
+ *          rows. Moved into the signal kit 2026-11-18.
  */
 import { Fragment } from 'react'
-import { VitalBadge } from '../signal/VitalBadge'
+import { VitalBadge } from './VitalBadge'
 import { splitVitalText } from '../../lib/vitalText'
 
 export function VitalText({ text }: { text: string }) {

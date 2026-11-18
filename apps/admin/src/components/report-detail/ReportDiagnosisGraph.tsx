@@ -22,7 +22,7 @@ import { useMediaQuery } from '../../lib/useMediaQuery'
 import { buildDiagnosisGraph, initialDiagnosisSelection } from '../../lib/reportDiagnosisGraph'
 import { DIAGNOSIS_LANES, type DiagnosisGraph, type DiagnosisLane, type DiagnosisNode } from '../../lib/reportDiagnosisModel'
 import type { ReportDetail } from './types'
-import { VitalText } from '../reports/VitalText'
+import { VitalText } from '../signal/VitalText'
 
 // Checks are green (verification) and Fix is the brand colour (action);
 // red for Checks read as "error" on the first localhost pass.

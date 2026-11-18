@@ -1,5 +1,5 @@
 /**
- * FILE: apps/admin/src/components/pipeline/StuckAgeBar.tsx
+ * FILE: apps/admin/src/components/signal/StuckAgeBar.tsx
  * PURPOSE: How long the stuck work has waited, as a picture (2026-11-18): one stacked bar per
  *          kind of stuck work ("Need you", and the backlog "Waiting for a fix"), split into
  *          0–3 d, 3–7 d, 7–30 d and 30 d+, darker = older. "Need you" is on the red ramp; the

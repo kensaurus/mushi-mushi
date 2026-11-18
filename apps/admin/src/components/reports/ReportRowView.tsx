@@ -49,7 +49,7 @@ import {
   TableSeverityCell,
 } from './ReportMetricCells'
 import { reportHeadline } from '../../lib/format'
-import { VitalText } from './VitalText'
+import { VitalText } from '../signal/VitalText'
 
 interface Props {
   row: ReportRow

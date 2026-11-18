@@ -32,7 +32,7 @@ import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagn
 import { FixWithAgentPanel } from './FixWithAgentPanel'
 import { modelLine } from '../../lib/reportInternals'
 import type { ReportDetail } from './types'
-import { VitalText } from '../reports/VitalText'
+import { VitalText } from '../signal/VitalText'
 
 /** Below this, we hedge instead of asserting a root cause. */
 const LOW_CONFIDENCE = 0.7

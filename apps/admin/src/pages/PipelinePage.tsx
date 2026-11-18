@@ -53,7 +53,7 @@ import { WorkersPanel } from '../components/pipeline/WorkersPanel'
 import { WorkerFlagsStrip } from '../components/pipeline/WorkerFlags'
 import { LANES_PATH, type WorkLanesData } from '../lib/workers'
 import { groupPrimary, stuckAges } from '../lib/pipelineSignals'
-import { StuckAgeBar } from '../components/pipeline/StuckAgeBar'
+import { StuckAgeBar } from '../components/signal/StuckAgeBar'
 import {
   ACTION_META,
   ageLabel,
