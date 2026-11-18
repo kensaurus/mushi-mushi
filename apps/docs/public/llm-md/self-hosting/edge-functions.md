@@ -9,7 +9,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). `mushi selfhost up` deploys **all** of them in one `supabase functions deploy`, with each function's `verify_jwt` taken from `config.toml`, the same as the production deploy. That is the simplest complete install: the cron jobs the migrations schedule call many of these functions. To deploy by hand, the **minimal ingest + classification** set is below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -107,11 +107,15 @@ The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payo
 
 ## Required secrets
 
-Set secrets before deploying — functions read them at cold-start:
+Set secrets before deploying — functions read them at cold-start. Only
+`MUSHI_INTERNAL_CALLER_SECRET` is required (`mushi selfhost up` generates it
+and writes the same value into `mushi_runtime_config`). One LLM key, Anthropic
+or OpenAI, turns on the diagnosis and fix drafts. Everything else is optional:
 
 ```bash
 cd packages/server
 
+npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=$(openssl rand -hex 32)   # + mushi_runtime_config, see Supabase setup
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 npx supabase secrets set OPENAI_API_KEY=sk-…
 npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…

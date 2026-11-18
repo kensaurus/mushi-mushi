@@ -1,13 +1,24 @@
 # FILE: values.yaml
 # PURPOSE: Default Helm values for Mushi Mushi deployment
+#
+# EXPERIMENTAL. The chart runs the edge functions and the console; it does not
+# run Supabase. Point global.supabaseUrl at a Supabase API (a hosted project,
+# or supabase/docker) whose Postgres is global.database.*. The supported path
+# is your own Supabase project + `mushi selfhost up` (docs/SELF_HOSTED.md).
 
 global:
   image:
+    # Images are published to GHCR by .github/workflows/publish-selfhost-images.yml
+    # (release tags + manual dispatch). Pin a version tag in production.
     tag: "latest"
+  # Supabase API gateway the functions call (/rest/v1, /auth/v1, /storage/v1,
+  # /functions/v1). Required. pg_cron calls it too (mushi_runtime_config).
+  supabaseUrl: ""
   database:
     host: postgres
     port: 5432
-    name: mushimushi
+    # pg_cron runs in the `postgres` database on Supabase images.
+    name: postgres
   llm:
     provider: anthropic
     model: claude-sonnet-4-6
@@ -20,7 +31,7 @@ global:
 
 api:
   replicas: 2
-  image: mushimushi/edge-functions
+  image: ghcr.io/kensaurus/mushi-mushi-edge
   resources:
     limits:
       memory: 512Mi
@@ -29,9 +40,11 @@ api:
       memory: 256Mi
       cpu: 250m
 
+# Unused: classify-report runs inside the api pods (one edge-runtime serves
+# every function). Kept so existing values files still render.
 classify:
   replicas: 1
-  image: mushimushi/edge-functions
+  image: ghcr.io/kensaurus/mushi-mushi-edge
   resources:
     limits:
       memory: 1Gi
@@ -42,7 +55,10 @@ classify:
 
 admin:
   replicas: 1
-  image: mushimushi/admin
+  # Built without VITE_SUPABASE_URL: the console asks for the Supabase URL and
+  # anon key on first open. Build your own image with --build-arg
+  # VITE_SUPABASE_URL=... to bake them in (deploy/Dockerfile.admin).
+  image: ghcr.io/kensaurus/mushi-mushi-admin
   resources:
     limits:
       memory: 256Mi
@@ -54,8 +70,13 @@ ingress:
   tls: true
   annotations: {}
 
+# Pass these with --set or an untracked values file; never commit real values.
 secrets:
+  # Optional: one LLM key (either provider) turns on diagnosis + fix drafts.
   anthropicApiKey: ""
+  openaiApiKey: ""
   supabaseServiceRoleKey: ""
+  # Required: shared by the functions and pg_cron (openssl rand -hex 32).
+  internalCallerSecret: ""
   jwtSecret: ""
   postgresPassword: ""

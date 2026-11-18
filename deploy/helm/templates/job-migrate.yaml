@@ -15,23 +15,58 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: "supabase/postgres:15.8.1.060"
+          image: "supabase/postgres:17.6.1.136"
+          # Same logic as deploy/db/migrate.sh: each file in one transaction
+          # with ON_ERROR_STOP, recorded in supabase_migrations.schema_migrations
+          # so an upgrade applies only new files, then mushi_runtime_config is
+          # pointed at global.supabaseUrl (the migrations seed Mushi Mushi Cloud).
           command:
-            - sh
+            - bash
             - -c
             - |
+              set -euo pipefail
+              psql -X -q -v ON_ERROR_STOP=1 -c "create schema if not exists supabase_migrations; create table if not exists supabase_migrations.schema_migrations (version text primary key, statements text[], name text);"
+              applied="$(psql -X -At -c 'select version from supabase_migrations.schema_migrations')"
               for f in /migrations/*.sql; do
-                echo "Running $f"
-                psql "$DATABASE_URL" -f "$f"
+                base="$(basename "$f" .sql)"; version="${base%%_*}"; name="${base#*_}"
+                if grep -qxF "$version" <<<"$applied"; then continue; fi
+                echo "→ $base"
+                { cat "$f"; printf "\ninsert into supabase_migrations.schema_migrations (version, name) values ('%s', '%s');\n" "$version" "$name"; } \
+                  | psql -X -q -v ON_ERROR_STOP=1 --single-transaction
               done
+              psql -X -q -v ON_ERROR_STOP=1 <<'SQL'
+              \getenv gateway MUSHI_GATEWAY_URL
+              \getenv token MUSHI_INTERNAL_CALLER_SECRET
+              insert into public.mushi_runtime_config (key, value) values
+                ('supabase_url', :'gateway'), ('service_role_key', :'token'), ('internal_caller_token', :'token')
+              on conflict (key) do update set value = excluded.value, updated_at = now();
+              -- Self-hosted: lift the Mushi Mushi Cloud plan limits on every plan (see deploy/db/migrate.sh).
+              update public.pricing_plans set included_diagnoses_per_month = null, max_projects = null,
+                seat_limit = null, retention_days = greatest(coalesce(retention_days, 0), 3650),
+                feature_flags = coalesce(feature_flags, '{}'::jsonb) || '{"byok": true, "sso": true, "plugins": true, "intelligence_reports": true, "audit_log": true, "self_hosted": true, "teams": true}'::jsonb
+              where true;
+              SQL
           env:
-            - name: DATABASE_URL
-              value: "postgres://postgres:$(POSTGRES_PASSWORD)@{{ .Values.global.database.host }}:{{ .Values.global.database.port }}/{{ .Values.global.database.name }}"
-            - name: POSTGRES_PASSWORD
+            - name: PGHOST
+              value: {{ .Values.global.database.host | quote }}
+            - name: PGPORT
+              value: {{ .Values.global.database.port | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.global.database.name | quote }}
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: postgres-password
+            - name: MUSHI_GATEWAY_URL
+              value: {{ required "global.supabaseUrl is required" .Values.global.supabaseUrl | quote }}
+            - name: MUSHI_INTERNAL_CALLER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: internal-caller-secret
           volumeMounts:
             - name: migrations
               mountPath: /migrations

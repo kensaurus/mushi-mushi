@@ -192,7 +192,10 @@ export function chooseProjectNonInteractive(
 
 export async function runLogin(opts: RunLoginOptions = {}): Promise<void> {
   const { CLOUD_API_ENDPOINT, resolveCloudEndpoint } = await import('./endpoint.js')
-  const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : CLOUD_API_ENDPOINT
+  // A saved endpoint (self-host: `mushi selfhost up` writes it) wins over Cloud when no
+  // --endpoint is given; before 2026-11-18 login always went to Cloud.
+  const saved = loadConfig().endpoint
+  const endpoint = opts.endpoint ? resolveCloudEndpoint(opts.endpoint) : saved ? resolveCloudEndpoint(saved) : CLOUD_API_ENDPOINT
   const consoleBase = await resolveConsoleUrl()
 
   let apiKey = opts.apiKey

@@ -1,0 +1,22 @@
+# Build context filter for deploy/Dockerfile.admin (BuildKit reads
+# <Dockerfile>.dockerignore next to the Dockerfile). The build needs the whole
+# workspace's manifests, but never secrets, git history or build output.
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/.next
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.keystore
+**/local.properties
+.claude
+.cursor
+**/test-results
+**/playwright-report
+**/coverage
+deploy/helm/migrations
+packages/android/**/build
+packages/ios/**/.build

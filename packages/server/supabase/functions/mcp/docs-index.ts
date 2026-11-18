@@ -2055,8 +2055,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting",
     markdown: "self-hosting/index.md",
     keywords: ["self-hosting", "self", "hosting"],
-    headings: ["What you'll deploy", "Fastest path — Docker Compose", "Managed-Supabase path"],
-    excerpt: "Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
+    headings: ["What you'll deploy", "Quickstart: your own Supabase project", "Docker Compose (experimental)"],
+    excerpt: "Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
   },
   {
     title: "Admin SPA deploy",
@@ -2073,8 +2073,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
     keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "self-host", "minutes"],
-    headings: ["One command", "Clone and configure", "Bring the stack up", "Open the console", "What's running", "Production notes", "Managed Supabase instead"],
-    excerpt: "Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.",
+    headings: ["Generate the secrets", "Bring the stack up", "Open the console", "What's running", "Not included", "Production notes"],
+    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.",
   },
   {
     title: "Edge Functions deploy",
@@ -2100,7 +2100,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/supabase",
     markdown: "self-hosting/supabase.md",
     keywords: ["self-hosting", "self", "hosting", "supabase", "setup"],
-    headings: ["Required extensions", "Required custom functions", "RLS pattern", "Seed data", "Verifying the setup"],
+    headings: ["Required extensions", "Required custom functions", "RLS pattern", "Seed data and runtime config", "Verifying the setup"],
     excerpt: "Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI, push every migration, and check the Postgres extensions the server needs.",
   },
   {

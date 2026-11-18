@@ -1,0 +1,118 @@
+# FILE: publish-selfhost-images.yml
+# PURPOSE: Build and push the self-host images the Helm chart and docs use:
+#            ghcr.io/<owner>/mushi-mushi-edge   (deploy/Dockerfile.edge)
+#            ghcr.io/<owner>/mushi-mushi-admin  (deploy/Dockerfile.admin)
+#
+# WHEN:    Only on release tags and manual dispatch. Never on pull requests or
+#          branch pushes (Actions minutes are billed; see ci-cost rules).
+#          Tags created by the Release workflow's GITHUB_TOKEN do not trigger
+#          other workflows, so after a release run:
+#            gh workflow run "Publish self-host images" --ref master -f version=<x.y.z>
+#          or push a `selfhost-v<x.y.z>` tag yourself.
+#
+# NOTES:   - Plain docker CLI steps, no third-party build actions.
+#          - The runner needs Docker with BuildKit (the per-Dockerfile
+#            .dockerignore files need it).
+#          - A new GHCR package starts private. Make both packages public once
+#            (Package settings → Change visibility) or `helm install` gets 401.
+
+name: Publish self-host images
+
+on:
+  push:
+    tags:
+      - 'mushi-mushi@*'
+      - 'selfhost-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version tag (e.g. 1.37.0). Empty = sha-<commit>, no latest.'
+        required: false
+        default: ''
+
+concurrency:
+  group: publish-selfhost-images-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build & push edge + admin images
+    runs-on: ${{ (github.actor != 'dependabot[bot]' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Resolve tags
+        id: tags
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#mushi-mushi@}"
+            version="${version#selfhost-v}"
+            latest=true
+          elif [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
+            latest=true
+          else
+            version="sha-${GITHUB_SHA::7}"
+            latest=false
+          fi
+          if ! [[ "$version" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Invalid version tag: $version"
+            exit 1
+          fi
+          {
+            echo "owner=$owner"
+            echo "version=$version"
+            echo "latest=$latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build & push
+        env:
+          DOCKER_BUILDKIT: '1'
+          OWNER: ${{ steps.tags.outputs.owner }}
+          VERSION: ${{ steps.tags.outputs.version }}
+          LATEST: ${{ steps.tags.outputs.latest }}
+        run: |
+          set -euo pipefail
+          for image in edge admin; do
+            repo="ghcr.io/${OWNER}/mushi-mushi-${image}"
+            docker build \
+              -f "deploy/Dockerfile.${image}" \
+              --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+              --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+              --label "org.opencontainers.image.version=${VERSION}" \
+              -t "${repo}:${VERSION}" .
+            docker push "${repo}:${VERSION}"
+            if [ "$LATEST" = "true" ]; then
+              docker tag "${repo}:${VERSION}" "${repo}:latest"
+              docker push "${repo}:latest"
+            fi
+            echo "::notice::Pushed ${repo}:${VERSION}"
+          done
+
+      - name: Log out
+        if: always()
+        run: docker logout ghcr.io || true

@@ -1,0 +1,11 @@
+# Build context filter for deploy/Dockerfile.edge (BuildKit reads
+# <Dockerfile>.dockerignore next to the Dockerfile). Only the functions and the
+# main router go in; never .env files, keys or node_modules.
+*
+!packages/server/supabase/functions/**
+!deploy/edge/**
+**/__tests__
+**/*.test.ts
+**/.env
+**/.env.*
+**/node_modules

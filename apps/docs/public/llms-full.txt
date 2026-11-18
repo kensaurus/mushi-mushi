@@ -16605,14 +16605,14 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting
 
 ---
 title: Self-hosting
-description: Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+description: Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
 ---
 
 # Self-hosting
 
 Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
-  **What you need** depends on the path. **Docker Compose** (below) needs only Docker and an Anthropic key: it runs the open-source Supabase services (Postgres, Auth, REST, Storage) in containers on your own machine, so you do not need a Supabase account. The **managed-Supabase path** needs Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+  **Supported path:** your own [Supabase](https://supabase.com) project (the free tier works) and one command, `mushi selfhost up`. You need Node 22+, a clone of this repo and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). An LLM key is optional. **Docker Compose** and the **Helm chart** are experimental: nobody has run them end to end yet.
 
 ## What you'll deploy
 
@@ -16624,39 +16624,43 @@ Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin
 | Observability | Langfuse + Sentry | MIT / Commercial |
 | Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
 
-## Fastest path — Docker Compose
-
-The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
-in one command, no managed Supabase project required:
+## Quickstart: your own Supabase project
 
 ```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY and the keys for the local stack
-docker compose up -d
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+supabase login
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url https://mushi.example.com
 ```
 
-See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.
+`selfhost up` links the project, applies every migration and sets the function secrets. It points the database's cron jobs at your project (the migrations seed the Mushi Mushi Cloud URL) and lifts the Cloud free-plan limits on your instance. Then it deploys every edge function and saves the endpoint and console URL to the CLI config. It asks for an Anthropic **or** OpenAI key; press Enter to skip.
 
-## Managed-Supabase path
-
-Prefer a hosted Supabase project? Link it and push the schema:
+Next, serve the console ([Admin SPA deploy](/self-hosting/admin-spa)) and sign up there; the first account owns the instance. Then sign the CLI in. This mints your key; no SQL needed:
 
 ```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi
-pnpm install                                       # installs all workspaces
-cd packages/server                                 # Supabase CLI works relative to this dir
-npx supabase link --project-ref <your-ref>
-npx supabase db push                               # applies all migrations
+mushi login --endpoint https://<your-ref>.supabase.co/functions/v1/api
+mushi selfhost doctor
 ```
 
-Then follow the guides in order:
+| Setting | Required? | What it unlocks |
+| --- | --- | --- |
+| Supabase project + CLI login | Required | Everything |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Required; `selfhost up` generates it | pg_cron calling your functions |
+| Anthropic or OpenAI key | Optional | The plain-English diagnosis and fix drafts |
+| OpenAI key | Optional | Duplicate detection, semantic search, voice transcription |
+| `--console-url` | Recommended | Report links in Slack/Discord, and `mushi login` opening your console instead of Mushi Mushi Cloud |
 
-1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
+**Without an LLM key**, reports are still ingested, stored and shown in the console, with a rule-based category and severity. You do not get the diagnosis, fix drafts or duplicate detection.
+
+[`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) is the step-by-step reference. The detailed guides:
+
+1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and the runtime config
 2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
 3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
 4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking
+
+## Docker Compose (experimental)
+
+To run every service in containers with no Supabase account, see [Docker Compose](/self-hosting/docker-compose).
 
 ---
 
@@ -16708,103 +16712,122 @@ After deploy, open the console and complete the **Onboarding** wizard (`/onboard
 2. Connect your GitHub OAuth app.
 3. Show the SDK snippet for your first project.
 
-If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build — these cannot be injected after build time.
+If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build. Vite inlines them at build time, so environment variables on the server that serves `dist/` have no effect.
+
+A build with `VITE_INSTANCE_TYPE=self-hosted` and no `VITE_SUPABASE_URL` opens a setup screen instead. It asks for the Supabase URL and anon key and keeps them in that browser. The published Docker image (`ghcr.io/kensaurus/mushi-mushi-admin`) works this way. To bake the values in, build your own image: `docker build -f deploy/Dockerfile.admin --build-arg VITE_SUPABASE_URL=… --build-arg VITE_SUPABASE_ANON_KEY=… .` (nginx serves it on port 3000 with the SPA fallback).
+
+Point the CLI at the console, so `mushi login` signs in there instead of on Mushi Mushi Cloud: `mushi config consoleUrl https://your-console.example.com`. Alternatively, pass `--console-url` to `mushi selfhost up`.
 
 ---
 
-## Self-host in minutes (Docker Compose)
+## Docker Compose (experimental)
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
 
 ---
-title: Self-host in minutes (Docker Compose)
-description: Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.
+title: Docker Compose (experimental)
+description: Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.
 ---
 
-# Self-host in minutes
+# Docker Compose (experimental)
 
-The fastest way to run the whole Mushi Mushi stack on your own box. One Compose file
-brings up Postgres, Auth, REST, Storage, the edge functions, the admin console,
-and a Caddy reverse proxy — no managed Supabase project required.
+One Compose file runs the whole stack on your own machine: Supabase's Postgres,
+Auth, PostgREST and Storage images, every edge function in one
+`supabase/edge-runtime` container, the admin console, and Caddy as the gateway.
+You do not need a Supabase account.
 
-  **Prerequisite:** Docker + Docker Compose, and an `ANTHROPIC_API_KEY` (or BYOK
-  key) for the classification pipeline. Everything else has a sane default.
+  **Experimental.** Nobody has run this stack end to end yet, so expect to fix
+  things. The supported path is [your own Supabase project + `mushi selfhost up`](/self-hosting).
 
-## One command
+### Generate the secrets
 
-### Clone and configure
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
+From the repo root:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...          # the diagnosis engine — no second key needed elsewhere
-SUPABASE_ANON_KEY=your-anon-key       # generated from your JWT_SECRET
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+./deploy/generate-secrets.sh            # bash + openssl
+# or, on any OS with Node 22+:
+npx mushi-mushi selfhost secrets
 ```
+
+Either one writes `deploy/.env` (mode 600). It contains a random Postgres
+password, JWT secret and internal caller secret, plus the anon and
+service_role JWTs signed with that JWT secret, so you never mint JWTs by hand.
+Neither overwrites an existing file.
+For a public domain, pass it first:
+`MUSHI_PUBLIC_URL=https://mushi.example.com ./deploy/generate-secrets.sh`
+(or `--public-url`).
+
+Optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `deploy/.env`. Either
+one turns on the plain-English diagnosis and fix drafts. Without one, reports
+get rule-based triage only.
 
 ### Bring the stack up
 
 ```bash
-docker compose up -d
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
+
+Compose refuses to start while a required secret is missing.
 
 ### Open the console
 
-| Service | URL | Notes |
-| --- | --- | --- |
-| Admin console | `http://localhost:3000` | React + Vite SPA, served by nginx |
-| Edge functions (`api`) | `http://localhost:8000` | Hono on Deno |
-| PostgREST | `http://localhost:3001` | the REST surface the SPA talks to |
-| Auth (GoTrue) | `http://localhost:9999` | email auto-confirm in local mode |
+Go to `http://localhost` (or your domain) and sign up. The first account owns
+the instance; sign-up is auto-confirmed, because the stack has no SMTP. Then:
+
+```bash
+mushi config consoleUrl http://localhost     # or the CLI signs in on Mushi Mushi Cloud
+mushi login --endpoint http://localhost/functions/v1/api
+```
 
 ## What's running
 
 ```
 deploy/docker-compose.yml
-├── postgres          supabase/postgres (migrations auto-applied from initdb)
-├── supabase-auth     GoTrue
-├── supabase-rest     PostgREST
-├── supabase-storage  Storage API (file backend)
-├── edge-functions    classify-report, api, fix-worker, … (Dockerfile.edge)
-├── admin             admin console SPA (Dockerfile.admin → nginx)
-└── caddy             reverse proxy / TLS (Caddyfile)
+├── db              supabase/postgres 17 (+ deploy/db/roles.sql, jwt.sql on first boot)
+├── auth            GoTrue
+├── rest            PostgREST
+├── storage         Storage API (file backend)
+├── migrate         one-shot: applies the migrations, sets mushi_runtime_config, lifts plan limits
+├── edge-functions  every function behind deploy/edge/main (Dockerfile.edge)
+├── admin           console SPA on nginx :3000 (Dockerfile.admin, VITE_* as build args)
+└── caddy           the only published port: console at /, gateway at /auth/v1, /rest/v1,
+                    /storage/v1, /functions/v1; plus an internal gateway on :8000
 ```
 
-The Postgres container mounts `packages/server/supabase/migrations` into
-`/docker-entrypoint-initdb.d`, so a fresh volume applies the full schema on
-first boot. To re-apply after a schema change, recreate the volume
-(`docker compose down -v && docker compose up -d`) or run `supabase db push`
-against the container.
+- **Migrations** run in the `migrate` service, after Auth and Storage have
+  created their schemas. Each file runs in one transaction. Applied files are
+  recorded in `supabase_migrations.schema_migrations`, the ledger
+  `supabase db push` uses, so `docker compose up` again applies only new ones.
+- **Cron jobs** call `http://caddy:8000`: `migrate` writes that URL into
+  `mushi_runtime_config`, together with `MUSHI_INTERNAL_CALLER_SECRET`.
+- **Console settings** are baked at build time. After changing
+  `MUSHI_PUBLIC_URL` or the anon key, run
+  `docker compose -f deploy/docker-compose.yml --env-file deploy/.env build admin`.
+
+## Not included
+
+- **Realtime**: the console's live updates need a page reload.
+- **Email**: no SMTP, so accounts are confirmed on sign-up.
+- **Studio**: use `psql` against the `db` container.
+- **Signed file links**: the functions build signed Storage URLs from the
+  internal gateway (`http://caddy:8000`), so screenshot and capture links the
+  API hands to the browser may not load yet.
 
 ## Production notes
 
-- **TLS / domain** — set `DOMAIN` in `.env` and Caddy will provision a
-  certificate automatically.
-- **Internal functions** — `classify-report`, `fix-worker`, `judge-batch`, and
-  friends authenticate via `requireServiceRoleAuth`. Only the public `api`
-  function should face the internet — never expose the others with
-  `--no-verify-jwt`.
-- **Kubernetes** — for a single-pod cluster deploy, use the Helm chart at
-  [`deploy/helm/`](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm).
+- **TLS / domain**: set `MUSHI_PUBLIC_URL` and `MUSHI_SITE_ADDRESS` to
+  `https://your-domain`, and Caddy provisions a certificate.
+- **Internal functions** (`classify-report`, `fix-worker`, `judge-batch`, …)
+  check `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key
+  (`requireServiceRoleAuth`) inside the handler.
+- **Kubernetes**: the [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm)
+  runs the functions and console against an existing Supabase API. It is
+  experimental too.
 
-## Managed Supabase instead
-
-Prefer to point the console at a hosted Supabase project rather than running
-Postgres locally? Skip Compose and follow the
-[step-by-step guides](/self-hosting) — [Supabase setup](/self-hosting/supabase),
-[Edge Functions deploy](/self-hosting/edge-functions), and
-[Admin SPA deploy](/self-hosting/admin-spa).
-
-  Same code, either way. Mushi Mushi Cloud runs this exact stack — there is no
+  It is the same code either way. Mushi Mushi Cloud runs this exact stack; there is no
   closed-source plus-tier. The hosted service adds only its own tuning data
-  (prompts and scoring weights kept as configuration); the repo's default
+  (prompts and scoring weights kept as configuration). The repo's default
   prompts give you every feature. See [Open source & licensing](/concepts/open-source).
 
 ---
@@ -16820,7 +16843,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). `mushi selfhost up` deploys **all** of them in one `supabase functions deploy`, with each function's `verify_jwt` taken from `config.toml`, the same as the production deploy. That is the simplest complete install: the cron jobs the migrations schedule call many of these functions. To deploy by hand, the **minimal ingest + classification** set is below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -16918,11 +16941,15 @@ The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payo
 
 ## Required secrets
 
-Set secrets before deploying — functions read them at cold-start:
+Set secrets before deploying — functions read them at cold-start. Only
+`MUSHI_INTERNAL_CALLER_SECRET` is required (`mushi selfhost up` generates it
+and writes the same value into `mushi_runtime_config`). One LLM key, Anthropic
+or OpenAI, turns on the diagnosis and fix drafts. Everything else is optional:
 
 ```bash
 cd packages/server
 
+npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=$(openssl rand -hex 32)   # + mushi_runtime_config, see Supabase setup
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 npx supabase secrets set OPENAI_API_KEY=sk-…
 npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
@@ -17043,11 +17070,14 @@ description: Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI
 
 # Supabase setup
 
+The one-command path, `mushi selfhost up --project-ref <your-ref>`, does all of
+this page ([Self-hosting](/self-hosting)). By hand:
+
 ```bash
 cd packages/server
 npx supabase login
 npx supabase link --project-ref <your-ref>
-npx supabase db push          # applies every migration in supabase/migrations/
+npx supabase db push --remote # every migration; CLI 2.x: --linked (3.x without it pushes to your LOCAL db)
 ```
 
   Run these commands from `packages/server/` — the Supabase CLI looks for `supabase/` relative to the current directory.
@@ -17096,11 +17126,24 @@ using (project_id in (
 
 Do **not** use bare `auth.uid()`: the subquery form is evaluated once per query instead of once per row, which matters on large tables.
 
-## Seed data
+## Seed data and runtime config
 
-There is no separate seed file. The migrations insert the lookup rows themselves
-(pricing plans, the plugin registry, the `mushi_runtime_config` defaults), so
-`db push` is enough.
+There is no separate seed file. The migrations insert the lookup rows
+themselves (pricing plans, the plugin registry, `mushi_runtime_config`
+defaults). **`db push` alone is not enough for a self-hosted project:**
+
+- The migrations seed `mushi_runtime_config.supabase_url` with the Mushi Mushi
+  Cloud URL, and leave `service_role_key` and `internal_caller_token` empty.
+  Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
+  fails.
+- New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
+  Mushi Cloud: 100 diagnoses a month (then reports stop at
+  `quota_exceeded`), 1 app, 1 seat and 14-day retention.
+
+`mushi selfhost up` fixes both after every `db push`. It upserts the three
+runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and
+lifts the plan limits on your instance. `mushi selfhost up --print-commands`
+prints the SQL if you run it by hand.
 
 ## Verifying the setup
 

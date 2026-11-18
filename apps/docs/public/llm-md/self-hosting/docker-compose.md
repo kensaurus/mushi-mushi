@@ -1,94 +1,109 @@
-# Self-host in minutes (Docker Compose)
+# Docker Compose (experimental)
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
 
 ---
-title: Self-host in minutes (Docker Compose)
-description: Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.
+title: Docker Compose (experimental)
+description: Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.
 ---
 
-# Self-host in minutes
+# Docker Compose (experimental)
 
-The fastest way to run the whole Mushi Mushi stack on your own box. One Compose file
-brings up Postgres, Auth, REST, Storage, the edge functions, the admin console,
-and a Caddy reverse proxy — no managed Supabase project required.
+One Compose file runs the whole stack on your own machine: Supabase's Postgres,
+Auth, PostgREST and Storage images, every edge function in one
+`supabase/edge-runtime` container, the admin console, and Caddy as the gateway.
+You do not need a Supabase account.
 
-  **Prerequisite:** Docker + Docker Compose, and an `ANTHROPIC_API_KEY` (or BYOK
-  key) for the classification pipeline. Everything else has a sane default.
+  **Experimental.** Nobody has run this stack end to end yet, so expect to fix
+  things. The supported path is [your own Supabase project + `mushi selfhost up`](/self-hosting).
 
-## One command
+### Generate the secrets
 
-### Clone and configure
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
+From the repo root:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...          # the diagnosis engine — no second key needed elsewhere
-SUPABASE_ANON_KEY=your-anon-key       # generated from your JWT_SECRET
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+./deploy/generate-secrets.sh            # bash + openssl
+# or, on any OS with Node 22+:
+npx mushi-mushi selfhost secrets
 ```
+
+Either one writes `deploy/.env` (mode 600). It contains a random Postgres
+password, JWT secret and internal caller secret, plus the anon and
+service_role JWTs signed with that JWT secret, so you never mint JWTs by hand.
+Neither overwrites an existing file.
+For a public domain, pass it first:
+`MUSHI_PUBLIC_URL=https://mushi.example.com ./deploy/generate-secrets.sh`
+(or `--public-url`).
+
+Optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `deploy/.env`. Either
+one turns on the plain-English diagnosis and fix drafts. Without one, reports
+get rule-based triage only.
 
 ### Bring the stack up
 
 ```bash
-docker compose up -d
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
+
+Compose refuses to start while a required secret is missing.
 
 ### Open the console
 
-| Service | URL | Notes |
-| --- | --- | --- |
-| Admin console | `http://localhost:3000` | React + Vite SPA, served by nginx |
-| Edge functions (`api`) | `http://localhost:8000` | Hono on Deno |
-| PostgREST | `http://localhost:3001` | the REST surface the SPA talks to |
-| Auth (GoTrue) | `http://localhost:9999` | email auto-confirm in local mode |
+Go to `http://localhost` (or your domain) and sign up. The first account owns
+the instance; sign-up is auto-confirmed, because the stack has no SMTP. Then:
+
+```bash
+mushi config consoleUrl http://localhost     # or the CLI signs in on Mushi Mushi Cloud
+mushi login --endpoint http://localhost/functions/v1/api
+```
 
 ## What's running
 
 ```
 deploy/docker-compose.yml
-├── postgres          supabase/postgres (migrations auto-applied from initdb)
-├── supabase-auth     GoTrue
-├── supabase-rest     PostgREST
-├── supabase-storage  Storage API (file backend)
-├── edge-functions    classify-report, api, fix-worker, … (Dockerfile.edge)
-├── admin             admin console SPA (Dockerfile.admin → nginx)
-└── caddy             reverse proxy / TLS (Caddyfile)
+├── db              supabase/postgres 17 (+ deploy/db/roles.sql, jwt.sql on first boot)
+├── auth            GoTrue
+├── rest            PostgREST
+├── storage         Storage API (file backend)
+├── migrate         one-shot: applies the migrations, sets mushi_runtime_config, lifts plan limits
+├── edge-functions  every function behind deploy/edge/main (Dockerfile.edge)
+├── admin           console SPA on nginx :3000 (Dockerfile.admin, VITE_* as build args)
+└── caddy           the only published port: console at /, gateway at /auth/v1, /rest/v1,
+                    /storage/v1, /functions/v1; plus an internal gateway on :8000
 ```
 
-The Postgres container mounts `packages/server/supabase/migrations` into
-`/docker-entrypoint-initdb.d`, so a fresh volume applies the full schema on
-first boot. To re-apply after a schema change, recreate the volume
-(`docker compose down -v && docker compose up -d`) or run `supabase db push`
-against the container.
+- **Migrations** run in the `migrate` service, after Auth and Storage have
+  created their schemas. Each file runs in one transaction. Applied files are
+  recorded in `supabase_migrations.schema_migrations`, the ledger
+  `supabase db push` uses, so `docker compose up` again applies only new ones.
+- **Cron jobs** call `http://caddy:8000`: `migrate` writes that URL into
+  `mushi_runtime_config`, together with `MUSHI_INTERNAL_CALLER_SECRET`.
+- **Console settings** are baked at build time. After changing
+  `MUSHI_PUBLIC_URL` or the anon key, run
+  `docker compose -f deploy/docker-compose.yml --env-file deploy/.env build admin`.
+
+## Not included
+
+- **Realtime**: the console's live updates need a page reload.
+- **Email**: no SMTP, so accounts are confirmed on sign-up.
+- **Studio**: use `psql` against the `db` container.
+- **Signed file links**: the functions build signed Storage URLs from the
+  internal gateway (`http://caddy:8000`), so screenshot and capture links the
+  API hands to the browser may not load yet.
 
 ## Production notes
 
-- **TLS / domain** — set `DOMAIN` in `.env` and Caddy will provision a
-  certificate automatically.
-- **Internal functions** — `classify-report`, `fix-worker`, `judge-batch`, and
-  friends authenticate via `requireServiceRoleAuth`. Only the public `api`
-  function should face the internet — never expose the others with
-  `--no-verify-jwt`.
-- **Kubernetes** — for a single-pod cluster deploy, use the Helm chart at
-  [`deploy/helm/`](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm).
+- **TLS / domain**: set `MUSHI_PUBLIC_URL` and `MUSHI_SITE_ADDRESS` to
+  `https://your-domain`, and Caddy provisions a certificate.
+- **Internal functions** (`classify-report`, `fix-worker`, `judge-batch`, …)
+  check `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key
+  (`requireServiceRoleAuth`) inside the handler.
+- **Kubernetes**: the [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm)
+  runs the functions and console against an existing Supabase API. It is
+  experimental too.
 
-## Managed Supabase instead
-
-Prefer to point the console at a hosted Supabase project rather than running
-Postgres locally? Skip Compose and follow the
-[step-by-step guides](/self-hosting) — [Supabase setup](/self-hosting/supabase),
-[Edge Functions deploy](/self-hosting/edge-functions), and
-[Admin SPA deploy](/self-hosting/admin-spa).
-
-  Same code, either way. Mushi Mushi Cloud runs this exact stack — there is no
+  It is the same code either way. Mushi Mushi Cloud runs this exact stack; there is no
   closed-source plus-tier. The hosted service adds only its own tuning data
-  (prompts and scoring weights kept as configuration); the repo's default
+  (prompts and scoring weights kept as configuration). The repo's default
   prompts give you every feature. See [Open source & licensing](/concepts/open-source).
