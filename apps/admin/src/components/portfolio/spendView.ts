@@ -6,7 +6,8 @@
  */
 
 import type { BadgeTone } from '../ui'
-import type { BillVendor, LedgerApp, LedgerSource } from '../../lib/portfolioTypes'
+import type { BillVendor, LedgerApp, LedgerSource, SpendLedgerResponse } from '../../lib/portfolioTypes'
+import { isPublicDemo } from '../../lib/publicDemo'
 import { formatUsd } from './portfolioView'
 
 export interface LedgerCell {
@@ -26,6 +27,32 @@ export function ledgerCell(source: LedgerSource): LedgerCell {
 export function ledgerTotal(app: Pick<LedgerApp, 'totalUsd' | 'complete'>): { text: string; tone: BadgeTone | null; title: string | undefined } {
   if (!app.complete) return { text: `${formatUsd(app.totalUsd)}+`, tone: 'warnSubtle', title: 'At least this much: a source could not be read and is left out.' }
   return { text: formatUsd(app.totalUsd), tone: null, title: undefined }
+}
+
+/**
+ * The ledger without the public demo app (2026-11-18: keep-but-hide). Its row goes, and its
+ * amounts come off the footer, so "All apps" is still the sum of the rows shown. Matched by
+ * id (the page knows the demo from the portfolio and the project list) or by its name, so the
+ * row stays out even when this read lands first.
+ */
+export function withoutPublicDemo(data: SpendLedgerResponse, demoIds: ReadonlySet<string>): SpendLedgerResponse {
+  const isDemo = (a: LedgerApp) => demoIds.has(a.projectId) || isPublicDemo({ name: a.name, slug: null })
+  const hidden = data.apps.filter(isDemo)
+  if (hidden.length === 0) return data
+  const sum = (pick: (a: LedgerApp) => number | null) => hidden.reduce((n, a) => n + (pick(a) ?? 0), 0)
+  const t = data.totals
+  return {
+    ...data,
+    apps: data.apps.filter((a) => !isDemo(a)),
+    totals: {
+      mushiLlmUsd: t.mushiLlmUsd - sum((a) => a.mushiLlm.usd),
+      providerLlmUsd: t.providerLlmUsd - sum((a) => a.providerLlm.usd),
+      ciUsd: t.ciUsd - sum((a) => a.ci.usd),
+      supabaseUsd: t.supabaseUsd - sum((a) => a.supabase.usd),
+      billsUsd: t.billsUsd - sum((a) => a.bills.usd),
+      totalUsd: t.totalUsd - sum((a) => a.totalUsd),
+    },
+  }
 }
 
 /** Most spend first; an unread total still sorts by what was read. */

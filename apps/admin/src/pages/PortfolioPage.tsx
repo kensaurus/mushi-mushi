@@ -60,12 +60,15 @@ import { useProjectSnapshots } from '../lib/useProjectSnapshots'
 import { faviconSourceFromProject } from '../lib/resolveProjectDomain'
 import type { ProjectFaviconSource } from '@mushi-mushi/core'
 import { ProjectGroupsBar } from '../components/portfolio/ProjectGroupsBar'
+import { ProjectFavicon } from '../components/ProjectFavicon'
 import { readActiveGroup, useProjectGroups, writeActiveGroup } from '../lib/projectGroups'
 import { PROJECT_DIRECTORY_PATH, type ProjectDirectory } from '../lib/crossTeamProject'
 import { HighlightProvider } from '../components/signal/linkedHighlight'
 import { AlertCards } from '../components/signal/AlertCards'
 import { AppSignalGrid } from '../components/portfolio/AppSignalGrid'
 import { appAlerts, lastCheckIns, rankApps, rankingSentence } from '../lib/appSignals'
+import { withoutApps } from '../lib/groupAppFindings'
+import { isPublicDemo } from '../lib/publicDemo'
 
 /** Table (the heat grid) or Cards: remembered per browser. */
 type PortfolioView = 'table' | 'cards'
@@ -156,7 +159,10 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // portfolio reads start at once instead of queuing behind project-groups.
   const waitForGroups = requested != null && groups.loading && !groups.data
   const page = usePageData<PortfolioResponse>(waitForGroups ? null : path)
-  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups ? null : `${base}/findings${query}`)
+  // Each tab reads only its own routes, and none waits for the portfolio read
+  // (about 8 s on a big team): Spend's, Payments' and Digest's cards mount at
+  // once and start beside it (2026-11-18). Fix once belongs to the Apps tab.
+  const findings = usePageData<PortfolioFindingsResponse>(waitForGroups || tab !== 'apps' ? null : `${base}/findings${query}`)
   const { isAdvanced } = useAdminMode()
   // Refresh also looks up the app icons again (a new store icon shows now,
   // not after the daily check). The flagged request answers the whole
@@ -184,8 +190,21 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const fetchedAt = freshWins ? refreshed.at : page.lastFetchedAt
   // The public demo stays out of the cards and every count ("All 10 apps need you").
   const { apps: ownCards, demo } = useMemo(() => splitPublicDemo(portfolio?.cards ?? []), [portfolio])
+  // Keep-but-hide (2026-11-18): the demo's id from the portfolio or, earlier, from the team's
+  // project list. Every per-app list on the tabs drops it here, once: Fix once, SDK versions,
+  // Missing setups, Across your apps and the Spend table.
+  const demoIds = useMemo(
+    () => new Set([...demo.map((c) => c.projectId), ...teamApps.filter((a) => isPublicDemo({ name: a.name, slug: null })).map((a) => a.projectId)]),
+    [demo, teamApps],
+  )
+  const ownFindingsData = useMemo(() => (findings.data ? withoutApps(findings.data, demoIds) : null), [findings.data, demoIds])
+  const ownFindings = { ...findings, data: ownFindingsData }
   const cards = useMemo(() => sortPortfolioCards(ownCards), [ownCards])
-  const names = useMemo(() => new Map((portfolio?.cards ?? []).map((c) => [c.projectId, c.name])), [portfolio])
+  // Names from the team's project list until the portfolio read lands, so the other tabs can draw first.
+  const names = useMemo(
+    () => new Map([...teamApps.map((a): [string, string] => [a.projectId, a.name]), ...(portfolio?.cards ?? []).map((c): [string, string] => [c.projectId, c.name])]),
+    [teamApps, portfolio],
+  )
   const openBugs = useMemo(() => cards.reduce((n, c) => n + c.openReports, 0), [cards])
   // App icons and SDK check-ins: the team's project list knows each app's SDK origin, repo and last call.
   const setup = useSetupStatus()
@@ -217,7 +236,12 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   const attention = useMemo(() => shown.filter(needsALook), [shown])
   const healthy = useMemo(() => shown.filter((c) => !needsALook(c)), [shown])
   // Every app, the demo included: spend, connectors and the digest still name it.
-  const appList = useMemo(() => (portfolio?.cards ?? []).map((c) => ({ projectId: c.projectId, name: c.name })), [portfolio])
+  // The team's project list stands in until the portfolio read lands.
+  const appList = useMemo(() => (portfolio ? portfolio.cards.map((c) => ({ projectId: c.projectId, name: c.name })) : teamApps), [portfolio, teamApps])
+  // The bill import picks among the team's own apps; the demo has no bills.
+  const ownAppList = useMemo(() => appList.filter((a) => !demoIds.has(a.projectId)), [appList, demoIds])
+  // Only a finished read that holds no app hides the tabs; while it runs, every tab but Apps draws.
+  const knownEmpty = portfolio != null && cards.length === 0
   const faviconFor = useCallback(
     (card: PortfolioCard): ProjectFaviconSource => {
       const known = setup.data?.projects.find((p) => p.project_id === card.projectId)
@@ -247,7 +271,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           title="Apps"
           description="All your apps in one place: what is broken, out of date or behind, and what to fix once for all of them."
           helpTitle="About apps"
-          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs."
+          helpWhatIsIt="The worst apps lead as red and amber cards, each with one thing to do. Below, one row per app: open bugs, risks, SDK, release age, CI failures today and the SDK's last check-in, darker where it is worse. Cards shows the same apps as cards. Under them, Fix once is a problems × apps grid: a dot where a problem is open, one button that copies the fix for all of them. Releases, Payments, Spend and accounts, and Digest are tabs. Accounts and resilience (on Spend and accounts) lists every account your apps depend on, who owns it, and who else can get in if that person cannot. It holds only what you declare: Mushi Mushi cannot see a provider's own settings."
           helpHowToUse="Start with the first alert card. Point at a row, card or alert to light the same app everywhere; click a row to pin it (Esc clears). A hatched cell means no data, never a pass. Copy a fix-once prompt into your editor to fix the same problem in every repo."
           helpFlowPath="/portfolio"
         >
@@ -264,13 +288,13 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
               show: cards.length > 0,
               children: portfolio ? (
                 <PageStatus
-                  sentence={status.sentence}
+                  sentence={status.top.length > 0 ? <WorstFirstChips status={status} faviconFor={faviconFor} /> : status.sentence}
                   tone={status.tone}
                   ariaLabel="Apps status"
                   metrics={[
                     { label: 'Need you', value: cards.filter(needsALook).length, hint: 'Apps that are broken, have open bugs, or have a part to fix. SDK updates and Mushi Mushi setup chores do not count.' },
                     { label: 'Open bugs', value: openBugs, hint: 'Open bug reports across these apps.' },
-                    { label: 'Fix once', value: portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
+                    { label: 'Fix once', value: ownFindings.data?.groups.length ?? portfolio.repeatedGroups, hint: 'Problems open in two or more apps, fixed with one prompt.' },
                   ]}
                   action={
                     status.first && firstReason ? (
@@ -310,29 +334,11 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
           />
         )}
 
-        {/* The apps are known before their details: list them at once instead of
-            a bare spinner, which sat for 5 s on a first load (2026-10-28). */}
-        {page.loading && !portfolio ? (
-          teamApps.length > 0 ? (
-            <Card className="px-3 py-1">
-              <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
-                {teamApps.map((app) => (
-                  <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
-                    <span className="font-medium text-fg">{app.name}</span>
-                    <span className="text-2xs text-fg-faint">Checking…</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          ) : (
-            <Loading text="Checking each app…" />
-          )
-        ) : null}
         {page.error && (
           <PageLoadError error={page.error} code={page.errorCode} resource="portfolio" endpoint={page.errorEndpoint} requestId={page.requestId} onRetry={page.reload} />
         )}
         {portfolio && portfolio.readErrors.length > 0 && <ReadErrorsCallout errors={portfolio.readErrors} />}
-        {portfolio && cards.length === 0 && (
+        {knownEmpty && (
           <Card className="px-4 py-8 text-center text-sm text-fg-faint">
             <p className="font-medium text-fg-muted">{group ? 'No apps in this group yet' : 'No apps in this team yet'}</p>
             <p className="mt-1 text-xs">
@@ -344,14 +350,34 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             </p>
           </Card>
         )}
-        {portfolio && cards.length === 0 && demo.length > 0 && <PublicDemoLine demo={demo} />}
-        {cards.length > 0 && portfolio && (
+        {knownEmpty && demo.length > 0 && <PublicDemoLine demo={demo} />}
+        {!knownEmpty && (
           <>
             <TabbedSubNav
               ariaLabel="Apps sections"
               tabs={PORTFOLIO_TABS.map((t) => ({ to: tabHref(t.id), label: t.label, match: () => tab === t.id }))}
             />
-            {tab === 'apps' && (
+            {tab === 'apps' && !portfolio && page.loading && (
+              // The apps are known before their details: list them at once instead of
+              // a bare spinner, which sat for 5 s on a first load (2026-10-28).
+              <section aria-label="Apps" data-testid="portfolio-tab-apps">
+                {teamApps.length > 0 ? (
+                  <Card className="px-3 py-1">
+                    <ul className="divide-y divide-edge-subtle text-xs" aria-busy="true" data-testid="portfolio-loading-apps">
+                      {teamApps.map((app) => (
+                        <li key={app.projectId} className="flex items-center justify-between gap-3 py-2">
+                          <span className="font-medium text-fg">{app.name}</span>
+                          <span className="text-2xs text-fg-faint">Checking…</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                ) : (
+                  <Loading text="Checking each app…" />
+                )}
+              </section>
+            )}
+            {tab === 'apps' && portfolio && (
               <section id="portfolio-apps" aria-label="Apps" className="space-y-3" data-testid="portfolio-tab-apps">
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <SegmentedControl
@@ -382,7 +408,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                     </Card>
                   )}
                   {view === 'cards' && attention.length > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {attention.map((card) => (
                         <PortfolioCardTile key={card.projectId} card={card} favicon={faviconFor(card)} showSpend={isAdvanced} />
                       ))}
@@ -400,10 +426,9 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                       </ul>
                     </Card>
                   )}
-                  {demo.length > 0 && <PublicDemoLine demo={demo} />}
                 </PanelErrorBoundary>
                 <PanelErrorBoundary label="Fix once">
-                  <PortfolioFindings findings={findings} iconFor={iconFor} appOrder={appOrder} />
+                  <PortfolioFindings findings={ownFindings} iconFor={iconFor} appOrder={appOrder} />
                 </PanelErrorBoundary>
               </section>
             )}
@@ -433,7 +458,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
             {tab === 'spend' && (
               <section id="portfolio-spend" aria-label="Spend and accounts" className="space-y-3" data-testid="portfolio-tab-spend">
                 <PanelErrorBoundary label="Spend per app">
-                  <SpendLedgerCard orgId={orgId} projects={appList} iconFor={iconFor} />
+                  <SpendLedgerCard orgId={orgId} projects={ownAppList} iconFor={iconFor} demoIds={demoIds} />
                 </PanelErrorBoundary>
                 <PanelErrorBoundary label="Accounts and resilience">
                   <AccountsRegisterCard orgId={orgId} />
@@ -443,7 +468,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
                 </PanelErrorBoundary>
                 <div id="portfolio-connectors" className="scroll-mt-20">
                   <PanelErrorBoundary label="Connected sources">
-                    <ConnectorsCard orgId={orgId} projects={appList} />
+                    <ConnectorsCard orgId={orgId} projects={appList} iconFor={iconFor} />
                   </PanelErrorBoundary>
                 </div>
               </section>
@@ -463,7 +488,39 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   )
 }
 
-/** The public demo: one muted line, not a card that "needs you". */
+/**
+ * The headline as chips, not prose (2026-11-18): each of the worst apps as its icon, name and
+ * open bugs (a mono number), then "+N more". The sentence stays for screen readers; the chips
+ * are hidden from them, so nothing is read twice.
+ */
+function WorstFirstChips({ status, faviconFor }: { status: ReturnType<typeof rankingSentence>; faviconFor: (card: PortfolioCard) => ProjectFaviconSource }) {
+  return (
+    <span data-testid="portfolio-worst-first">
+      <span className="sr-only">{status.sentence}</span>
+      <span aria-hidden="true" className="inline-flex flex-wrap items-center gap-1">
+        <span className="mr-0.5 text-2xs font-semibold text-fg-secondary">Worst first</span>
+        {status.top.map((r) => {
+          const bugs = `${r.openBugs.value}${r.openBugs.atLeast ? '+' : ''}`
+          return (
+            <span
+              key={r.card.projectId}
+              className="inline-flex max-w-48 items-center gap-1 rounded-sm border border-edge bg-surface-root px-1 py-0.5 text-xs"
+              title={r.reasons.map((x) => x.short).join(' · ')}
+              data-testid={`worst-chip-${r.card.projectId}`}
+            >
+              <ProjectFavicon {...faviconFor(r.card)} size={12} />
+              <span className="truncate font-semibold text-fg">{r.card.name}</span>
+              {r.openBugs.value > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">{bugs}</span>}
+            </span>
+          )
+        })}
+        {status.more > 0 && <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums">+{status.more} more</span>}
+      </span>
+    </span>
+  )
+}
+
+/** The public demo on an otherwise empty page: one muted line, not a card that "needs you". */
 function PublicDemoLine({ demo }: { demo: readonly PortfolioCard[] }) {
   return (
     <p className="px-1 text-2xs text-fg-muted" data-testid="portfolio-public-demo">

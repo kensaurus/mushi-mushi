@@ -95,6 +95,14 @@ describe('FindingsMatrix', () => {
     expect(row.querySelector('[data-testid="fix-once-dot"]')!.getAttribute('aria-label')).toBe('AI key rejected: calm-app')
   })
 
+  it('scrolls sideways in its own positioned box, so its sr-only headers never widen the page', async () => {
+    await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
+    const box = container.querySelector('[data-testid="fix-once-matrix"]')!
+    // An absolutely placed sr-only span escapes an overflow box that is not its containing block.
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['relative', 'min-w-0', 'overflow-x-auto']))
+    expect(box.querySelector('table')).not.toBeNull()
+  })
+
   it('shows the explanation only after the row is opened', async () => {
     await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
     expect(container.textContent).not.toContain('is rejected by anthropic')
@@ -132,6 +140,30 @@ describe('PortfolioFindings', () => {
     expect(container.textContent).not.toContain('has no version probe')
     expect(container.textContent).not.toContain('glot.it, yen-yen')
     expect(container.querySelector('[data-testid="fix-once-matrix"]')).not.toBeNull()
+  })
+
+  it('draws Fix once as a matrix from 768 px of room and as rows below it, both in the DOM', async () => {
+    await render(createElement(PortfolioFindings, {
+      findings: state({ organizationId: 'o', generatedAt: '', groups: GROUPS, sdkSkew: [], holes: [], crossProject: [], readErrors: [] }),
+      iconFor,
+      appOrder: ['d', 'c', 'b', 'a'],
+    }))
+    const classes = (id: string) => container.querySelector(`[data-testid="${id}"]`)!.className.split(' ')
+    // The container query resolves against the wrapper; the wrapper itself carries no @ class.
+    expect(classes('fix-once')).toEqual(['@container'])
+    expect(classes('fix-once-wide')).toEqual(expect.arrayContaining(['hidden', '@3xl:block']))
+    expect(container.querySelector('[data-testid="fix-once-wide"] [data-testid="fix-once-matrix"]')).not.toBeNull()
+    expect(classes('fix-once-list')).toContain('@3xl:hidden')
+    const items = [...container.querySelectorAll('[data-testid^="fix-once-item-"]')]
+    expect(items.map((i) => i.getAttribute('data-testid'))).toEqual(['fix-once-item-byok_key_invalid', 'fix-once-item-index_stale', 'fix-once-item-spend_cap_unset'])
+    // Each row: severity mark, title, app count, the app icons in page order and one action.
+    const first = items[0]!
+    expect(first.querySelector('[data-testid="status-mark"]')!.getAttribute('data-status')).toBe('failed')
+    expect(first.textContent).toContain('AI key rejected')
+    const chips = first.querySelector('[data-testid="app-icon-chips"]')!
+    expect(chips.getAttribute('data-count')).toBe('2')
+    expect([...chips.querySelectorAll('li[data-app]')].map((li) => li.getAttribute('data-app'))).toEqual(['d', 'b'])
+    expect([...first.querySelectorAll('button')].map((b) => b.textContent)).toContain('Fix key')
   })
 
   it('reads an empty list as a green mark, not a sentence', async () => {

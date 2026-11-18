@@ -226,8 +226,8 @@ function AppBlock({ hub, app, busy, onAsk, iconFor }: { hub: MonetizationHubView
             ))}
           </ul>
         )}
-        <div className="grid gap-2 md:grid-cols-2">
-          <div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="min-w-0">
             <p className="text-2xs font-semibold text-fg-secondary">Entitlements</p>
             {app.entitlements.length === 0 ? (
               <p className="text-xs text-fg-muted">None tied to this app.</p>
@@ -264,11 +264,14 @@ function AppBlock({ hub, app, busy, onAsk, iconFor }: { hub: MonetizationHubView
 function OfferingsGrid({ app }: { app: MonetizationAppView }) {
   const platforms = offeringPlatforms(app)
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-2xs font-semibold text-fg-secondary">Offerings</p>
       {app.offerings.length === 0 ? (
         <p className="text-xs text-fg-muted">None tied to this app.</p>
       ) : (
+        // Long store product ids: the table scrolls in its own box, never the page. `relative` keeps
+        // its screen-reader-only text (absolutely placed) inside that box too.
+        <div className="relative min-w-0 overflow-x-auto" data-testid="offerings-scroll">
         <table className="mt-0.5 w-full border-collapse text-xs" data-testid="offerings-grid">
           <caption className="sr-only">Offerings of {app.name}: products by platform</caption>
           <thead>
@@ -326,6 +329,7 @@ function OfferingsGrid({ app }: { app: MonetizationAppView }) {
             ])}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

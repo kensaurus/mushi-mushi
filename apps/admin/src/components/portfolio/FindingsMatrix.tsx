@@ -31,7 +31,10 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
   const apps = [...appOrder.filter((id) => affected.has(id)), ...[...affected].filter((id) => !appOrder.includes(id))]
   const nameOf = (id: string) => iconFor(id).project_name
   return (
-    <div className="overflow-x-auto" data-testid="fix-once-matrix">
+    // `relative`: the screen-reader-only header text is absolutely placed. Without a positioned
+    // box here its containing block is outside the scroller, so the far-right "Fix" header
+    // widened the whole page at 390 px (2026-11-18 preview) instead of scrolling in here.
+    <div className="relative min-w-0 overflow-x-auto" data-testid="fix-once-matrix">
       <table className="w-full border-collapse text-xs">
         <caption className="sr-only">Problems open in two or more apps, by app</caption>
         <thead>
@@ -68,7 +71,9 @@ export function FindingsMatrix({ rows, appOrder, iconFor }: { rows: readonly Fix
                       className="flex w-full min-w-0 items-center gap-1.5 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
                     >
                       <StatusMark status={sev.status} label={sev.word} />
-                      <span className="truncate font-semibold text-fg">{r.title}</span>
+                      <span className="truncate font-semibold text-fg" title={r.fullTitle}>
+                        {r.title}
+                      </span>
                       <span className={`shrink-0 font-mono text-2xs font-bold tabular-nums ${STATUS_INK[sev.status]}`} title={`${r.projectIds.length} apps`}>
                         {r.projectIds.length}
                         <span className="sr-only"> apps</span>

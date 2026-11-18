@@ -174,6 +174,18 @@ describe('MonetizationCard', () => {
     expect(link?.getAttribute('rel')).toBe('noreferrer')
   })
 
+  it('keeps the offerings table in its own scroll box at 390 px, never the page', async () => {
+    await render()
+    const table = container.querySelector('[data-testid="offerings-grid"]')!
+    const box = table.parentElement!
+    expect(box.getAttribute('data-testid')).toBe('offerings-scroll')
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['relative', 'min-w-0', 'overflow-x-auto']))
+    // Entitlements | Offerings: one explicit column below md, or the implicit track grows to the table.
+    const grid = box.parentElement!.parentElement!
+    expect(grid.className.split(' ')).toEqual(expect.arrayContaining(['grid', 'grid-cols-1', 'md:grid-cols-2']))
+    expect([...grid.children].every((c) => c.className.split(' ').includes('min-w-0'))).toBe(true)
+  })
+
   it('"Ask to fix" only asks for the approved action, with the exact payload', async () => {
     await render()
     const ask = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === 'Ask to fix')!

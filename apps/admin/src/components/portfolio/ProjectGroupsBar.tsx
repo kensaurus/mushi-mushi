@@ -154,7 +154,7 @@ export function ProjectGroupsBar({ orgId, groups, apps, active, onSelect, onChan
                   </span>
                 )}
               </div>
-              <ul className="grid gap-1 sm:grid-cols-2">
+              <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">
                 {apps.map((a) => (
                   <li key={a.projectId}>
                     <label className="flex items-center gap-2 text-xs text-fg-secondary">

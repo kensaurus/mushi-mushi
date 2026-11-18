@@ -37,8 +37,13 @@ type AppReasonId = 'broken' | 'ci' | 'risks' | 'bugs' | 'silent' | 'fix' | 'watc
 
 interface AppReason {
   id: AppReasonId
-  /** A few words for the headline and the alert title: "4 CI jobs failed today". */
+  /** A few words for the headline sentence: "4 CI jobs failed today". */
   short: string
+  /**
+   * The alert card's title: the problem without its number ("CI failing today"), since the
+   * card's big number already says how many (2026-11-18: "448 open bugs" over "448 bugs").
+   */
+  title: string
   /** The big number on an alert card. */
   metric: { value: string; unit: string }
   /** The page that fixes it (before appLink scopes it to the app). */
@@ -109,6 +114,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
     reasons.push({
       id: 'broken',
       short: urgency.short,
+      title: failing ? 'A part is failing' : 'Blueprint unreadable',
       metric: failing ? { value: failing.label, unit: 'failing' } : { value: '?', unit: 'unreadable' },
       to: urgency.next?.to ?? '/recipe',
       weight: 100,
@@ -119,7 +125,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   const ciFailsToday = card.ciFailsToday == null ? null : { value: card.ciFailsToday, atLeast: ciUnread }
   if (ciFailsToday && ciFailsToday.value > 0) {
     const n = ciFailsToday.value
-    reasons.push({ id: 'ci', short: `${n}${ciFailsToday.atLeast ? '+' : ''} CI ${n === 1 ? 'job' : 'jobs'} failed today`, metric: { value: `${n}${ciFailsToday.atLeast ? '+' : ''}`, unit: n === 1 ? 'job failed' : 'jobs failed' }, to: '/ci', weight: 15 * Math.min(n, 4) })
+    reasons.push({ id: 'ci', title: 'CI failing today', short: `${n}${ciFailsToday.atLeast ? '+' : ''} CI ${n === 1 ? 'job' : 'jobs'} failed today`, metric: { value: `${n}${ciFailsToday.atLeast ? '+' : ''}`, unit: n === 1 ? 'job failed' : 'jobs failed' }, to: '/ci', weight: 15 * Math.min(n, 4) })
   }
 
   const radarUnread = card.unreadable.includes('gate_runs') || card.unreadable.includes('findings')
@@ -132,13 +138,13 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
         : null
   const risks = risksNote ? null : { error: card.radar.open.error, warn: card.radar.open.warn }
   if (risks && risks.error > 0) {
-    reasons.push({ id: 'risks', short: plural(risks.error, 'serious risk'), metric: { value: String(risks.error), unit: risks.error === 1 ? 'risk' : 'risks' }, to: '/recipe', weight: 10 * Math.min(risks.error, 5) })
+    reasons.push({ id: 'risks', title: 'Serious risks open', short: plural(risks.error, 'serious risk'), metric: { value: String(risks.error), unit: risks.error === 1 ? 'risk' : 'risks' }, to: '/recipe', weight: 10 * Math.min(risks.error, 5) })
   }
 
   const openBugs = { value: card.openReports, atLeast: card.unreadable.includes('reports') }
   if (openBugs.value > 0) {
     const n = `${openBugs.value}${openBugs.atLeast ? '+' : ''}`
-    reasons.push({ id: 'bugs', short: `${n} open ${openBugs.value === 1 ? 'bug' : 'bugs'}`, metric: { value: n, unit: openBugs.value === 1 ? 'bug' : 'bugs' }, to: '/reports', weight: 8 * Math.log2(1 + openBugs.value) })
+    reasons.push({ id: 'bugs', title: 'Open bug reports', short: `${n} open ${openBugs.value === 1 ? 'bug' : 'bugs'}`, metric: { value: n, unit: openBugs.value === 1 ? 'bug' : 'bugs' }, to: '/reports', weight: 8 * Math.log2(1 + openBugs.value) })
   }
 
   const known = checkIns.has(card.projectId)
@@ -146,7 +152,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   const freshness: SdkFreshness | 'unknown' = known ? sdkFreshness(seenAt, now) : 'unknown'
   if (freshness === 'cold' && seenAt) {
     const days = Math.floor((now - Date.parse(seenAt)) / DAY_MS)
-    reasons.push({ id: 'silent', short: `SDK silent ${days} d`, metric: { value: String(days), unit: 'days silent' }, to: '/connect', weight: 10 })
+    reasons.push({ id: 'silent', title: 'SDK stopped calling in', short: `SDK silent ${days} d`, metric: { value: String(days), unit: 'days silent' }, to: '/connect', weight: 10 })
   }
 
   if (tier !== 0) {
@@ -155,6 +161,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
       reasons.push({
         id: 'fix',
         short: drift.length === 1 ? `${drift[0].label} to fix` : `${drift.length} parts to fix`,
+        title: drift.length === 1 ? `${drift[0].label} to fix` : 'Parts to fix',
         metric: { value: String(drift.length), unit: drift.length === 1 ? 'part to fix' : 'parts to fix' },
         to: urgency.level === 'fix' && urgency.next ? urgency.next.to : '/recipe',
         weight: 6 * drift.length,
@@ -163,10 +170,10 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   }
 
   if (risks && risks.warn > 0) {
-    reasons.push({ id: 'watch', short: plural(risks.warn, 'risk to look at', 'risks to look at'), metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
+    reasons.push({ id: 'watch', title: 'Risks to look at', short: plural(risks.warn, 'risk to look at', 'risks to look at'), metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
   }
   if (freshness === 'stale' && seenAt) {
-    reasons.push({ id: 'quiet', short: `SDK quiet ${shortAge(seenAt, now)}`, metric: { value: shortAge(seenAt, now), unit: 'quiet' }, to: '/connect', weight: 2 })
+    reasons.push({ id: 'quiet', title: 'SDK gone quiet', short: `SDK quiet ${shortAge(seenAt, now)}`, metric: { value: shortAge(seenAt, now), unit: 'quiet' }, to: '/connect', weight: 2 })
   }
 
   const sdkUnread = card.unreadable.includes('sdk')
@@ -180,7 +187,7 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
       : current
         ? `${current.package ?? 'SDK'} ${current.version} (latest)`
         : (card.sdk[0]?.reason ?? 'No SDK has reported yet')
-  if (behind) reasons.push({ id: 'sdk', short: `SDK ${behind.version} → ${behind.latest}`, metric: { value: behind.latest ?? '?', unit: 'SDK out' }, to: '/connect', weight: 2 })
+  if (behind) reasons.push({ id: 'sdk', title: 'SDK out of date', short: `SDK ${behind.version} → ${behind.latest}`, metric: { value: behind.latest ?? '?', unit: 'SDK out' }, to: '/connect', weight: 2 })
 
   const shipped = card.latestRelease?.publishedAt ? Date.parse(card.latestRelease.publishedAt) : NaN
   const releaseAgeDays = Number.isFinite(shipped) ? Math.max(0, Math.floor((now - shipped) / DAY_MS)) : null
@@ -216,9 +223,19 @@ function named(r: AppSignals): string {
 /**
  * The page's headline: a ranking, not a count ("All 10 apps need you" said
  * nothing about which one first). Expects `rankApps(…, 'worst')`.
+ * `sentence` is the screen-reader text; the page draws `top` as chips (icon,
+ * name, open bugs) and `more` as "+N more" (2026-11-18: no prose headline).
  */
-export function rankingSentence(ranked: readonly AppSignals[]): { sentence: string; tone: 'ok' | 'warn' | 'danger' | 'neutral'; first: AppSignals | null } {
-  if (ranked.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null }
+export function rankingSentence(ranked: readonly AppSignals[]): {
+  sentence: string
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  first: AppSignals | null
+  /** The worst apps that need you, at most three; empty when none does. */
+  top: AppSignals[]
+  /** How many more need you beyond `top`. */
+  more: number
+} {
+  if (ranked.length === 0) return { sentence: 'No apps yet.', tone: 'neutral', first: null, top: [], more: 0 }
   const needing = appsNeedingYou(ranked)
   if (needing.length === 0) {
     const chores = ranked.filter((r) => r.reasons.length > 0).length
@@ -226,13 +243,15 @@ export function rankingSentence(ranked: readonly AppSignals[]): { sentence: stri
       sentence: chores > 0 ? `No app needs you right now. ${plural(chores, 'app has', 'apps have')} small chores, like an SDK update.` : ranked.length === 1 ? `${ranked[0].card.name} is clear.` : `All ${ranked.length} apps are clear.`,
       tone: 'ok',
       first: null,
+      top: [],
+      more: 0,
     }
   }
-  const top = needing.slice(0, 3).map(named).join(' · ')
-  const rest = needing.length - 3
+  const top = needing.slice(0, 3)
+  const rest = needing.length - top.length
   const first = needing[0]
   const tone = first.tier === 0 || (first.ciFailsToday?.value ?? 0) > 0 ? 'danger' : 'warn'
-  return { sentence: `Worst first: ${top}${rest > 0 ? ` · ${rest} more ${rest === 1 ? 'needs' : 'need'} you` : ''}.`, tone, first }
+  return { sentence: `Worst first: ${top.map(named).join(' · ')}${rest > 0 ? ` · ${rest} more ${rest === 1 ? 'needs' : 'need'} you` : ''}.`, tone, first, top, more: rest }
 }
 
 /** The highlight key of an app: its heat row, alert card and app card share it. */
@@ -266,7 +285,8 @@ const ACTION_LABEL: Record<AppReasonId, string> = {
 
 /**
  * Alert cards for the worst apps that need you (at most `max`): the top
- * reason as the title and the big number, the next ones as the detail line,
+ * reason named as the title (no number) and counted as the big number, the
+ * next ones as the detail line,
  * and one action that opens the page fixing the top reason, in that app.
  * Critical (red, pulsing) when the app is broken or its CI failed today.
  */
@@ -282,7 +302,7 @@ export function appAlerts(ranked: readonly AppSignals[], onOpen: (projectId: str
         severity: r.tier === 0 || (r.ciFailsToday?.value ?? 0) > 0 ? 'critical' : 'serious',
         label: ALERT_LABEL[top.id],
         app: r.card.name,
-        title: top.short.charAt(0).toUpperCase() + top.short.slice(1),
+        title: top.title,
         detail: rest.length > 0 ? rest.join(' · ') : 'Nothing else open.',
         metric: top.metric,
         keys: [appKey(id)],

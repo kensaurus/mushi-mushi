@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, spendSplit, supabaseUsage } from './spendView'
+import type { LedgerApp, SpendLedgerResponse } from '../../lib/portfolioTypes'
+import { billsBreakdown, importSummary, ledgerCell, ledgerTotal, notConnectedCount, removalSummary, sortBySpend, spendSplit, supabaseUsage, withoutPublicDemo } from './spendView'
 import { ratingLabel, pullSummary } from './storeReviewsView'
 
 describe('ledgerCell', () => {
@@ -67,5 +68,33 @@ describe('store review view helpers', () => {
       ],
     })).toBe('1 new report filed. · App Store: App Store Connect rejected the credential. · Google Play: 2 new reviews, 1 filed')
     expect(pullSummary({ status: 'not_connected', filed: 0, stores: [] })).toMatch(/No App Store Connect/)
+  })
+})
+
+describe('withoutPublicDemo', () => {
+  const ok = (usd: number) => ({ state: 'ok' as const, usd, detail: null })
+  const off = { state: 'not_connected' as const, usd: null, detail: null }
+  const app = (projectId: string, name: string, mushi: number, ci: number | null): LedgerApp => ({
+    projectId, name, mushiLlm: { ...ok(mushi), calls: 1 }, providerLlm: off, ci: { ...(ci == null ? off : ok(ci)), minutes: null, runs: 0 },
+    supabase: { ...off, usage: [] }, bills: { ...off, byVendor: [] }, totalUsd: mushi + (ci ?? 0), complete: true,
+  })
+  const data: SpendLedgerResponse = {
+    organizationId: 'o', from: '', to: '', days: 30, ciUsdPerLinuxMinute: 0.006,
+    apps: [app('glot', 'glot.it', 50, 1), app('demo', 'Mushi demo (sample data)', 3, null), app('yen', 'yen-yen', 10, 2)],
+    totals: { mushiLlmUsd: 63, providerLlmUsd: 0, ciUsd: 3, supabaseUsd: 0, billsUsd: 0, totalUsd: 66 },
+    unattributedProviderUsd: null, complete: true, imports: [],
+  }
+
+  it('drops the demo row and takes its amounts off the footer, so the footer is the sum of the rows', () => {
+    const out = withoutPublicDemo(data, new Set(['demo']))
+    expect(out.apps.map((a) => a.projectId)).toEqual(['glot', 'yen'])
+    expect(out.totals).toEqual({ mushiLlmUsd: 60, providerLlmUsd: 0, ciUsd: 3, supabaseUsd: 0, billsUsd: 0, totalUsd: 63 })
+    expect(out.totals.totalUsd).toBe(out.apps.reduce((n, a) => n + a.totalUsd, 0))
+  })
+
+  it('knows the demo by its name when its id is not known yet', () => {
+    expect(withoutPublicDemo(data, new Set()).apps.map((a) => a.projectId)).toEqual(['glot', 'yen'])
+    const mine = { ...data, apps: [data.apps[0]!] }
+    expect(withoutPublicDemo(mine, new Set())).toBe(mine)
   })
 })
