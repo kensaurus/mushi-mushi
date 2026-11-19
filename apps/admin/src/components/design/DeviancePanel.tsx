@@ -146,9 +146,11 @@ interface DeviancePanelProps {
   runningSince: string | null
   notice: DevianceRunNotice
   onRun: () => void
+  /** The page draws the trend and the findings elsewhere (DesignAtAGlance, DesignFindingsByFile). */
+  compact?: boolean
 }
 
-export function DeviancePanel({ deviance, running, runningSince, notice, onRun }: DeviancePanelProps) {
+export function DeviancePanel({ deviance, running, runningSince, notice, onRun, compact = false }: DeviancePanelProps) {
   const run = deviance.latest
   const since = runningSince ? new Date(runningSince) : null
   const sinceText = since && !Number.isNaN(since.getTime()) ? formatRelative(since) : null
@@ -185,19 +187,23 @@ export function DeviancePanel({ deviance, running, runningSince, notice, onRun }
         )}
         <DevianceScoreCard run={run} />
         {run && (
-          <div className="flex flex-col gap-1.5">
-            <h3 className="text-xs font-medium text-fg-secondary">Per-rule breakdown</h3>
+          <details className="flex flex-col gap-1.5" open={!compact}>
+            <summary className="cursor-pointer text-xs font-medium text-fg-secondary hover:text-fg">How the score is made, per rule</summary>
             <Breakdown rows={run.breakdown} />
-          </div>
+          </details>
         )}
-        <div className="flex flex-col gap-1.5">
-          <h3 className="text-xs font-medium text-fg-secondary">Trend</h3>
-          <Trend trend={deviance.trend} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <h3 className="text-xs font-medium text-fg-secondary">Top findings</h3>
-          <Findings findings={deviance.topFindings} />
-        </div>
+        {!compact && (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-xs font-medium text-fg-secondary">Trend</h3>
+              <Trend trend={deviance.trend} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-xs font-medium text-fg-secondary">Top findings</h3>
+              <Findings findings={deviance.topFindings} />
+            </div>
+          </>
+        )}
       </div>
     </Section>
   )

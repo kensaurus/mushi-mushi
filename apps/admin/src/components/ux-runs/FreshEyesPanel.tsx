@@ -14,6 +14,12 @@
  *          offered only where they can work (Mushi's own project, for its
  *          operators). The server decides both.
  *
+ *          Layout (2026-11-19): a status block leads (the computer as a state
+ *          mark, one sentence, the last test's numbers, and the fix command
+ *          copied in one click when the computer cannot run a test); the run
+ *          history is a list of state marks; a visitor's steps are a strip of
+ *          screenshots with a wait/reading bar each on one scale.
+ *
  * Data: GET /v1/admin/projects/:pid/fresh-eyes, GET …/fresh-eyes/:runId,
  *       POST …/fresh-eyes (Run now), POST …/fresh-eyes/:runId/cancel
  * Live: Realtime on ux_runs for the project.
@@ -21,18 +27,21 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Callout, Card, CodeValue, EmptyState, Input, Loading, SegmentedControl, Sparkline, StatCard } from '../ui'
+import { Btn, Callout, Card, CodeValue, EmptyState, Input, Loading, SegmentedControl, Sparkline } from '../ui'
 import { formatRelative } from '../ui/metrics'
 import { PageLoadError } from '../PageLoadError'
-import { StatusPill } from '../signal/StatusMark'
+import { PageStatus, toMetrics, type PageStatusMetric } from '../ui/page-status'
+import { StatusMark, StatusPill, STATUS_WORD, type RunStatus } from '../signal/StatusMark'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { apiFetch } from '../../lib/supabase'
 import {
   formatSeconds,
+  freshEyesStatus,
   isStartUrl,
-  RUN_STATUS_META,
   runHeadline,
+  runMark,
+  runnerFix,
   runnerMark,
   runnerMessage,
   runNowBlocker,
@@ -41,8 +50,10 @@ import {
   ttfvTrend,
   type FreshEyesListData,
   type FreshEyesRunDetail,
+  type FreshEyesRunListItem,
   type FreshEyesRunner,
   type FreshEyesSession,
+  type FreshEyesStep,
 } from '../../lib/freshEyes'
 
 type Mode = 'look' | 'file' | 'account'
@@ -64,9 +75,11 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
   const trend = ttfvTrend(list.data?.trend ?? [])
 
   return (
-    <div className="flex flex-col gap-4" data-testid="fresh-eyes-panel">
+    <div className="flex flex-col gap-3" data-testid="fresh-eyes-panel">
       {list.error && <PageLoadError error={list.error} resource="first-time user tests" endpoint={listPath} onRetry={list.reload} />}
       {list.loading && !list.data && <Loading text="Loading first-time user tests…" />}
+
+      {list.data && <FreshEyesStatus data={list.data} latest={latest} runCount={runs.length} />}
 
       {list.data && (
         <RunNowCard
@@ -80,47 +93,24 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
         />
       )}
 
-      {latest && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Time to first value" value={formatSeconds(latest.ttfv_seconds)} detail="app wait and reading, not the model" />
-          <StatCard label="Steps" value={latest.steps ?? 0} detail="median over visitors" />
-          <StatCard label="Reached the goal" value={`${latest.reached ?? 0} of ${latest.counts?.sessions ?? 0}`} detail="visitors" />
-          <Card className="flex flex-col gap-1 p-3" data-testid="fresh-eyes-trend">
-            <span className="text-2xs text-fg-muted">Trend, last 90 days</span>
-            {trend.length > 1 ? (
-              <Sparkline values={trend} width={120} height={28} ariaLabel={`Time to first value over ${trend.length} tests`} />
-            ) : (
-              <span className="text-2xs text-fg-faint">Shows after two finished tests that reach the goal.</span>
-            )}
-          </Card>
-        </div>
-      )}
-
       {list.data && runs.length === 0 && (
         <EmptyState title="No tests yet" description="Each test shows here with every step the visitor took, its screenshot, how long the app made them wait, and what stopped them." />
       )}
 
       {runs.length > 0 && (
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <nav aria-label="First-time user tests" className="flex shrink-0 flex-col gap-1 lg:w-64">
-            {runs.map((r) => (
-              <button
-                key={r.local_run_id}
-                type="button"
-                onClick={() => setChosen(r.local_run_id)}
-                aria-current={r.local_run_id === runId}
-                className={`rounded-md border px-3 py-2 text-left text-xs ${r.local_run_id === runId ? 'border-brand/40 bg-surface-raised' : 'border-edge-subtle hover:bg-surface-raised'}`}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-fg">{formatRelative(r.started_at)}</span>
-                  <span className="flex items-center gap-1">
-                    {r.dry_run ? <Badge tone="neutral">Look around</Badge> : null}
-                    {r.status !== 'done' && <Badge tone={RUN_STATUS_META[r.status]?.tone ?? 'neutral'}>{RUN_STATUS_META[r.status]?.label ?? r.status}</Badge>}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-2xs text-fg-secondary">{runHeadline(r)}</span>
-              </button>
-            ))}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+          <nav aria-label="First-time user tests" className="flex shrink-0 flex-col gap-2 lg:w-64">
+            {trend.length > 1 && (
+              <div className="flex items-center justify-between gap-2 rounded-sm border border-edge-subtle bg-surface-raised px-2 py-1" data-testid="fresh-eyes-trend">
+                <span className="text-2xs font-semibold text-fg-secondary">Time to goal, 90 days</span>
+                <Sparkline values={trend} width={96} height={22} ariaLabel={`Time to first value over ${trend.length} tests`} />
+              </div>
+            )}
+            <ul className="flex flex-col divide-y divide-edge-subtle rounded-sm border border-edge-subtle bg-surface-raised" data-testid="fresh-eyes-history">
+              {runs.map((r) => (
+                <RunHistoryRow key={r.local_run_id} run={r} current={r.local_run_id === runId} onPick={() => setChosen(r.local_run_id)} />
+              ))}
+            </ul>
           </nav>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {detail.error && <PageLoadError error={detail.error} resource="this test" endpoint={`${listPath}/${runId}`} onRetry={detail.reload} />}
@@ -129,6 +119,110 @@ export function FreshEyesPanel({ projectId }: { projectId: string }) {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * The page's lead: the computer's state as a mark, one sentence, the last test's numbers, and
+ * the fix in place when the computer cannot run a test (2026-11-19: "alienwarex16 offline"
+ * blocked Run now with nothing to press). The command copies in one click.
+ */
+function FreshEyesStatus({ data, latest, runCount }: { data: FreshEyesListData; latest: FreshEyesRunListItem | null; runCount: number }) {
+  const status = freshEyesStatus(data.runner, latest)
+  const mark = runnerMark(data.runner)
+  const machine = runnerMessage(data.runner)
+  const fix = runnerFix(data.runner)
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    if (!fix) return
+    try {
+      await navigator.clipboard.writeText(fix.command)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
+    }
+  }
+  const reached = latest?.reached ?? 0
+  const sessions = latest?.counts?.sessions ?? 0
+  const metrics: PageStatusMetric[] = latest
+    ? [
+        { label: 'Time to first value', value: formatSeconds(latest.ttfv_seconds), hint: "App wait and reading time in the last test that could sign up; the model's own think time is not counted." },
+        { label: 'Reached the goal', value: `${reached} of ${sessions}`, tone: reached === 0 ? 'danger' : reached < sessions ? 'warn' : 'ok' },
+        { label: 'Tests', value: runCount },
+      ]
+    : [{ label: 'Tests', value: runCount }]
+  const workers = (
+    <Btn size="sm" variant={fix || machine.canRun ? 'ghost' : 'primary'} to="/pipeline?tab=workers">
+      Open Workers
+    </Btn>
+  )
+  return (
+    <PageStatus
+      ariaLabel="Test status"
+      marked
+      tone={status.tone}
+      metrics={toMetrics(metrics)}
+      data-testid="fresh-eyes-status"
+      sentence={
+        <span className="flex flex-col gap-1.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusPill status={mark.status} label={mark.label} />
+            <span data-testid="fresh-eyes-runner">{status.sentence}</span>
+          </span>
+          {fix && (
+            <span className="flex flex-wrap items-center gap-2 text-xs text-fg-secondary" data-testid="fresh-eyes-fix">
+              <CodeValue inline value={fix.command} />
+              {fix.after && <span>{fix.after}</span>}
+            </span>
+          )}
+        </span>
+      }
+      action={
+        fix ? (
+          <>
+            <Btn size="sm" variant="primary" onClick={() => void copy()} data-testid="fresh-eyes-fix-copy">
+              {copied ? 'Copied' : fix.label}
+            </Btn>
+            {workers}
+          </>
+        ) : !machine.canRun ? (
+          workers
+        ) : (
+          <Btn size="sm" variant="primary" onClick={() => document.getElementById('fresh-eyes-run-now')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+            Start a test
+          </Btn>
+        )
+      }
+    />
+  )
+}
+
+/** One test in the history: a state mark, when, and the result in one line. */
+function RunHistoryRow({ run: r, current, onPick }: { run: FreshEyesRunListItem; current: boolean; onPick: () => void }) {
+  const mark: RunStatus = runMark(r)
+  const headline = runHeadline(r)
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onPick}
+        aria-current={current}
+        className={`flex w-full items-start gap-2 border-l-2 px-2 py-1.5 text-left text-xs hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${current ? 'border-l-brand bg-surface-overlay' : 'border-l-transparent'}`}
+        data-status={mark}
+      >
+        <StatusMark status={mark} label={STATUS_WORD[mark]} className="mt-0.5" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="font-semibold text-fg">{formatRelative(r.started_at)}</span>
+            {r.dry_run ? <span className="rounded-xs border border-edge-subtle px-1 text-3xs text-fg-secondary">Look around</span> : null}
+          </span>
+          <span className="block truncate text-2xs text-fg-secondary" title={headline}>
+            {headline}
+          </span>
+        </span>
+      </button>
+    </li>
   )
 }
 
@@ -150,7 +244,6 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   }, [defaults?.url, defaults?.goal])
 
   const status = runnerMessage(data.runner)
-  const mark = runnerMark(data.runner)
   const urlOk = isStartUrl(url)
   const goalOk = goal.trim().length > 0 && goal.trim().length <= 300
   const canRun = status.canRun && urlOk && goalOk && !busy
@@ -180,50 +273,10 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   ]
 
   return (
-    <Card className="flex flex-col gap-3 p-4" data-testid="fresh-eyes-run-now">
+    <Card id="fresh-eyes-run-now" className="flex scroll-mt-4 flex-col gap-3 p-3" data-testid="fresh-eyes-run-now">
+      {/* The computer's state and its fix lead the page (FreshEyesStatus above); the card only
+          says who runs the test once it can run (2026-11-19, moved out of the card). */}
       <h2 className="text-sm font-semibold text-fg">Run a first-time user test</h2>
-
-      {/* Setup is step 1, above the form, when no computer can run the test
-          (round-2 sweep 2026-11-18: the blocker sat amber in the middle of the
-          card and the same instruction was repeated beside Run now). A machine
-          you set up that is now offline, paused or old is a warning; one never
-          set up is just the first step. */}
-      {!status.canRun ? (
-        <div
-          className={`flex gap-3 rounded-md border p-3 text-xs ${status.tone === 'warn' ? 'border-warn/40 bg-warn-muted' : 'border-edge-subtle bg-surface-overlay'}`}
-          data-testid="fresh-eyes-setup-step"
-        >
-          <StepNumber n={1} />
-          <div className="min-w-0 flex-1">
-            <StatusPill status={mark.status} label={mark.label} className="mb-1" />
-            <p className="text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
-            {status.setup === 'install' && (
-              <div className="mt-2 flex flex-col gap-2">
-                <CodeValue value="mushi worker install" />
-                <Link className="text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
-                  Open Workers to see your computers →
-                </Link>
-              </div>
-            )}
-            {status.setup === 'workers' && (
-              <Link className="mt-1 inline-block text-2xs font-medium text-brand hover:underline" to="/pipeline?tab=workers">
-                Open Workers →
-              </Link>
-            )}
-          </div>
-        </div>
-      ) : (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-fg-secondary">
-          <StatusPill status={mark.status} label={mark.label} />
-          <span data-testid="fresh-eyes-runner">{status.text}</span>
-        </p>
-      )}
-
-      {!status.canRun && (
-        <p className="flex items-center gap-2 text-xs font-medium text-fg">
-          <StepNumber n={2} /> Choose what to test
-        </p>
-      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <Input
@@ -272,6 +325,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         <Btn onClick={runNow} disabled={!canRun} loading={busy} data-testid="fresh-eyes-run-button">
           Run now
         </Btn>
+        {status.canRun && !blocker && !busy && !queued && <span className="text-2xs text-fg-muted">{status.text}</span>}
         {blocker && !busy && (
           <span className="text-2xs text-fg-secondary" data-testid="fresh-eyes-run-blocker">
             {blocker}
@@ -285,14 +339,6 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         )}
       </div>
     </Card>
-  )
-}
-
-function StepNumber({ n }: { n: number }) {
-  return (
-    <span aria-label={`Step ${n}`} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-edge text-2xs font-semibold tabular-nums text-fg">
-      {n}
-    </span>
   )
 }
 
@@ -364,7 +410,7 @@ function FreshEyesRunView({ projectId, detail, runner, onChanged }: { projectId:
           <ul className="flex flex-col gap-1">
             {findings.map((f) => (
               <li key={f.fingerprint} className="flex items-start gap-2 text-xs">
-                <Badge tone={f.severity === 'high' ? 'dangerSubtle' : f.severity === 'medium' ? 'warnSubtle' : 'neutral'}>{f.severity}</Badge>
+                <StatusPill status={SEVERITY_MARK[f.severity].status} label={SEVERITY_MARK[f.severity].label} />
                 <span className="text-fg-secondary">
                   {f.summary} <span className="text-fg-faint">({f.basis === 'measured' ? 'measured' : `${f.sessions.length} visitors agreed`})</span>
                 </span>
@@ -391,50 +437,111 @@ function FreshEyesRunView({ projectId, detail, runner, onChanged }: { projectId:
   )
 }
 
+const SEVERITY_MARK: Record<'high' | 'medium' | 'low', { status: RunStatus; label: string }> = {
+  high: { status: 'failed', label: 'High' },
+  medium: { status: 'slow', label: 'Medium' },
+  low: { status: 'idle', label: 'Low' },
+}
+
+/** App wait (dark teal; amber when it hit the 20 s cap) and reading (light teal), stacked on the session's shared scale. */
+function StepTimeBar({ step: st, maxMs }: { step: FreshEyesStep; maxMs: number }) {
+  const pct = (ms: number) => (maxMs > 0 ? Math.max(0, Math.min(100, (ms / maxMs) * 100)) : 0)
+  const label = `${formatSeconds(st.app_ms / 1000)} wait${st.read_ms > 0 ? ` · ${formatSeconds(st.read_ms / 1000)} read` : ''}`
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5" title={`App wait ${formatSeconds(st.app_ms / 1000)}${st.read_ms > 0 ? `, reading ${formatSeconds(st.read_ms / 1000)}` : ''}`}>
+      <span className="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-overlay" aria-hidden="true">
+        <span className={`ci-grow-x h-full ${st.capped ? 'bg-st-slow' : 'ci-heat-5'}`} style={{ width: `${pct(st.app_ms)}%` }} />
+        <span className="ci-grow-x h-full ci-heat-2" style={{ width: `${pct(st.read_ms)}%` }} />
+      </span>
+      <span className="truncate font-mono text-3xs font-bold text-fg tabular-nums">{label}</span>
+    </span>
+  )
+}
+
+/** Where the session's time went: app wait and reading counted, the model's think time not. */
+function SessionTimeSplit({ session }: { session: FreshEyesSession }) {
+  const total = session.app_seconds + session.read_seconds
+  const appPct = total > 0 ? (session.app_seconds / total) * 100 : 0
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex h-2 w-full max-w-md overflow-hidden rounded-sm bg-surface-overlay" aria-hidden="true">
+        <span className="ci-grow-x h-full ci-heat-5" style={{ width: `${appPct}%` }} />
+        <span className="ci-grow-x h-full ci-heat-2" style={{ width: `${total > 0 ? 100 - appPct : 0}%` }} />
+      </span>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-fg-secondary">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-3 rounded-xs ci-heat-5" aria-hidden="true" />
+          App wait <span className="font-mono font-bold text-fg tabular-nums">{formatSeconds(session.app_seconds)}</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-3 rounded-xs ci-heat-2" aria-hidden="true" />
+          Reading <span className="font-mono font-bold text-fg tabular-nums">{formatSeconds(session.read_seconds)}</span>
+        </span>
+        {session.backtracks > 0 && <span>Went back {session.backtracks}×</span>}
+        <span className="text-fg-muted">The model&apos;s own think time ({formatSeconds(session.model_seconds)}) is not counted</span>
+      </p>
+    </div>
+  )
+}
+
 function SessionTimeline({ session, shots }: { session: FreshEyesSession; shots: Record<string, string> }) {
+  const maxMs = Math.max(1, ...session.steps.map((s) => s.app_ms + s.read_ms))
+  const reached = session.outcome === 'reached'
   return (
     <div className="flex flex-col gap-2" data-testid="fresh-eyes-timeline">
-      <Card className="p-3 text-xs">
-        {session.outcome === 'reached' ? (
-          <p className="font-medium text-fg">
-            Reached the goal in {session.steps.length - 1} steps,{' '}
-            {session.ttfv_seconds == null ? 'but a wait hit the 20 s limit, so the time is not measured' : `${formatSeconds(session.ttfv_seconds)} to first value`}.
-          </p>
-        ) : (
-          <p className="font-medium text-fg">
-            {STALL_LABEL[session.stall?.reason ?? 'out_of_steps']} at <span className="font-mono">{session.stall?.screen}</span>, step {session.stall?.step}.
-          </p>
-        )}
-        {session.stall?.detail && <p className="mt-1 text-fg-secondary">{session.stall.detail}</p>}
-        <p className="mt-1 text-2xs text-fg-muted">
-          App wait {formatSeconds(session.app_seconds)} · reading {formatSeconds(session.read_seconds)} · {session.backtracks} time(s) went back · the model&apos;s own think time ({formatSeconds(session.model_seconds)}) is not counted
+      <Card className="flex flex-col gap-1.5 px-3 py-2 text-xs">
+        <p className="flex items-start gap-2 font-semibold text-fg">
+          <StatusMark status={reached ? 'passed' : 'failed'} label={reached ? 'Reached the goal' : 'Stalled'} className="mt-0.5" />
+          {reached ? (
+            <span>
+              Reached the goal in {session.steps.length - 1} steps,{' '}
+              {session.ttfv_seconds == null ? 'but a wait hit the 20 s limit, so the time is not measured' : `${formatSeconds(session.ttfv_seconds)} to first value`}.
+            </span>
+          ) : (
+            <span>
+              {STALL_LABEL[session.stall?.reason ?? 'out_of_steps']} at <span className="font-mono">{session.stall?.screen}</span>, step {session.stall?.step}.
+            </span>
+          )}
         </p>
+        {session.stall?.detail && <p className="pl-5 text-fg-secondary">{session.stall.detail}</p>}
+        <SessionTimeSplit session={session} />
       </Card>
-      <ol className="flex flex-col gap-2">
+      {/* The steps as a strip: screenshot, what the visitor did, and how long the app made them
+          wait and read, on one scale (2026-11-19: a long text column per step). */}
+      <ol className="flex gap-2 overflow-x-auto pb-1" aria-label="Steps the visitor took" data-testid="fresh-eyes-steps">
         {session.steps.map((st, i) => {
           const notes = stepNotes(st)
           const url = st.shot ? shots[st.shot] : undefined
-          const stalledHere = session.stall && st.n === session.stall.step && i === session.steps.length - 1
+          const stalledHere = !!session.stall && st.n === session.stall.step && i === session.steps.length - 1
+          const goalHere = reached && i === session.steps.length - 1
           return (
-            <li key={`${st.n}-${i}`} className={`flex gap-3 rounded-md border p-2 ${stalledHere ? 'border-danger/40' : 'border-edge-subtle'}`}>
-              {url ? (
-                <a href={url} target="_blank" rel="noreferrer" className="shrink-0">
-                  <img src={url} alt={`Step ${st.n}: ${st.screen}`} loading="lazy" className="h-20 w-32 rounded-sm border border-edge-subtle object-cover object-top" />
-                </a>
-              ) : (
-                <span className="h-20 w-32 shrink-0 rounded-sm border border-dashed border-edge-subtle" aria-hidden />
+            <li
+              key={`${st.n}-${i}`}
+              className={`flex w-36 shrink-0 flex-col gap-1 rounded-sm border p-1 ${stalledHere ? 'border-st-failed bg-st-failed-soft' : 'border-edge-subtle bg-surface-raised'}`}
+              title={`${st.n}. ${st.action}\n${st.screen}`}
+              data-stalled={stalledHere || undefined}
+            >
+              <span className="relative block">
+                {url ? (
+                  <a href={url} target="_blank" rel="noreferrer" className="block">
+                    <img src={url} alt={`Step ${st.n}: ${st.screen}`} loading="lazy" className="h-20 w-full rounded-xs border border-edge-subtle object-cover object-top" />
+                  </a>
+                ) : (
+                  <span className="block h-20 w-full rounded-xs border border-dashed border-edge-subtle" aria-hidden />
+                )}
+                <span className="absolute top-0.5 left-0.5 inline-flex items-center gap-0.5 rounded-xs bg-surface-raised px-1 font-mono text-3xs font-bold text-fg">
+                  {stalledHere ? <StatusMark status="failed" label="Stalled here" size={10} /> : goalHere ? <StatusMark status="passed" label="Goal reached" size={10} /> : null}
+                  {st.n}
+                </span>
+              </span>
+              <span className="truncate text-2xs font-semibold text-fg">{st.action}</span>
+              <span className="truncate font-mono text-3xs text-fg-muted">{st.screen}</span>
+              <StepTimeBar step={st} maxMs={maxMs} />
+              {notes.length > 0 && (
+                <span className="line-clamp-2 text-3xs text-fg-secondary" title={notes.join(' · ')}>
+                  {notes.join(' · ')}
+                </span>
               )}
-              <div className="min-w-0 flex-1 text-xs wrap-anywhere">
-                <p className="font-medium text-fg">
-                  {st.n}. {st.action}
-                </p>
-                <p className="truncate font-mono text-2xs text-fg-muted">{st.screen}</p>
-                <p className="text-2xs text-fg-secondary">
-                  App wait {formatSeconds(st.app_ms / 1000)}
-                  {st.read_ms > 0 ? ` · reading ${formatSeconds(st.read_ms / 1000)}` : ''}
-                </p>
-                {notes.length > 0 && <p className="text-2xs text-fg-secondary">{notes.join(' · ')}</p>}
-              </div>
             </li>
           )
         })}

@@ -61,7 +61,9 @@ describe('StoryCard controls', () => {
     expect(open!.contains(play!)).toBe(false)
     expect(open!.contains(replay!)).toBe(false)
     expect(play!.closest('[role="button"]')).toBeNull()
-    expect(host.textContent).toContain('skipped')
+    // The state is a mark with a plain word; the runner is named in words, not "Local".
+    expect(host.querySelector('[data-testid="status-pill"][data-status="cancelled"]')?.textContent).toContain('Skipped')
+    expect(host.querySelector('[data-testid="qa-story-runner"]')?.textContent).toBe('On your computer')
     expect(host.textContent).not.toContain('0%')
 
     await act(async () => { (open as HTMLButtonElement).click() })
@@ -85,6 +87,30 @@ describe('StoryCard controls', () => {
       }))
     })
     expect(host.textContent).toContain('0%')
-    expect(host.textContent).toContain('failed')
+    expect(host.querySelector('[data-testid="status-pill"][data-status="failed"]')?.textContent).toContain('Failed')
+    expect(host.querySelector('[data-testid="qa-skip-reason"]')).toBeNull()
+  })
+
+  it('says why a local story was skipped and holds the fix: Run in the cloud and the CLI command', async () => {
+    const onRunInCloud = vi.fn()
+    await act(async () => {
+      root.render(createElement(StoryCard, { coverage, isQueued: false, onRunNow: vi.fn(), onSelect: vi.fn(), highlighted: false, onRunInCloud }))
+    })
+    const reason = host.querySelector('[data-testid="qa-skip-reason"]')!
+    expect(reason.textContent).toMatch(/run on your computer/)
+    expect(reason.textContent).toContain('mushi qa run s1')
+    const cloud = [...reason.querySelectorAll('button')].find((b) => b.textContent?.includes('Run in the cloud'))!
+    expect(cloud).toBeTruthy()
+    await act(async () => { cloud.click() })
+    expect(onRunInCloud).toHaveBeenCalledWith('s1')
+  })
+
+  it('gives a viewer the command but no button that changes the story', async () => {
+    await act(async () => {
+      root.render(createElement(StoryCard, { coverage, isQueued: false, onSelect: vi.fn(), highlighted: false }))
+    })
+    const reason = host.querySelector('[data-testid="qa-skip-reason"]')!
+    expect(reason.textContent).toContain('mushi qa run s1')
+    expect([...reason.querySelectorAll('button')].some((b) => b.textContent?.includes('Run in the cloud'))).toBe(false)
   })
 })

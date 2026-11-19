@@ -23,12 +23,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { DisclosurePanel, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
+import { Btn, DisclosurePanel, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetchMutate } from '../lib/supabase'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import type {
+  DesignDevianceResponse,
   DesignDevianceRunResult,
   DesignPlaneResponse,
   DesignRuleId,
@@ -44,7 +45,12 @@ import { DesignActionsCard } from '../components/design/DesignActionsCard'
 import { TokenEditQueue } from '../components/design/TokenEditQueue'
 import { changeLocksInputs, useDesignChange } from '../components/design/useDesignChange'
 import { editKey, type RuleChange } from '../components/design/designTokens'
-import { RecipeIssueList } from '../components/recipe/RecipeIssueList'
+import { PageStatus, toMetrics } from '../components/ui/page-status'
+import { CopyPromptButton } from '../components/gates/CopyFixPromptButton'
+import { DesignFindingsByFile } from '../components/design/DesignFindingsByFile'
+import { TokenIssuesPanel } from '../components/design/TokenIssuesPanel'
+import { allFilesFixPrompt, designLead, groupFindingsByFile, totalFindings } from '../components/design/designFindings'
+import { isFormatNote } from '../components/recipe/recipeIssueLabels'
 import { ComponentInventory } from '../components/design/ComponentInventory'
 import { DirectionsBoard } from '../components/design/DirectionsBoard'
 import { CssScopeColumns } from '../components/design/CssScopeColumns'
@@ -114,6 +120,10 @@ function ProjectDesign({ projectId }: { projectId: string }) {
   const [direction, setDirection] = useState<string | null>(null)
   const path = `/v1/admin/projects/${projectId}/design${direction ? `?direction=${encodeURIComponent(direction)}` : ''}`
   const { data, loading, error, reload } = usePageData<DesignPlaneResponse>(path)
+  // Up to 200 stored findings of the newest scan, grouped by file below (the plane sends 50).
+  const deviancePath = `/v1/admin/projects/${projectId}/design/deviance?limit=200`
+  const devianceRead = usePageData<DesignDevianceResponse>(deviancePath)
+  const reloadDeviance = devianceRead.reload
 
   // Keep the set picker on screen while a set switch re-fetches.
   const [stickySets, setStickySets] = useState<{ sets: DesignTokenSet[]; activeSet: string | null; shownSet: string | null } | null>(null)
@@ -173,8 +183,9 @@ function ProjectDesign({ projectId }: { projectId: string }) {
     (outcome: DevianceSettle) => {
       setRunNotice(describeDevianceSettle(outcome))
       reload()
+      reloadDeviance()
     },
-    [reload],
+    [reload, reloadDeviance],
   )
   const { running: backgroundRun, follow: followScan } = useDeviancePoll({ projectId, onSettled: onScanSettled })
   const running = starting || backgroundRun !== null
@@ -219,6 +230,21 @@ function ProjectDesign({ projectId }: { projectId: string }) {
   const activeSet = data?.activeSet ?? stickySets?.activeSet ?? null
   const shownSet = direction ?? data?.shownSet ?? stickySets?.shownSet ?? null
 
+  // The work list and the lead: hard-coded styles by file first, token-file format notes folded.
+  const findings = devianceRead.data?.latest?.runId && devianceRead.data.latest.runId === data?.deviance.latest?.runId
+    ? devianceRead.data.findings
+    : data?.deviance.topFindings ?? []
+  const fileGroups = useMemo(() => groupFindingsByFile(findings), [findings])
+  const lead = data
+    ? designLead({
+        latest: data.deviance.latest,
+        lastError: data.lastError,
+        files: fileGroups.length,
+        tokenProblems: data.issues.filter((i) => !isFormatNote(i)).length,
+        formatNotes: data.issues.filter(isFormatNote).length,
+      })
+    : null
+
   return (
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
@@ -236,7 +262,24 @@ function ProjectDesign({ projectId }: { projectId: string }) {
           {
             priority: POSTURE_PRIORITY.status,
             show: data != null && !empty,
-            children: data ? <DesignStateBanner design={data} tokenIssueCount={data.issues.length} /> : null,
+            children: lead ? (
+              <PageStatus
+                ariaLabel="Design status"
+                tone={lead.tone}
+                sentence={lead.sentence}
+                metrics={toMetrics(lead.metrics)}
+                action={
+                  lead.next === 'fix-all' ? (
+                    <CopyPromptButton variant="primary" text={allFilesFixPrompt(fileGroups)} label="Copy fix prompt for all files" testId="design-lead-fix-all" />
+                  ) : lead.next === 'run' ? (
+                    <Btn size="sm" variant="primary" onClick={() => void runDeviance()} loading={running} disabled={running}>
+                      Check for drift
+                    </Btn>
+                  ) : undefined
+                }
+                data-testid="design-status"
+              />
+            ) : null,
           },
         ]}
       />
@@ -306,11 +349,15 @@ function ProjectDesign({ projectId }: { projectId: string }) {
             contrast, actions); the catalogue last, closed. */}
         {view === 'tokens' && data && (
           <>
-            <DesignAtAGlance design={data} />
+            {/* The real work first: hard-coded styles by file (owner, 2026-11-19). */}
+            <DesignFindingsByFile
+              findings={findings}
+              total={totalFindings(data.deviance.latest)}
+              emptyText={data.deviance.latest ? 'The newest drift check found no hard-coded styles.' : 'No drift check has run yet.'}
+            />
 
-            <Section title="Token issues" action={<span className="text-2xs text-fg-faint">{data.issues.length} found</span>}>
-              <RecipeIssueList issues={data.issues} empty="No token issues in this set." />
-            </Section>
+            {/* Token-file problems listed; format notes (still read correctly) folded into one row. */}
+            <TokenIssuesPanel issues={data.issues} />
 
             <DeviancePanel
               deviance={data.deviance}
@@ -318,7 +365,14 @@ function ProjectDesign({ projectId }: { projectId: string }) {
               runningSince={backgroundRun?.startedAt ?? null}
               notice={runNotice}
               onRun={() => void runDeviance()}
+              compact
             />
+
+            {/* Your colours and the drift trend: context, below the work. */}
+            <DesignAtAGlance design={data} />
+
+            {/* Where the tokens were read from, and any failed refresh. */}
+            <DesignStateBanner design={data} tokenIssueCount={data.issues.filter((i) => !isFormatNote(i)).length} />
 
             <Section title="Contrast" action={<span className="text-2xs text-fg-faint">WCAG ratio per declared pair</span>}>
               <ContrastTiles pairs={data.contrast} />

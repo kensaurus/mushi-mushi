@@ -1,49 +1,56 @@
 /**
  * FILE: apps/admin/src/components/qa-coverage/RunStrip.tsx
- * PURPOSE: A story's last 7 days at a glance (console journeys 2026-10-27):
- *          one square per UTC day, green when every finished run passed, red
- *          when any failed, grey with no finished run. Skipped runs never
- *          count as failures (server: buildRunStrips in qa-coverage.ts).
+ * PURPOSE: A story's last 7 days at a glance: one heat cell per UTC day with a
+ *          glyph, so colour is never the only signal (2026-11-19: seven empty
+ *          boxes sat under "24 runs · 24h" with no reason).
+ *            ✕ red    any run failed that day
+ *            ✓ green  every finished run passed
+ *            ⊘ grey   only skipped runs (the runner never ran it)
+ *            ○ blank  no run at all
+ *          Skipped runs never count as failures (server: buildRunStrips in
+ *          qa-coverage.ts; an older server sends no `skipped`, read as 0).
  */
 
-export interface RunStripDay {
-  day: string
-  passed: number
-  failed: number
-}
+import { StatusMark, STATUS_SOFT } from '../signal/StatusMark'
+import { stripDayStatus, type StripDayCounts } from '../../lib/qaSkipReason'
 
-type DayTone = 'pass' | 'fail' | 'none'
+export type RunStripDay = StripDayCounts
+
+type DayTone = 'pass' | 'fail' | 'skip' | 'none'
 
 /** @internal Exported for tests only. */
 export function dayTone(d: RunStripDay): DayTone {
-  if (d.failed > 0) return 'fail'
-  if (d.passed > 0) return 'pass'
-  return 'none'
-}
-
-const TONE: Record<DayTone, string> = {
-  pass: 'bg-ok',
-  fail: 'bg-danger',
-  none: 'bg-surface-overlay border border-edge-subtle',
+  const s = stripDayStatus(d)
+  return s === 'failed' ? 'fail' : s === 'passed' ? 'pass' : s === 'cancelled' ? 'skip' : 'none'
 }
 
 function dayLabel(d: RunStripDay): string {
   const date = new Date(`${d.day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-  if (d.passed + d.failed === 0) return `${date}: no runs`
-  return `${date}: ${d.passed} passed, ${d.failed} failed`
+  const skipped = d.skipped ?? 0
+  if (d.passed + d.failed === 0) return skipped > 0 ? `${date}: ${skipped} skipped, nothing checked` : `${date}: no runs`
+  return `${date}: ${d.passed} passed, ${d.failed} failed${skipped > 0 ? `, ${skipped} skipped` : ''}`
 }
 
 export function RunStrip({ days }: { days: readonly RunStripDay[] }) {
   if (days.length === 0) return null
   return (
     <div className="flex items-center gap-2" data-testid="qa-run-strip">
-      <span className="shrink-0 text-3xs text-fg-faint">7 days</span>
-      <ol className="flex list-none gap-0.5 p-0" aria-label="Pass or fail per day, last 7 days">
-        {days.map((d) => (
-          <li key={d.day} title={dayLabel(d)} data-tone={dayTone(d)} className={`h-3 w-3 rounded-xs ${TONE[dayTone(d)]}`}>
-            <span className="sr-only">{dayLabel(d)}</span>
-          </li>
-        ))}
+      <span className="shrink-0 text-3xs text-fg-secondary">7 days</span>
+      <ol className="flex list-none gap-0.5 p-0" aria-label="Result per day, last 7 days">
+        {days.map((d) => {
+          const status = stripDayStatus(d)
+          return (
+            <li
+              key={d.day}
+              title={dayLabel(d)}
+              data-tone={dayTone(d)}
+              className={`sig-cell flex h-4 w-4 items-center justify-center rounded-xs border ${status === 'idle' ? 'border-edge-subtle bg-surface-overlay' : STATUS_SOFT[status]}`}
+            >
+              {status !== 'idle' && <StatusMark status={status} size={9} />}
+              <span className="sr-only">{dayLabel(d)}</span>
+            </li>
+          )
+        })}
       </ol>
     </div>
   )

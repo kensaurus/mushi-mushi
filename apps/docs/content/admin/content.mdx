@@ -7,8 +7,13 @@ description: The Content checks page in the Mushi Mushi console queues low-scori
 
 **Route:** `/content` (sidebar: **Content checks**, under Verify)
 
-With nothing open and no filter from a link, the page is its empty state with
-**Show past issues**; the filter row appears once there is something to filter.
+When your app has never sent anything, the page is one first step: **Copy the
+request** copies a ready `curl` call to `POST /v1/content-quality` (put your
+project API key in `X-Mushi-Api-Key` and send it from your app). With nothing
+open but past issues, the page is one all-clear line with **Show past issues**;
+the filter row appears once there is something to filter. When issues are open,
+a status line says how many need a look, how many your users flagged and how
+many regenerations failed, with **Show what users flagged**.
 
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
 > poorly or got user flags, and you need a queue of fixable assets.
