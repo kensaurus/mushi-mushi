@@ -1,11 +1,14 @@
 /**
  * FILE: JudgeSnapshotStrip.tsx
- * PURPOSE: Triage grading status: one sentence and the three numbers that say
- *          whether Mushi's diagnoses can be trusted (PageStatus, P1).
+ * PURPOSE: Triage grading status: what is wrong ("7 of 12 diagnoses disagreed with the
+ *          grader"), the one button that fixes it ("Review 7"), and three numbers: agreement as a
+ *          bar against the 80% target, disagreements still to review, reports ready to grade.
  */
 
-import { Btn, PageStatus, type PageStatusMetric, type PageStatusTone } from '../ui'
-import { judgeWeekTitle, type JudgeStats } from './JudgeStatsTypes'
+import { Btn, PageStatus, type PageStatusMetric } from '../ui'
+import { ThresholdBar } from '../signal/BarCell'
+import { AGREEMENT_TARGET_PCT, judgeLead } from '../../lib/judgeReview'
+import type { JudgeStats } from './JudgeStatsTypes'
 import { judgeLinks } from '../../lib/statCardLinks'
 
 interface Props {
@@ -19,91 +22,58 @@ interface Props {
   showSentence?: boolean
 }
 
-function scoreTone(score: number | null): PageStatusTone {
-  if (score == null) return 'neutral'
-  if (score >= 0.8) return 'ok'
-  if (score >= 0.6) return 'warn'
-  return 'danger'
-}
-
-/** The recent window when the server sent it, else all time; the words say which (64c2b3df). */
-function disagreementWindow(stats: JudgeStats): { disagreed: number; graded: number; words: string; recent: boolean } {
-  if (stats.recentEvaluations != null && stats.recentDisagreements != null) {
-    const days = stats.recentWindowDays ?? 14
-    return { disagreed: stats.recentDisagreements, graded: stats.recentEvaluations, words: `in the last ${days} days`, recent: true }
-  }
-  return { disagreed: stats.disagreementCount, graded: stats.totalEvaluations, words: 'so far', recent: false }
-}
-
-/** "Week of Nov 9" → "week of Nov 9": only the first letter (the month kept its capital). */
-function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1)
-}
-
 /**
- * @internal Exported for tests only. Label of the latest-week number: what it is and which week,
- * short enough not to wrap to three lines at 390 (2026-11-19: "Average / grade, week / of Nov 9").
- */
-export function judgeWeekMetricLabel(stats: Pick<JudgeStats, 'latestWeekLabel'>): string {
-  const week = lowerFirst(judgeWeekTitle(stats.latestWeekLabel))
-  const m = /^week of (.+)$/.exec(week)
-  return `Avg grade · ${m ? m[1] : week}`
-}
-
-/**
- * @internal Exported for tests only.
- * The verdict the numbers below it don't say on their own (2026-11-18 sweep:
- * "scored 67%" beside "disagreed with 2 of 2 (100%)" read as a contradiction).
- * The average grade gives partial credit; a disagreement means the grader
- * would have diagnosed the report differently. The grade itself lives in the
- * labelled metric, so the sentence doesn't repeat it.
+ * @internal Exported for tests only. The lead sentence: how many diagnoses the grader disagreed
+ * with, then what to do (lib/judgeReview.ts holds the rule; this keeps the old export name).
  */
 export function judgeStatusSentence(stats: JudgeStats): string {
-  if (stats.totalEvaluations === 0) {
-    return stats.ungradedReports > 0
-      ? `Nothing graded yet; ${stats.ungradedReports} diagnosed report${stats.ungradedReports === 1 ? ' is' : 's are'} ready.`
-      : 'Nothing graded yet. Grades start once reports are diagnosed.'
-  }
-  const w = disagreementWindow(stats)
-  if (w.graded === 0) return `Nothing was graded ${w.words}.`
-  if (w.disagreed === 0) return `The grader agreed with all ${w.graded} diagnoses ${w.words}.`
-  const when = w.recent ? `In the last ${stats.recentWindowDays ?? 14} days` : 'So far'
-  const which = w.disagreed === w.graded ? 'every report it graded' : `${w.disagreed} of ${w.graded} reports`
-  return `${when} the grader would have diagnosed ${which} differently. Read those before merging their fixes.`
+  return judgeLead(stats).sentence
 }
 
 export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements, showSentence = true }: Props) {
-  const w = disagreementWindow(stats)
+  const lead = judgeLead(stats)
+  const recent = stats.recentEvaluations != null && stats.recentDisagreements != null
+  const days = stats.recentWindowDays ?? 14
+  const agreement: PageStatusMetric = {
+    label: recent ? `Agreed · ${days}d` : 'Agreed, all time',
+    value: lead.agreementPct != null ? `${lead.agreementPct}%` : '—',
+    tone: lead.agreementPct == null ? 'neutral' : lead.agreementPct >= AGREEMENT_TARGET_PCT ? 'ok' : lead.agreementPct >= 60 ? 'warn' : 'danger',
+    hint: `How often the grader agreed with the diagnosis. The tick is the ${AGREEMENT_TARGET_PCT}% target.`,
+    to: judgeLinks.disagree,
+    visual:
+      lead.agreementPct != null ? (
+        <ThresholdBar
+          fill={lead.agreementPct / 100}
+          warn={AGREEMENT_TARGET_PCT / 100}
+          crit={null}
+          level={lead.agreementPct >= AGREEMENT_TARGET_PCT ? 'ok' : lead.agreementPct >= 60 ? 'warn' : 'crit'}
+          label={`${lead.graded - lead.disagreed}/${lead.graded}`}
+        />
+      ) : undefined,
+  }
   const disagreements: PageStatusMetric = {
-    label: w.recent ? `Disagreed · ${stats.recentWindowDays ?? 14}d` : (statLabels?.disagree ?? 'Disagreements, all time'),
-    value: w.disagreed,
-    tone: w.disagreed > 0 ? 'warn' : 'neutral',
-    hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
+    label: lead.toReview > 0 && lead.toReview < lead.disagreed ? `To review · ${days}d` : recent ? `Disagreed · ${days}d` : (statLabels?.disagree ?? 'Disagreements, all time'),
+    value: lead.toReview > 0 && lead.toReview < lead.disagreed ? lead.toReview : lead.disagreed,
+    tone: lead.toReview > 0 ? 'warn' : 'neutral',
+    hint: 'Grades where the second model disagreed with the diagnosis. Review these before merging their fixes.',
     to: judgeLinks.disagree,
   }
   return (
     <PageStatus
       ariaLabel="Triage grading status"
-      tone={scoreTone(stats.latestWeekScore)}
+      tone={lead.tone}
       marked={!showSentence}
-      sentence={showSentence ? judgeStatusSentence(stats) : null}
+      sentence={showSentence ? lead.sentence : null}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       action={
-        onSeeDisagreements && w.disagreed > 0 ? (
-          <Btn size="sm" variant="primary" onClick={onSeeDisagreements}>
-            See disagreements
+        onSeeDisagreements && lead.toReview > 0 ? (
+          <Btn size="sm" variant="primary" onClick={onSeeDisagreements} data-testid="judge-review-action">
+            Review {lead.toReview}
           </Btn>
         ) : undefined
       }
       metrics={[
-        {
-          // Not statLabels.week: that said "This week" over an older week's grade.
-          label: judgeWeekMetricLabel(stats),
-          value: stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—',
-          tone: scoreTone(stats.latestWeekScore),
-          hint: 'Average grade for the latest week with grades: was the category, severity and component right.',
-          to: judgeLinks.week,
-        },
+        agreement,
         disagreements,
         {
           label: statLabels?.classified ?? 'Ready to grade',

@@ -139,11 +139,6 @@ export function incidentCounts(snapshot: OpsSnapshot): Map<string, { total: numb
   return out
 }
 
-/** Unique dependent apps of an account, in first-seen order. */
-export function dependentApps(p: ProviderAccount): string[] {
-  return [...new Set((p.depends ?? []).map((d) => d.app).filter(Boolean))]
-}
-
 const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
 
 /**
@@ -158,6 +153,116 @@ export function makeAppNamer(projects: ReadonlyArray<{ project_name: string; pro
     by.set(normName(p.project_name), p.project_name)
   }
   return (app: string) => by.get(normName(app)) ?? app
+}
+
+/**
+ * The console's project for an ops app slug, matched like makeAppNamer, so a "Used by" chip can
+ * carry the app's icon. Null when no project matches (the chip then shows the slug alone).
+ */
+export function makeAppProjectFinder<P extends { project_name: string; project_slug: string }>(projects: readonly P[]): (app: string) => P | null {
+  const by = new Map<string, P>()
+  for (const p of projects) {
+    by.set(normName(p.project_slug), p)
+    by.set(normName(p.project_name), p)
+  }
+  return (app: string) => by.get(normName(app)) ?? null
+}
+
+/** One app that uses an account, with the features it calls it for (a chip's hover). */
+export interface AppUse {
+  app: string
+  features: string[]
+}
+
+/** The apps behind an account, one entry each with its features, sorted by the console's name. */
+export function appUses(p: ProviderAccount, appName: (app: string) => string = (a) => a): AppUse[] {
+  const by = new Map<string, Set<string>>()
+  for (const d of p.depends ?? []) {
+    if (!d.app) continue
+    const f = by.get(d.app) ?? new Set<string>()
+    if (d.feature) f.add(d.feature)
+    by.set(d.app, f)
+  }
+  return [...by.entries()]
+    .map(([app, f]) => ({ app, features: [...f].sort() }))
+    .sort((a, b) => appName(a.app).localeCompare(appName(b.app)))
+}
+
+/** A provider state in plain words (the pill beside its glyph). */
+export const PROVIDER_STATE_WORD: Record<ProviderState, string> = {
+  ok: 'Working',
+  warn: 'Warning',
+  down: 'Down',
+  stale: 'Not checked lately',
+  unknown: 'Not checked',
+}
+
+/**
+ * What an off or unchecked account needs, in one line, and the one button when the console can do
+ * it (2026-11-19: ElevenLabs and fal.ai said "unknown" with nothing to press). Turning an account
+ * on is the only fix the console has; a missing health check is set up on kenji, and the line says
+ * so instead of offering a button that would only re-read the same snapshot.
+ */
+export function providerNeeds(p: ProviderAccount, now: number): { text: string; action: 'turn_on' | null } | null {
+  if (!p.enabled) return { text: 'Off: the router skips it, so no app calls it. Turn it on to route to it again.', action: 'turn_on' }
+  const state = providerState(p)
+  if (state === 'unknown') {
+    if (!p.status) {
+      // Only what the data shows: no reading yet. Its health check is set up on kenji, not here.
+      return { text: 'Not checked yet: the provider watch on kenji has no reading for it. It shows here after its first check.', action: null }
+    }
+    return { text: `The last check could not tell whether it works${p.status.detail ? `: ${p.status.detail}` : '.'}`, action: null }
+  }
+  if (state === 'stale') {
+    const age = ageLabel(p.status?.last_probe_at, now)
+    return { text: `Last checked ${age ? `${age} ago` : 'a while ago'}; the watch on kenji has not probed it since.`, action: null }
+  }
+  return null
+}
+
+/** A short phrase for an account that needs a look, for the lead ("fal.ai is off"). */
+function needsWord(p: ProviderAccount): string {
+  if (!p.enabled) return 'is off'
+  const state = providerState(p)
+  if (state === 'down') return 'is down'
+  if (state === 'warn') return 'has a warning'
+  if (state === 'stale') return 'is not checked lately'
+  return 'is not checked'
+}
+
+/**
+ * The page's lead (2026-11-19): which accounts need a look, worst first, and the one button the
+ * console has for them (turn an off account on). Down and warning accounts also have their alert
+ * cards below, with their own actions.
+ */
+export function providersLead(providers: readonly ProviderAccount[]): {
+  sentence: string
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  working: number
+  needLook: ProviderAccount[]
+  turnOn: ProviderAccount | null
+} {
+  const sorted = sortProviders(providers)
+  const working = sorted.filter((p) => p.enabled && providerState(p) === 'ok').length
+  const needLook = sorted.filter((p) => !p.enabled || providerState(p) !== 'ok')
+  const turnOn = needLook.find((p) => !p.enabled) ?? null
+  if (providers.length === 0) return { sentence: 'No provider accounts yet.', tone: 'neutral', working, needLook, turnOn }
+  if (needLook.length === 0) return { sentence: providers.length === 1 ? 'The provider account is working.' : `All ${providers.length} provider accounts are working.`, tone: 'ok', working, needLook, turnOn }
+  const shown = needLook.slice(0, 3).map((p) => `${p.label.replace(SHARED_SUFFIX, '')} ${needsWord(p)}`)
+  const more = needLook.length > 3 ? `, and ${needLook.length - 3} more` : ''
+  const down = needLook.some((p) => p.enabled && providerState(p) === 'down')
+  return {
+    sentence: `${needLook.length === 1 ? '1 account needs' : `${needLook.length} accounts need`} a look: ${shown.join(', ')}${more}.`,
+    tone: down ? 'danger' : 'warn',
+    working,
+    needLook,
+    turnOn,
+  }
+}
+
+/** Why an account has no balance bar, in a few words. */
+export function balanceWhy(p: ProviderAccount): string {
+  return p.probe_kind === 'auth_only' ? 'key check only' : 'not reported'
 }
 
 const SHARED_SUFFIX = /\s*\(shared (?:key|account)\)\s*$/i
@@ -188,7 +293,12 @@ export function providerColumns(
 ): { balance: boolean; incidents: boolean; note: string | null } {
   const balance = providers.some((p) => providerGauge(p) != null)
   const inc = providers.some((p) => (incidents.get(p.id)?.total ?? 0) > 0)
-  const parts = [!balance && 'Balance: not checked on any account yet', !inc && 'no open incidents'].filter(Boolean) as string[]
+  // Say why there is no balance, from the checks themselves (2026-11-19: "Balance: not checked").
+  const keyOnly = providers.length > 0 && providers.every((p) => p.probe_kind === 'auth_only')
+  const noBalance = keyOnly
+    ? 'Balance: not shown, because each account’s check only tests that its key works'
+    : 'Balance: no account has reported one yet'
+  const parts = [!balance && noBalance, !inc && 'no open incidents'].filter(Boolean) as string[]
   return { balance, incidents: inc, note: parts.length > 0 && providers.length > 0 ? parts.join(' · ') : null }
 }
 

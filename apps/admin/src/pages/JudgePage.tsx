@@ -40,6 +40,9 @@ import {
   Histogram,
 } from '../components/charts'
 import { useToast } from '../lib/toast'
+import { useEntitlements } from '../lib/useEntitlements'
+import type { GraderPatch } from '../lib/judgeReview'
+import { JudgeReviewRows } from '../components/judge/JudgeReviewRows'
 import { describeJudgeRun, useJudgeRunPrefill, type JudgeRunResponse } from '../lib/judgeRun'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -94,6 +97,10 @@ interface EvalRow {
   report_summary: string | null
   report_severity: string | null
   report_status: string | null
+  /** Review step fields (server 2026-11-19); absent on an older server. */
+  report_category?: string | null
+  grader_patch?: GraderPatch | null
+  reviewed?: boolean
 }
 
 /**
@@ -270,6 +277,7 @@ export function JudgePage() {
   const rangeTo = searchParams.get('to')
   const sort: 'recent' | 'score_asc' = searchParams.get('sort') === 'score_asc' ? 'score_asc' : 'recent'
   const toast = useToast()
+  const { canEditProject } = useEntitlements()
 
   const {
     data: statsData,
@@ -292,14 +300,22 @@ export function JudgePage() {
     },
     [setSearchParams],
   )
+  // "Review N" counts the recent window, so the list it opens covers the same days (a count and
+  // its list agree); an older server without the window opens all time.
+  const recentDays = stats.recentEvaluations != null ? (stats.recentWindowDays ?? 14) : null
   const seeDisagreements = useCallback(() => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('tab', 'evaluations')
       next.set('filter', 'disagreement')
+      if (recentDays != null) {
+        const now = Date.now()
+        next.set('from', new Date(now - recentDays * 86_400_000).toISOString())
+        next.set('to', new Date(now).toISOString())
+      }
       return next
     })
-  }, [setSearchParams])
+  }, [setSearchParams, recentDays])
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -817,6 +833,8 @@ export function JudgePage() {
           weeks={stats.agreementWeeks ?? []}
           windowDays={stats.recentWindowDays ?? 14}
           capped={stats.agreementCapped}
+          canEdit={canEditProject}
+          onChanged={loadAll}
         />
       ) : null}
 
@@ -914,7 +932,7 @@ export function JudgePage() {
 
       {activeTab === 'evaluations' && (
       <Section
-        title="Recent evaluations"
+        title={disagreementOnly ? 'Disagreements to review' : 'Recent evaluations'}
         action={
           <div className="flex flex-wrap items-center gap-1.5">
             {disagreementOnly && (
@@ -988,6 +1006,9 @@ export function JudgePage() {
                 : 'Run judge now or wait for the nightly cron to score classified reports.'
             }
           />
+        ) : disagreementOnly ? (
+          // "Review N" lands here: the decision sits in each row (console-first, 2026-11-19).
+          <JudgeReviewRows rows={evals} canEdit={canEditProject} onChanged={loadAll} />
         ) : !wide ? (
           <JudgeGradeRows evals={evals} />
         ) : (

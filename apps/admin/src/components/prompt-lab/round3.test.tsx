@@ -15,10 +15,11 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { EvalDatasetCard } from './EvalDatasetCard'
-import { versionState } from './VersionStateMark'
+import { EvalDatasetCard, sampleTitle, severityGlyph } from './EvalDatasetCard'
+import { trafficWords, versionState, versionStateWords } from './VersionStateMark'
 import { promptTestSummary } from './promptLabCounts'
-import { PromptLabSnapshotStrip, promptLabLineState } from './PromptLabSnapshotStrip'
+import { PromptLabSnapshotStrip } from './PromptLabSnapshotStrip'
+import { promptRecommendation } from './promptRecommendation'
 import { EMPTY_PROMPT_LAB_STATS } from './PromptLabStatsTypes'
 import type { PromptVersion } from './types'
 
@@ -41,7 +42,7 @@ afterEach(() => {
 const BODY = 'Your app installs minimatch 10.2.6.\nVersion 11.0.1 fixes it. ' + 'How to fix: '.repeat(40)
 
 describe('EvalDatasetCard', () => {
-  it('shows one truncated line per report and the body only after Show', () => {
+  it('shows a severity glyph and one truncated title per report, the rest only after Details', () => {
     act(() => {
       root.render(
         createElement(MemoryRouter, null,
@@ -58,8 +59,12 @@ describe('EvalDatasetCard', () => {
     expect(cls).toContain('truncate')
     // `block` beside line-clamp cancelled the clamp; neither is on the link now.
     expect(cls).not.toMatch(/\bblock\b/)
+    expect(link.textContent).toBe('Your app installs minimatch 10.2.6.')
+    expect(host.querySelector('[data-testid="eval-dataset-row"] [data-tone="warn"]')).not.toBeNull()
+    // Category and area are details, not a row of chips on every report.
+    expect(host.querySelector('[data-testid="eval-dataset-details"]')).toBeNull()
     expect(host.querySelector('[data-testid="eval-dataset-body"]')).toBeNull()
-    const show = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Show')!
+    const show = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Details')!
     expect(show.getAttribute('aria-expanded')).toBe('false')
     act(() => show.click())
     expect(host.querySelector('[data-testid="eval-dataset-body"]')?.textContent).toBe(BODY)
@@ -75,7 +80,24 @@ function v(stage: string, version: string, extra: Partial<PromptVersion> = {}): 
   }
 }
 
+describe('sampleTitle and severityGlyph', () => {
+  it('takes the first plain line and skips JSON and markdown marks', () => {
+    expect(sampleTitle('{"error":"x"}\n## Checkout breaks\nmore')).toBe('Checkout breaks')
+    expect(sampleTitle('')).toBe('(no description)')
+    expect(severityGlyph('critical').tone).toBe('danger')
+    expect(severityGlyph(null)).toEqual({ tone: 'off', word: 'No severity' })
+  })
+})
+
 describe('version state', () => {
+  it('says the share a test gets in words', () => {
+    expect(trafficWords(50)).toBe('half of reports')
+    expect(trafficWords(10)).toBe('1 in 10 reports')
+    expect(trafficWords(30)).toBe('30% of reports')
+    expect(versionStateWords({ is_active: false, is_candidate: true, traffic_percentage: 50 })).toBe('Testing on half of reports')
+    expect(versionStateWords({ is_active: true, is_candidate: false, traffic_percentage: 100 })).toBe('In use')
+  })
+
   it('names a 0%-traffic test "Not started" and a running one "Testing"', () => {
     expect(versionState({ is_active: true, is_candidate: false, traffic_percentage: 100 })).toEqual({ label: 'In use', tone: 'ok' })
     expect(versionState({ is_active: false, is_candidate: true, traffic_percentage: 0 })).toEqual({ label: 'Not started', tone: 'warn' })
@@ -97,43 +119,23 @@ describe('one status line for tests and grades', () => {
     expect(promptTestSummary([v('stage1', 'v1', { is_active: true })])).toBeNull()
   })
 
-  it('leads the status line with the test state and shows a dash, not "No grades", in the tile', () => {
+  it('leads the status line with one recommendation and its button', () => {
     const html = renderToStaticMarkup(
       createElement(MemoryRouter, null,
         createElement(PromptLabSnapshotStrip, {
           stats: { ...EMPTY_PROMPT_LAB_STATS, hasAnyProject: true, activePrompts: 12, candidatePrompts: 2 },
           statsFetchedAt: null,
           testSummary: promptTestSummary(prompts),
+          recommendation: promptRecommendation(prompts),
+          onAction: () => {},
         }),
       ),
     )
-    expect(html).toContain('1 test running · 1 not started. No version has a grade yet.')
+    // Fast filter's test gets no reports; built-in, so the step opens for a clone.
+    expect(html).toContain('Fast filter has a built-in test version that gets no reports. Clone it to test it.')
+    expect(html).toContain('Open step')
     expect(html).toContain('Steps testing')
-    expect(html).not.toContain('Steps with a test')
     expect(html).not.toContain('>No grades<')
-    expect(html).toContain('Open prompts')
-  })
-
-  it('keeps the warning and its "Set traffic %" step when every test sits at 0%', () => {
-    const idle = [
-      v('stage1', 'v1', { is_active: true, traffic_percentage: 100 }),
-      v('stage1', 'v2', { is_candidate: true, traffic_percentage: 0 }),
-    ]
-    const summary = promptTestSummary(idle)
-    expect(summary).toEqual({ text: '1 not started', testing: 0 })
-    expect(promptLabLineState(summary)).toEqual({ tone: 'warn', action: 'Set traffic %' })
-    expect(promptLabLineState(null)).toEqual({ tone: 'neutral', action: null })
-    const html = renderToStaticMarkup(
-      createElement(MemoryRouter, null,
-        createElement(PromptLabSnapshotStrip, {
-          stats: { ...EMPTY_PROMPT_LAB_STATS, hasAnyProject: true },
-          statsFetchedAt: null,
-          testSummary: summary,
-          promptsHref: '/prompt-lab?tab=prompts&stage=stage1',
-        }),
-      ),
-    )
-    expect(html).toContain('Set traffic %')
-    expect(html).toContain('href="/prompt-lab?tab=prompts&amp;stage=stage1"')
+    expect(html).not.toContain('traffic')
   })
 })

@@ -35,6 +35,8 @@ export interface PageStatusMetric {
   /** One plain sentence on what is counted; shown from an (i) beside the label. */
   hint?: string
   tone?: PageStatusTone
+  /** Optional picture of the number (a bar, marks), drawn between the value and its label. */
+  visual?: ReactNode
 }
 
 /** @public At most three numbers: a fourth is a type error, not a style choice. */
@@ -149,6 +151,7 @@ function MetricItem({ metric }: { metric: PageStatusMetric }) {
         <span className="leading-tight wrap-break-word">{metric.label}</span>
         {metric.hint ? <InfoHint content={metric.hint} /> : null}
       </dt>
+      {metric.visual ? <dd className="m-0 py-0.5">{metric.visual}</dd> : null}
       <dd className="m-0">
         {metric.to ? <MetricLink metric={metric} to={metric.to} className={valueClass} /> : <span className={valueClass}>{metric.value}</span>}
       </dd>
