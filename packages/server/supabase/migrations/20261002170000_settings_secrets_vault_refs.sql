@@ -50,6 +50,12 @@
 --    where conname like '%\_is\_vault\_ref' escape '\'
 --      and conrelid in ('public.project_settings'::regclass, 'public.organization_integration_settings'::regclass);
 
+-- The hosted database has these two columns from outside the migration history;
+-- add them so a fresh database (self-host, CI replay) matches. No-op on hosted.
+ALTER TABLE public.project_settings
+  ADD COLUMN IF NOT EXISTS github_installation_token_ref text,
+  ADD COLUMN IF NOT EXISTS github_webhook_secret text;
+
 DO $$
 DECLARE
   -- column => Vault kind segment (matches VAULTED_FIELDS_BY_KIND in api/routes/integrations.ts)

@@ -1,0 +1,7 @@
+# HTTPS for a self-hosted Mushi Mushi. Caddy gets and renews the certificate
+# for MUSHI_DOMAIN (its DNS must point at this server; ports 80 and 443 open).
+# The console container already serves the API on the same origin.
+{$MUSHI_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy mushi-admin:8080
+}

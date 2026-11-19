@@ -266,10 +266,14 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     }
 
     // The console approval page URL — user_code pre-fills the field.
+    // MUSHI_ADMIN_URL (the console's full base URL, as in the email links) wins:
+    // a self-hosted console is served at its own root, not /mushi-mushi/admin.
     const adminOrigin =
       (Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST') ?? '').split(',')[0]?.trim() ||
       'https://kensaur.us'
-    const verificationUri = `${adminOrigin}/mushi-mushi/admin/cli-auth?code=${userCode}`
+    const adminBase =
+      (Deno.env.get('MUSHI_ADMIN_URL') ?? '').trim().replace(/\/+$/, '') || `${adminOrigin}/mushi-mushi/admin`
+    const verificationUri = `${adminBase}/cli-auth?code=${userCode}`
 
     // Fire-and-forget: record that a CLI auth attempt started. No user_id yet
     // (public endpoint) so deduplicate on device_code alone.

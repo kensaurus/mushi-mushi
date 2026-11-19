@@ -1,0 +1,99 @@
+# Mushi Mushi on Supabase's self-host kit (tag self-hosted/v0.8.4).
+#
+# install.sh copies this file next to the kit's docker-compose.yml and adds it
+# to COMPOSE_FILE in .env, so plain `docker compose ...` (and the kit's
+# run.sh) use both. What it changes:
+#   - functions: Mushi's edge functions (image), JWT checks left to each handler
+#   - mushi-migrate: applies Mushi's migrations, then exits (runs on every up)
+#   - mushi-admin: the console on MUSHI_PUBLIC_URL, proxying the API paths
+#   - every published port binds to 127.0.0.1 unless you change MUSHI_BIND
+# Needs Docker Compose 2.24.4+ (for !override / !reset).
+
+services:
+  mushi-migrate:
+    image: ghcr.io/kensaurus/mushi-migrate:${MUSHI_VERSION:-latest}
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    environment:
+      PGHOST: ${POSTGRES_HOST}
+      PGPORT: ${POSTGRES_PORT}
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET:?run install.sh or set MUSHI_INTERNAL_CALLER_SECRET in .env}
+      MUSHI_FUNCTIONS_URL: http://api-gw:8000
+      MUSHI_PLAN_LIMITS: ${MUSHI_PLAN_LIMITS:-off}
+
+  functions:
+    image: ghcr.io/kensaurus/mushi-functions:${MUSHI_VERSION:-latest}
+    # The code is in the image; keep only the dependency cache.
+    volumes: !override
+      - deno-cache:/root/.cache/deno
+    depends_on:
+      mushi-migrate:
+        condition: service_completed_successfully
+    environment:
+      # Mushi authenticates inside each function (config.toml: verify_jwt = false).
+      VERIFY_JWT: "false"
+      SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET}
+      # Links in emails, CLI sign-in, MCP and CORS all use the public URL.
+      MUSHI_ADMIN_URL: ${MUSHI_PUBLIC_URL}
+      ADMIN_BASE_URL: ${MUSHI_PUBLIC_URL}
+      SITE_URL: ${MUSHI_PUBLIC_URL}
+      MUSHI_CONSOLE_URL: ${MUSHI_PUBLIC_URL}
+      MUSHI_ADMIN_ORIGIN_ALLOWLIST: ${MUSHI_PUBLIC_URL}
+      MUSHI_API_PUBLIC_URL: ${MUSHI_PUBLIC_URL}/functions/v1/api
+      MCP_PUBLIC_BASE_URL: ${MUSHI_PUBLIC_URL}/functions/v1/mcp
+      MUSHI_CLUSTER_REGION: ${MUSHI_CLUSTER_REGION:-us}
+      # AI. All optional: without a key, reports are still taken and sorted by
+      # rules; the plain-English diagnosis needs one of these.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      MUSHI_ALLOW_PRIVATE_LLM_BASE_URL: ${MUSHI_ALLOW_PRIVATE_LLM_BASE_URL:-false}
+      MUSHI_OPENAI_MODEL_MAP: ${MUSHI_OPENAI_MODEL_MAP:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      # Optional integrations
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SENTRY_DSN_SERVER: ${SENTRY_DSN_SERVER:-}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+
+  mushi-admin:
+    image: ghcr.io/kensaurus/mushi-admin:${MUSHI_VERSION:-latest}
+    container_name: mushi-admin
+    restart: unless-stopped
+    depends_on:
+      api-gw:
+        condition: service_healthy
+    environment:
+      MUSHI_PUBLIC_URL: ${MUSHI_PUBLIC_URL}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+    ports:
+      - ${MUSHI_BIND:-127.0.0.1}:${MUSHI_PORT:-3000}:8080
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  # Studio, the database and the pooler stay off the network: reach Studio
+  # with an SSH tunnel to 127.0.0.1:8000 (user DASHBOARD_USERNAME).
+  api-gw:
+    ports: !override
+      - 127.0.0.1:${API_GW_HTTP_PORT:-8000}:8000/tcp
+  supavisor:
+    ports: !override
+      - 127.0.0.1:${POSTGRES_PORT}:5432
+      - 127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION}:6543

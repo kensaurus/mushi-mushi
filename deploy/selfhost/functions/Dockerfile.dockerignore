@@ -1,0 +1,12 @@
+**/node_modules
+**/.git
+.git
+**/dist
+**/.turbo
+**/.next
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+# The functions image needs only the server's functions and this folder.

@@ -1,0 +1,24 @@
+# Optional HTTPS layer: `sh mushi.sh https mushi.example.com` adds this file to
+# COMPOSE_FILE and sets MUSHI_DOMAIN and the public URLs.
+services:
+  mushi-caddy:
+    image: caddy:2.10-alpine
+    container_name: mushi-caddy
+    restart: unless-stopped
+    depends_on:
+      mushi-admin:
+        condition: service_healthy
+    environment:
+      MUSHI_DOMAIN: ${MUSHI_DOMAIN:?set MUSHI_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - mushi_caddy_data:/data
+      - mushi_caddy_config:/config
+
+volumes:
+  mushi_caddy_data:
+  mushi_caddy_config:

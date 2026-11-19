@@ -13,11 +13,16 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. mistake_clusters
 -- ─────────────────────────────────────────────────────────────────────────────
-create type if not exists mistake_cluster_status as enum (
-  'candidate',   -- not yet coherent or large enough for promotion
-  'promoted',    -- ≥ 3 reports, coherence ≥ 0.75, lesson row created
-  'retired'      -- superseded by a newer cluster or manually archived
-);
+-- Postgres has no CREATE TYPE IF NOT EXISTS; guard it so a fresh database
+-- (self-host, CI replay) can apply this file.
+do $$ begin
+  create type mistake_cluster_status as enum (
+    'candidate',   -- not yet coherent or large enough for promotion
+    'promoted',    -- ≥ 3 reports, coherence ≥ 0.75, lesson row created
+    'retired'      -- superseded by a newer cluster or manually archived
+  );
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists mistake_clusters (
   id                     uuid primary key default gen_random_uuid(),
@@ -106,9 +111,10 @@ create policy "org_members_read_rcm"
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. lessons
 -- ─────────────────────────────────────────────────────────────────────────────
-create type if not exists lesson_severity as enum (
-  'info', 'warn', 'critical'
-);
+do $$ begin
+  create type lesson_severity as enum ('info', 'warn', 'critical');
+exception when duplicate_object then null;
+end $$;
 
 create table if not exists lessons (
   id                  uuid primary key default gen_random_uuid(),
