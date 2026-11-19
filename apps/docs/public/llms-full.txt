@@ -26428,7 +26428,9 @@ Below **The story so far**, the **Pipeline** strip shows where this report is:
 **Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
 its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
 how long it took against the longest stage, and the time itself. A stage still open
-shows the time so far.
+shows the time so far. A stage that did not need to run reads **not needed**: a
+confident quick check skips the full diagnosis, and a report you sorted by hand skips
+triage.
 
 When a stage failed or is stuck, the strip names it with the reason in one plain line
 ("The AI key or the internal worker token was refused.") and the try count. The raw
@@ -26437,8 +26439,8 @@ button next to it retries that stage:
 
 | Stage | Button | What it does |
 | --- | --- | --- |
-| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing; a report that is already diagnosed is refused, since it would spend AI budget again. Members only, at most 30 an hour per person. |
-| Fix | **Retry fix** | The page's own dispatch, with the same checks (disabled with the reason when a fix PR is still open, for example). |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing. A report that is already triaged or diagnosed is refused: it would spend AI budget again and could overwrite a severity set by hand. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks. Disabled with the reason when a fix PR is still open, or when a retry would reach the same answer (the agent found nothing to change, for example). |
 | CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
 
 While triage runs, the strip checks again every few seconds and the page updates when

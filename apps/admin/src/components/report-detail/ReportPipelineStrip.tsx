@@ -120,7 +120,8 @@ export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, 
               className="min-w-0"
               data-testid={`trail-stage-${s.id}`}
               data-state={s.state}
-              title={[s.label, s.startedAt ? `started ${new Date(s.startedAt).toLocaleString()}` : null, s.endedAt ? `ended ${new Date(s.endedAt).toLocaleString()}` : null].filter(Boolean).join(' · ')}
+              data-skipped={s.skipped || undefined}
+              title={[s.label, s.note, s.startedAt ? `started ${new Date(s.startedAt).toLocaleString()}` : null, s.endedAt ? `ended ${new Date(s.endedAt).toLocaleString()}` : null].filter(Boolean).join(' · ')}
             >
               <span className="flex min-w-0 items-center gap-1">
                 <StatusMark status={s.state} size={11} label={`${s.label}: ${s.state}`} />
@@ -134,8 +135,12 @@ export function ReportPipelineStrip({ reportId, onRetryDispatch, dispatchBlock, 
                   />
                 )}
               </span>
-              <span className={`mt-0.5 block truncate font-mono text-3xs tabular-nums ${dur ? 'font-bold text-fg' : 'text-fg-faint'}`}>
-                {dur ? (open ? `${dur} so far` : dur) : '—'}
+              <span
+                className={`mt-0.5 block truncate font-mono text-3xs tabular-nums ${dur ? 'font-bold text-fg' : 'text-fg-faint'}`}
+                title={s.note ?? undefined}
+                data-testid={`trail-stage-${s.id}-time`}
+              >
+                {s.skipped ? 'not needed' : dur ? (open ? `${dur} so far` : dur) : '—'}
               </span>
             </li>
           )

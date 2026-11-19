@@ -18,6 +18,8 @@ function stage(over: Partial<TrailStage> & Pick<TrailStage, 'id'>): TrailStage {
     detail: null,
     attempts: null,
     retry: null,
+    skipped: false,
+    note: null,
     ...over,
   }
 }
@@ -86,6 +88,10 @@ describe('retryButtonFor', () => {
     const s = stage({ id: 'fix', retry: { kind: 'dispatch', allowed: true, reason: null } })
     expect(retryButtonFor(s, ctx)).toMatchObject({ kind: 'dispatch', enabled: true })
     expect(retryButtonFor(s, { ...ctx, dispatchBlocked: true, dispatchReason: 'A fix PR is already open.' })).toMatchObject({ enabled: false, why: 'A fix PR is already open.' })
+  })
+  it('a fix retry the server refuses (same answer again) is disabled with its reason', () => {
+    const s = stage({ id: 'fix', retry: { kind: 'dispatch', allowed: false, reason: 'If the bug is gone, mark the report fixed.' } })
+    expect(retryButtonFor(s, ctx)).toEqual({ kind: 'dispatch', label: 'Retry fix', enabled: false, why: 'If the bug is gone, mark the report fixed.' })
   })
   it('red CI points at the fix actions bar instead of a second CI repair button', () => {
     const s = stage({ id: 'ci', retry: { kind: 'ci_repair', allowed: true, reason: null } })

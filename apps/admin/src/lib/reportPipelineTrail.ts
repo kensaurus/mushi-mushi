@@ -27,6 +27,10 @@ export interface TrailStage {
   detail: string | null
   attempts: { used: number; max: number } | null
   retry: { kind: TrailRetryKind; allowed: boolean; reason: string | null } | null
+  /** Did not run and did not need to (a confident quick check skips the full diagnosis). */
+  skipped: boolean
+  /** One short line for a skipped stage, or null. */
+  note: string | null
 }
 
 export interface TrailJob {
@@ -121,6 +125,9 @@ export function retryButtonFor(
     return { kind: 'triage', label: stage.id === 'diagnosis' ? 'Re-run diagnosis' : 'Retry triage', enabled: r.allowed, why: r.allowed ? null : r.reason }
   }
   if (r.kind === 'dispatch') {
+    // The server refuses a retry that would reach the same answer (already fixed, …); the page's
+    // dispatch gate can refuse too (a fix PR still open). Either way the button says why.
+    if (!r.allowed) return { kind: 'dispatch', label: 'Retry fix', enabled: false, why: r.reason }
     return { kind: 'dispatch', label: 'Retry fix', enabled: !ctx.dispatchBlocked, why: ctx.dispatchBlocked ? ctx.dispatchReason : null }
   }
   return ctx.hasFixActions ? { kind: 'jump', label: 'CI repair ↑', to: '#report-fix-actions' } : null

@@ -52,6 +52,8 @@ function trail(triage: Record<string, unknown>) {
       detail: null,
       attempts: null,
       retry: null,
+      skipped: false,
+      note: null,
       ...(id === 'triage' ? triage : {}),
     })),
   }
@@ -97,7 +99,7 @@ describe('ReportPipelineStrip', () => {
       retry: { kind: 'triage', allowed: true, reason: null },
     })
     await render()
-    expect(container.querySelectorAll('[data-testid^="trail-stage-"]')).toHaveLength(8)
+    expect(container.querySelectorAll('li[data-testid^="trail-stage-"]')).toHaveLength(8)
     expect(q('trail-stage-triage')?.getAttribute('data-state')).toBe('failed')
     expect(q('trail-stage-triage')?.textContent).toContain('5 min')
     expect(q('report-pipeline-callout')?.textContent).toContain('The AI key or the internal worker token was refused.')
@@ -122,6 +124,14 @@ describe('ReportPipelineStrip', () => {
     await render()
     expect((q('report-pipeline-retry') as HTMLButtonElement).disabled).toBe(true)
     expect(q('report-pipeline-retry-why')?.textContent).toBe('Triage is running for this report now.')
+  })
+
+  it('a skipped stage reads "not needed", not a missing number', async () => {
+    state.trail = trail({ state: 'idle', skipped: true, note: 'Sorted without an AI quick check.' })
+    await render()
+    expect(q('trail-stage-triage-time')?.textContent).toBe('not needed')
+    expect(q('trail-stage-triage-time')?.getAttribute('title')).toBe('Sorted without an AI quick check.')
+    expect(q('report-pipeline-callout')).toBeNull()
   })
 
   it('a moving report has no callout', async () => {

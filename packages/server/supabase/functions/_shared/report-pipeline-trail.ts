@@ -70,6 +70,13 @@ export interface TrailStage {
   detail: string | null
   attempts: { used: number; max: number } | null
   retry: TrailRetry | null
+  /**
+   * The stage did not run and did not need to (a confident quick check needs no full
+   * diagnosis; a report a person sorted needs no triage run). Never the "current" stage.
+   */
+  skipped: boolean
+  /** One short line for a skipped or passed stage ("Not needed: the quick check was confident."), or null. */
+  note: string | null
 }
 
 export interface TrailJob {
@@ -194,6 +201,8 @@ export function plainTriageError(raw: string | null | undefined): string | null 
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+const lowerFirst = (t: string) => (t ? `${t[0]!.toLowerCase()}${t.slice(1)}` : t)
+
 const ms = (iso: string | null | undefined): number | null => {
   if (!iso) return null
   const t = Date.parse(iso)
@@ -229,6 +238,16 @@ const DEPLOY_SLOW_MS = 24 * 3600_000
 /** Diagnosis still running after the quick check passed this long ago: treat as stuck. */
 const DIAGNOSIS_STUCK_MS = STUCK_AFTER_MS
 
+/**
+ * Statuses that mean the report was triaged, by the pipeline or by a person (the admin's
+ * isReportClassified set, plus dispatched / dismissed / completed). A report in one of
+ * these is never "stuck in triage", and re-running triage on it would overwrite its
+ * category and severity, a person's choice included.
+ */
+export const TRIAGED_STATUSES: ReadonlySet<string> = new Set(['classified', 'triaged', 'grouped', 'dispatched', 'fixing', 'fixed', 'verified', 'resolved', 'completed', 'dismissed'])
+
+const statusOf = (r: Pick<TrailReportRow, 'status'>) => (r.status ?? '').toLowerCase()
+
 // ── Retry rule ──────────────────────────────────────────────────────────────
 
 export type TriageRetryDecision =
@@ -239,7 +258,9 @@ export type TriageRetryDecision =
 /**
  * May a person re-run triage (fast-filter → classify-report) for this report now?
  *
- *   diagnosed (stage 1 and stage 2 both stored)   deny: it would spend AI budget again
+ *   diagnosed (stage 2 stored)                    deny: it would spend AI budget again
+ *   triaged status (TRIAGED_STATUSES)             deny: it would overwrite the triage
+ *   quota_exceeded                                deny: it would stop at the quota again
  *   job pending / processing, fresh               already: the worker is on it
  *   job failed / dead_letter                      retry
  *   job pending / processing, waited 15 min       retry (stuck)
@@ -249,8 +270,14 @@ export type TriageRetryDecision =
 export function triageRetryDecision(report: TrailReportRow, queue: readonly TrailQueueRow[], nowMs: number): TriageRetryDecision {
   const quick = report.stage1_classification != null
   const deep = report.stage2_analysis != null
-  if (quick && deep) {
+  if (deep) {
     return { kind: 'deny', reason: 'This report is already diagnosed. Running triage again would spend AI budget and could overwrite it.' }
+  }
+  if (TRIAGED_STATUSES.has(statusOf(report))) {
+    return { kind: 'deny', reason: 'This report is already triaged. Running triage again would spend AI budget and could overwrite its category and severity.' }
+  }
+  if (statusOf(report) === 'quota_exceeded') {
+    return { kind: 'deny', reason: "This plan's diagnosis quota is used up. Raise it on Billing, then retry." }
   }
   const job = stage1Job(queue)
   if (job && isActiveJob(job.status)) {
@@ -288,7 +315,9 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
       : null
   const stages: TrailStage[] = []
   const base = (id: TrailStageId): Pick<TrailStage, 'id' | 'label'> => ({ id, label: TRAIL_STAGES.find((s) => s.id === id)!.label })
-  const empty = { startedAt: null, endedAt: null, durationMs: null, problem: null, detail: null, attempts: null, retry: null }
+  const empty = { startedAt: null, endedAt: null, durationMs: null, problem: null, detail: null, attempts: null, retry: null, skipped: false, note: null }
+  // Triaged by the pipeline or a person: never stuck in triage (TRIAGED_STATUSES).
+  const triagedStatus = TRIAGED_STATUSES.has(statusOf(report))
 
   // Reported
   stages.push({ ...base('received'), ...empty, state: 'passed', startedAt: report.created_at, endedAt: report.created_at })
@@ -297,10 +326,12 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
   {
     const attempts = job ? { used: job.attempts ?? 0, max: job.max_attempts ?? 3 } : null
     const startedAt = job ? (job.started_at ?? job.created_at) : report.created_at
-    const stage1Err = report.processing_error && /^stage1_unhandled/i.test(report.processing_error) ? report.processing_error : null
     if (quick) {
       const dur = report.stage1_latency_ms ?? span(startedAt, job?.completed_at ?? null, nowMs)
       stages.push({ ...base('triage'), ...empty, state: 'passed', startedAt, endedAt: job?.completed_at ?? null, durationMs: dur, attempts })
+    } else if (deep || triagedStatus) {
+      // A stage-2 diagnosis with no stage-1 object, or a report a person sorted: triage is done.
+      stages.push({ ...base('triage'), ...empty, state: deep ? 'passed' : 'idle', skipped: !deep, note: deep ? null : 'Sorted without an AI quick check.', attempts })
     } else if (job && isFailedJob(job.status)) {
       const raw = job.last_error ?? report.processing_error
       stages.push({
@@ -329,18 +360,21 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
         attempts,
         retry: triageRetry(stuck),
       })
-    } else if (stage1Err) {
+    } else if (report.processing_error) {
+      // Untriaged with an error stamped on the report (fast-filter's own catch, a schema
+      // mismatch, …): the job may still read "completed", since fast-filter answered.
       stages.push({
         ...base('triage'),
         ...empty,
         state: 'failed',
         startedAt,
-        problem: plainTriageError(stage1Err),
-        detail: screenDetail(stage1Err),
+        endedAt: job?.completed_at ?? null,
+        problem: plainTriageError(report.processing_error),
+        detail: screenDetail(report.processing_error),
         attempts,
         retry: triageRetry(true),
       })
-    } else if (!job && report.status === 'queued') {
+    } else if (!job && statusOf(report) === 'queued') {
       stages.push({
         ...base('triage'),
         ...empty,
@@ -351,7 +385,7 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
         retry: triageRetry(true),
       })
     } else {
-      // No job, nothing stored: stranded before triage (or a completed job whose run stored nothing).
+      // No job and nothing stored: stranded before triage (or a completed job whose run stored nothing).
       const old = nowMs - (ms(report.created_at) ?? nowMs) >= STUCK_AFTER_MS
       stages.push({
         ...base('triage'),
@@ -366,23 +400,38 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
     }
   }
 
-  // Diagnosis (classify-report, stage 2)
+  // Diagnosis (classify-report, stage 2). Optional: fast-filter stops at stage 1 when it is
+  // confident (or fell back to its rule) and sets `classified` itself; only a low-confidence
+  // report, or an app's first real one, goes on (fast-filter/index.ts).
   {
     const quickStage = stages[stages.length - 1]!
     const startedAt = quickStage.state === 'passed' ? (quickStage.endedAt ?? null) : null
-    const stage2Err = report.processing_error && /stage2|classify/i.test(report.processing_error) ? report.processing_error : null
+    const status = statusOf(report)
     if (deep) {
       stages.push({ ...base('diagnosis'), ...empty, state: 'passed', startedAt, durationMs: report.stage2_latency_ms ?? null })
-    } else if (!quick) {
-      stages.push({ ...base('diagnosis'), ...empty, state: 'idle' })
-    } else if (stage2Err) {
+    } else if (status === 'quota_exceeded') {
       stages.push({
         ...base('diagnosis'),
         ...empty,
         state: 'failed',
         startedAt,
-        problem: plainTriageError(stage2Err),
-        detail: screenDetail(stage2Err),
+        problem: "This plan's diagnosis quota is used up, so the full diagnosis did not run. Raise it on Billing.",
+        retry: triageRetry(true),
+      })
+    } else if (triagedStatus) {
+      stages.push({ ...base('diagnosis'), ...empty, state: 'idle', skipped: true, note: quick ? 'Not needed: the quick check was sure enough.' : null })
+    } else if (!quick) {
+      stages.push({ ...base('diagnosis'), ...empty, state: 'idle' })
+    } else if (report.processing_error) {
+      // Stage 1 stored, not classified, an error stamped: the hand-off or classify-report failed.
+      const plain = plainTriageError(report.processing_error) ?? 'Triage failed.'
+      stages.push({
+        ...base('diagnosis'),
+        ...empty,
+        state: 'failed',
+        startedAt,
+        problem: /stage2 handoff/i.test(report.processing_error) ? plain : `The full diagnosis failed: ${lowerFirst(plain)}`,
+        detail: screenDetail(report.processing_error),
         retry: triageRetry(true),
       })
     } else {
@@ -419,7 +468,9 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
       durationMs: span(fixStarted, fix.completed_at, nowMs),
       problem: human?.title ?? (fixStatus === 'cancelled' ? 'The fix run was cancelled.' : 'The fix agent stopped without a PR.'),
       detail: screenDetail(fix.error),
-      retry: { kind: 'dispatch', allowed: true, reason: null },
+      // A "hard" error (already fixed, nothing to tie to code, a setting) reaches the same answer
+      // on a retry, so Retry is offered disabled with what to do instead (humanize-error.ts).
+      retry: human?.severity === 'hard' ? { kind: 'dispatch', allowed: false, reason: human.hint } : { kind: 'dispatch', allowed: true, reason: null },
     })
   } else {
     stages.push({
@@ -496,7 +547,7 @@ export function buildReportTrail(input: TrailInput): ReportTrail {
     stages.push({ ...base('deploy'), ...empty, state: 'idle' })
   }
 
-  const current = stages.find((s) => s.state !== 'passed')?.id ?? null
+  const current = stages.find((s) => s.state !== 'passed' && !s.skipped)?.id ?? null
   const failing = stages.find((s) => s.state === 'failed')?.id ?? null
   const jobs: TrailJob[] = [...input.queue]
     .sort((a, b) => a.created_at.localeCompare(b.created_at))

@@ -113,7 +113,7 @@ describe('buildReportTrail', () => {
 
   it('a classified report with a failed stage-2 handoff fails at Diagnosis, not the quick check', () => {
     const t = buildReportTrail({
-      report: report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_latency_ms: 1800, processing_error: 'stage2 handoff failed: HTTP 504' }),
+      report: report({ status: 'new', stage1_classification: { category: 'bug' }, stage1_latency_ms: 1800, processing_error: 'stage2 handoff failed: HTTP 504' }),
       queue: [job({ status: 'completed', completed_at: minsAgo(58) })],
       fix: null,
       deploys: [],
@@ -157,8 +157,59 @@ describe('buildReportTrail', () => {
       now: NOW,
     })
     expect(stage(failed, 'fix').state).toBe('failed')
-    expect(stage(failed, 'fix').retry?.kind).toBe('dispatch')
+    // "Already fixed" reaches the same answer on a retry: offered disabled, with what to do instead.
+    expect(stage(failed, 'fix').retry).toMatchObject({ kind: 'dispatch', allowed: false })
+    expect(stage(failed, 'fix').retry?.reason).toMatch(/mark the report fixed/)
+
+    const flaky = buildReportTrail({
+      report: report({ stage1_classification: {}, stage2_analysis: {} }),
+      queue: [],
+      fix: fix({ status: 'failed', pr_url: null, error: 'something odd happened', check_run_conclusion: null }),
+      deploys: [],
+      now: NOW,
+    })
+    expect(stage(flaky, 'fix').retry).toEqual({ kind: 'dispatch', allowed: true, reason: null })
     expect(stage(failed, 'pr').state).toBe('idle')
+  })
+
+  it('an unclassified report with an error on it fails the quick check, even when its job says completed', () => {
+    const t = buildReportTrail({
+      report: report({ processing_error: 'schema mismatch' }),
+      queue: [job({ status: 'completed', completed_at: minsAgo(58) })],
+      fix: null,
+      deploys: [],
+      now: NOW,
+    })
+    expect(stage(t, 'triage')).toMatchObject({ state: 'failed', detail: 'schema mismatch', retry: { kind: 'triage', allowed: true } })
+    expect(t.failing).toBe('triage')
+  })
+
+  it('a confident quick check needs no diagnosis: skipped, not stuck, and no retry', () => {
+    const t = buildReportTrail({
+      report: report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_latency_ms: 700 }),
+      queue: [job({ status: 'completed', completed_at: minsAgo(59) })],
+      fix: null,
+      deploys: [],
+      now: NOW,
+    })
+    expect(stage(t, 'diagnosis')).toMatchObject({ state: 'idle', skipped: true, retry: null })
+    expect(stage(t, 'diagnosis').note).toMatch(/Not needed/)
+    expect(t.current).toBe('fix')
+  })
+
+  it('a report a person sorted (or one with only a stage-2 diagnosis) is not stuck in triage', () => {
+    const byHand = buildReportTrail({ report: report({ status: 'fixing' }), queue: [], fix: null, deploys: [], now: NOW })
+    expect(stage(byHand, 'triage')).toMatchObject({ state: 'idle', skipped: true, retry: null })
+    expect(stage(byHand, 'diagnosis')).toMatchObject({ skipped: true })
+    const deepOnly = buildReportTrail({ report: report({ status: 'new', stage2_analysis: { rootCause: 'x' } }), queue: [], fix: null, deploys: [], now: NOW })
+    expect(stage(deepOnly, 'triage').state).toBe('passed')
+    expect(stage(deepOnly, 'diagnosis').state).toBe('passed')
+  })
+
+  it('a used-up diagnosis quota fails Diagnosis with the way out, and its retry is refused', () => {
+    const t = buildReportTrail({ report: report({ status: 'quota_exceeded', stage1_classification: {} }), queue: [job({ status: 'completed' })], fix: null, deploys: [], now: NOW })
+    expect(stage(t, 'diagnosis')).toMatchObject({ state: 'failed', retry: { kind: 'triage', allowed: false } })
+    expect(stage(t, 'diagnosis').problem).toMatch(/Billing/)
   })
 
   it('skipped CI is not green', () => {
@@ -176,6 +227,13 @@ describe('buildReportTrail', () => {
 describe('triageRetryDecision', () => {
   it('refuses a diagnosed report', () => {
     expect(triageRetryDecision(report({ stage1_classification: {}, stage2_analysis: {} }), [job({ status: 'completed' })], NOW.getTime()).kind).toBe('deny')
+  })
+  it('refuses a report already triaged, by the pipeline or by hand, so a severity set by hand is never overwritten', () => {
+    for (const status of ['classified', 'fixing', 'fixed', 'dismissed', 'dispatched']) {
+      expect(triageRetryDecision(report({ status }), [], NOW.getTime()).kind).toBe('deny')
+    }
+    expect(triageRetryDecision(report({ stage2_analysis: {} }), [], NOW.getTime()).kind).toBe('deny')
+    expect(triageRetryDecision(report({ status: 'quota_exceeded', stage1_classification: {} }), [], NOW.getTime()).kind).toBe('deny')
   })
   it('says already running for a fresh job', () => {
     expect(triageRetryDecision(report(), [job({ status: 'processing', started_at: minsAgo(3) })], NOW.getTime()).kind).toBe('already')
