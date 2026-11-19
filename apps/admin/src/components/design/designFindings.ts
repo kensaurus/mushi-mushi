@@ -6,6 +6,7 @@
  *          sentence, numbers and next step. Pure: no React.
  */
 
+import type { ReactNode } from 'react'
 import type { PageStatusMetric, PageStatusTone } from '../ui/page-status'
 import type { DesignPlaneResponse, DevianceFinding, RecipeIssue } from '../../lib/recipeTypes'
 import { issueCodeLabel } from '../recipe/recipeIssueLabels'
@@ -113,11 +114,13 @@ export function designLead(input: {
   /** Token-file problems that are not format notes (errors and warnings). */
   tokenProblems: number
   formatNotes: number
+  /** Drawn under the hard-coded styles number (the page's spread bar). */
+  stylesVisual?: ReactNode
 }): DesignLead {
-  const { latest, lastError, files, tokenProblems, formatNotes } = input
+  const { latest, lastError, files, tokenProblems, formatNotes, stylesVisual } = input
   const total = totalFindings(latest)
   const metrics: PageStatusMetric[] = []
-  if (total) metrics.push({ label: total === 1 ? 'Hard-coded style' : 'Hard-coded styles', value: total.toLocaleString(), tone: 'warn' })
+  if (total) metrics.push({ label: total === 1 ? 'Hard-coded style' : 'Hard-coded styles', value: total.toLocaleString(), tone: 'warn', ...(stylesVisual ? { visual: stylesVisual } : {}) })
   if (files) metrics.push({ label: files === 1 ? 'File' : 'Files', value: files })
   if (latest?.score != null) metrics.push({ label: 'Drift score (lower is better)', value: Math.round(latest.score), hint: 'How much of the scanned code uses values outside your design, 0 to 100.' })
   if (lastError) {

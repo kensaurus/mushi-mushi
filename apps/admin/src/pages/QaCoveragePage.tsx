@@ -1069,7 +1069,24 @@ export function QaCoveragePage() {
                   metrics={toMetrics([
                     { label: 'Passing', value: lead.passing, tone: 'ok', to: qaCoverageLinks.passing, hint: 'Tests whose finished runs passed at least 80% of the time in the last 24 hours.' },
                     { label: 'Failing', value: lead.failing, tone: lead.failing > 0 ? 'danger' : 'neutral', to: qaCoverageLinks.failing, hint: 'Tests whose finished runs passed less than 80% of the time in the last 24 hours.' },
-                    { label: 'Never ran', value: lead.neverRan, tone: lead.neverRan > 0 ? 'warn' : 'neutral', hint: 'Turned-on tests the schedule skipped all day, so nothing was checked. Each card says why.' },
+                    {
+                      label: 'Never ran',
+                      value: lead.neverRan,
+                      tone: lead.neverRan > 0 ? 'warn' : 'neutral',
+                      hint: 'Turned-on tests the schedule skipped all day, so nothing was checked. One mark per test; each card says why.',
+                      // One skipped mark per test, its name and reason on hover (2026-11-19).
+                      visual:
+                        lead.neverRanTests.length > 0 ? (
+                          <span className="flex flex-wrap items-center gap-1" data-testid="qa-never-ran-marks">
+                            {lead.neverRanTests.slice(0, 12).map((t) => (
+                              <span key={t.id} title={`${t.name}: ${t.why}`}>
+                                <StatusMark status="cancelled" label={`${t.name}: never ran`} />
+                              </span>
+                            ))}
+                            {lead.neverRanTests.length > 12 && <span className="font-mono text-2xs font-bold text-fg-secondary">+{lead.neverRanTests.length - 12}</span>}
+                          </span>
+                        ) : undefined,
+                    },
                   ])}
                   action={
                     lead.action.kind === 'open_failing' ? (

@@ -46,6 +46,7 @@ import { TokenEditQueue } from '../components/design/TokenEditQueue'
 import { changeLocksInputs, useDesignChange } from '../components/design/useDesignChange'
 import { editKey, type RuleChange } from '../components/design/designTokens'
 import { PageStatus, toMetrics } from '../components/ui/page-status'
+import { BarCell } from '../components/signal/BarCell'
 import { CopyPromptButton } from '../components/gates/CopyFixPromptButton'
 import { DesignFindingsByFile } from '../components/design/DesignFindingsByFile'
 import { TokenIssuesPanel } from '../components/design/TokenIssuesPanel'
@@ -242,6 +243,16 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         files: fileGroups.length,
         tokenProblems: data.issues.filter((i) => !isFormatNote(i)).length,
         formatNotes: data.issues.filter(isFormatNote).length,
+        // Under "Hard-coded styles": how many of the scanned files hold one, as a bar (2026-11-19).
+        stylesVisual:
+          fileGroups.length > 0 && (data.deviance.latest?.scannedFiles ?? 0) > 0 ? (
+            <BarCell
+              value={fileGroups.length}
+              max={data.deviance.latest!.scannedFiles}
+              tone="warn"
+              label={`In ${fileGroups.length} of ${data.deviance.latest!.scannedFiles} scanned files`}
+            />
+          ) : undefined,
       })
     : null
 

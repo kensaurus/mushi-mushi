@@ -111,3 +111,11 @@ describe('designLead', () => {
     expect(totalFindings(null)).toBeNull()
   })
 })
+
+describe('designLead styles visual', () => {
+  it('draws the visual under the hard-coded styles number only', () => {
+    const lead = designLead({ latest: run({}), lastError: null, files: 23, tokenProblems: 0, formatNotes: 0, stylesVisual: 'bar' })
+    expect(lead.metrics.find((m) => m.label === 'Hard-coded styles')?.visual).toBe('bar')
+    expect(lead.metrics.find((m) => m.label === 'Files')?.visual).toBeUndefined()
+  })
+})
