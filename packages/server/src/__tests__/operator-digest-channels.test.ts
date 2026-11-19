@@ -37,7 +37,7 @@ const P2 = '1000000b-0000-4000-8000-000000000000'
 // A Monday.
 const MONDAY = new Date('2026-10-05T09:30:00Z')
 
-const content = { title: 'Mushi daily digest for A', lines: ['a'], text: 'Mushi daily digest for A\n• a\nOpen the portfolio: u', hasContent: true }
+const content = { title: 'Mushi Mushi daily digest for A', lines: ['a'], text: 'Mushi Mushi daily digest for A\n• a\nOpen the portfolio: u', hasContent: true }
 
 function deps(over: Record<string, unknown> = {}) {
   return {
@@ -329,6 +329,6 @@ describe('digest settings with the new channels', () => {
     const res = await app.call('POST', `/v1/admin/orgs/${ORG}/digest/send`)
     // The app was never hole-checked, which the digest always says out loud.
     expect(res.body.data).toMatchObject({ status: 'sent', channels: [{ channel: 'teams', ok: true, detail: 'posted' }] })
-    expect(delivery.sendTeams).toHaveBeenCalledWith(expect.anything(), P1, 'Mushi daily digest for A', expect.stringContaining('1 app has not had hole checks yet.'))
+    expect(delivery.sendTeams).toHaveBeenCalledWith(expect.anything(), P1, 'Mushi Mushi daily digest for A', expect.stringContaining('1 app has not had hole checks yet.'))
   })
 })

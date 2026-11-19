@@ -267,6 +267,7 @@ async function sharedKeyWriteGuard(
 }
 import {
   countByokKeyHealth,
+  countByokKeysNeedingAction,
   legacyKeyStatus,
   type ByokKeyHealthInput,
 } from '../../_shared/byok-key-health.ts';
@@ -602,6 +603,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       cooldown_until: string | null;
       exhausted_until?: string | null;
       expires_at?: string | null;
+      key_hint?: string | null;
+      created_at?: string | null;
     }>;
     const healthInputs: ByokKeyHealthInput[] = poolRows.map((k) => ({
       provider_slug: k.provider_slug,
@@ -610,6 +613,8 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
       cooldown_until: k.cooldown_until,
       exhausted_until: k.exhausted_until ?? null,
       expires_at: k.expires_at ?? null,
+      key_hint: k.key_hint ?? null,
+      created_at: k.created_at ?? null,
     }));
     for (const provider of ['anthropic', 'openai', 'firecrawl', 'browserbase'] as const) {
       if (!row[`byok_${provider}_key_ref`]) continue;
@@ -626,6 +631,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
     const byokKeysFailing = health.attention;
     const byokKeysUntested = health.checking;
     const byokKeysExpiring = health.expiring;
+    const byokKeysNeedingAction = countByokKeysNeedingAction(healthInputs);
     // A replaced key (another one took over) is saved but never "failing".
     const byokKeysConfigured = health.working + health.attention + health.replaced + health.checking + health.expiring;
 
@@ -667,6 +673,7 @@ export function registerSettingsResearchRoutes(app: Hono<{ Variables: Variables 
         byokKeysConfigured,
         byokKeysPassing,
         byokKeysFailing,
+        byokKeysNeedingAction,
         byokKeysUntested,
         byokKeysExpiring,
         githubRepoConfigured: Boolean(row.github_repo_url),

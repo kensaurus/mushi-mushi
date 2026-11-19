@@ -30,7 +30,7 @@ REVOKE EXECUTE ON FUNCTION public.prune_graph_edges_per_project()               
 REVOKE EXECUTE ON FUNCTION public.prune_sandbox_events_per_project()                 FROM anon;
 REVOKE EXECUTE ON FUNCTION public.refresh_blast_radius_cache_safe()                  FROM anon;
 REVOKE EXECUTE ON FUNCTION public.refresh_intelligence_benchmarks()                  FROM anon;
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()                                  FROM anon;
+DO $guard$ BEGIN IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN EXECUTE 'REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon'; END IF; END $guard$; -- guarded 2026-11-19: hosted-only function
 REVOKE EXECUTE ON FUNCTION public.scoped_rate_limit_claim(uuid, text, integer, interval) FROM anon;
 REVOKE EXECUTE ON FUNCTION public.scoped_rate_limit_prune(interval)                  FROM anon;
 REVOKE EXECUTE ON FUNCTION public.vault_delete_secret(text)                          FROM anon;

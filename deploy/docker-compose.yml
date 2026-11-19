@@ -109,7 +109,9 @@ services:
     volumes:
       - storagedata:/var/lib/storage
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/status"]
+      # Storage listens on 127.0.0.1 and the container IP, not on ::1, and "localhost" can
+      # resolve to ::1 in this image; Supabase's own compose checks the service name.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage:5000/status"]
       interval: 5s
       timeout: 5s
       retries: 20

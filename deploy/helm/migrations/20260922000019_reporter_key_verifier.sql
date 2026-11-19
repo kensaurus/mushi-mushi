@@ -91,11 +91,11 @@ declare
 begin
   -- Rekeying is not an edit: keep updated_at (and "recently updated" views)
   -- as they were.
-  alter table public.reports disable trigger reports_updated_at;
-  alter table public.reporter_devices disable trigger trg_reporter_devices_updated_at;
-  alter table public.reporter_notifications disable trigger trg_reporter_notifications_updated_at;
-  alter table public.reporter_reputation disable trigger set_reporter_reputation_updated_at;
-  alter table public.support_tickets disable trigger trg_support_tickets_updated_at;
+  if exists (select 1 from pg_trigger where tgname = 'reports_updated_at' and tgrelid = 'public.reports'::regclass) then alter table public.reports disable trigger reports_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_reporter_devices_updated_at' and tgrelid = 'public.reporter_devices'::regclass) then alter table public.reporter_devices disable trigger trg_reporter_devices_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_reporter_notifications_updated_at' and tgrelid = 'public.reporter_notifications'::regclass) then alter table public.reporter_notifications disable trigger trg_reporter_notifications_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'set_reporter_reputation_updated_at' and tgrelid = 'public.reporter_reputation'::regclass) then alter table public.reporter_reputation disable trigger set_reporter_reputation_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_support_tickets_updated_at' and tgrelid = 'public.support_tickets'::regclass) then alter table public.support_tickets disable trigger trg_support_tickets_updated_at; end if;
 
   -- Plain columns
   update public.reports set reporter_token_hash = public.mushi_reporter_key(reporter_token_hash)
@@ -193,11 +193,11 @@ begin
    where exists (select 1 from unnest(d.reporter_tokens) as x where x ~ '^[0-9a-f]{64}$');
   get diagnostics n = row_count; table_name := 'reporter_devices.reporter_tokens'; converted := n; skipped := 0; return next;
 
-  alter table public.reports enable trigger reports_updated_at;
-  alter table public.reporter_devices enable trigger trg_reporter_devices_updated_at;
-  alter table public.reporter_notifications enable trigger trg_reporter_notifications_updated_at;
-  alter table public.reporter_reputation enable trigger set_reporter_reputation_updated_at;
-  alter table public.support_tickets enable trigger trg_support_tickets_updated_at;
+  if exists (select 1 from pg_trigger where tgname = 'reports_updated_at' and tgrelid = 'public.reports'::regclass) then alter table public.reports enable trigger reports_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_reporter_devices_updated_at' and tgrelid = 'public.reporter_devices'::regclass) then alter table public.reporter_devices enable trigger trg_reporter_devices_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_reporter_notifications_updated_at' and tgrelid = 'public.reporter_notifications'::regclass) then alter table public.reporter_notifications enable trigger trg_reporter_notifications_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'set_reporter_reputation_updated_at' and tgrelid = 'public.reporter_reputation'::regclass) then alter table public.reporter_reputation enable trigger set_reporter_reputation_updated_at; end if;
+  if exists (select 1 from pg_trigger where tgname = 'trg_support_tickets_updated_at' and tgrelid = 'public.support_tickets'::regclass) then alter table public.support_tickets enable trigger trg_support_tickets_updated_at; end if;
 end;
 $$;
 

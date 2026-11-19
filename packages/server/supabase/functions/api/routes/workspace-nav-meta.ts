@@ -638,6 +638,7 @@ export function registerWorkspaceNavMetaRoutes(
       ]),
       settings: pick(byPath['/v1/admin/settings/stats'], [
         'byokKeysFailing',
+        'byokKeysNeedingAction',
         'byokKeysUntested',
         'byokKeysExpiring',
         'byokKeysConfigured',

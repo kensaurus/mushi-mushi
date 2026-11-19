@@ -82,7 +82,7 @@ export function detectByokKeyInvalid(
       severity: 'error' as const,
       message:
         `Your ${k.provider_slug} key "${k.label || k.key_hint || 'unnamed'}" is rejected by ${k.provider_slug}. ` +
-        'Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → API Keys.',
+        'Mushi Mushi skips it, so calls fall back to another key or fail. Replace it in Settings → API Keys.',
       suggested_fix: {
         kind: 'console',
         path: '/settings?tab=byok',
@@ -152,7 +152,7 @@ export function detectSpendCapUnset(settings: SpendCapSettings): RadarFinding[] 
   if (missingAutofix.length > 0) {
     problems.push(
       autofixOn
-        ? `Auto-fix is on with no ${missingAutofix.join(' and no ')}. Mushi can start fixes on its own, so nothing limits what they spend.`
+        ? `Auto-fix is on with no ${missingAutofix.join(' and no ')}. Mushi Mushi can start fixes on its own, so nothing limits what they spend.`
         : `Auto-fix is off, but it has no ${missingAutofix.join(' and no ')}: if it is turned on, nothing limits what its fixes spend.`,
     )
     if (settings.autofix_max_spend_usd == null) {
@@ -198,10 +198,10 @@ export interface InboundWebhookState {
 }
 
 const INBOUND_LABEL: Record<InboundWebhookState['source'], { name: string; setup: string }> = {
-  sentry: { name: 'Sentry', setup: 'In Sentry, add the Mushi webhook URL under Settings → Integrations → Internal Integration, then send a test alert.' },
-  linear: { name: 'Linear', setup: 'Reconnect Linear from Integrations so Mushi can register its webhook, then change an issue to test it.' },
-  slack: { name: 'Slack', setup: 'Reinstall the Mushi Slack app from Integrations so Slack can send events, then mention the bot to test it.' },
-  github: { name: 'GitHub', setup: 'Install the Mushi GitHub App on the repo (or add the repo webhook), then push a commit to test it.' },
+  sentry: { name: 'Sentry', setup: 'In Sentry, add the Mushi Mushi webhook URL under Settings → Integrations → Internal Integration, then send a test alert.' },
+  linear: { name: 'Linear', setup: 'Reconnect Linear from Integrations so Mushi Mushi can register its webhook, then change an issue to test it.' },
+  slack: { name: 'Slack', setup: 'Reinstall the Mushi Mushi Slack app from Integrations so Slack can send events, then mention the bot to test it.' },
+  github: { name: 'GitHub', setup: 'Install the Mushi Mushi GitHub App on the repo (or add the repo webhook), then push a commit to test it.' },
 }
 
 export function detectWebhookNeverDelivered(states: InboundWebhookState[], nowMs: number): RadarFinding[] {
@@ -221,7 +221,7 @@ export function detectWebhookNeverDelivered(states: InboundWebhookState[], nowMs
             severity: 'error',
             message:
               `${label.name} has sent ${s.rejectedSignature} webhook(s), and every one failed the signature check. ` +
-              `The signing secret in ${label.name} does not match the one saved in Mushi, so no event has ever been accepted.`,
+              `The signing secret in ${label.name} does not match the one saved in Mushi Mushi, so no event has ever been accepted.`,
             suggested_fix: { kind: 'setup', source: s.source, step: 'Copy the signing secret again from Integrations and paste it into ' + label.name + '.' },
           }
         : {
@@ -267,7 +267,7 @@ export function detectIndexHealth(
       rule_id: 'index_branch_mismatch',
       severity: 'error',
       message:
-        `Mushi indexes the "${following}" branch of ${repo.repo_url}, but the repo's default branch is ` +
+        `Mushi Mushi indexes the "${following}" branch of ${repo.repo_url}, but the repo's default branch is ` +
         `"${github.default_branch}". Diagnoses and fixes read old code.`,
       suggested_fix: { kind: 'setting', field: 'project_repos.default_branch', value: github.default_branch },
     })

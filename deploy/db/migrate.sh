@@ -39,11 +39,15 @@ for f in "$MIGRATIONS_DIR"/*.sql; do
     exit 1
   fi
   echo "→ $base"
+  # CREATE INDEX CONCURRENTLY cannot run inside a transaction; such a file runs statement by
+  # statement (as `supabase db push` does), every other file all-or-nothing.
+  tx=--single-transaction
+  if grep -qi concurrently "$f"; then tx=; fi
   {
     cat "$f"
     printf "\ninsert into supabase_migrations.schema_migrations (version, name) values ('%s', '%s');\n" \
       "$version" "$name"
-  } | psql_ --single-transaction
+  } | psql_ $tx
   count=$((count + 1))
 done
 echo "✓ applied $count new migration(s)"

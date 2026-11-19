@@ -39,14 +39,26 @@ CREATE SCHEMA IF NOT EXISTS extensions;
 -- These ALTER EXTENSION calls are idempotent if the extension is already in
 -- the target schema. They fail silently if the extension isn't installed
 -- (e.g. self-hosted forks that don't have pg_net).
+-- 2026-11-19: move an extension only when it really sits in `public` and can move. A fresh
+-- self-host on supabase/postgres 17 installs pg_net elsewhere and refuses SET SCHEMA
+-- ("extension pg_net does not support SET SCHEMA"), which stopped `docker compose up`.
+-- Hosted ran this file in May 2026; the guard changes nothing there.
 DO $$
+DECLARE
+  ext text;
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
-    EXECUTE 'ALTER EXTENSION pg_net SET SCHEMA extensions';
-  END IF;
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'citext') THEN
-    EXECUTE 'ALTER EXTENSION citext SET SCHEMA extensions';
-  END IF;
+  FOREACH ext IN ARRAY ARRAY['pg_net', 'citext'] LOOP
+    IF EXISTS (
+      SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+      WHERE e.extname = ext AND n.nspname = 'public' AND e.extrelocatable
+    ) THEN
+      BEGIN
+        EXECUTE format('ALTER EXTENSION %I SET SCHEMA extensions', ext);
+      EXCEPTION WHEN feature_not_supported OR object_not_in_prerequisite_state THEN
+        RAISE NOTICE 'Left extension % where it is: %', ext, SQLERRM;
+      END;
+    END IF;
+  END LOOP;
 END $$;
 
 -- =============================================================================

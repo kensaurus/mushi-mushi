@@ -120,7 +120,7 @@ describe('missing_path_filter', () => {
 
   it('fires when docs-only pull requests ran the workflow, prices their minutes, and offers ignore_docs_paths', () => {
     const [a] = byRule(adviseCiCost(input({ workflows: [wf('ci.yml', yaml)], facts: prFacts, pullRequests: [pr(1, true), pr(2, false), pr(3, null)] })), 'missing_path_filter')
-    expect(a.evidence).toContain('1 of the 2 pull requests Mushi checked that ran ci.yml in 30 days changed only documentation (#1); they billed 50 min.')
+    expect(a.evidence).toContain('1 of the 2 pull requests Mushi Mushi checked that ran ci.yml in 30 days changed only documentation (#1); they billed 50 min.')
     expect(a.monthSavingUsd).toBe(0.3)
     expect(a.autofix).toMatchObject({ kind: 'ignore_docs_paths', workflowPath: 'ci.yml' })
   })
