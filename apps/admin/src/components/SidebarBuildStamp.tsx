@@ -80,16 +80,18 @@ export function SidebarBuildStamp({ compact = false }: { compact?: boolean }) {
   return (
     <Tooltip content={detail} side="right" portal>
       <div
-        className="flex min-w-0 items-center gap-1.5 px-2 text-2xs leading-none text-fg-muted"
+        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-2 text-2xs leading-none text-fg-muted"
         data-testid="sidebar-build-stamp"
         aria-label={`${modeLabel(mode)}. Mushi Mushi console v${build.version}${builtFull ? `, built ${builtFull}` : ''}`}
       >
         <span aria-hidden className={`${mark.ink} ${confirmed ? '' : 'opacity-60'}`}>{mark.glyph}</span>
-        <span className={`font-semibold uppercase tracking-wider ${confirmed ? 'text-fg-secondary' : 'text-fg-muted'}`}>
+        {/* Mixed case, no letter-spacing: "HOSTED" in caps pushed the version
+            out of the 240px sidebar ("v0.…", preview 2026-11-19). */}
+        <span className={`shrink-0 font-semibold ${confirmed ? 'text-fg-secondary' : 'text-fg-muted'}`}>
           {modeLabel(mode)}
         </span>
         <span aria-hidden className="text-fg-faint">·</span>
-        <span className="truncate font-mono tabular-nums text-fg-secondary">v{build.version}</span>
+        <span className="shrink-0 font-mono tabular-nums text-fg-secondary">v{build.version}</span>
         {builtShort ? (
           <>
             <span aria-hidden className="text-fg-faint">·</span>

@@ -74,7 +74,8 @@ function FileRow({ g, max }: { g: FileGroup; max: number }) {
           <StatusGlyph tone={g.errors > 0 ? 'danger' : 'warn'} label={g.errors > 0 ? 'Has errors' : 'Warnings'} />
           <span className="min-w-0 flex-1 basis-48 truncate font-mono text-xs font-bold text-fg" title={g.file}>{g.file}</span>
           <BarCell value={g.findings.length} max={max} tone={g.errors > 0 ? 'danger' : 'warn'} text={g.findings.length} widthClass="w-20" />
-          <span className="hidden min-w-0 truncate text-2xs text-fg-secondary sm:inline sm:max-w-64">
+          {/* Fixed width (not max-w) so every row's count and bar sit in one column. */}
+          <span className="hidden shrink-0 truncate text-2xs text-fg-secondary sm:inline sm:w-64" title={g.rules.map((r) => `${ruleLabel(r.rule)} ×${r.count}`).join(' · ')}>
             {g.rules.map((r) => `${ruleLabel(r.rule)} ×${r.count}`).join(' · ')}
           </span>
         </summary>
