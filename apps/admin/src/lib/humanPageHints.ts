@@ -44,12 +44,6 @@ export function cronErrorsHint(count: number): string {
     : `${count} scheduled jobs failed. Open Cron to see which jobs broke and when they last ran.`
 }
 
-export function qaFailingHint(count: number): string {
-  return count === 1
-    ? 'One user-story test is failing on schedule. Open the run to see screenshots and assertion errors.'
-    : `${count} user-story tests are failing. Open the failing runs to see screenshots and assertion errors.`
-}
-
 export function deadLetterHint(count: number): string {
   return count === 1
     ? 'One report hit the dead-letter queue after retries were exhausted. Inspect before replaying.'

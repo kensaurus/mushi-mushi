@@ -35,8 +35,6 @@ vi.mock('../components/PageHeaderBar', () => ({
 
 import { QaCoveragePage } from './QaCoveragePage'
 import { ToastProvider } from '../lib/toast'
-import { QaCoverageSnapshotStrip } from '../components/qa-coverage/QaCoverageSnapshotStrip'
-import { EMPTY_QA_COVERAGE_STATS } from '../components/qa-coverage/QaCoverageStatsTypes'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -88,16 +86,25 @@ describe('QaCoveragePage with no scheduled tests', () => {
   })
 })
 
-describe('QaCoverageSnapshotStrip', () => {
-  it('keeps its three numbers on one row at phone width (no orphan tile)', async () => {
-    await act(async () => {
-      root.render(
-        createElement(MemoryRouter, null, createElement(QaCoverageSnapshotStrip, { stats: { ...EMPTY_QA_COVERAGE_STATS, totalStories: 2 }, statsFetchedAt: null, hideLinks: true })),
-      )
+describe('QaCoveragePage lead when every test was skipped', () => {
+  it('says why in one sentence and offers one button that moves them to the cloud', async () => {
+    const story = (id: string, name: string) => ({
+      story_id: id, project_id: 'p1', name, enabled: true, browser_provider: 'local', last_run_status: 'skipped',
+      runs_24h: 24, passed_24h: 0, failed_24h: 0, error_24h: 0, pass_rate_pct: null, last_run_at: null, last_failure_url: null,
+      last_7d: [{ day: '2026-11-19', passed: 0, failed: 0, skipped: 24 }],
     })
-    const grid = host.querySelector('[aria-label="Scheduled tests summary"]')!
-    expect(grid.className).toContain('grid-cols-3')
-    expect(grid.className).not.toContain('grid-cols-2')
-    expect(grid.children).toHaveLength(3)
+    mocks.coverage = [story('a', 'Login'), story('b', 'Checkout'), story('c', 'Signup')]
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(QaCoveragePage))))
+    })
+    const status = host.querySelector('[data-testid="qa-status"]')!
+    expect(status.textContent).toContain('3 tests never ran: they are set to run on your computer only.')
+    expect(host.querySelector('[data-testid="qa-run-all-in-cloud"]')?.textContent).toBe('Run all 3 in the cloud')
+    // Each card says why too, and its strip marks the day as skipped, not failed.
+    expect(host.querySelectorAll('[data-testid="qa-skip-reason"]')).toHaveLength(3)
+    expect(host.querySelector('[data-testid="qa-run-strip"] li')?.getAttribute('data-tone')).toBe('skip')
+    // The old banner and the snapshot of numbers are gone: the status is said once.
+    expect(host.textContent).not.toContain('No test results yet')
+    expect(host.textContent).not.toContain('Summary')
   })
 })

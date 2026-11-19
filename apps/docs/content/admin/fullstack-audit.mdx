@@ -56,7 +56,12 @@ the table list or the gate runs), the page lists it and the verdict reads
 ## Open findings by check
 
 Below the scorecard, every open finding of each check's newest run is listed
-with its rule, file and line. This list is available on **every plan**; it
+with its rule, file and line. Each check leads with a status mark (▲ failing,
+◆ needs a look, ○ could not finish, ● passing) and, when it has more than one
+open finding, **Fix all N: copy prompt**: one prompt for every finding in that
+check. Lists longer than three findings stay folded. The audit's backend
+findings are rows with a mark, folded past five, and each known dependency
+hole keeps its advisories behind **Show the advisories**. This list is available on **every plan**; it
 reads `GET /v1/admin/inventory/:projectId/findings`, the same data as the MCP
 tool `list_gate_findings`. Running gates, crawls and test generation still need
 a plan with the inventory features.

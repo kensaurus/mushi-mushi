@@ -16,6 +16,20 @@ import { Callout } from 'nextra/components'
 
 Scheduled tests in Mushi Mushi let you describe user flows in plain English, run them on a schedule, and get screenshots plus failure evidence when something breaks.
 
+## The status line
+
+The page opens on one line that says what is wrong and holds the one button
+that fixes it, worst first:
+
+| What it says | The button |
+|--------------|-----------|
+| *N tests failing in the last 24 hours. Worst: Login.* | **Open Login** (its run history) |
+| *N tests never ran: they are set to run on your computer only.* | **Run all N in the cloud** (switches them to Firecrawl, so the schedule runs them). Viewers get the `mushi qa run <id>` command instead |
+| *N runs in progress.* / *All N tests passed in the last 24 hours.* | **Refresh** |
+
+Beside it, up to three numbers: **Passing**, **Failing** and **Never ran**
+(turned-on tests the schedule skipped all day, so nothing was checked).
+
 ---
 
 ## Story lifecycle
@@ -70,21 +84,39 @@ with a full Playwright test. The story uses the `local` provider and runs weekly
 ## Story cards
 
 The main grid shows one card per story with:
-- **Provider badge** — Local / Browserbase / Firecrawl
-- **24h pass rate** — colour-coded bar and percentage
-- **7 days** — one square per UTC day: red when a run failed that day, green when
-  every finished run passed, grey with none. Skipped runs never count as failures.
-  From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
-  could not be read).
+- **State** as a mark and a word: ✓ Passed, ✕ Failed, ⊘ Skipped, ○ Never ran,
+  Queued, Turned off
+- **Where it runs**: *On your computer*, *Cloud · Firecrawl* or *Cloud · Browserbase*
+- **Why it was skipped**, with the fix in the card:
+
+  | Runner | Why the schedule skips it | Fix on the card |
+  |--------|---------------------------|-----------------|
+  | On your computer | The cloud runner never runs it; only `mushi qa run <id>` on your computer does | **Run in the cloud**, or copy the command |
+  | Cloud · Browserbase | Browserbase opens the session, but the test still needs the CLI runner | **Run in the cloud** (Firecrawl), or copy the command |
+  | Cloud · Firecrawl | Too many tests ran at once for this app; the next tick runs it | none needed |
+
+  **Run in the cloud** reads each test first. A test that holds a Playwright
+  script (the kind **Generate test from report** writes) stays on your
+  computer: the cloud runner would ignore the script and could pass without
+  running the test. The page says so and points you at its `mushi qa run <id>`
+  command; the story drawer shows only the command for it.
+
+- **24h pass rate** over finished runs — bar and percentage; "nothing checked"
+  when every run was skipped
+- **7 days** — one heat cell per UTC day with a glyph: ✕ red when a run failed
+  that day, ✓ green when every finished run passed, ⊘ grey when every run was
+  skipped, blank with none. Skipped runs never count as failures. From `last_7d`
+  on `GET /v1/admin/projects/:id/qa-coverage` (`{ day, passed, failed, skipped }`;
+  `null` when the runs could not be read)
 - **Run count** and **last run** time
-- **disabled** / **queued** chip when applicable
 - Link to last failure Browserbase replay session
 
 ## Story drawer
 
 Click any card to open the story drawer:
 
-- **Story prompt** and **provider** at the top
+- **Story prompt** and **where it runs** at the top, with **Run in the cloud**
+  and the `mushi qa run <id>` command when it is not on Firecrawl
 - **Script** section (collapsible) — the raw Playwright script if one was generated
 - **Run history** — newest runs first. Expand any run to see:
   - Meta (status, provider, latency)

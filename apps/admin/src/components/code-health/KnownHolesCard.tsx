@@ -285,16 +285,22 @@ function HoleRow({ g, busy, onDismiss, onReopen }: { g: KnownHoleGroup; busy: bo
         <span className="font-mono">{g.sources.map((s) => s.path).join(', ')}</span>
         {!g.target && ' · no fixed version published yet'}
       </p>
-      <ul className="flex flex-col gap-0.5 text-xs">
-        {g.advisories.slice(0, 4).map((a) => (
-          // Wraps, never cut: "denial of s…" at 390 hid what the advisory is (round 3).
-          <li key={a.id} className="min-w-0 wrap-break-word">
-            <a href={a.url} target="_blank" rel="noreferrer" className={LINK_ACCENT}>{a.id}</a>
-            <span className="text-fg-muted"> {a.title}</span>
-          </li>
-        ))}
-        {g.advisories.length > 4 && <li className="text-fg-faint">and {g.advisories.length - 4} more</li>}
-      </ul>
+      {/* The advisories fold under one line: the upgrade and its buttons lead (2026-11-19). */}
+      <details className="text-xs">
+        <summary className="cursor-pointer text-2xs text-fg-muted hover:text-fg">
+          Show the advisor{g.advisories.length === 1 ? 'y' : 'ies'}
+        </summary>
+        <ul className="mt-0.5 flex flex-col gap-0.5">
+          {g.advisories.slice(0, 4).map((a) => (
+            // Wraps, never cut: "denial of s…" at 390 hid what the advisory is (round 3).
+            <li key={a.id} className="min-w-0 wrap-break-word">
+              <a href={a.url} target="_blank" rel="noreferrer" className={LINK_ACCENT}>{a.id}</a>
+              <span className="text-fg-muted"> {a.title}</span>
+            </li>
+          ))}
+          {g.advisories.length > 4 && <li className="text-fg-faint">and {g.advisories.length - 4} more</li>}
+        </ul>
+      </details>
       <div className="flex flex-wrap items-center gap-2">
         {g.reportId && <Btn to={`/reports/${g.reportId}`} size="sm" variant="ghost">Open the report</Btn>}
         {g.target && <Btn size="sm" variant="ghost" onClick={copy}>{copied ? 'Copied' : 'Copy fix prompt'}</Btn>}

@@ -25,7 +25,8 @@ import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
 import { ApplySuggestedCapsButton } from './ApplySuggestedCapsButton'
 import { DismissFindingButton } from './DismissFindingButton'
-import { CopyFixPromptButton } from './CopyFixPromptButton'
+import { CopyFixPromptButton, CopyPromptButton, checkFindingsFixPrompt } from './CopyFixPromptButton'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { usePageData } from '../../lib/usePageData'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import {
@@ -206,11 +207,11 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
   )
 }
 
-const STATUS_TEXT: Record<string, { label: string; tone: string }> = {
-  fail: { label: 'Failing', tone: 'text-danger' },
-  error: { label: 'Could not finish', tone: 'text-danger' },
-  warn: { label: 'Needs a look', tone: 'text-warn' },
-  pass: { label: 'Passing', tone: 'text-ok' },
+const STATUS_TEXT: Record<string, { label: string; tone: string; glyph: SignalTone }> = {
+  fail: { label: 'Failing', tone: 'text-danger-foreground', glyph: 'danger' },
+  error: { label: 'Could not finish', tone: 'text-danger-foreground', glyph: 'off' },
+  warn: { label: 'Needs a look', tone: 'text-warn-foreground', glyph: 'warn' },
+  pass: { label: 'Passing', tone: 'text-ok-foreground', glyph: 'ok' },
 }
 
 /**
@@ -232,19 +233,28 @@ function findingsDisclosureLabel(open: number, shown: number): string {
  */
 function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: string; group: CheckGroup; limit: number; onChanged: () => void }) {
   const info = gateInfo(g.gate)
-  const status = STATUS_TEXT[g.status] ?? { label: g.status, tone: 'text-fg-muted' }
+  const status = STATUS_TEXT[g.status] ?? { label: g.status, tone: 'text-fg-muted', glyph: 'off' as const }
   const days = g.ranAt ? Math.floor((Date.now() - Date.parse(g.ranAt)) / 86_400_000) : null
   const shown = g.findings.slice(0, limit)
   return (
     <div className="space-y-2 py-3 first:pt-0" data-check={g.gate}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <h3 className="text-sm font-semibold text-fg">{gateLabel(g.gate)}</h3>
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+            <StatusGlyph tone={status.glyph} />
+            {gateLabel(g.gate)}
+          </h3>
           {info && <p className="text-xs text-fg-secondary">{checksLine(gateLabel(g.gate), info.checks)}</p>}
         </div>
-        <span className={`shrink-0 text-xs font-medium ${status.tone}`} data-testid="gate-check-counts">
-          {status.label}
-          {g.open > 0 ? ` · ${severityParts(g.findings)}` : ' · nothing open'}
+        <span className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className={`text-xs font-bold ${status.tone}`} data-testid="gate-check-counts">
+            {status.label}
+            {g.open > 0 ? ` · ${severityParts(g.findings)}` : ' · nothing open'}
+          </span>
+          {/* The check's action first, before its list (2026-11-19): one prompt for every open finding. */}
+          {g.open > 1 && (
+            <CopyPromptButton text={checkFindingsFixPrompt(g.findings)} label={`Fix all ${g.open}: copy prompt`} testId="copy-check-fix-all" />
+          )}
         </span>
       </div>
       <p className="text-2xs text-fg-muted">
@@ -307,7 +317,10 @@ function QuietCheckRow({ group: g }: { group: CheckGroup }) {
   const info = gateInfo(g.gate)
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-2 text-xs" data-check={g.gate}>
-      <span className="text-fg" title={info?.checks}>{gateLabel(g.gate)}</span>
+      <span className="flex items-center gap-1.5 text-fg" title={info?.checks}>
+        <StatusGlyph tone={g.status === 'pass' ? 'ok' : 'off'} />
+        {gateLabel(g.gate)}
+      </span>
       <span className="text-2xs text-fg-muted">
         {g.ranAt ? <span title={new Date(g.ranAt).toLocaleString()}>{formatRelative(g.ranAt)}</span> : 'Unknown run time'}
       </span>
