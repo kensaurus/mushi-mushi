@@ -23,6 +23,8 @@ import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { VitalText } from '../signal/VitalText'
 import { SendToWorkerButton } from './SendToWorkerButton'
+import { AppGroupSection } from '../ui/app-group'
+import { groupByApp, type AppGroup } from '../../lib/groupByApp'
 import type { WorkerLane } from '../../lib/workers'
 
 interface Props {
@@ -75,6 +77,28 @@ const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 
 const VERDICT_LABEL: Record<string, string> = { merge: 'Opus: merge', fix_first: 'Opus: fix first', hold: 'Opus: hold' }
 
 /** Where the person fixes what blocks an action, when it is a setting. */
+/** A group's signal as a RunStatus, for the per-app header counts. */
+const SIGNAL_RUN_STATUS: Record<SignalTone, RunStatus> = { danger: 'failed', warn: 'slow', info: 'running', ok: 'passed', off: 'idle' }
+
+/**
+ * All apps: a group's items by app, the app with the oldest item first and, inside it, the
+ * oldest item first (the one that has waited longest is the worst). One app: null, the list
+ * stays flat. @internal Exported for tests.
+ */
+export function groupItemsByApp(
+  group: Pick<PipelineGroup, 'items'>,
+  projectNames: ReadonlyMap<string, string>,
+  showApp: boolean,
+): AppGroup<PipelineItem>[] | null {
+  if (!showApp || new Set(group.items.map((i) => i.projectId)).size < 2) return null
+  return groupByApp(group.items, (i) => ({ id: i.projectId, name: projectNames.get(i.projectId) }), {
+    rank: (i) => {
+      const t = Date.parse(i.since)
+      return Number.isFinite(t) ? t : Number.POSITIVE_INFINITY
+    },
+  })
+}
+
 function blockedFixLink(reason: string): { label: string; to: string } | null {
   if (/GitHub token/i.test(reason)) return { label: 'GitHub connection', to: '/integrations/config#platform-card-github' }
   if (/follow-ups are off|Cursor key/i.test(reason)) return { label: 'Review follow-ups setting', to: '/settings?tab=byok#review-followups' }
@@ -336,6 +360,9 @@ function GroupCard({ group, props, marked, inSection = false }: { group: Pipelin
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
   const signal = groupSignalTone(group)
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
+  const byApp = groupItemsByApp(group, props.projectNames, props.showApp)
+  // "Show more" pages through the whole group in the grouped order, so each app shows its oldest first.
+  const shownIds = new Set((byApp ? byApp.flatMap((a) => a.items) : group.items).slice(0, shown).map((i) => i.id))
   return (
     // On a phone the title takes its own line and the age + actions a row beneath, never a
     // one-letter-wide column (GROUP_HEAD, 2026-11-18).
@@ -390,9 +417,31 @@ function GroupCard({ group, props, marked, inSection = false }: { group: Pipelin
       )}
       {open && (
         <ul className="divide-y divide-edge-subtle border-t border-edge-subtle px-2.5">
-          {group.items.slice(0, shown).map((item) => (
-            <ItemRow key={item.id} item={item} group={group} props={props} />
-          ))}
+          {byApp
+            ? // All apps: one block per app (worst first), its count in the header and "Open →"
+              // to that app's own pipeline at this group. The row's app badge would repeat the header.
+              byApp.map((app) => {
+                const rows = app.items.filter((i) => shownIds.has(i.id))
+                if (rows.length === 0) return null
+                return (
+                  <li key={app.id} className="py-1" data-testid={`pipeline-group-${group.id}-app-${app.id}`}>
+                    <AppGroupSection
+                      app={app}
+                      counts={{ [SIGNAL_RUN_STATUS[signal]]: app.items.length }}
+                      summary={app.items[0] ? `oldest ${ageLabel(app.items[0].since, props.now)}` : undefined}
+                      to={`/pipeline?project=${encodeURIComponent(app.id)}&group=${encodeURIComponent(group.id)}`}
+                      data-testid={`pipeline-app-group-${group.id}-${app.id}`}
+                    >
+                      <ul className="divide-y divide-edge-subtle">
+                        {rows.map((item) => (
+                          <ItemRow key={item.id} item={item} group={group} props={{ ...props, showApp: false }} />
+                        ))}
+                      </ul>
+                    </AppGroupSection>
+                  </li>
+                )
+              })
+            : group.items.slice(0, shown).map((item) => <ItemRow key={item.id} item={item} group={group} props={props} />)}
           {shown < group.items.length && (
             <li className="py-2">
               <Btn size="sm" variant="ghost" onClick={() => setShown((n) => n + ITEMS_STEP)} data-testid={`pipeline-group-${group.id}-more`}>

@@ -19448,7 +19448,8 @@ mushi runner status --json
 
 | Permission | Needed for |
 | --- | --- |
-| Actions: read | Jobs, their times, runner names and why a job was cancelled |
+| Actions: read | Jobs, their times, runner names and why a job was cancelled, and a failed job's log in the console's **Why?** panel |
+| Actions: read and write (optional) | **Re-run failed jobs** and **Cancel run** from the console. The Mushi Mushi GitHub App asks for Actions: read only, so add a fine-grained token with Actions: Read and write in the app's GitHub connection. Without it the console says so and links that setting |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
 | Variables: read and write (optional) | Changing where CI runs: Mushi Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi Mushi's own token |
@@ -21173,11 +21174,30 @@ The **Now** view opens with plain answers, in this order:
 | --- | --- |
 | The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. For waiting jobs it says why: which machine takes jobs with their labels, and which idle machines are not set up for them. |
 | **Machines right now** | Which machine runs what: one card per real machine, by name, with how busy its CPU and memory are. Jobs on GitHub's machines show as **GitHub's cloud**. Idle machines are listed on one line. |
-| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. |
+| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. **Inspect** shows the live steps and **Cancel run**. |
 | **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A job that failed in a re-run too is listed once. Draft pull requests that skipped CI on purpose are one line below the list, not failures. |
 | **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. Two repos of one app show their repo name. |
 
 **Last 7 days** follows: the week's counts and pass rate. It does not repeat what is waiting or running now; that is the board above.
+
+The cards at the top merge one cause seen in several places: a job that keeps failing in three apps is one card with a bar per app, not three cards.
+
+### All apps
+
+With **All apps** and two or more apps, **Running now** and **What broke** become one section per app, worst app first. Each app's header counts what failed, is running and is waiting, and shows its pass rate as a bar. Apps where nothing is wrong start collapsed. A cause seen in several apps, and a card about a machine, are listed once above the apps. **Open →** switches the page to that app.
+
+## Why it failed
+
+Every failed job has a **Why?** button: on the cards at the top (**Why it failed**), in **What broke**, in the finished queue, under **Stopped by the test machine** and in a job's details. It opens a panel with:
+
+| Part | What it shows |
+| --- | --- |
+| The failing step | The first step that failed, with every step and its time below. |
+| **Explain this failure** | A plain-English cause, one next step, and whether it looks like your code, a flaky run or the test machine. A machine stop or a cancel is explained from the job's own result, with no AI call. A code failure is read by OpenAI's small model through your app's AI keys, within its spend limit. The answer is kept for that job attempt, so opening it again costs nothing. |
+| **Log around the failure** | The lines around the errors in the job's log, read from GitHub when you open the panel. Lines that read like instructions to an AI or name a secret are hidden, and links show as `[url]`. Mushi Mushi does not store the log. GitHub's annotations are listed under it. |
+| Actions | **Re-run failed jobs** for that run, **Cancel run** while it is still going, and **Send to CI repair** when the job tested a Mushi Mushi fix: an agent makes CI green without weakening tests. **Open on GitHub** is last. |
+
+Re-run and cancel need **Actions: Read and write** on the GitHub access Mushi Mushi uses. The Mushi Mushi GitHub App reads Actions only, so the panel says so and links the GitHub connection, where a fine-grained token with that permission can be added. A missing OpenAI key or a spent AI limit shows its own fix button.
 
 ## Test machine or your code
 
@@ -21213,7 +21233,7 @@ Runners that live for a single job, named as a label plus a number of seconds, a
 
 **Slow jobs** is the jobs and steps that take the longest.
 
-**Stopped by the test machine** lists jobs that never finished testing. Re-run them.
+**Stopped by the test machine** lists jobs that never finished testing. **Re-run** them here; with several runs, **Re-run all** re-runs each run once.
 
 ## Your real bill
 
@@ -21767,8 +21787,13 @@ description: The Content checks page in the Mushi Mushi console queues low-scori
 
 **Route:** `/content` (sidebar: **Content checks**, under Verify)
 
-With nothing open and no filter from a link, the page is its empty state with
-**Show past issues**; the filter row appears once there is something to filter.
+When your app has never sent anything, the page is one first step: **Copy the
+request** copies a ready `curl` call to `POST /v1/content-quality` (put your
+project API key in `X-Mushi-Api-Key` and send it from your app). With nothing
+open but past issues, the page is one all-clear line with **Show past issues**;
+the filter row appears once there is something to filter. When issues are open,
+a status line says how many need a look, how many your users flagged and how
+many regenerations failed, with **Show what users flagged**.
 
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
 > poorly or got user flags, and you need a queue of fixable assets.
@@ -22089,16 +22114,20 @@ With no token files read yet, the page is one step: point Mushi Mushi at the fil
 
 ## Tokens
 
-A status chip (OK, Needs attention, Not checked yet, Not set up, or Check failed) sits with the reason and where the snapshot came from: repo files, a CI push, derived data, or a connector, plus the short commit when one is recorded. When the scan is OK but the token files have issues, the chip reads Needs attention and the reason counts those issues. A failed refresh or scan is printed under the chip.
+The page opens on one status line: how many places use a hard-coded style instead of your tokens and in how many files, up to three numbers (hard-coded styles, files, drift score) and one button: **Copy fix prompt for all files**, or **Check for drift** when no check has run or the last one failed.
 
-Under it, **Your colours** shows the colour tokens as swatches and **Drift from your design** draws the deviance score over time (lower is better; unscored checks are left out).
+**Hard-coded styles by file** comes next: one row per file, worst first, with its count as a bar, the kinds of problem in plain words (off-token colour, off-scale spacing…) and **Copy fix prompt** for that file. A row opens to its findings: the line, the value, and the token to use instead. Up to 200 stored findings are grouped; when the scan counted more, the section says so.
+
+**Token files** lists real problems in the token files (invalid JSON, an alias to a missing token, a token defined twice). Format notes, tokens written in an older DTCG form that are still read correctly, fold into one row ("67 token format notes · not breaking") with **Fix all (prompt)**; it opens to the count per kind in plain words.
+
+Then **Drift from your design** (the score, **Check for drift**, and the per-rule breakdown behind a disclosure), **Your colours** with the drift trend, and the status chip with where the tokens were read from (repo files, a CI push, derived data or a connector, plus the short commit) and any failed refresh.
 
 When the project has more than one token set, a switch lists them and marks the active set from `mushi.recipe.json`. The view then shows:
 
 | Section | What you see |
 | --- | --- |
-| **Token issues** | Severity, message, and file or token path. Empty: "No token issues in this set." |
-| **Drift from your design** | The deviance score, a per-rule breakdown, a trend, the top findings, and **Check for drift**. |
+| **Token files** | Problems in the token files, then the format notes folded into one row. Hidden when there are none. |
+| **Drift from your design** | The deviance score, **Check for drift**, and the per-rule breakdown. |
 | **Contrast** | An "Aa" sample for each declared pair, the ratio, the minimum it needs, and Pass, Fail, or Not judged. |
 | **When the score is too high** | A 0–100 threshold and two switches, off until an owner or admin turns them on. |
 | **Token catalogue** | Closed until the edit queue has an edit. Swatches, Latin and Thai type samples, spacing bars, radius boxes, motion values, and other tokens. Filter by name. The first 12 tokens in a section, then **View all**. **Edit** queues a new value. |
@@ -23264,7 +23293,12 @@ the table list or the gate runs), the page lists it and the verdict reads
 ## Open findings by check
 
 Below the scorecard, every open finding of each check's newest run is listed
-with its rule, file and line. This list is available on **every plan**; it
+with its rule, file and line. Each check leads with a status mark (▲ failing,
+◆ needs a look, ○ could not finish, ● passing) and, when it has more than one
+open finding, **Fix all N: copy prompt**: one prompt for every finding in that
+check. Lists longer than three findings stay folded. The audit's backend
+findings are rows with a mark, folded past five, and each known dependency
+hole keeps its advisories behind **Show the advisories**. This list is available on **every plan**; it
 reads `GET /v1/admin/inventory/:projectId/findings`, the same data as the MCP
 tool `list_gate_findings`. Running gates, crawls and test generation still need
 a plan with the inventory features.
@@ -23449,6 +23483,22 @@ The page has four views, picked at the top: **Mushi Mushi’s AI & jobs** (descr
 **[Unusual spikes](/admin/anomalies)**. Inside **Mushi Mushi’s AI & jobs**, the tabs are
 **Overview**, **AI calls**, **Scheduled jobs** and **Recent traces**.
 
+**First on the page:** one line with the worst problem and its button, in this order:
+
+| The line says | Button |
+|---|---|
+| "1 scheduled job failed on its last run: Triage grading." | **Run now** (or **Open jobs** for several jobs, or one the console can't run) |
+| "9% of AI calls failed in the last 24h, usually a provider outage or an expired key." | **See failed calls** |
+| "1 scheduled job is overdue: Weekly summary." | **Run now** / **Open jobs** |
+| "2% of AI calls failed …" or "… switched to the backup model …" | **See failed calls** / **See AI calls** |
+
+When nothing is wrong the line points at **Home** for your app's own health. **Run now**
+runs Triage grading or Weekly summary straight away (it spends AI budget; admins only);
+Data clean-up only runs on its schedule. The three numbers beside it are pictures: **AI
+calls** as one bar split into answered, answered by the backup model and failed;
+**Failed calls** against the 5% line; **Background jobs on time** with one status mark per
+job.
+
 ---
 
 ## Time window
@@ -23506,6 +23556,20 @@ The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
 
 Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
 It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
+
+### Stuck reports
+
+Above the job cards, **Stuck reports** counts this app's reports stuck before triage
+(new or held for over 5 minutes, under 3 tries), failed triage jobs with tries left,
+and jobs that have waited for the worker for over 15 minutes. **Run recovery now**
+does what the 5-minute `pipeline-recovery` job does, for this app only: it sends the
+stuck reports to triage again, retries the failed jobs, and closes jobs whose report
+was already triaged. The result shows on the same line ("Re-sent 3 stuck reports to
+triage, retried 1 failed job."). It spends AI budget, so only owners and admins can
+run it. The same line shows on the **Overview** tab while something is stuck.
+
+A run by hand does not count as a run of the scheduled job, so a scheduled job that
+is not running still shows as late.
 
 ---
 
@@ -24396,13 +24460,34 @@ A second AI grades each diagnosis Mushi Mushi makes: was the category right, the
 severity, the part of the app, and were the steps to reproduce usable. This page shows
 how often it agrees, so you can tell whether to trust a diagnosis before you merge its fix.
 
-**First on the page:** one sentence with this week's score and how often the grader
-disagreed **in the last 14 days** (the window is named; an older server without it
-gets "so far", all time), with **See disagreements**. Under it, **How often the grader
-agrees** draws the weekly agreement share for 12 weeks, and **Worst disagreements,
-last 14 days** lists the 3 lowest-scored disagreements with the grader's reason and a
-link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
-`recentEvaluations`, `recentDisagreements` and `agreementWeeks` for this.
+**First on the page:** one line that says how many diagnoses the grader disagreed with
+**in the last 14 days** ("7 of 12 diagnoses in the last 14 days disagreed with the grader")
+and a **Review 7** button. An older server without the window says "so far", all time.
+Beside it: **Agreed** as a bar against the 80% target, the disagreements still to review,
+and the reports ready to grade.
+
+Under it, **How often the grader agrees** draws one bar per week for 12 weeks against a
+dashed 80% target line (green at or over it, amber under, red under 60%). **Worst
+disagreements, last 14 days** lists the 3 lowest-graded disagreements as review rows.
+
+### Reviewing a disagreement
+
+**Review N** opens **Grades** filtered to the last 14 days of disagreements, rows still to review first, one compact row each: the report,
+its grade as a bar, the grader's reason in one line, and the decision:
+
+- **Accept grader's view** applies the grader's correction to the report (category,
+  severity or area; only values the report accepts are offered).
+- **Keep diagnosis** keeps the report as it is and adds a team note.
+
+Both confirm the report's category as a person, so the row turns into **✓ Reviewed** and
+leaves the count. Confirming a category also lets a reporter's feature request go to
+auto-fix. A row with no correction to offer, a report filed under a reporter's own category
+(feature, question, feedback), or a server older than this page, shows
+**Open report** instead. Viewers can read the rows but not decide.
+
+`GET /v1/admin/judge/stats` returns `recentWindowDays`, `recentEvaluations`,
+`recentDisagreements`, `recentToReview` and `agreementWeeks`; each row of
+`GET /v1/admin/judge/evaluations` carries `grader_patch` and `reviewed`.
 
 ---
 
@@ -24471,6 +24556,11 @@ In Mushi Mushi, a lesson is a structured coding rule extracted from a cluster of
 bug reports. Once promoted, your editor agent can read it before it writes a fix: through
 the MCP tools `query_lessons` and `list_lessons`, or from `.mushi/lessons.json` in your repo.
 
+**First on the page:** one line on what the rules do and how things stand, with one
+button: **Promote N** when a recurring bug is ready to become a rule, **Review rules**
+when a critical rule is in use, or **Try a change** (see which rules apply to a diff)
+when rules are in use and nothing is ready.
+
 ---
 
 ## The lifecycle: how a report becomes a rule
@@ -24514,10 +24604,12 @@ A pattern of 2 reports isn't reliable enough to write a codebase rule: it reads
 
 ## Tab: Rules in use (`?tab=lessons`)
 
-Your active coding rules. Each row shows the severity, how many times it was seen,
-the pattern it came from, and the first two lines of the rule text.
+Your active coding rules as dense rows, the most-seen first. Each row shows the
+severity as a glyph (▲ critical, ◆ warning, ■ note), a **seen N×** bar on one scale for
+the whole list, the rule clamped to two lines (**More** expands it in place, with what to
+avoid), when it was last seen, and **Retire**.
 
-**Click any row** to open the detail drawer with the full content:
+**›** opens the detail drawer with the full content:
 
 - **Rule** — the positive instruction (e.g. *"Always await the form submit handler
   before accessing `event.target` values in Safari"*)
@@ -25403,6 +25495,10 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
 
+In **All apps**, an open group lists its items in one block per app: the app with the item that has waited longest comes first, its header shows how many of the group's items are in that app and how long the oldest has waited, and **Open →** switches to that app's own Pipeline at the same group. With one app, or in **This app**, the list stays flat.
+
+The status line at the top names the group to start with, and in **All apps** the apps it is in. Its button is that group's first fix the server would take. When nothing is stuck but nothing opens fixes either, the button opens the **Workers** tab.
+
 ## Release trains
 
 One row per repository with the trains of the last 7 days: green merged, red failed, blue on the way. Click a square for that train's detail. The checks that failed the trains most often are listed under the row. **Run merge queue now** checks the queue at once and says whether a train left, and if not, when the next one may leave or why it waits.
@@ -25833,10 +25929,24 @@ robots:
 AI prompts is a Lab: it is under **More pages** in the sidebar, and Settings → Display & sidebar can keep it in the sidebar. The page
 works by URL either way.
 
-**First on the page:** **Versions and their grades**, one row per AI step (Fast
-filter, Diagnosis, Grading, Fix writer, …) with the version in use, the best version
-being tested, their grades, and a verdict: ahead (consider promoting), behind, or
-waiting for grades. A row opens that step's editing table.
+**First on the page:** one recommendation in plain words and its button, picked from
+every step:
+
+| The line says | Button |
+|---|---|
+| "A newer Diagnosis prompt scores 72% vs 61% for the one in use. Switch to it." | **Switch to it** (asks first) |
+| "Fast filter has a test version that gets no reports … Start it on 1 in 10 reports." | **Start on 1 in 10 reports** |
+| "A newer Diagnosis prompt scores 49% vs no grade yet … Not enough grades yet: 6 more needed." | **Open grading** (points at Triage grading's Run button) |
+| "Each step runs one prompt; nothing is being tested." | none |
+
+Switching is suggested only when the nightly auto-promotion would do it too: 30 grades
+and more than 5% better than the version in use. Built-in versions are never switched
+to from here; clone them first.
+
+Under it, **Versions and their grades** has one row per AI step (Fast filter, Diagnosis,
+Grading, Fix writer, …) with the version in use, the version being tested, their grades,
+and a verdict ("Testing on half of reports, waiting for grades", "Not started: gets no
+reports"). A row opens that step's version table.
 
 > **Scenario:** Your fix-worker has been generating patches that touch the wrong file
 > 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
@@ -25858,19 +25968,21 @@ The **How prompt tuning works** panel lists the steps:
 ```
 
 **Step 1 — Build eval dataset:** grades need classified reports. The **Eval dataset**
-card shows the recent classified reports the grader can use.
+card shows the recent classified reports the grader can use, one line each: a severity
+glyph and the report's title. **Details** shows its category, area and full text.
 
 **Step 2 — Clone a baseline:** click **Clone** (the copy icon) on the version in use. The
 copy starts at 0% traffic, so it serves no live requests yet. Click **Edit** to change
 its template. Steps marked **Built-in** cannot be cloned: no worker reads a project copy
 of that prompt yet.
 
-**Step 3 — A/B at low traffic:** use **Set A/B traffic share** to give the copy a small
-share (for example 10%). The judge runs nightly and grades both versions. Compare their
-**Judge score** columns once each has a fair number of **Evals**.
+**Step 3 — Test on a share of reports:** use the sliders icon (**Choose how many reports
+this version tests on**) to give the copy a small share (for example 10%, "1 in 10
+reports"). The judge runs nightly and grades both versions. Compare their **Grade** bars
+once each has a fair number of **Grades**.
 
-**Step 4 — Promote:** click **Make this the live prompt** and confirm **Activate at 100%**.
-This removes all A/B splits. The nightly judge run also promotes a candidate on its own
+**Step 4 — Switch:** click **Switch to this** and confirm **Switch to it**. Every new
+report in that step uses the version, and the step's tests stop. The nightly judge run also promotes a candidate on its own
 once it has at least 30 evaluations and scores more than 5% above the version in use.
 
 The judge runs once per night, so an A/B test needs a few nights of data. Don't promote
@@ -25912,11 +26024,11 @@ show up when they have prompt rows.
 
 | Column | What it tells you |
 |--------|------------------|
-| **Version** | The version name, with an **Auto** badge when the weekly prompt tuner drafted it |
-| **State** | **Active**, **Candidate** or **Idle**, plus **Global** for a built-in version |
-| **Traffic** | What share of live requests this version serves |
-| **Judge score** | Higher is better. Uses the rolling 7-day evaluation window |
-| **Evals** | How many evaluations the score is based on. A low count means an unreliable score |
+| **State** | A glyph and plain words: **In use**, **Testing on half of reports**, **Not started**, **Idle**; plus **Global** for a built-in version and **Auto** when the weekly prompt tuner drafted it |
+| **Version** | The raw version id, as small grey text |
+| **Grade** | A bar on 0–100%. Higher is better. Uses the rolling 7-day evaluation window |
+| **Grades** | How many grades the score is based on. A low count means an unreliable score |
+| **Share of reports** | A bar of what share of new reports this version diagnoses |
 | **Updated** | When the version last changed |
 
 ---
@@ -25928,8 +26040,8 @@ show up when they have prompt rows.
 | **Clone** | Starting point for any edit. Built-in versions are read-only; clone first |
 | **Edit** | Open the template editor for a project version |
 | **Diff** | Compare against the version it was cloned from. Use before promoting |
-| **Set A/B traffic share** | Raise a candidate's traffic share gradually |
-| **Make this the live prompt** | Activate at 100% and remove all A/B splits |
+| **Choose how many reports** (sliders) | Raise a test's share of reports gradually |
+| **Switch to this** | Use this version for every report in the step; tests stop |
 | **Delete** | Remove a candidate that didn't work out. Its past evaluations stay |
 
 ---
@@ -25940,13 +26052,13 @@ show up when they have prompt rows.
 1. Open the **Diagnosis** tab.
 2. **Clone** the version in use.
 3. **Edit** the template: add explicit examples of the component names your codebase uses.
-4. Give it a 10% traffic share.
-5. Wait a few nights. Is its **Judge score** above the version in use?
+4. Give it a 10% share of reports.
+5. Wait a few nights. Is its **Grade** above the version in use?
 6. If yes: **Diff**, then make it the live prompt. If not: edit and try again.
 
 ### Investigating a bad judge score
 1. Open the tab for the step with the low score.
-2. Check **Evals**. With fewer than 10, the score isn't meaningful yet: wait.
+2. Check **Grades**. With fewer than 10, the score isn't meaningful yet: wait.
 3. With more than 20 and a still-low score, the prompt is likely wrong. Clone and start fresh.
 
 ---
@@ -25997,7 +26109,11 @@ robots:
 
 **Route:** `/providers` (operators only; other accounts never see it)
 
-- **Providers:** one row per provider account, worst first: ✕ down, ⧗ warn, ✓ ok, ◷ stale. Each row shows its balance or quota bar.
+**First on the page:** one line naming the accounts that need a look, worst first ("3 accounts need a look: OpenAI is down, fal.ai is not checked, ElevenLabs is off."), with **Turn on** for an account that is off. Beside it: accounts working as a bar, how many need a look, and open incidents.
+
+- **Providers:** one row per provider account, worst first, each state a glyph and a plain word: ✕ Down, ⧗ Warning, ✓ Working, ◷ Not checked lately, ○ Not checked, ⊘ Off. Each row shows its balance or quota bar; with no balance it says why ("key check only" when the account's check only tests its key). **Used by** is one chip per app with its icon; hover a chip for the features that app calls the account for.
+  - An account that is off says so in one line with **Turn on**.
+  - An unchecked account says so in one line: the provider watch on kenji has no reading for it yet. Its health check is set up on kenji, so there is no button.
 - **Spend:** what each app's AI calls cost against what the app sells, with the margin as ▲/▼.
 - **Routes:** the models each app tries, in order. Toggle, reorder or edit a route; a change that would leave an app with no enabled default route is refused.
 - **History:** every change, who made it, and when.
@@ -26021,6 +26137,20 @@ description: Scheduled tests in the Mushi Mushi console turn plain-English user 
 > if it still works — without writing a full Playwright suite from scratch.
 
 Scheduled tests in Mushi Mushi let you describe user flows in plain English, run them on a schedule, and get screenshots plus failure evidence when something breaks.
+
+## The status line
+
+The page opens on one line that says what is wrong and holds the one button
+that fixes it, worst first:
+
+| What it says | The button |
+|--------------|-----------|
+| *N tests failing in the last 24 hours. Worst: Login.* | **Open Login** (its run history) |
+| *N tests never ran: they are set to run on your computer only.* | **Run all N in the cloud** (switches them to Firecrawl, so the schedule runs them). Viewers get the `mushi qa run ` command instead |
+| *N runs in progress.* / *All N tests passed in the last 24 hours.* | **Refresh** |
+
+Beside it, up to three numbers: **Passing**, **Failing** and **Never ran**
+(turned-on tests the schedule skipped all day, so nothing was checked).
 
 ---
 
@@ -26074,21 +26204,39 @@ with a full Playwright test. The story uses the `local` provider and runs weekly
 ## Story cards
 
 The main grid shows one card per story with:
-- **Provider badge** — Local / Browserbase / Firecrawl
-- **24h pass rate** — colour-coded bar and percentage
-- **7 days** — one square per UTC day: red when a run failed that day, green when
-  every finished run passed, grey with none. Skipped runs never count as failures.
-  From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
-  could not be read).
+- **State** as a mark and a word: ✓ Passed, ✕ Failed, ⊘ Skipped, ○ Never ran,
+  Queued, Turned off
+- **Where it runs**: *On your computer*, *Cloud · Firecrawl* or *Cloud · Browserbase*
+- **Why it was skipped**, with the fix in the card:
+
+  | Runner | Why the schedule skips it | Fix on the card |
+  |--------|---------------------------|-----------------|
+  | On your computer | The cloud runner never runs it; only `mushi qa run ` on your computer does | **Run in the cloud**, or copy the command |
+  | Cloud · Browserbase | Browserbase opens the session, but the test still needs the CLI runner | **Run in the cloud** (Firecrawl), or copy the command |
+  | Cloud · Firecrawl | Too many tests ran at once for this app; the next tick runs it | none needed |
+
+  **Run in the cloud** reads each test first. A test that holds a Playwright
+  script (the kind **Generate test from report** writes) stays on your
+  computer: the cloud runner would ignore the script and could pass without
+  running the test. The page says so and points you at its `mushi qa run `
+  command; the story drawer shows only the command for it.
+
+- **24h pass rate** over finished runs — bar and percentage; "nothing checked"
+  when every run was skipped
+- **7 days** — one heat cell per UTC day with a glyph: ✕ red when a run failed
+  that day, ✓ green when every finished run passed, ⊘ grey when every run was
+  skipped, blank with none. Skipped runs never count as failures. From `last_7d`
+  on `GET /v1/admin/projects/:id/qa-coverage` (`{ day, passed, failed, skipped }`;
+  `null` when the runs could not be read)
 - **Run count** and **last run** time
-- **disabled** / **queued** chip when applicable
 - Link to last failure Browserbase replay session
 
 ## Story drawer
 
 Click any card to open the story drawer:
 
-- **Story prompt** and **provider** at the top
+- **Story prompt** and **where it runs** at the top, with **Run in the cloud**
+  and the `mushi qa run ` command when it is not on Firecrawl
 - **Script** section (collapsible) — the raw Playwright script if one was generated
 - **Run history** — newest runs first. Expand any run to see:
   - Meta (status, provider, latency)
@@ -26492,9 +26640,16 @@ App blueprint is the Mushi Mushi console screen for one project's recipe: what t
 
 **Refresh** reads the repo again — the recipe file, design tokens, CI builds and environment variable names — and reloads this page. A failure shows the reason. Until the recipe loads, the page says **Composing the recipe…**. A load error names the app recipe and offers a retry.
 
-The status card has two sides:
+The page opens on one status line: a plain sentence on the worst thing on the page, up to three numbers (risk checks not met, dependencies with known holes, blueprint parts to check) and one button that fixes it:
 
-- **Overall** is the worst state on the page. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
+- dependency holes lead with **Fix all holes: copy prompt**, one prompt for your editor that makes every upgrade;
+- another failed risk check leads with its **Copy fix prompt**;
+- a check that could not finish, or no result yet, leads with **Run checks**;
+- with no risk problem, the first blueprint card that needs a look leads with **Show how to fix**.
+
+The blueprint card under the risk checks has two sides:
+
+- **Blueprint** is the worst state of the cards. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
 - **Recipe file** says the page is built from what Mushi Mushi already sees when `mushi.recipe.json` is missing, and tells you to add that file at the repo root to declare design tokens, deploy targets and budgets. When the file is present, the card shows its path, the short commit and when it was read. Problems in the file are listed: fix them in the repo, then press Refresh.
 
 ---
@@ -26544,7 +26699,11 @@ With nothing selected, the panel says to pick a card. A selected card shows the 
 
 ## Risk checks
 
-**Risk checks** sits under the cards: store rules, an expiring domain, a broken privacy link, storage that keeps billing. Problems are listed first. Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
+**Risk checks** comes right after the status line: store rules, an expiring domain, a broken privacy link, a known hole in a dependency. Each check that is not met is one row, worst first: a status mark (▲ error, ◆ warning, ○ could not finish), its name, one line of cause and its own fix (**Copy fix prompt**, or **Run again** for a check that could not finish). More than three findings fold under the row.
+
+Known holes in dependencies are one table: package, installed version → the version that fixes it, the hole count as a bar, and the row's fix. **Fix in a PR** opens the bug report Mushi Mushi filed for that upgrade, where the Fix button opens a pull request; a row with no report yet has **Copy prompt**. **Fix all: copy prompt** sits on the check's row. Development-only packages are greyed and sorted last. Past ten rows, **Show N more**.
+
+Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
 
 ---
 
@@ -26908,6 +27067,38 @@ Selecting a report opens the full detail view:
   the active attempt, CI badge, and merge controls.
 - **Related links**: other reports for this component, this reporter's history,
   the knowledge graph, the dispatched PR and the auto-fix pipeline.
+
+---
+
+## Pipeline strip on report detail
+
+Below **The story so far**, the **Pipeline** strip shows where this report is:
+**Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
+its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
+how long it took against the longest stage, and the time itself. A stage still open
+shows the time so far. A stage that did not need to run reads **not needed**: a
+confident quick check skips the full diagnosis, and a report you sorted by hand skips
+triage.
+
+When a stage failed or is stuck, the strip names it with the reason in one plain line
+("The AI key or the internal worker token was refused.") and the try count. The raw
+error, with keys removed, is behind **Details**, with the triage job's history. The
+button next to it retries that stage:
+
+| Stage | Button | What it does |
+| --- | --- | --- |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing. A report that is already triaged or diagnosed is refused: it would spend AI budget again and could overwrite a severity set by hand. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks. Disabled with the reason when a fix PR is still open, or when a retry would reach the same answer (the agent found nothing to change, for example). |
+| CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
+
+While triage runs, the strip checks again every few seconds and the page updates when
+it finishes. The unified timeline also lists the triage job: when it was queued, and
+when it finished, failed or gave up.
+
+In **All apps**, the list groups its rows by app: the app with the most urgent open bug
+first (critical, then high, then untriaged), the counts per state in its header and
+**Open →** to that app alone. Rows inside an app keep your sort. Grouping covers the
+page you are on.
 
 ---
 
@@ -28394,8 +28585,12 @@ decides everything else:
 test, its live-site watch or site audit address) and the goal is plain words you can
 change. The test runs on your own computer, where its browser and AI run: if Mushi Mushi runs
 there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
-test up within a minute and the page follows it live. If not, the page says so and shows
-the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+test up within a minute and the page follows it live. The status at the top of the page
+shows your computer's state (online, busy, offline, paused, out of date) and, when it
+cannot run a test, the one command that fixes it with a copy button: `mushi work --daemon`
+to start an offline worker, `mushi worker install` the first time, or
+`npm i -g @mushi-mushi/cli@latest` (then restart the worker) when it is too old. A paused
+computer gets **Open Workers**, where you turn a lane back on. Pick **Look around, file nothing** to see where a visitor gets
 stuck, or **File what stops them** to turn each problem into a bug report.
 
 From a terminal it is the same run:
@@ -28412,8 +28607,11 @@ The run is signed out in a clean browser. It may only write to your app's own or
 forms and anything labelled delete or revoke are refused. Without an account it stops at
 your sign-up page and says so; `--dry-run` never writes to your app.
 
-The page shows each test: time to first value, steps, how many visitors reached the goal,
-the trend over tests, and every step with its screenshot and wait. A waiting test can be
+The status also gives the last test's time to first value, how many visitors reached the
+goal, and the number of tests. The history lists each test with a state mark (reached ✓,
+stalled ✕, running, waiting, stopped) and the time-to-goal trend. A visitor's steps are a
+strip of screenshots, each with a bar for how long the app made them wait and read on one
+scale; the step where the visitor stalled is marked red. A waiting test can be
 cancelled; a failed one says why. Once an app has a finished test, Home shows a
 **First-time setup** light with the minutes and steps.
 

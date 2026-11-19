@@ -111,7 +111,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ci",
     markdown: "admin/ci.md",
     keywords: ["admin", "ci", "runners"],
-    headings: ["Spend less on CI", "How it reads your runs", "Right now", "Test machine or your code", "Queue and wait", "Machines", "What would make fixes land sooner", "Your real bill"],
+    headings: ["Spend less on CI", "How it reads your runs", "Right now", "All apps", "Why it failed", "Test machine or your code", "Queue and wait", "Machines"],
     excerpt: "The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.",
   },
   {
@@ -291,7 +291,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/health",
     markdown: "admin/health.md",
     keywords: ["admin", "health"],
-    headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Server doctor (operators only)", "Related pages"],
+    headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Stuck reports", "Recent LLM calls log", "Recommended actions", "Server doctor (operators only)"],
     excerpt: "The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.",
   },
   {
@@ -354,7 +354,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/judge",
     markdown: "admin/judge.md",
     keywords: ["admin", "judge", "triage", "grading"],
-    headings: ["Tabs", "Prompt promotion", "Drift alerts", "See also"],
+    headings: ["Reviewing a disagreement", "Tabs", "Prompt promotion", "Drift alerts", "See also"],
     excerpt: "The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.",
   },
   {
@@ -480,7 +480,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/qa-coverage",
     markdown: "admin/qa-coverage.md",
     keywords: ["admin", "qa-coverage", "coverage", "scheduled", "tests"],
-    headings: ["Story lifecycle", "Execution providers", "Creating a story", "Story cards", "Story drawer", "Manual run", "Filters", "Related pages"],
+    headings: ["The status line", "Story lifecycle", "Execution providers", "Creating a story", "Story cards", "Story drawer", "Manual run", "Filters"],
     excerpt: "Scheduled tests in the Mushi Mushi console turn plain-English user flows into browser tests on a schedule, so you find out when login or checkout breaks.",
   },
   {
@@ -543,7 +543,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/reports",
     markdown: "admin/reports.md",
     keywords: ["admin", "reports", "bugs"],
-    headings: ["Diagnosis + Fix hero", "Compact diagnosis preview", "Merging a fix from report detail"],
+    headings: ["Diagnosis + Fix hero", "Compact diagnosis preview", "Pipeline strip on report detail", "Merging a fix from report detail"],
     excerpt: "The Bugs page is the Mushi Mushi bug list. Filter by status, severity, category and component, and start with the recommended action at the top.",
   },
   {

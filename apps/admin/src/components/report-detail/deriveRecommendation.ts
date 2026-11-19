@@ -540,7 +540,7 @@ function recommendationFor(
     return {
       title: 'Classification failed — triage manually',
       description:
-        'Pick a status and severity by hand, or dispatch a fix once you understand the issue.',
+        'Press Retry triage in the Pipeline strip, or pick a status and severity by hand.',
       tone: 'urgent',
     }
   }

@@ -24,6 +24,22 @@ The page has four views, picked at the top: **Mushi Mushi’s AI & jobs** (descr
 **[Unusual spikes](/admin/anomalies)**. Inside **Mushi Mushi’s AI & jobs**, the tabs are
 **Overview**, **AI calls**, **Scheduled jobs** and **Recent traces**.
 
+**First on the page:** one line with the worst problem and its button, in this order:
+
+| The line says | Button |
+|---|---|
+| "1 scheduled job failed on its last run: Triage grading." | **Run now** (or **Open jobs** for several jobs, or one the console can't run) |
+| "9% of AI calls failed in the last 24h, usually a provider outage or an expired key." | **See failed calls** |
+| "1 scheduled job is overdue: Weekly summary." | **Run now** / **Open jobs** |
+| "2% of AI calls failed …" or "… switched to the backup model …" | **See failed calls** / **See AI calls** |
+
+When nothing is wrong the line points at **Home** for your app's own health. **Run now**
+runs Triage grading or Weekly summary straight away (it spends AI budget; admins only);
+Data clean-up only runs on its schedule. The three numbers beside it are pictures: **AI
+calls** as one bar split into answered, answered by the backup model and failed;
+**Failed calls** against the 5% line; **Background jobs on time** with one status mark per
+job.
+
 ---
 
 ## Time window
@@ -81,6 +97,20 @@ The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
 
 Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
 It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
+
+### Stuck reports
+
+Above the job cards, **Stuck reports** counts this app's reports stuck before triage
+(new or held for over 5 minutes, under 3 tries), failed triage jobs with tries left,
+and jobs that have waited for the worker for over 15 minutes. **Run recovery now**
+does what the 5-minute `pipeline-recovery` job does, for this app only: it sends the
+stuck reports to triage again, retries the failed jobs, and closes jobs whose report
+was already triaged. The result shows on the same line ("Re-sent 3 stuck reports to
+triage, retried 1 failed job."). It spends AI budget, so only owners and admins can
+run it. The same line shows on the **Overview** tab while something is stuck.
+
+A run by hand does not count as a run of the scheduled job, so a scheduled job that
+is not running still shows as late.
 
 ---
 

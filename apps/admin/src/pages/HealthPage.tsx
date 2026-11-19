@@ -28,6 +28,7 @@ import {
   Loading, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import { HealthSnapshotStrip, healthLead } from '../components/health/HealthSnapshotStrip'
+import { PipelineRecoveryPanel } from '../components/health/PipelineRecoveryPanel'
 import { HealthProbesGuide } from '../components/health/HealthProbesGuide'
 import {
   ActionPill,
@@ -519,6 +520,8 @@ function HealthPageContent() {
           leaving the page blank below the KPI snapshot. PageHero (PDCA chrome)
           is still advanced-only. */}
       {activeTab === 'overview' && recommendedAction}
+      {/* Reports stuck before triage, with the button that recovers them (console 2026-11-19). */}
+      {activeTab === 'overview' && <PipelineRecoveryPanel canRun={stats.canRunJobs !== false} variant="alert" />}
 
       <PagePosture
         slots={[
@@ -749,6 +752,10 @@ function HealthPageContent() {
         // One status per job from its last run AND its schedule (cronJobState): a job that ran
         // fine 9 days ago on a weekly schedule is "overdue 9d", never a green "success" (round 3).
         // Flat rows, the tab's own name, and no second "Updated": the strip above has it.
+        <>
+        <Section title="Stuck reports">
+          <PipelineRecoveryPanel canRun={stats.canRunJobs !== false} variant="row" />
+        </Section>
         <Section title="Scheduled jobs">
           <ul className="divide-y divide-edge-subtle" data-dav-anchor="health:verify" data-testid="health-cron-jobs">
             {KNOWN_JOBS.map((job) => {
@@ -786,6 +793,7 @@ function HealthPageContent() {
             })}
           </ul>
         </Section>
+        </>
       )}
 
       {activeTab === 'activity' && (

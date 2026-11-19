@@ -20,6 +20,8 @@ import { ProjectFavicon } from '../ProjectFavicon'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { useSetupStatus } from '../../lib/useSetupStatus'
 import { UNASSIGNED_APP_ID } from '../../lib/groupByApp'
+import { setStoredProjectScopeMode } from '../../lib/projectScope'
+import { pickActiveProject } from '../../lib/activeProject'
 import { faviconSourceFromProject } from '../../lib/resolveProjectDomain'
 
 const STATUS_ORDER: readonly RunStatus[] = ['failed', 'slow', 'waiting', 'running', 'cancelled', 'passed', 'idle']
@@ -32,7 +34,7 @@ export interface AppGroupSectionProps {
   countLabels?: Partial<Record<RunStatus, string>>
   /** Right-aligned meta (row count, wait time …). */
   summary?: ReactNode
-  /** Link to this app's own view of the page (switches the app pin). */
+  /** Link to this app's own view of the page. Clicking it leaves All apps and pins this app. */
   to?: string
   defaultOpen?: boolean
   children: ReactNode
@@ -90,7 +92,18 @@ export function AppGroupSection({
         <span className="ml-auto flex shrink-0 items-center gap-2 text-2xs text-fg-muted tabular-nums">
           {summary}
           {to ? (
-            <Link to={to} className="text-fg-secondary underline-offset-2 hover:text-fg hover:underline" aria-label={`Open ${app.name} only`}>
+            <Link
+              to={to}
+              // All apps mode lives in storage, so a plain link would land on the combined page again.
+              // Opening one app leaves All apps and pins that app, as picking it in the switcher does.
+              onClick={() => {
+                if (app.id === UNASSIGNED_APP_ID) return
+                setStoredProjectScopeMode('project')
+                pickActiveProject(app.id)
+              }}
+              className="text-fg-secondary underline-offset-2 hover:text-fg hover:underline"
+              aria-label={`Open ${app.name} only`}
+            >
               Open →
             </Link>
           ) : null}

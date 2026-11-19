@@ -49,11 +49,15 @@ describe('queueRetryDenial (bug 55)', () => {
 describe('queue retry route', () => {
   const body = routeSlice(read('routes/queue.ts'), "app.post('/v1/admin/queue/:id/retry'")
   it('checks the policy and viewer role before resetting the job', () => {
+    // The reset is the shared resetQueueJob (api/queue-actions.ts, also behind the report
+    // page's retry), or an inline update; either way it comes after both checks.
     const update = body.indexOf(".from('processing_queue')\n      .update(")
-    const fallbackUpdate = update === -1 ? body.search(/\.from\('processing_queue'\)\s*\.update\(/) : update
+    const inlineUpdate = update === -1 ? body.search(/\.from\('processing_queue'\)\s*\.update\(/) : update
+    const reset = inlineUpdate === -1 ? body.indexOf('resetQueueJob(') : inlineUpdate
     expect(body.indexOf('queueRetryDenial(')).toBeGreaterThan(0)
     expect(body.indexOf('denyViewerWrite(')).toBeGreaterThan(0)
-    expect(fallbackUpdate).toBeGreaterThan(body.indexOf('queueRetryDenial('))
+    expect(reset).toBeGreaterThan(body.indexOf('queueRetryDenial('))
+    expect(reset).toBeGreaterThan(body.indexOf('denyViewerWrite('))
     expect(body).toMatch(/NOT_RETRYABLE/)
   })
 })
