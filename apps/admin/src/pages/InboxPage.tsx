@@ -517,7 +517,6 @@ const SEVERITY_TONE: Record<string, SignalTone> = { critical: 'danger', high: 'w
 /**
  * Raw float noise in a report title ("15.341893476 GB") reads as a bug of its own: round any
  * number with more than two decimals to one (round-3 review, 2026-11-19).
- * @internal Exported for tests.
  */
 export function tidyActivityLabel(label: string): string {
   return label.replace(/\d+\.\d{3,}/g, (n) => String(Math.round(Number(n) * 10) / 10))
