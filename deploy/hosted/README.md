@@ -10,7 +10,7 @@
 This document describes how the Mushi Cloud instance at `kensaur.us/mushi-mushi`
 is deployed. It is **not required reading for SDK users** (who need only
 `MUSHI_PROJECT_ID` + `MUSHI_API_KEY`) or for self-hosters (see
-[`deploy/docker-compose.yml`](../docker-compose.yml) and the
+[`deploy/selfhost/`](../selfhost/) and the
 [self-hosting docs](../../apps/docs/content/self-hosting/)).
 
 ## Infrastructure overview

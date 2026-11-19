@@ -87,9 +87,16 @@ alter policy "Members can update step runs via run access" on public.skill_pipel
      where spr.project_id in (
        select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid()))));
 
-alter policy "Members can manage their project skill sources" on public.skill_sources
-  using (project_id in (
-    select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+-- This policy exists on the hosted database but no migration creates it; a fresh
+-- database relies on the per-action policies from 20260612040716 instead.
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'skill_sources'
+               and policyname = 'Members can manage their project skill sources') then
+    alter policy "Members can manage their project skill sources" on public.skill_sources
+      using (project_id in (
+        select pm.project_id from public.project_members pm where pm.user_id = (select auth.uid())));
+  end if;
+end $$;
 
 alter policy "Members can read their project skill sources" on public.skill_sources
   using (project_id in (

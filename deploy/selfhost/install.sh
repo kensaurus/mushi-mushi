@@ -75,11 +75,11 @@ printf 'ref=%s\n' "$SUPABASE_KIT_REF" > "$DIR/.supabase-version"
 # --- 2. Mushi's layer -------------------------------------------------------
 here=$(cd "$(dirname "$0")" 2>/dev/null && pwd || true)
 if [ -n "$here" ] && [ -f "$here/docker-compose.mushi.yml" ]; then
-  cp "$here/docker-compose.mushi.yml" "$here/mushi.sh" "$DIR/"
+  cp "$here/docker-compose.mushi.yml" "$here/mushi.sh" "$here/mushi.env.example" "$DIR/"
   cp -R "$here/caddy" "$DIR/" 2>/dev/null || true
 else
   raw=$(printf '%s' "$MUSHI_REPO" | sed 's#https://github.com/#https://raw.githubusercontent.com/#')/$MUSHI_REF/deploy/selfhost
-  for f in docker-compose.mushi.yml mushi.sh caddy/docker-compose.caddy-mushi.yml caddy/Caddyfile; do
+  for f in docker-compose.mushi.yml mushi.sh mushi.env.example caddy/docker-compose.caddy-mushi.yml caddy/Caddyfile; do
     mkdir -p "$DIR/$(dirname "$f")"
     curl -fsSL "$raw/$f" -o "$DIR/$f" || die "could not download $f"
   done
@@ -112,43 +112,7 @@ set_env DISABLE_SIGNUP true
 # Set SMTP_* in .env for password-reset and invite emails.
 set_env ENABLE_EMAIL_AUTOCONFIRM true
 set_env FUNCTIONS_VERIFY_JWT false
-cat >> .env <<EOF
-
-############
-# Mushi Mushi
-############
-MUSHI_VERSION=$MUSHI_VERSION
-# The one URL people and the SDK use. Behind a reverse proxy: your https URL.
-MUSHI_PUBLIC_URL=$PUBLIC_URL
-# 127.0.0.1 keeps the console private to this machine (use a reverse proxy or
-# an SSH tunnel). 0.0.0.0 publishes it on every interface.
-MUSHI_BIND=127.0.0.1
-MUSHI_PORT=3000
-MUSHI_INTERNAL_CALLER_SECRET=$(openssl rand -hex 32)
-# off: no monthly caps (you pay your own model provider)
-MUSHI_PLAN_LIMITS=off
-
-# AI for plain-English diagnoses (optional; reports are taken without it).
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
-# Your own OpenAI-compatible server, e.g. Ollama: OPENAI_BASE_URL=http://host.docker.internal:11434/v1
-# with MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true and a model map such as
-# MUSHI_OPENAI_MODEL_MAP=gpt-6-luna=qwen3:8b,gpt-6.1-terra=qwen3:14b,gpt-6.1-sol=qwen3:32b
-OPENAI_BASE_URL=
-MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=false
-MUSHI_OPENAI_MODEL_MAP=
-OPENROUTER_API_KEY=
-
-# Optional integrations
-FIRECRAWL_API_KEY=
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=
-GITHUB_TOKEN=
-SENTRY_DSN_SERVER=
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_BASE_URL=
-EOF
+sed -e "s|@MUSHI_VERSION@|$MUSHI_VERSION|"     -e "s|@MUSHI_PUBLIC_URL@|$PUBLIC_URL|"     -e "s|@MUSHI_INTERNAL_CALLER_SECRET@|$(openssl rand -hex 32)|"     mushi.env.example >> .env
 chmod 600 .env
 
 # --- 4. start ---------------------------------------------------------------

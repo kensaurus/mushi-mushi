@@ -17,22 +17,22 @@ Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin
 
 | Layer | Technology | License |
 | --- | --- | --- |
-| Database + Auth | Supabase (Postgres 15 + pgvector + pgcrypto + pg_cron) | Open |
-| Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
+| Database + Auth | Supabase (Postgres 17 + pgvector + pgcrypto + pg_cron) | Open |
+| Edge Functions | Every Supabase Edge function (Deno) — run `pnpm docs-stats` for the live count | AGPLv3 |
 | Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
 | Observability | Langfuse + Sentry | MIT / Commercial |
 | Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
 
 ## Fastest path — Docker Compose
 
-The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
-in one command, no managed Supabase project required:
+The whole stack (Postgres, Auth, REST, Realtime, Storage, every edge function
+and the console) with one command, no managed Supabase project required. The
+installer generates every secret, closes sign-up and creates your admin
+account:
 
 ```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY and the keys for the local stack
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com
 ```
 
 See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.

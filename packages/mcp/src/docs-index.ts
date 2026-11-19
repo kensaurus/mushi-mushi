@@ -2046,8 +2046,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
     keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "self-host", "minutes"],
-    headings: ["One command", "Clone and configure", "Bring the stack up", "Open the console", "What's running", "Production notes", "Managed Supabase instead"],
-    excerpt: "Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.",
+    headings: ["Install", "Run the installer", "Open the console", "Add an AI key (optional)", "HTTPS on your own domain", "Your own model server (Ollama, vLLM, LM Studio)", "Day to day", "Point your app and tools at it"],
+    excerpt: "Run the whole Mushi Mushi stack on your own server with one install command. Supabase's self-host kit plus Mushi's images, generated secrets, closed sign-up, HTTPS, backups and…",
   },
   {
     title: "Edge Functions deploy",

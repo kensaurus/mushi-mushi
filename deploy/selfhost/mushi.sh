@@ -21,6 +21,8 @@ set_env() {
   if grep -q "^$1=" .env; then sed -i.bak "s|^$1=.*|$1=$2|" .env && rm -f .env.bak; else printf '%s=%s\n' "$1" "$2" >> .env; fi
 }
 gw() { printf 'http://127.0.0.1:%s' "$(env_get API_GW_HTTP_PORT | sed 's/^$/8000/')"; }
+# A small image with tar that is always present: the migrator this install runs.
+tools() { TOOLS_IMAGE="ghcr.io/kensaurus/mushi-migrate:$(env_get MUSHI_VERSION | sed 's/^$/latest/')"; }
 
 cmd=${1:-help}
 [ $# -gt 0 ] && shift
@@ -56,12 +58,16 @@ case "$cmd" in
     mkdir -p backups
     out="backups/mushi-$(date +%Y%m%d-%H%M%S).tar.gz"
     echo "Stopping the database for a consistent copy..."
+    # Whatever happens below, start everything again.
+    trap 'docker compose up -d --wait >/dev/null 2>&1 || echo "mushi.sh: restart failed; run: sh mushi.sh up" >&2' EXIT
     docker compose stop functions mushi-admin storage realtime auth rest supavisor db >/dev/null
-    # The data folder belongs to the container's postgres user; tar it from inside a container.
-    docker run --rm -v "$(pwd):/mushi" -w /mushi alpine:3.21 \
-      tar czf "$out" volumes/db/data volumes/storage .env .supabase-version
-    docker compose up -d --wait >/dev/null
-    echo "Backup: $out ($(du -h "$out" | cut -f1)). Copy it off this machine."
+    # The data folder belongs to the database container's user, so archive it
+    # as root from the migrator image (always on this machine; no extra pull).
+    tools
+    docker run --rm --user 0 --entrypoint tar -v "$(pwd):/mushi" -w /mushi "$TOOLS_IMAGE" \
+      czf "$out" volumes/db/data volumes/storage .env .supabase-version
+    chmod 600 "$out" 2>/dev/null || true
+    echo "Backup: $out ($(du -h "$out" | cut -f1)). It contains your secrets (.env): copy it off this machine and keep it private."
     ;;
 
   restore)
@@ -70,8 +76,9 @@ case "$cmd" in
     printf 'This replaces the current database and files with %s. Type "restore" to go on: ' "$file"
     read -r answer
     [ "$answer" = restore ] || { echo "Stopped."; exit 1; }
+    tools
     docker compose down >/dev/null
-    docker run --rm -v "$(pwd):/mushi" -w /mushi alpine:3.21 sh -c \
+    docker run --rm --user 0 --entrypoint sh -v "$(pwd):/mushi" -w /mushi "$TOOLS_IMAGE" -c \
       "rm -rf volumes/db/data volumes/storage && tar xzf '$file'"
     docker compose up -d --wait
     echo "Restored from $file."

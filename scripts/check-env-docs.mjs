@@ -21,7 +21,7 @@ const REQUIRED_IN_EXAMPLES = {
   MUSHI_INTERNAL_CALLER_SECRET: ['.env.example', 'packages/server/.env.example'],
   VITE_CLOUD_SUPABASE_URL: ['apps/admin/.env.example'],
   VITE_CLOUD_SUPABASE_ANON_KEY: ['apps/admin/.env.example'],
-  LANGFUSE_BASE_URL: ['.env.example', 'deploy/.env.example'],
+  LANGFUSE_BASE_URL: ['.env.example', 'deploy/selfhost/mushi.env.example'],
 }
 
 const ONBOARDING_SCAN = ['apps/docs/content/self-hosting', '.github/CONTRIBUTING.md', 'docs/SELF_HOSTED.md']
@@ -83,7 +83,7 @@ for (const rel of [
   '.env.example',
   'apps/admin/.env.example',
   'packages/server/.env.example',
-  'deploy/.env.example',
+  'deploy/selfhost/mushi.env.example',
   'apps/docs/.env.example',
   'examples/react-demo/.env.example',
 ]) {

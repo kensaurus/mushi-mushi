@@ -27,6 +27,16 @@
 -- the key itself, so a stored key copied from the console claims nothing.
 -- ============================================================================
 
+-- The hosted database names the reports updated_at trigger reports_updated_at;
+-- 20260416000000 created it as set_reports_updated_at. Align a fresh database
+-- (self-host, CI replay) so mushi.rekey_reporter_tokens() below can find it.
+do $$ begin
+  if not exists (select 1 from pg_trigger where tgrelid = 'public.reports'::regclass and tgname = 'reports_updated_at')
+     and exists (select 1 from pg_trigger where tgrelid = 'public.reports'::regclass and tgname = 'set_reports_updated_at') then
+    alter trigger set_reports_updated_at on public.reports rename to reports_updated_at;
+  end if;
+end $$;
+
 create or replace function public.mushi_reporter_key(p_presented text)
 returns text
 language sql
