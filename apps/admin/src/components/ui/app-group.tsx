@@ -20,8 +20,7 @@ import { ProjectFavicon } from '../ProjectFavicon'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { useSetupStatus } from '../../lib/useSetupStatus'
 import { UNASSIGNED_APP_ID } from '../../lib/groupByApp'
-import { setStoredProjectScopeMode } from '../../lib/projectScope'
-import { pickActiveProject } from '../../lib/activeProject'
+import { openAppOnly } from '../../lib/projectScope'
 import { faviconSourceFromProject } from '../../lib/resolveProjectDomain'
 
 const STATUS_ORDER: readonly RunStatus[] = ['failed', 'slow', 'waiting', 'running', 'cancelled', 'passed', 'idle']
@@ -97,9 +96,7 @@ export function AppGroupSection({
               // All apps mode lives in storage, so a plain link would land on the combined page again.
               // Opening one app leaves All apps and pins that app, as picking it in the switcher does.
               onClick={() => {
-                if (app.id === UNASSIGNED_APP_ID) return
-                setStoredProjectScopeMode('project')
-                pickActiveProject(app.id)
+                if (app.id !== UNASSIGNED_APP_ID) openAppOnly(app.id)
               }}
               className="text-fg-secondary underline-offset-2 hover:text-fg hover:underline"
               aria-label={`Open ${app.name} only`}
