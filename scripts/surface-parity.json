@@ -705,6 +705,12 @@
     "PUT /v1/tester/me": {"allow": "jwt-only"}
   },
   "dynamicCalls": {
+    "apps/admin/src/pages/InboxPage.tsx": {
+      "activeProjectId ? `${LANES_PATH}?projectId=${encodeURIComponent(activeProjectId)}` : LANES_PATH": "LANES_PATH is '/v1/admin/work/lanes' (lib/workers.ts; mapped as GET /v1/admin/work/lanes); the projectId query narrows it to the active app, as Pipeline > This app does."
+    },
+    "apps/admin/src/pages/PipelinePage.tsx": {
+      "lanesPath": "LANES_PATH ('/v1/admin/work/lanes', mapped as GET /v1/admin/work/lanes), with ?projectId= on the This app view."
+    },
     "apps/admin/src/components/reports/ReportPicker.tsx": {
       "value ? null : reportPickerPath(debounced, limit, query)": "reportPickerPath builds GET /v1/admin/reports with search and sort parameters (mapped as GET /v1/admin/reports); null while a report is picked."
     },
