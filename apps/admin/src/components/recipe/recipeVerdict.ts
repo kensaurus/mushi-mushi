@@ -9,6 +9,7 @@
  *          result yet reads as not checked. Pure: no React.
  */
 
+import type { ReactNode } from 'react'
 import type { PageStatusMetric, PageStatusTone } from '../ui/page-status'
 import { radarOverall } from '../portfolio/portfolioView'
 
@@ -67,8 +68,10 @@ export function recipeVerdict(input: {
   holes: number
   /** Blueprint cards that need a look, worst first. */
   behind: ReadonlyArray<{ key: string; label: string }>
+  /** Drawn under the holes number (the page's severity bar). */
+  holesVisual?: ReactNode
 }): RecipeVerdict {
-  const { detectors, holes, behind } = input
+  const { detectors, holes, behind, holesVisual } = input
   const problems = rankProblems((detectors ?? []).filter((d) => d.state === 'finding' || d.state === 'error'))
   const found = problems.filter((d) => d.state === 'finding')
   const unfinished = problems.filter((d) => d.state === 'error')
@@ -76,7 +79,7 @@ export function recipeVerdict(input: {
 
   const metrics: PageStatusMetric[] = []
   if (found.length > 0) metrics.push({ label: found.length === 1 ? 'Risk check not met' : 'Risk checks not met', value: found.length, tone: radarOverall(found)?.tone ?? 'warn' })
-  if (holes > 0) metrics.push({ label: holes === 1 ? 'Dependency with holes' : 'Dependencies with holes', value: holes, tone: 'danger' })
+  if (holes > 0) metrics.push({ label: holes === 1 ? 'Dependency with holes' : 'Dependencies with holes', value: holes, tone: 'danger', ...(holesVisual ? { visual: holesVisual } : {}) })
   if (behind.length > 0) metrics.push({ label: behind.length === 1 ? 'Blueprint part to check' : 'Blueprint parts to check', value: behind.length, tone: 'warn' })
 
   if (problems.length > 0) {

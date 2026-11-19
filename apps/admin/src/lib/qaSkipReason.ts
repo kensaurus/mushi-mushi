@@ -151,6 +151,8 @@ export interface QaPageLead {
   passing: number
   failing: number
   neverRan: number
+  /** The tests behind "Never ran", for one mark each under the number (name and why, for the tooltip). */
+  neverRanTests: Array<{ id: string; name: string; why: string }>
   action: QaLeadAction
 }
 
@@ -168,7 +170,12 @@ export function qaPageStatus(rows: readonly QaCoverageRow[], opts: { pendingRuns
   const failingRows = enabled.filter((r) => r.runs_24h > 0 && r.pass_rate_pct != null && r.pass_rate_pct < 80)
   const passingRows = enabled.filter((r) => r.runs_24h > 0 && r.pass_rate_pct != null && r.pass_rate_pct >= 80)
   const skipped = enabled.map((r) => ({ r, why: skipReason(r) })).filter((x) => x.why != null && nothingFinished(x.r))
-  const base = { passing: passingRows.length, failing: failingRows.length, neverRan: skipped.length }
+  const base = {
+    passing: passingRows.length,
+    failing: failingRows.length,
+    neverRan: skipped.length,
+    neverRanTests: skipped.map((x) => ({ id: x.r.story_id, name: x.r.name, why: x.why!.text })),
+  }
 
   if (failingRows.length > 0) {
     const worst = [...failingRows].sort((a, b) => (a.pass_rate_pct ?? 0) - (b.pass_rate_pct ?? 0))[0]!

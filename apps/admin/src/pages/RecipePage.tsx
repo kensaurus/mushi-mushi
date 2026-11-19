@@ -31,6 +31,7 @@ import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
 import { useFitsRecipeDiagram, usePrefersRecipeList } from '../components/recipe/useMediaQuery'
 import { RadarPanel, checkFixPrompt, useRadarRun } from '../components/portfolio/RadarPanel'
 import { PageStatus, toMetrics } from '../components/ui/page-status'
+import { BarCell } from '../components/signal/BarCell'
 import { CopyPromptButton } from '../components/gates/CopyFixPromptButton'
 import type { RadarView } from '../lib/radarTypes'
 import type { KnownHolesView } from '../components/code-health/KnownHolesCard'
@@ -95,15 +96,17 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
   const elements = useMemo(() => orderedRecipeElements(data?.elements), [data])
   const selected = selectedKey ? elements.find((e) => e.key === selectedKey) ?? null : null
   const holes = useMemo(() => dependencyRows(vulns.data, radar.data), [vulns.data, radar.data])
-  const verdict = useMemo(
-    () =>
-      recipeVerdict({
-        detectors: radar.data?.detectors ?? null,
-        holes: holes?.filter((r) => !r.dev).length ?? 0,
-        behind: data ? elementsBehindWorst(elements).map((e) => ({ key: e.key, label: e.label })) : [],
-      }),
-    [radar.data, holes, data, elements],
-  )
+  const verdict = useMemo(() => {
+    const shipped = holes?.filter((r) => !r.dev) ?? []
+    // Under "Dependencies with holes": how many of them are critical or high, as a bar (2026-11-19).
+    const serious = shipped.filter((r) => r.severity === 'critical' || r.severity === 'high').length
+    return recipeVerdict({
+      detectors: radar.data?.detectors ?? null,
+      holes: shipped.length,
+      behind: data ? elementsBehindWorst(elements).map((e) => ({ key: e.key, label: e.label })) : [],
+      holesVisual: shipped.length > 0 ? <BarCell value={serious} max={shipped.length} tone="danger" label={`${serious} of ${shipped.length} critical or high`} /> : undefined,
+    })
+  }, [radar.data, holes, data, elements])
 
   const onSelect = useCallback((key: RecipeElementKey) => {
     setSelectedKey((cur) => (cur === key ? null : key))

@@ -78,6 +78,9 @@ describe('qaPageStatus', () => {
     expect(lead.tone).toBe('warn')
     expect(lead.sentence).toBe('3 tests never ran: they are set to run on your computer only.')
     expect(lead.neverRan).toBe(3)
+    // One entry per test behind the number, for its mark (2026-11-19).
+    expect(lead.neverRanTests.map((t) => t.id)).toEqual(['a', 'b', 'c'])
+    expect(lead.neverRanTests[0]!.why).toBeTruthy()
     expect(lead.action).toEqual({ kind: 'run_in_cloud', storyIds: ['a', 'b', 'c'] })
   })
 

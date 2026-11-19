@@ -72,3 +72,11 @@ describe('checkFixPrompt', () => {
     expect(text).toContain('- The privacy link 404s (app/layout.tsx:12)\n  Fix: Point it at /privacy.')
   })
 })
+
+describe('recipeVerdict holes visual', () => {
+  it('draws the visual under the holes number only', () => {
+    const v = recipeVerdict({ detectors: [det({ ruleId: 'known_vulnerable_dependency', state: 'finding', findings: [{ severity: 'error' }] })], holes: 3, behind: [], holesVisual: 'bar' })
+    expect(v.metrics.find((m) => m.label === 'Dependencies with holes')?.visual).toBe('bar')
+    expect(v.metrics.find((m) => m.label === 'Risk check not met')?.visual).toBeUndefined()
+  })
+})
