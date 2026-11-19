@@ -27,6 +27,7 @@ import { gatedMergePullRequest } from '../../_shared/gated-merge.ts'
 import { canonicalPrUrl, parsePullRequestUrl } from '../../_shared/pr-substance.ts'
 import { fetchPullRequestDetails, type GithubRepoRef } from '../../_shared/github.ts'
 import { checkRuns, connectedRepoRefs, prTitle, repoTokenResolver, requiredChecks, sameRepo, stripCiSkips } from '../../_shared/github-pr-checks.ts'
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import {
   buildUxLoopReport,
   countStatuses,
@@ -312,7 +313,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
       if (!path) return jsonError(c, 'VALIDATION_ERROR', `Bad screenshot name "${name.slice(0, 120)}"`)
       const { data, error: signErr } = await db.storage.from(UX_CAPTURES_BUCKET).createSignedUploadUrl(path, { upsert: true })
       if (signErr || !data) return jsonError(c, 'UPSTREAM_ERROR', 'Could not mint an upload URL. Retry in a moment.', 502)
-      uploads.push({ name, path, signedUrl: data.signedUrl, token: data.token })
+      uploads.push({ name, path, signedUrl: toPublicSupabaseUrl(data.signedUrl), token: data.token })
     }
     return c.json({ ok: true, data: { bucket: UX_CAPTURES_BUCKET, uploads } })
   })
@@ -370,7 +371,7 @@ export function registerUxRunsRoutes(app: Hono<{ Variables: Variables }>): void 
     const signed = new Map<string, string>()
     if (paths.length > 0) {
       const { data: urls } = await db.storage.from(UX_CAPTURES_BUCKET).createSignedUrls(paths, READ_URL_TTL_SEC)
-      for (const u of urls ?? []) if (u.path && u.signedUrl) signed.set(u.path, u.signedUrl)
+      for (const u of urls ?? []) if (u.path && u.signedUrl) signed.set(u.path, toPublicSupabaseUrl(u.signedUrl))
     }
     const urlsOf = (v: unknown) =>
       Object.fromEntries(

@@ -32,6 +32,7 @@ import { boundKeyTargetsOtherProject } from '../../_shared/bound-key.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { dbError, ownedProjectIds, jsonError, userCanAccessProject } from '../shared.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts';
 
 /** Days in each story's pass/fail strip on /qa-coverage. */
 const STRIP_DAYS = 7;
@@ -694,7 +695,7 @@ export function registerQaCoverageRoutes(app: Hono<{ Variables: Variables }>): v
           const { data: urlData } = await db.storage
             .from('qa-evidence')
             .createSignedUrl(inBucketPath, 3600);
-          signed_url = urlData?.signedUrl ?? null;
+          signed_url = toPublicSupabaseUrl(urlData?.signedUrl ?? null);
         }
         return { ...ev, signed_url };
       }),
