@@ -128,6 +128,19 @@ export function isValidBackendUrl(url: string): boolean {
   }
 }
 
+/**
+ * A self-hosted backend URL the Settings switcher may save: any valid backend
+ * over https, or plain http only to this machine (Docker Compose serves the
+ * API at http://localhost:8000). The old rule took https only, so a Compose
+ * install could not be connected from Settings (2026-11-19).
+ */
+export function isAcceptableSelfHostUrl(url: string): boolean {
+  if (!isValidBackendUrl(url)) return false
+  const parsed = new URL(stripTrailingSlash(url.trim()))
+  if (parsed.protocol === 'https:') return true
+  return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
+}
+
 function clearStoredKeysOnly(): void {
   try {
     localStorage.removeItem(STORAGE_KEY_MODE)
