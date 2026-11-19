@@ -300,14 +300,22 @@ export function JudgePage() {
     },
     [setSearchParams],
   )
+  // "Review N" counts the recent window, so the list it opens covers the same days (a count and
+  // its list agree); an older server without the window opens all time.
+  const recentDays = stats.recentEvaluations != null ? (stats.recentWindowDays ?? 14) : null
   const seeDisagreements = useCallback(() => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('tab', 'evaluations')
       next.set('filter', 'disagreement')
+      if (recentDays != null) {
+        const now = Date.now()
+        next.set('from', new Date(now - recentDays * 86_400_000).toISOString())
+        next.set('to', new Date(now).toISOString())
+      }
       return next
     })
-  }, [setSearchParams])
+  }, [setSearchParams, recentDays])
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null

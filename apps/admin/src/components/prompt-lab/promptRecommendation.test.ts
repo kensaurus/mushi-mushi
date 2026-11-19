@@ -23,7 +23,7 @@ describe('promptRecommendation', () => {
     const rec = promptRecommendation([inUse('stage2'), v('stage2', 'v2', { is_candidate: true, traffic_percentage: 50, avg_judge_score: 0.49, total_evaluations: 6 })])
     expect(rec.sentence).toBe(`A newer Diagnosis prompt scores 49% vs no grade yet for the one in use. Not enough grades yet: ${MIN_GRADES_TO_SWITCH - 6} more needed.`)
     expect(rec.action).toEqual({ kind: 'grade' })
-    expect(rec.actionLabel).toBe('Grade reports now')
+    expect(rec.actionLabel).toBe('Open grading')
   })
 
   it('says Switch to it once the newer prompt leads with enough grades', () => {
@@ -47,11 +47,11 @@ describe('promptRecommendation', () => {
     expect(rec.action).toEqual({ kind: 'open', stage: 'stage2' })
   })
 
-  it('offers to start a test that gets no reports on half of them', () => {
+  it('offers to start a test that gets no reports on a small share', () => {
     const cand = v('stage1', 'v2', { is_candidate: true, traffic_percentage: 0 })
     const rec = promptRecommendation([inUse('stage1'), cand])
-    expect(rec.sentence).toBe('Fast filter has a test version that gets no reports, so it never gets graded. Start it on half of reports.')
-    expect(rec.action).toEqual({ kind: 'start', version: cand, pct: 50 })
+    expect(rec.sentence).toBe('Fast filter has a test version that gets no reports, so it never gets graded. Start it on 1 in 10 reports.')
+    expect(rec.action).toEqual({ kind: 'start', version: cand, pct: 10 })
   })
 
   it('prefers a switch over a start over more grades', () => {

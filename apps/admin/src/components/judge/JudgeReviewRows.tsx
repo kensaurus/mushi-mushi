@@ -28,6 +28,14 @@ export interface ReviewRow extends ReviewRowFields {
 const CONFIRMS =
   'Confirms the category as a person: a reporter feature request may then go to auto-fix.'
 
+/** @internal Exported for tests. Rows the server has not seen reviewed first, in their order. */
+export function unreviewedFirst<T extends { reviewed?: boolean }>(rows: readonly T[]): T[] {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) => Number(Boolean(a.r.reviewed)) - Number(Boolean(b.r.reviewed)) || a.i - b.i)
+    .map((x) => x.r)
+}
+
 export function JudgeReviewRows({
   rows,
   canEdit,
@@ -67,7 +75,8 @@ export function JudgeReviewRows({
 
   return (
     <ol className="list-none divide-y divide-edge-subtle p-0" data-testid={testId}>
-      {rows.map((r) => {
+      {/* Rows still waiting for a decision first; a row decided this visit stays put until the reload. */}
+      {unreviewedFirst(rows).map((r) => {
         const reviewed = r.reviewed || done.has(r.id)
         const accept = reviewed ? null : reviewBody(r, 'accept')
         const keep = reviewed ? null : reviewBody(r, 'keep')

@@ -27,7 +27,7 @@ import {
   RelativeTime,
   Loading, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
-import { HealthSnapshotStrip } from '../components/health/HealthSnapshotStrip'
+import { HealthSnapshotStrip, healthLead } from '../components/health/HealthSnapshotStrip'
 import { HealthProbesGuide } from '../components/health/HealthProbesGuide'
 import {
   ActionPill,
@@ -455,6 +455,9 @@ function HealthPageContent() {
   // A failed or overdue job, and a failing share of AI calls, lead the status line below with
   // their one button ("Run now", "See failed calls"); the cards that said them again are gone
   // (console UX overhaul, 2026-11-19).
+  // Quick mode hides the strip, but never while it carries a problem and its button.
+  const leadProblem = healthLead({ stats, failing: failingCron, overdue: overdueCron, window }).sentence != null
+  const showStrip = !ux.hideHealthSnapshot || leadProblem
   const jobMarks = cronStates.map(({ job, state }) => ({ job, tone: state.tone, label: state.label }))
   const recommendedAction = (() => {
     if (llm.totalCalls === 0) {
@@ -522,7 +525,7 @@ function HealthPageContent() {
           {
             priority: POSTURE_PRIORITY.status,
             // The status sentence below says the same thing; the banner stands in only when it is hidden.
-            show: isHealthStatusBannerCritical(stats) && (ux.hideHealthSnapshot || !stats.hasAnyProject),
+            show: isHealthStatusBannerCritical(stats) && (!showStrip || !stats.hasAnyProject),
             children: (
               <HealthStatusBanner
                 stats={stats}
@@ -535,7 +538,7 @@ function HealthPageContent() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideHealthSnapshot,
+            show: showStrip,
             children: (
               <HealthSnapshotStrip
                 stats={stats}

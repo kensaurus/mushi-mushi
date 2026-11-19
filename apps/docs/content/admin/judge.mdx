@@ -29,7 +29,7 @@ disagreements, last 14 days** lists the 3 lowest-graded disagreements as review 
 
 ### Reviewing a disagreement
 
-**Review N** opens **Grades** filtered to disagreements, one compact row each: the report,
+**Review N** opens **Grades** filtered to the last 14 days of disagreements, rows still to review first, one compact row each: the report,
 its grade as a bar, the grader's reason in one line, and the decision:
 
 - **Accept grader's view** applies the grader's correction to the report (category,
@@ -38,7 +38,8 @@ its grade as a bar, the grader's reason in one line, and the decision:
 
 Both confirm the report's category as a person, so the row turns into **✓ Reviewed** and
 leaves the count. Confirming a category also lets a reporter's feature request go to
-auto-fix. A row with no correction to offer, or a server older than this page, shows
+auto-fix. A row with no correction to offer, a report filed under a reporter's own category
+(feature, question, feedback), or a server older than this page, shows
 **Open report** instead. Viewers can read the rows but not decide.
 
 `GET /v1/admin/judge/stats` returns `recentWindowDays`, `recentEvaluations`,

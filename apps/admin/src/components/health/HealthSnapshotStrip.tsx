@@ -45,7 +45,7 @@ export interface HealthLead {
 }
 
 /**
- * @internal Exported for tests. The worst problem first, then its one button: a failed job, a
+ * The worst problem first, then its one button: a failed job, a
  * high failed-call share, an overdue job, any failed calls. Null sentence when all is well (the
  * line then points at Home for the user's own app).
  */

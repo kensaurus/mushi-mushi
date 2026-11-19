@@ -208,12 +208,8 @@ export function providerNeeds(p: ProviderAccount, now: number): { text: string; 
   const state = providerState(p)
   if (state === 'unknown') {
     if (!p.status) {
-      return {
-        text: p.secret_name
-          ? 'Not checked yet: the provider watch on kenji has not probed it. It shows here after its first check.'
-          : 'Not checked: no key is stored on kenji for its health check, so the watch cannot probe it.',
-        action: null,
-      }
+      // Only what the data shows: no reading yet. Its health check is set up on kenji, not here.
+      return { text: 'Not checked yet: the provider watch on kenji has no reading for it. It shows here after its first check.', action: null }
     }
     return { text: `The last check could not tell whether it works${p.status.detail ? `: ${p.status.detail}` : '.'}`, action: null }
   }
@@ -222,6 +218,46 @@ export function providerNeeds(p: ProviderAccount, now: number): { text: string; 
     return { text: `Last checked ${age ? `${age} ago` : 'a while ago'}; the watch on kenji has not probed it since.`, action: null }
   }
   return null
+}
+
+/** A short phrase for an account that needs a look, for the lead ("fal.ai is off"). */
+function needsWord(p: ProviderAccount): string {
+  if (!p.enabled) return 'is off'
+  const state = providerState(p)
+  if (state === 'down') return 'is down'
+  if (state === 'warn') return 'has a warning'
+  if (state === 'stale') return 'is not checked lately'
+  return 'is not checked'
+}
+
+/**
+ * The page's lead (2026-11-19): which accounts need a look, worst first, and the one button the
+ * console has for them (turn an off account on). Down and warning accounts also have their alert
+ * cards below, with their own actions.
+ */
+export function providersLead(providers: readonly ProviderAccount[]): {
+  sentence: string
+  tone: 'ok' | 'warn' | 'danger' | 'neutral'
+  working: number
+  needLook: ProviderAccount[]
+  turnOn: ProviderAccount | null
+} {
+  const sorted = sortProviders(providers)
+  const working = sorted.filter((p) => p.enabled && providerState(p) === 'ok').length
+  const needLook = sorted.filter((p) => !p.enabled || providerState(p) !== 'ok')
+  const turnOn = needLook.find((p) => !p.enabled) ?? null
+  if (providers.length === 0) return { sentence: 'No provider accounts yet.', tone: 'neutral', working, needLook, turnOn }
+  if (needLook.length === 0) return { sentence: providers.length === 1 ? 'The provider account is working.' : `All ${providers.length} provider accounts are working.`, tone: 'ok', working, needLook, turnOn }
+  const shown = needLook.slice(0, 3).map((p) => `${p.label.replace(SHARED_SUFFIX, '')} ${needsWord(p)}`)
+  const more = needLook.length > 3 ? `, and ${needLook.length - 3} more` : ''
+  const down = needLook.some((p) => p.enabled && providerState(p) === 'down')
+  return {
+    sentence: `${needLook.length === 1 ? '1 account needs' : `${needLook.length} accounts need`} a look: ${shown.join(', ')}${more}.`,
+    tone: down ? 'danger' : 'warn',
+    working,
+    needLook,
+    turnOn,
+  }
 }
 
 /** Why an account has no balance bar, in a few words. */

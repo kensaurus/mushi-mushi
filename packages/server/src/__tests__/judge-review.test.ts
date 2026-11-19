@@ -50,6 +50,8 @@ describe('judge routes use the review helper', () => {
     expect(src).toContain('grader_patch: row.classification_agreed === false && meta ? graderPatch(suggested, now) : null')
     expect(src).toContain('reviewed: meta ? reviewedAfterGrade(')
     expect(src).toContain('suggested_correction: suggested, ...row')
+    // A reporter category (feature, question…) can't be PATCHed back, so it is never offered to Keep.
+    expect(src).toContain('report_category: isClassifierCategory(now.category) ? now.category : null')
   })
   it('counts the recent disagreements nobody reviewed for the stats', () => {
     expect(src).toContain('recentToReview,')

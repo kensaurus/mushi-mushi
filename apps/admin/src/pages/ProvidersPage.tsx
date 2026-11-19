@@ -24,7 +24,9 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { TabbedSubNav } from '../components/TabbedSubNav'
 import { PageLoadError } from '../components/PageLoadError'
-import { Btn, EmptyState, Loading } from '../components/ui'
+import { Btn, EmptyState, Loading, PageStatus } from '../components/ui'
+import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
+import { BarCell } from '../components/signal/BarCell'
 import { IconRefresh } from '../components/icons'
 import { ProvidersAlerts } from '../components/providers/ProvidersAlerts'
 import { ProvidersTable, providerPendingKey } from '../components/providers/ProvidersTable'
@@ -60,6 +62,7 @@ import {
   type ProvidersTab,
   makeAppNamer,
   makeAppProjectFinder,
+  providersLead,
 } from '../lib/providersView'
 
 export function ProvidersPage() {
@@ -184,6 +187,8 @@ export function ProvidersPage() {
   const alerts = useMemo(() => (snapshot ? buildAlerts(snapshot, now) : []), [snapshot, now])
   const history = useMemo(() => (snapshot ? buildHistory(snapshot.route_changes, snapshot.provider_changes) : []), [snapshot])
   const troubled = providers.filter((p) => p.enabled && (providerState(p) === 'down' || providerState(p) === 'warn')).length
+  const lead = useMemo(() => providersLead(providers), [providers])
+  const openIncidents = snapshot?.incidents.length ?? 0
 
   usePublishPageContext({
     route: '/providers',
@@ -252,6 +257,58 @@ export function ProvidersPage() {
 
       {snapshot && (
         <>
+          {/* What needs a look, and the one fix the console has for it (2026-11-19). */}
+          <PagePosture
+            slots={[
+              {
+                priority: POSTURE_PRIORITY.status,
+                children: (
+                  <PageStatus
+                    ariaLabel="Providers status"
+                    tone={lead.tone}
+                    sentence={lead.sentence}
+                    action={
+                      lead.turnOn ? (
+                        <Btn
+                          size="sm"
+                          variant="primary"
+                          disabled={pending.has(providerPendingKey(lead.turnOn.id))}
+                          onClick={() => onProviderToggle(lead.turnOn!, true)}
+                          data-testid="providers-lead-action"
+                        >
+                          Turn on {lead.turnOn.label}
+                        </Btn>
+                      ) : undefined
+                    }
+                    metrics={[
+                      {
+                        label: 'Working',
+                        value: `${lead.working}/${providers.length}`,
+                        tone: lead.working === providers.length ? 'ok' : 'warn',
+                        hint: 'Accounts that are on and passed their last health check.',
+                        to: tabHref('providers'),
+                        visual: providers.length > 0 ? <BarCell value={lead.working} max={providers.length} tone="ok" label={`${lead.working} of ${providers.length} working`} /> : undefined,
+                      },
+                      {
+                        label: 'Need a look',
+                        value: lead.needLook.length,
+                        tone: lead.needLook.length > 0 ? 'warn' : 'neutral',
+                        hint: 'Accounts that are off, down, warning or not checked.',
+                        to: tabHref('providers'),
+                      },
+                      {
+                        label: 'Open incidents',
+                        value: openIncidents,
+                        tone: openIncidents > 0 ? 'danger' : 'neutral',
+                        hint: 'Problems the provider watch raised and has not closed.',
+                        to: tabHref('providers'),
+                      },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
           <ProvidersAlerts alerts={alerts} onOpen={openTab} />
           <TabbedSubNav ariaLabel="Providers views" tabs={tabs} />
           {tab === 'providers' && (

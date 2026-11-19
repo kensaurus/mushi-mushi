@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_JUDGE_STATS, type JudgeStats } from '../components/judge/JudgeStatsTypes'
 import { firstSentence, judgeLead, patchWords, reviewBody } from './judgeReview'
+import { unreviewedFirst } from '../components/judge/JudgeReviewRows'
 
 const stats = (over: Partial<JudgeStats>): JudgeStats => ({
   ...EMPTY_JUDGE_STATS,
@@ -87,5 +88,12 @@ describe('patchWords and firstSentence', () => {
   it('cuts the grader reason to its first sentence', () => {
     expect(firstSentence('The crash is in checkout, not auth. The stack trace names CartService.')).toBe('The crash is in checkout, not auth.')
     expect(firstSentence('   ')).toBeNull()
+  })
+})
+
+describe('unreviewedFirst', () => {
+  it('puts rows still waiting for a decision first and keeps their order', () => {
+    const rows = [{ id: 'a', reviewed: true }, { id: 'b', reviewed: false }, { id: 'c' }, { id: 'd', reviewed: true }]
+    expect(unreviewedFirst(rows).map((r) => r.id)).toEqual(['b', 'c', 'a', 'd'])
   })
 })

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { ProviderAccount } from './kensaurusOpsTypes'
-import { appUses, balanceWhy, makeAppProjectFinder, providerColumns, providerNeeds, PROVIDER_STATE_WORD } from './providersView'
+import { appUses, balanceWhy, makeAppProjectFinder, providerColumns, providerNeeds, providersLead, PROVIDER_STATE_WORD } from './providersView'
 
 const NOW = Date.parse('2026-11-19T12:00:00Z')
 
@@ -24,8 +24,8 @@ describe('providerNeeds', () => {
   })
 
   it('explains an unchecked account from its data, with no fake button', () => {
-    expect(providerNeeds(account({ secret_name: null }), NOW)).toEqual({ text: 'Not checked: no key is stored on kenji for its health check, so the watch cannot probe it.', action: null })
-    expect(providerNeeds(account(), NOW)?.text).toContain('has not probed it')
+    // A null secret name says nothing about probing (probed, ok accounts have one too).
+    expect(providerNeeds(account({ secret_name: null }), NOW)).toEqual({ text: 'Not checked yet: the provider watch on kenji has no reading for it. It shows here after its first check.', action: null })
     expect(providerNeeds(account({}, status({ state: 'unknown', detail: 'HTTP 418' })), NOW)?.text).toBe('The last check could not tell whether it works: HTTP 418')
     expect(providerNeeds(account({}, status({ state: 'stale' })), NOW)?.text).toBe('Last checked 3h ago; the watch on kenji has not probed it since.')
   })
@@ -59,5 +59,24 @@ describe('balance', () => {
     expect(providerColumns([account(), account({ id: 'kenji:x' })], new Map()).note).toBe(
       'Balance: not shown, because each account’s check only tests that its key works · no open incidents',
     )
+  })
+})
+
+describe('providersLead', () => {
+  it('names the accounts that need a look, worst first, and offers to turn an off one on', () => {
+    const off = account({ id: 'kenji:el', label: 'ElevenLabs', enabled: false }, status({ state: 'ok' }))
+    const unchecked = account({ id: 'kenji:fal', label: 'fal.ai' })
+    const down = account({ id: 'kenji:openai', label: 'OpenAI (shared key)' }, status({ state: 'down' }))
+    const ok = account({ id: 'kenji:anthropic', label: 'Anthropic' }, status({ state: 'ok' }))
+    const lead = providersLead([ok, off, unchecked, down])
+    expect(lead.sentence).toBe('3 accounts need a look: OpenAI is down, fal.ai is not checked, ElevenLabs is off.')
+    expect(lead.tone).toBe('danger')
+    expect(lead.working).toBe(1)
+    expect(lead.turnOn?.id).toBe('kenji:el')
+  })
+
+  it('says all are working when none needs a look', () => {
+    const lead = providersLead([account({}, status({ state: 'ok' }))])
+    expect(lead).toMatchObject({ sentence: 'The provider account is working.', tone: 'ok', turnOn: null })
   })
 })

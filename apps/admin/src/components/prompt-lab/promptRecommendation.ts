@@ -23,8 +23,8 @@ import { trafficWords } from './VersionStateMark'
 export const MIN_GRADES_TO_SWITCH = 30
 /** Relative lift over the one in use before a switch is suggested (MIN_SCORE_LIFT_PERCENT). */
 export const MIN_LIFT_PCT = 5
-/** The share a "Start" button gives a test that gets no reports. */
-export const START_TEST_PCT = 50
+/** The share a "Start" button gives a test that gets no reports: small, as the page help advises. */
+export const START_TEST_PCT = 10
 
 export type PromptRecommendationAction =
   | { kind: 'switch'; version: PromptVersion }
@@ -91,7 +91,7 @@ export function promptRecommendation(prompts: readonly PromptVersion[]): PromptR
           sentence: `A newer ${name} prompt runs on ${trafficWords(candidate.traffic_percentage)} and has no grades yet: ${MIN_GRADES_TO_SWITCH} needed.`,
           tone: 'info',
           action: { kind: 'grade' },
-          actionLabel: 'Grade reports now',
+          actionLabel: 'Open grading',
         },
       })
       continue
@@ -111,7 +111,7 @@ export function promptRecommendation(prompts: readonly PromptVersion[]): PromptR
           sentence: `A newer ${name} prompt scores ${pct(c)} vs ${vs}. Not enough grades yet: ${more} more needed.`,
           tone: 'info',
           action: { kind: 'grade' },
-          actionLabel: 'Grade reports now',
+          actionLabel: 'Open grading',
         },
       })
     } else if (!ahead) {
