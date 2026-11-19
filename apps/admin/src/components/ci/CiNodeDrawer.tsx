@@ -11,7 +11,8 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { StageDrawer } from '../flow-primitives/StageDrawer'
 import { IconExternalLink } from '../icons'
-import { RelativeTime } from '../ui'
+import { Btn, RelativeTime } from '../ui'
+import { useCiDebug } from './CiJobDebug'
 import type { CiJob, CiOverview } from '../../lib/ciTypes'
 import { ciActivity, formatPercent, formatSeconds, runnerFamily, runnerKey } from '../../lib/ciView'
 import { GITHUB_HOST_ID, GITHUB_RUNNER_ID, GITHUB_RUNNERS_NAME, UNKNOWN_HOST_ID } from './ciMapContext'
@@ -267,7 +268,7 @@ function hostContent(o: CiOverview, key: string, onSelect: Select) {
   }
 }
 
-function content(o: CiOverview, nodeId: string, onSelect: Select): { title: string; subtitle: string; body: ReactNode } | null {
+function content(o: CiOverview, nodeId: string, onSelect: Select, onDebug?: (jobId: string) => void): { title: string; subtitle: string; body: ReactNode } | null {
   const [kind, ...rest] = nodeId.split(':')
   const key = rest.join(':')
 
@@ -382,6 +383,11 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
               onSelect={onSelect}
             />
           </DrawerSection>
+          {onDebug && (j.status !== 'completed' || ['code_failure', 'runner_lost', 'queue_expired', 'cancelled'].includes(j.ciKind)) && (
+            <Btn size="sm" variant="primary" className="mt-3" onClick={() => onDebug(j.id)} data-testid="ci-node-debug">
+              {j.status === 'completed' ? 'Why it failed: log and cause' : 'Inspect: live steps and Cancel'}
+            </Btn>
+          )}
           {j.infraDetail && <p className="mt-3 text-xs text-fg-secondary">{j.infraDetail}</p>}
           {isMushiVerifyJob(j) && <p className="mt-3 text-xs text-fg-secondary">{MUSHI_VERIFY_JOB_NOTE}</p>}
           {j.htmlUrl && (
@@ -398,7 +404,15 @@ function content(o: CiOverview, nodeId: string, onSelect: Select): { title: stri
 }
 
 export function CiNodeDrawer({ overview, nodeId, onClose, onSelect }: Props) {
-  const c = nodeId ? content(overview, nodeId, onSelect) : null
+  const debug = useCiDebug()
+  // The debug drawer replaces this one: two drawers open at once fight over focus.
+  const onDebug = debug
+    ? (jobId: string) => {
+        onClose()
+        debug.open(jobId)
+      }
+    : undefined
+  const c = nodeId ? content(overview, nodeId, onSelect, onDebug) : null
   return (
     <StageDrawer open={c != null} onClose={onClose} title={c?.title ?? ''} subtitle={c?.subtitle}>
       {c?.body}

@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 243
+Pages: 245
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -16601,186 +16601,233 @@ prompts. Self-hosting is free forever; you supply your own LLM keys.
 
 ---
 
-## Self-hosting
+## Self-hosting quickstart
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting
 
 ---
-title: Self-hosting
-description: Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+title: Self-hosting quickstart
+description: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits."
 ---
 
-# Self-hosting
+# Self-hosting quickstart
 
-Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
+Run the whole Mushi Mushi server on your own [Supabase](https://supabase.com) project. The free tier is enough. Self-host turns every feature on and lifts every plan limit ([ADR 0063](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0063-reach-first-free-plan-and-free-self-host.md)). It is the same code Mushi Mushi Cloud runs: the server is AGPLv3 and the SDKs are MIT ([Open source & licensing](/concepts/open-source)).
 
-  **Supported path:** your own [Supabase](https://supabase.com) project (the free tier works) and one command, `mushi selfhost up`. You need Node 22+, a clone of this repo and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). An LLM key is optional. **Docker Compose** and the **Helm chart** are experimental: nobody has run them end to end yet.
+This page takes you from nothing to your first diagnosis. Prefer containers and no Supabase account? Use [Docker Compose](/self-hosting/docker-compose) instead.
 
-## What you'll deploy
+## Before you start
 
-| Layer | Technology | License |
-| --- | --- | --- |
-| Database + Auth | Supabase (Postgres 15 + pgvector + pgcrypto + pg_cron) | Open |
-| Edge Functions | 50+ Supabase Edge functions (Deno) — run `pnpm docs-stats` for live count | AGPLv3 |
-| Admin SPA | React + Vite, deployed to any static host | AGPLv3 |
-| Observability | Langfuse + Sentry | MIT / Commercial |
-| Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
+- [ ] A Supabase project, and its **project ref** (Project Settings → General; the `abcdefghijklmnopqrst` in `https://abcdefghijklmnopqrst.supabase.co`)
+- [ ] The [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), signed in: `supabase login`
+- [ ] Node 22+, pnpm and git
+- [ ] Optional: an Anthropic **or** OpenAI API key. Without one, reports get a rule-based category and severity, but no plain-English diagnosis or fix draft. You can add one later in the console.
 
-## Quickstart: your own Supabase project
+### Clone the repo
+
+The migrations and functions deploy from your clone.
 
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
-supabase login
-npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url https://mushi.example.com
 ```
 
-`selfhost up` links the project, applies every migration and sets the function secrets. It points the database's cron jobs at your project (the migrations seed the Mushi Mushi Cloud URL) and lifts the Cloud free-plan limits on your instance. Then it deploys every edge function and saves the endpoint and console URL to the CLI config. It asks for an Anthropic **or** OpenAI key; press Enter to skip.
+You should see: a `mushi-mushi` folder, and your shell inside it.
 
-Next, serve the console ([Admin SPA deploy](/self-hosting/admin-spa)) and sign up there; the first account owns the instance. Then sign the CLI in. This mints your key; no SQL needed:
+### Deploy the server
 
 ```bash
-mushi login --endpoint https://<your-ref>.supabase.co/functions/v1/api
-mushi selfhost doctor
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url http://localhost:6464
 ```
 
-| Setting | Required? | What it unlocks |
-| --- | --- | --- |
-| Supabase project + CLI login | Required | Everything |
-| `MUSHI_INTERNAL_CALLER_SECRET` | Required; `selfhost up` generates it | pg_cron calling your functions |
-| Anthropic or OpenAI key | Optional | The plain-English diagnosis and fix drafts |
-| OpenAI key | Optional | Duplicate detection, semantic search, voice transcription |
-| `--console-url` | Recommended | Report links in Slack/Discord, and `mushi login` opening your console instead of Mushi Mushi Cloud |
+It asks you to confirm, then for an AI key (press Enter to skip). Then it links the project, applies every migration, sets the function secrets, points the database's cron jobs at your project, lifts the plan limits, deploys every edge function stamped with your commit, and saves the API address to the CLI config. `--console-url` is where you will serve the console in the next step; `up` sets it as the address for links and sign-in, and lets that origin call the API.
 
-**Without an LLM key**, reports are still ingested, stored and shown in the console, with a rule-based category and severity. You do not get the diagnosis, fix drafts or duplicate detection.
+You should see, at the end:
 
-[`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) is the step-by-step reference. The detailed guides:
+```
+  OK    /health 200 412ms
+  OK    Server deploy: Running commit 3c64ea2.
+✓  selfhost up complete.
+```
 
-1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and the runtime config
-2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
-3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
-4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking
+### Serve the console
 
-## Docker Compose (experimental)
+The console is a static app. Build it with your project's URL and anon key (Project Settings → API), then serve it:
 
-To run every service in containers with no Supabase account, see [Docker Compose](/self-hosting/docker-compose).
+```bash
+pnpm install
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co \
+VITE_SUPABASE_ANON_KEY=<anon key> \
+VITE_INSTANCE_TYPE=self-hosted \
+pnpm --filter "@mushi-mushi/admin..." build
+npx serve -s apps/admin/dist -l 6464
+```
+
+You should see: `Serving!` and `http://localhost:6464`. For a real domain, see [Host the console](/self-hosting/admin-spa).
+
+### Sign up
+
+Open `http://localhost:6464` and create an account. The first account owns the instance. Supabase emails a confirmation link first; to skip it while you test, turn off **Confirm email** under Authentication → Sign In / Providers.
+
+You should see: the console, with **Self-hosted** in the sidebar footer.
+
+### Sign the CLI in and run the doctor
+
+```bash
+npx mushi-mushi@latest login --endpoint https://<your-ref>.supabase.co/functions/v1/api
+npx mushi-mushi@latest selfhost doctor
+```
+
+`login` opens your console to approve the CLI and mints its key; no SQL needed. The doctor checks the server, the console, the cron URL, the screenshots bucket and the AI key.
+
+You should see: `OK` lines and maybe `INFO` lines, with exit code 0. `INFO` marks an optional extra that is not set up (an AI key, Langfuse, Sentry). Each `FAIL` or `WARN` line ends with its fix.
+
+### Get your first diagnosis
+
+In the console, create an app (**Projects** → New), then open **Settings → SDK & connection** and press **Send test bug**. The same page shows the **Self-host setup** checklist.
+
+You should see: a test report under **Reports**, with a plain-English diagnosis if you set an AI key, or a rule-based category if not. To catch real bugs, run `npx mushi-mushi@latest init` in your app's repo.
+
+## Next
+
+| I want to… | Go to |
+| --- | --- |
+| See every setting and where it goes | [Environment variables](/self-hosting/environment) |
+| Run everything in containers, no Supabase account | [Docker Compose](/self-hosting/docker-compose) |
+| Run each step myself, or understand what `selfhost up` did | [Supabase by hand](/self-hosting/supabase) |
+| Put the console on a real domain | [Host the console](/self-hosting/admin-spa) |
+| Add Langfuse traces and Sentry errors | [Observability](/self-hosting/observability) |
+| Upgrade, bootstrap from IaC, add cron jobs, harden | [Operate and upgrade](/self-hosting/operate) |
+
+  Re-running `selfhost up` is safe: it applies only new migrations and redeploys. It rotates the internal caller secret in both places unless you export `MUSHI_INTERNAL_CALLER_SECRET` first. In CI, add `--yes`. No Supabase CLI, or want to read every command first? `selfhost up --print-commands` prints them with placeholders for each secret.
 
 ---
 
-## Admin SPA deploy
+## Host the console
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa
 
 ---
-title: Admin SPA deploy
-description: Build and deploy the Mushi Mushi admin console yourself. A static Vite and React app that talks to your Supabase project, and the env vars it needs.
+title: Host the console
+description: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open."
 ---
 
-# Admin SPA deploy
+# Host the console
 
-The admin console is a Vite + React SPA that talks directly to your Supabase project and the `api` edge function. It has no server runtime — any static host works.
+**Use this when** you put the console on a real domain, or the console opens a "does not know where your Mushi Mushi server is" screen. The console is a static Vite + React app. It talks to your Supabase project and the `api` function, and has no server of its own.
 
-## Build
+  Vite **inlines** `VITE_*` values at build time. Setting them on the server that serves the files does nothing, and so does restarting it. Change a value, then rebuild. The one exception is `pnpm dev`, which rereads `apps/admin/.env` on restart.
+
+## Pick how you serve it
+
+| You serve it as | Do this |
+| --- | --- |
+| Files on any static host | Build with the values (below), upload `apps/admin/dist` |
+| A Docker image | `docker build -f deploy/Dockerfile.admin` with `--build-arg` values (below) |
+| Part of Docker Compose | Nothing: Compose builds it from `deploy/.env`. After changing `MUSHI_PUBLIC_URL` or the anon key: `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build admin` |
+| A local dev server | Put the values in `apps/admin/.env`, run `pnpm --filter @mushi-mushi/admin dev` (http://localhost:6464) |
+| A build without the values | Open it: the setup screen asks for the Supabase URL and anon key and keeps them in that browser (**Connect this browser**) |
+
+The values: your project URL and **anon** key from Supabase → Project Settings → API. The anon key is meant to be public; the service-role key never goes in the console.
+
+### Static build
 
 From the repo root:
 
 ```bash
-VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
-VITE_SUPABASE_ANON_KEY=eyJ… \
-VITE_API_URL=https://YOUR-REF.supabase.co/functions/v1/api \
+pnpm install
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co \
+VITE_SUPABASE_ANON_KEY=<anon key> \
+VITE_API_URL=https://<your-ref>.supabase.co/functions/v1/api \
+VITE_INSTANCE_TYPE=self-hosted \
 pnpm --filter "@mushi-mushi/admin..." build
 ```
 
-The trailing `...` also builds the workspace packages the console imports (`@mushi-mushi/web`, `@mushi-mushi/mcp` and others) first; a fresh clone has none of their `dist/` folders yet. The output lands in `apps/admin/dist/`.
+The trailing `...` also builds the workspace packages the console imports first; a fresh clone has none of their `dist/` folders yet. Output: `apps/admin/dist/`. `VITE_API_URL` is optional (it defaults to `/functions/v1/api`) and must point at the `api` function, never the database URL.
 
-  `VITE_API_URL` must point to the `api` edge function (`…/functions/v1/api`), **not** your database URL. All console API calls are proxied through that function.
-
-## Deploy options
-
-| Host | Command / workflow |
+| Host | Command |
 | --- | --- |
-| **Cloudflare Pages** | `wrangler pages deploy apps/admin/dist --project-name mushi-admin` |
-| **Vercel** | `vercel apps/admin/dist` |
-| **S3 + CloudFront** | See `.github/workflows/deploy-admin.yml` in the repo |
-| **Netlify** | `netlify deploy --dir apps/admin/dist --prod` |
+| Cloudflare Pages | `wrangler pages deploy apps/admin/dist --project-name mushi-admin` |
+| Vercel | `vercel apps/admin/dist` |
+| Netlify | `netlify deploy --dir apps/admin/dist --prod` |
+| S3 + CloudFront | See `.github/workflows/deploy-admin.yml` in the repo |
+| Try it locally | `npx serve -s apps/admin/dist -l 6464` |
 
-## SPA routing
+Every host must serve `index.html` for every path under the console (a SPA fallback). Cloudflare Pages and Netlify: a `_redirects` file with `/* /index.html 200`. The reference S3 + CloudFront deploy uses CloudFront functions (`scripts/cloudfront-mushi-spa-router.js`, `cloudfront-mushi-spa-response.js`).
 
-All hosts need to serve `index.html` for every path under the console root. The repo's reference S3 + CloudFront deploy does this with CloudFront functions (`scripts/cloudfront-mushi-spa-router.js` and `cloudfront-mushi-spa-response.js`) in front of a private bucket. For Cloudflare Pages and Netlify, a `_redirects` file or `netlify.toml` with `/* /index.html 200` is sufficient.
+### Docker image
 
-## First-run setup
+```bash
+docker build -f deploy/Dockerfile.admin \
+  --build-arg VITE_SUPABASE_URL=https://<your-ref>.supabase.co \
+  --build-arg VITE_SUPABASE_ANON_KEY=<anon key> \
+  --build-arg VITE_INSTANCE_TYPE=self-hosted \
+  -t mushi-admin .
+docker run -p 3000:3000 mushi-admin
+```
 
-After deploy, open the console and complete the **Onboarding** wizard (`/onboarding`). It will:
-1. Generate your first API key.
-2. Connect your GitHub OAuth app.
-3. Show the SDK snippet for your first project.
+nginx serves it on port 3000 with the SPA fallback. Built without `VITE_SUPABASE_URL`, the image opens the setup screen instead.
 
-If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build. Vite inlines them at build time, so environment variables on the server that serves `dist/` have no effect.
+## After it is up
 
-A build with `VITE_INSTANCE_TYPE=self-hosted` and no `VITE_SUPABASE_URL` opens a setup screen instead. It asks for the Supabase URL and anon key and keeps them in that browser. The published Docker image (`ghcr.io/kensaurus/mushi-mushi-admin`) works this way. To bake the values in, build your own image: `docker build -f deploy/Dockerfile.admin --build-arg VITE_SUPABASE_URL=… --build-arg VITE_SUPABASE_ANON_KEY=… .` (nginx serves it on port 3000 with the SPA fallback).
+1. Point the CLI at it, so `mushi login` signs in on your console, not Mushi Mushi Cloud: `npx mushi-mushi config consoleUrl https://mushi.example.com` (or pass `--console-url` to `selfhost up`).
+2. Set the function secrets `ADMIN_BASE_URL` to the same address (links in Slack, Discord and email, and the `mushi login` approval page, open it) and `MUSHI_ADMIN_ORIGIN_ALLOWLIST` to its origin (without it, the browser blocks the console's calls to the API, except on `localhost` dev ports). `selfhost up --console-url` does all three. Compose needs none of this: the console and the API share one origin.
+3. Run `npx mushi-mushi selfhost doctor`: its **Console answers** line checks the address responds with the console page.
 
-Point the CLI at the console, so `mushi login` signs in there instead of on Mushi Mushi Cloud: `mushi config consoleUrl https://your-console.example.com`. Alternatively, pass `--console-url` to `mushi selfhost up`.
+Every `VITE_*` value is listed on [Environment variables](/self-hosting/environment#console-build-vite_). The console's own Sentry DSN is `VITE_SENTRY_DSN`; see [Observability](/self-hosting/observability).
 
 ---
 
-## Docker Compose (experimental)
+## Docker Compose
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
 
 ---
-title: Docker Compose (experimental)
-description: Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.
+title: Docker Compose
+description: Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Postgres, auth, storage, every edge function, the console and Caddy, on one machine.
 ---
 
-# Docker Compose (experimental)
+# Docker Compose
 
-One Compose file runs the whole stack on your own machine: Supabase's Postgres,
-Auth, PostgREST and Storage images, every edge function in one
-`supabase/edge-runtime` container, the admin console, and Caddy as the gateway.
-You do not need a Supabase account.
+**Use this when** you want everything on one machine, in containers, with no Supabase account. One Compose file runs Supabase's Postgres, Auth, PostgREST and Storage images, every edge function in one `supabase/edge-runtime` container, the console, and Caddy as the gateway. It was proved end to end on a clean machine on 2026-11-19: 578 migrations on an empty Postgres 17, sign-up, and the first-app bootstrap.
 
-  **Experimental.** Nobody has run this stack end to end yet, so expect to fix
-  things. The supported path is [your own Supabase project + `mushi selfhost up`](/self-hosting).
+Already have a Supabase project? The [quickstart](/self-hosting) (`selfhost up`) is shorter.
+
+You need Docker with Compose v2, git, and either bash + openssl or Node 22+. Run every command from the repo root.
 
 ### Generate the secrets
 
-From the repo root:
-
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
-./deploy/generate-secrets.sh            # bash + openssl
-# or, on any OS with Node 22+:
-npx mushi-mushi selfhost secrets
+npx mushi-mushi@latest selfhost secrets        # or: ./deploy/generate-secrets.sh
 ```
 
-Either one writes `deploy/.env` (mode 600). It contains a random Postgres
-password, JWT secret and internal caller secret, plus the anon and
-service_role JWTs signed with that JWT secret, so you never mint JWTs by hand.
-Neither overwrites an existing file.
-For a public domain, pass it first:
-`MUSHI_PUBLIC_URL=https://mushi.example.com ./deploy/generate-secrets.sh`
-(or `--public-url`).
+Both write `deploy/.env` (mode 600): a random Postgres password, JWT secret and internal caller secret, plus the anon and service_role keys signed with that JWT secret. Neither overwrites an existing file. For a public domain, pass it first: `--public-url https://mushi.example.com` (or `MUSHI_PUBLIC_URL=https://mushi.example.com ./deploy/generate-secrets.sh`).
 
-Optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `deploy/.env`. Either
-one turns on the plain-English diagnosis and fix drafts. Without one, reports
-get rule-based triage only.
+Optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `deploy/.env`. Either one turns on the plain-English diagnosis and fix drafts.
 
-### Bring the stack up
+You should see: `✓ Wrote …/deploy/.env (mode 600).`
+
+### Start the stack
 
 ```bash
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
 
-Compose refuses to start while a required secret is missing.
+The first run builds the functions and console images and applies every migration, so it takes a few minutes. Compose refuses to start while a required secret is missing.
 
-### Open the console
+You should see: `docker compose -f deploy/docker-compose.yml ps` lists `migrate` as exited (0) and the other services as running.
 
-Go to `http://localhost` (or your domain) and sign up. The first account owns
-the instance; sign-up is auto-confirmed, because the stack has no SMTP. Then:
+### Sign up and sign the CLI in
+
+Open `http://localhost` (or your domain) and create an account. The first account owns the instance. Sign-up is confirmed at once, because the stack has no SMTP.
 
 ```bash
-mushi config consoleUrl http://localhost     # or the CLI signs in on Mushi Mushi Cloud
-mushi login --endpoint http://localhost/functions/v1/api
+npx mushi-mushi@latest config consoleUrl http://localhost
+npx mushi-mushi@latest login --endpoint http://localhost/functions/v1/api
+npx mushi-mushi@latest selfhost doctor
 ```
+
+You should see: `OK` and `INFO` lines, exit code 0. Then create an app and press **Send test bug** under Settings → SDK & connection.
 
 ## What's running
 
@@ -16797,118 +16844,73 @@ deploy/docker-compose.yml
                     /storage/v1, /functions/v1; plus an internal gateway on :8000
 ```
 
-- **Migrations** run in the `migrate` service, after Auth and Storage have
-  created their schemas. Each file runs in one transaction. Applied files are
-  recorded in `supabase_migrations.schema_migrations`, the ledger
-  `supabase db push` uses, so `docker compose up` again applies only new ones.
-- **Cron jobs** call `http://caddy:8000`: `migrate` writes that URL into
-  `mushi_runtime_config`, together with `MUSHI_INTERNAL_CALLER_SECRET`.
-- **Console settings** are baked at build time. After changing
-  `MUSHI_PUBLIC_URL` or the anon key, run
-  `docker compose -f deploy/docker-compose.yml --env-file deploy/.env build admin`.
+- **Migrations** run in `migrate`, after Auth and Storage have created their schemas. Each file runs in one transaction. Applied files are recorded in `supabase_migrations.schema_migrations`, the ledger `supabase db push` uses, so running `up` again applies only new ones.
+- **Cron jobs** call `http://caddy:8000`: `migrate` writes that URL and `MUSHI_INTERNAL_CALLER_SECRET` into `mushi_runtime_config`.
+- **The functions** get `MUSHI_INSTANCE_MODE=self-hosted` and `ADMIN_BASE_URL` = `MUSHI_PUBLIC_URL`, so `/health` says self-hosted and report links open your console.
+- **Console settings** are baked in at build time. After changing `MUSHI_PUBLIC_URL` or the anon key, rebuild it: `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build admin`.
+
+Every variable `deploy/.env` takes is on [Environment variables](/self-hosting/environment#docker-compose-deployenv). To pass another function secret (say `SENTRY_DSN_SERVER`), add it to the `edge-functions` service's `environment:` block.
+
+## Upgrade
+
+```bash
+git pull
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+```
+
+`migrate` applies only the new migrations; the images rebuild from your checkout.
 
 ## Not included
 
 - **Realtime**: the console's live updates need a page reload.
 - **Email**: no SMTP, so accounts are confirmed on sign-up.
-- **Studio**: use `psql` against the `db` container.
-- **Signed file links**: the functions build signed Storage URLs from the
-  internal gateway (`http://caddy:8000`), so screenshot and capture links the
-  API hands to the browser may not load yet.
+- **Studio**: use `psql` in the `db` container: `docker compose -f deploy/docker-compose.yml exec db psql -U postgres`.
+- **Signed file links**: the functions build signed Storage URLs from the internal gateway (`http://caddy:8000`), so screenshot links the API hands to the browser may not load yet.
 
 ## Production notes
 
-- **TLS / domain**: set `MUSHI_PUBLIC_URL` and `MUSHI_SITE_ADDRESS` to
-  `https://your-domain`, and Caddy provisions a certificate.
-- **Internal functions** (`classify-report`, `fix-worker`, `judge-batch`, …)
-  check `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key
-  (`requireServiceRoleAuth`) inside the handler.
-- **Kubernetes**: the [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm)
-  runs the functions and console against an existing Supabase API. It is
-  experimental too.
+- **TLS / domain**: set `MUSHI_PUBLIC_URL` and `MUSHI_SITE_ADDRESS` to `https://your-domain`, and Caddy provisions a certificate.
+- **Internal functions** (`classify-report`, `fix-worker`, `judge-batch`, …) check `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key (`requireServiceRoleAuth`) inside the handler.
+- **Kubernetes**: the [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm) runs the functions and console against an existing Supabase API. Unlike Compose, it has not been run end to end yet.
 
-  It is the same code either way. Mushi Mushi Cloud runs this exact stack; there is no
-  closed-source plus-tier. The hosted service adds only its own tuning data
-  (prompts and scoring weights kept as configuration). The repo's default
-  prompts give you every feature. See [Open source & licensing](/concepts/open-source).
+  It is the same code either way: Mushi Mushi Cloud runs this stack, and there is no closed-source plus-tier. The hosted service adds only its own tuning data (prompts and scoring weights kept as configuration). The repo's default prompts give you every feature. See [Open source & licensing](/concepts/open-source).
 
 ---
 
-## Edge Functions deploy
+## Edge functions
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/edge-functions
 
 ---
-title: Edge Functions deploy
-description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted install. The minimal ingest and classification set, the full list, and the secrets they need.
+title: Edge functions
+description: What the Mushi Mushi Supabase Edge Functions do, how they authenticate, and how to redeploy one. selfhost up deploys all of them.
 ---
 
-# Edge Functions deploy
+# Edge functions
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). `mushi selfhost up` deploys **all** of them in one `supabase functions deploy`, with each function's `verify_jwt` taken from `config.toml`, the same as the production deploy. That is the simplest complete install: the cron jobs the migrations schedule call many of these functions. To deploy by hand, the **minimal ingest + classification** set is below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
+**Use this page when** you need to know what a function does, redeploy one, or check what is running. Install them with the [quickstart](/self-hosting): `selfhost up` deploys **every** function under `packages/server/supabase/functions/` in one `supabase functions deploy`, with each function's `verify_jwt` taken from `config.toml`, the same as the production deploy. Deploy all of them: the cron jobs the migrations schedule call many of these (run `pnpm docs-stats` for the live count). The secrets they read are on [Environment variables](/self-hosting/environment#function-secrets).
 
-## Minimal required (ingest + classify)
+## Redeploy one function
 
 ```bash
 cd packages/server
-
-npx supabase functions deploy api --no-verify-jwt
-npx supabase functions deploy fast-filter --no-verify-jwt
-npx supabase functions deploy classify-report --no-verify-jwt
+npx supabase functions deploy api
 ```
 
-Also deploy **`mcp`** if you use the hosted MCP transport, and **`healthz`** for unauthenticated monitoring:
+  Run deploy commands from `packages/server/`: the Supabase CLI looks for `supabase/functions/` under the current directory. From the repo root it fails with "entrypoint path does not exist".
+
+A plain `supabase functions deploy` leaves the deploy unstamped, so `/health` reports `"version": "dev"`. To stamp the commit, re-run `selfhost up`, or deploy with `SUPABASE_PROJECT_REF=<your-ref> node scripts/deploy-edge-function.mjs `. Supabase keeps the uploaded bundle as the source of truth, so a deploy from a stale checkout silently drops newer routes.
+
+## Check what is deployed
+
+`api` answers `GET /health` and `GET /v1/health` without a key:
 
 ```bash
-npx supabase functions deploy mcp --no-verify-jwt
-npx supabase functions deploy healthz --no-verify-jwt
+curl -s "https://<your-ref>.supabase.co/functions/v1/api/v1/health"
+# {"status":"ok","version":"<commit sha>","deployed_at":"…","mode":"self-hosted","region":"us","hosting_region":"ap-northeast-1"}
 ```
 
-  Run every deploy command from `packages/server/` — the Supabase CLI looks for `supabase/functions/` relative to the current directory. Running from the repo root will fail with "entrypoint path does not exist".
-
-## Checking what is deployed
-
-`api` answers `GET /health` and `GET /v1/health` without a key, with the
-commit it was built from:
-
-```bash
-curl -s "$SUPABASE_URL/functions/v1/api/v1/health"
-# {"status":"ok","version":"<commit sha>","deployed_at":"...","region":"us","hosting_region":"ap-northeast-1"}
-```
-
-`version` is the sha stamped at deploy time, so it answers "did my deploy
-land?" without reading logs — compare it with `git rev-parse HEAD`.
-`hosting_region` is where the function actually runs, which matters when the
-database lives elsewhere. The standalone `healthz` function reports the same
-sha for uptime monitors that should not depend on the API router.
-
-## Common optional functions
-
-```bash
-npx supabase functions deploy fix-worker --no-verify-jwt
-npx supabase functions deploy judge-batch --no-verify-jwt
-npx supabase functions deploy intelligence-report --no-verify-jwt
-npx supabase functions deploy generate-synthetic --no-verify-jwt
-npx supabase functions deploy qa-story-runner --no-verify-jwt
-npx supabase functions deploy pdca-runner --no-verify-jwt
-npx supabase functions deploy inventory-crawler --no-verify-jwt
-npx supabase functions deploy inventory-propose --no-verify-jwt
-npx supabase functions deploy inventory-gates --no-verify-jwt
-npx supabase functions deploy drift-walker --no-verify-jwt
-npx supabase functions deploy contract-graph-builder --no-verify-jwt
-npx supabase functions deploy a2a-push-notify --no-verify-jwt
-npx supabase functions deploy test-gen-from-report --no-verify-jwt
-npx supabase functions deploy telegram-webhook --no-verify-jwt
-npx supabase functions deploy cursor-webhook --no-verify-jwt
-npx supabase functions deploy agent-status-poll --no-verify-jwt
-npx supabase functions deploy agent-pr-review --no-verify-jwt
-npx supabase functions deploy recipe-collector --no-verify-jwt
-npx supabase functions deploy radar-scan --no-verify-jwt
-npx supabase functions deploy operator-digest --no-verify-jwt
-npx supabase functions deploy store-review-intake --no-verify-jwt
-```
-
-For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `release-builder`, `experiment-analyzer`, `anomaly-detector`, …) and cron setup, follow [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md).
+`version` is the commit stamped at deploy time: compare it with `git rev-parse HEAD`. `mode` is `self-hosted` unless the server runs on Mushi Mushi Cloud's project (`MUSHI_INSTANCE_MODE` overrides it). `hosting_region` is where the function runs, which matters when the database lives elsewhere. `GET /health/ready` adds a database round trip, and the standalone `healthz` function reports the same sha for uptime monitors that should not depend on the API router.
 
 ## Function inventory (core pipeline)
 
@@ -16941,33 +16943,6 @@ For closed-loop evolution workers (`mistake-clusterer`, `mistake-summarizer`, `r
 
 The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payout, …) live alongside these. Full list: `ls packages/server/supabase/functions/` or `pnpm docs-stats`.
 
-## Required secrets
-
-Set secrets before deploying — functions read them at cold-start. Only
-`MUSHI_INTERNAL_CALLER_SECRET` is required (`mushi selfhost up` generates it
-and writes the same value into `mushi_runtime_config`). One LLM key, Anthropic
-or OpenAI, turns on the diagnosis and fix drafts. Everything else is optional:
-
-```bash
-cd packages/server
-
-npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=$(openssl rand -hex 32)   # + mushi_runtime_config, see Supabase setup
-npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
-npx supabase secrets set OPENAI_API_KEY=sk-…
-npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
-npx supabase secrets set LANGFUSE_SECRET_KEY=sk-lf-…
-npx supabase secrets set LANGFUSE_BASE_URL=https://cloud.langfuse.com
-npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…
-npx supabase secrets set GITHUB_APP_ID=…
-npx supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
-npx supabase secrets set FIRECRAWL_API_KEY=…
-npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
-```
-
-Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
-
-The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they count as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user listed in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). The pipeline's own Langfuse tracing still uses the keys for every app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. On a single-team self-host, put your own user id there, or the server-wide token serves no app. `E2B_API_KEY` is read by the Node fix orchestrator in `@mushi-mushi/agents`, not by the edge functions; set it where that runs if you use the E2B sandbox.
-
 ## JWT verification
 
 Functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Auth is enforced **inside** each handler via one of two patterns:
@@ -16976,6 +16951,396 @@ Functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Au
 - **User / API-key guard** — user-facing functions (`api`, `mcp`, `classify-report`, etc.) authenticate via API key or JWT inside the handler.
 
 This two-layer approach lets functions be deployed with `--no-verify-jwt` while keeping security equivalent to the platform default. See `packages/server/supabase/config.toml` for the per-function settings.
+
+---
+
+## Environment variables
+
+Source: https://kensaur.us/mushi-mushi/docs/self-hosting/environment
+
+---
+title: Environment variables
+description: Every environment variable a self-hosted Mushi Mushi reads, where to set it, and whether it is required. Generated from the .env.example templates.
+---
+
+# Environment variables
+
+You need very few of these. `npx mushi-mushi selfhost up` sets the required function secrets for you, and `npx mushi-mushi selfhost secrets` writes the Compose `.env`. Everything else turns on an optional feature.
+
+| You run | Required | Set by |
+| --- | --- | --- |
+| Your own Supabase project | `MUSHI_INTERNAL_CALLER_SECRET` | `selfhost up` |
+| Docker Compose | `POSTGRES_PASSWORD`, `JWT_SECRET`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `MUSHI_INTERNAL_CALLER_SECRET` | `selfhost secrets` |
+| A console you build yourself | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | your build command |
+
+An AI key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) is optional: without one, reports get rule-based triage, and no plain-English diagnosis.
+
+## Set by the platform
+
+Supabase sets these in every function. Compose passes them to the `edge-functions` service. Do not set them yourself on Supabase.
+
+| Variable | Notes |
+| --- | --- |
+| `SUPABASE_URL` | The project URL. Compose passes the internal gateway, `http://caddy:8000`. |
+| `SUPABASE_ANON_KEY` | The anon (public) key. |
+| `SUPABASE_SERVICE_ROLE_KEY` | The service-role key. Server only. |
+| `SUPABASE_DB_URL` | Direct Postgres connection string. |
+| `SB_REGION` | Region the function runs in (read-only). |
+
+## Function secrets
+
+A Supabase function secret: `supabase secrets set NAME=value` (or Project Settings → Edge Functions → Secrets). In Docker Compose, add it to the `edge-functions` service environment.
+
+### Core (selfhost up sets these)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Required: `selfhost up` and the Compose secrets script generate it | — | Lets pg_cron call your functions; the same value goes in mushi_runtime_config |
+| `ADMIN_BASE_URL` | Optional | — | Where your console is served; links in Slack, Discord and email open it |
+
+### AI keys (optional; one turns on the plain-English diagnosis and fix drafts)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Optional | — | — |
+| `OPENAI_API_KEY` | Optional | — | Either provider works; OpenAI also powers duplicate detection, semantic search and voice |
+| `AGENT_PR_REVIEW_MODEL` | Optional | `claude-opus-5-5` | Agent PR review model for every project that has not set its own (project_settings.agent_pr_review_model, ADR 0039). Default: claude-opus-5-5. |
+
+### Operator notices and Slack routing (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_FUNCTION_REGION` | Optional | — | Your database's region: pins the Slack bot's Request URLs there (?forceFunctionRegion), so Slack's US calls answer inside its 3 s limit |
+| `MUSHI_OPS_KEY` | Optional | — | Optional: this deployment's own ops:write key; operator notices (payments, alerts) go to the Ops hub's Slack bot, the webhooks are the fallback |
+| `MUSHI_OPS_API_URL` | Optional | `this project's own api` | Optional: where those notices go (default: this project's own api) |
+
+### Discord triage feed (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_DISCORD_WEBHOOK_URL` | Optional | — | Centralised Discord triage (_shared/discord-triage.README.md). Cross-project operator feed — distinct from the per-project project_settings.discord_webhook_url. Unset = silent no-op. Webhook mode: |
+| `MUSHI_DISCORD_THREAD_ID` | Optional | — | Optional; posts into an existing thread |
+| `MUSHI_TRIAGE_RELAY_URL` | Optional | — | Relay mode (channels where the bot lacks MANAGE_WEBHOOKS): |
+| `MUSHI_TRIAGE_RELAY_TOKEN` | Optional | — | Sent as the x-relay-token header |
+| `MUSHI_TRIAGE_RELAY_THREAD` | Optional | — | Default. Absent/other =&gt; relay posts to sales |
+| `MUSHI_DISCORD_MIN_LEVEL` | Optional | `error` | low\|medium\|high\|critical (error→high). Default: error |
+
+### Code index (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_REPO_INDEX_SWEEP_FILE_CAP` | Optional | — | Codebase index sweep (webhooks-github-indexer). The coverage ceiling (files a project's index may hold) follows the plan: Free 300, Builder (indie) 1,500, Studio (pro) 5,000, Enterprise 20,000, or pricing_plans.feature_flags .codebase_index_file_cap. Setting the cap pins it for EVERY project, so leave it unset on Mushi Cloud; self-hosts (no billing plans) set it here. |
+| `MUSHI_REPO_INDEX_SWEEP_RUN_FILES` | Optional | — | Files one sweep fetches (bounded by the edge function's wall clock and the GitHub token's rate limit); a larger ceiling fills over hourly runs. |
+
+### Public diagram pages (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_PUBLIC_PAGES_BUCKET` | Optional | — | Public architecture-diagram pages (docs/operators/public-diagram-pages.md). An IAM user limited to s3:PutObject + s3:DeleteObject on arn:aws:s3:::&lt;bucket&gt;/mushi-mushi/r/\*. Unset = the crawlable page and its .md twin are not written; the diagram still shows via the docs 404 fallback. |
+| `MUSHI_PUBLIC_PAGES_REGION` | Optional | — | — |
+| `MUSHI_PUBLIC_PAGES_ACCESS_KEY_ID` | Optional | — | — |
+| `MUSHI_PUBLIC_PAGES_SECRET_ACCESS_KEY` | Optional | — | — |
+
+### Self-hosted Sentry hosts (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_SENTRY_SELF_HOSTED_HOSTS` | Optional | — | Self-hosted Sentry (_shared/sentry-dsn.ts). A Sentry DSN on a published app or in Settings → General must point at sentry.io (or a subdomain such as o123.ingest.us.sentry.io). List extra hosts here, comma separated, to accept a self-hosted Sentry. IP addresses, localhost and internal names are refused even when listed. Unset = sentry.io only. |
+
+### Origins (optional; redirects and links in email)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `ADMIN_ORIGIN` | Optional | — | — |
+| `MUSHI_ADMIN_URL` | Optional | — | — |
+| `MUSHI_ADMIN_BASE_URL` | Optional | — | — |
+| `SITE_URL` | Optional | — | — |
+| `APP_URL` | Optional | — | — |
+| `MUSHI_API_PUBLIC_URL` | Optional | — | — |
+| `MUSHI_ADMIN_ORIGIN_ALLOWLIST` | Optional | — | First origin is the CLI device-auth approval page. |
+| `DEFAULT_BASE_URL` | Optional | — | — |
+| `MCP_PUBLIC_BASE_URL` | Optional | — | — |
+| `TELEGRAM_WEBHOOK_BASE_URL` | Optional | — | — |
+
+### Runtime name (optional; unset is treated as production)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `SUPABASE_ENV` | Optional | — | — |
+| `DENO_ENV` | Optional | — | — |
+| `MUSHI_CLUSTER_REGION` | Optional | — | — |
+| `MUSHI_VERSION` | Optional | — | — |
+
+### GitHub App (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `GITHUB_APP_ID` | Optional | — | — |
+| `GITHUB_APP_PRIVATE_KEY` | Optional | — | — |
+| `GITHUB_APP_PRIVATE_KEY_PEM` | Optional | — | — |
+| `GITHUB_APP_WEBHOOK_SECRET` | Optional | — | — |
+| `GITHUB_APP_SLUG` | Optional | — | "Connect GitHub" in the console (verified install + repository picker): the App's slug, OAuth client id and secret. The App's callback URLs must include &lt;SUPABASE_URL&gt;/functions/v1/api/v1/webhooks/github/app-authorize (or GITHUB_APP_OAUTH_REDIRECT_URL when set). MUSHI_GITHUB_CONNECT_SECRET signs the short-lived link and grant; unset uses the service role key. |
+| `GITHUB_APP_CLIENT_ID` | Optional | — | — |
+| `GITHUB_APP_CLIENT_SECRET` | Optional | — | — |
+| `GITHUB_APP_OAUTH_REDIRECT_URL` | Optional | — | — |
+| `MUSHI_GITHUB_CONNECT_SECRET` | Optional | — | — |
+| `GITHUB_TOKEN` | Optional | — | The platform GITHUB_TOKEN serves only apps whose owner is listed here. |
+| `MUSHI_OPERATOR_USER_IDS` | Optional | — | — |
+| `MUSHI_GITHUB_APP_TRUST_UNVERIFIED_INSTALLS` | Optional | — | Single-tenant self-host only. Hosted production leaves this unset. |
+
+### Slack OAuth (optional; operator workspace)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `SLACK_BOT_TOKEN` | Optional | — | — |
+| `SLACK_CHANNEL_ID` | Optional | — | — |
+| `SLACK_CLIENT_ID` | Optional | — | — |
+| `SLACK_CLIENT_SECRET` | Optional | — | — |
+| `SLACK_SIGNING_SECRET` | Optional | — | — |
+| `SLACK_STATE_SECRET` | Optional | — | — |
+| `SLACK_REDIRECT_URI` | Optional | — | — |
+
+### Linear OAuth (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `LINEAR_OAUTH_CLIENT_ID` | Optional | — | — |
+| `LINEAR_OAUTH_CLIENT_SECRET` | Optional | — | — |
+
+### Email (optional; both required before any mail is sent)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `RESEND_API_KEY` | Optional | — | — |
+| `RESEND_FROM_EMAIL` | Optional | — | — |
+| `LIFECYCLE_UNSUB_SECRET` | Optional | — | — |
+
+### Tremendous tester payouts (optional; set the host explicitly)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `TREMENDOUS_API_KEY` | Optional | — | — |
+| `TREMENDOUS_API_URL` | Optional | — | — |
+| `TREMENDOUS_WEBHOOK_SECRET` | Optional | — | — |
+| `TESTER_TIN_PEPPER` | Optional | — | — |
+
+### AWS Bedrock fine-tune (optional; off until the flag is 1)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_BEDROCK_FINETUNE_ENABLED` | Optional | — | — |
+| `AWS_ACCESS_KEY_ID` | Optional | — | — |
+| `AWS_SECRET_ACCESS_KEY` | Optional | — | — |
+| `AWS_SESSION_TOKEN` | Optional | — | — |
+| `AWS_REGION` | Optional | — | — |
+| `BEDROCK_REGION` | Optional | — | — |
+| `BEDROCK_ROLE_ARN` | Optional | — | — |
+| `BEDROCK_OUTPUT_S3_URI` | Optional | — | — |
+| `MUSHI_ALLOW_STUB_FINE_TUNE` | Optional | — | — |
+
+### Hosted LLM billing (optional; stays off without the wallet bridge)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_HOSTED_LLM_BILLING` | Optional | — | — |
+| `KENSAURUS_WALLET_URL` | Optional | — | — |
+| `KENSAURUS_WALLET_INTERNAL_TOKEN` | Optional | — | — |
+| `MUSHI_HOSTED_LLM_PREFLIGHT_TIMEOUT_MS` | Optional | — | — |
+
+### OpenAI-compatible endpoint (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `OPENAI_BASE_URL` | Optional | — | — |
+| `OPENAI_WEBHOOK_SECRET` | Optional | — | — |
+| `MUSHI_OPENAI_BASE_URL_ALLOWLIST` | Optional | — | — |
+
+### QA crawl providers (optional; project BYOK wins when set)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `FIRECRAWL_API_KEY` | Optional | — | — |
+| `BROWSERBASE_API_KEY` | Optional | — | — |
+
+### Operators, bootstrap, and safety switches (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_OPERATOR_USER_IDS` | Optional | — | — |
+| `KENSAURUS_OPS_URL` | Optional | — | Providers &amp; AI routes (/providers, operators only): the kensaurus-ops API and its console token. Both unset: the route answers 404. See docs/operators/providers-ai-routes.md. |
+| `KENSAURUS_OPS_CONSOLE_TOKEN` | Optional | — | — |
+| `MUSHI_FRESH_EYES_EMAIL_DOMAIN` | Optional | — | Fresh-eyes test accounts (ADR 0053): the email domain; one no mailbox answers on. Default synthetic.kensaur.us. |
+| `MUSHI_INIT_OWNER_EMAIL` | Optional | — | — |
+| `MUSHI_INIT_ORG_NAME` | Optional | — | — |
+| `MUSHI_INIT_ORG_ID` | Optional | — | — |
+| `MUSHI_INIT_PROJECT_NAME` | Optional | — | — |
+| `MUSHI_INIT_PROJECT_ID` | Optional | — | — |
+| `MUSHI_INIT_REPORTER_KEY` | Optional | — | — |
+| `MUSHI_EE_LICENSE_KEY` | Optional | — | — |
+| `MUSHI_EE_PUBLIC_KEY` | Optional | — | — |
+| `MUSHI_SELF_PROJECT_ID` | Optional | — | — |
+| `MUSHI_ALLOW_INTERNAL_PUSH` | Optional | — | — |
+| `MUSHI_ALLOW_LOCAL_SANDBOX` | Optional | — | — |
+| `MUSHI_ALLOW_PRIVATE_STORAGE_ENDPOINT` | Optional | — | — |
+| `MUSHI_SCREENSHOT_HOST_ALLOWLIST` | Optional | — | — |
+| `JIRA_DONE_TRANSITION_ID` | Optional | — | — |
+| `CURSOR_USE_V0_WEBHOOK` | Optional | — | — |
+| `MUSHI_CI_SYNC_BATCH` | Optional | — | — |
+| `MUSHI_FIX_MIN_RAG_CHUNKS` | Optional | — | — |
+| `MUSHI_FREE_REPORTS_PER_MONTH` | Optional | — | — |
+| `MUSHI_INVENTORY_DRIFT_ROUTES` | Optional | — | — |
+| `MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS` | Optional | — | — |
+| `MUSHI_INVENTORY_DRIFT_MAX_PER_RUN` | Optional | — | — |
+
+### Instance and support (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_INSTANCE_MODE` | Optional | — | hosted \| self-hosted. Unset: self-hosted unless SUPABASE_URL is Mushi Mushi Cloud's project. GET /health reports it; `mushi selfhost up` and Compose set self-hosted. |
+| `MUSHI_CONSOLE_URL` | Optional | `https://kensaur` | Console address in key-created and usage-alert emails. Default: https://kensaur.us/mushi-mushi/admin |
+| `MUSHI_API_ENDPOINT` | Optional | — | API address the console shows for SDK setup. Default: &lt;SUPABASE_URL&gt;/functions/v1/api |
+| `SUPPORT_EMAIL` | Optional | — | — |
+| `SUPPORT_URL` | Optional | — | — |
+| `OPERATOR_SLACK_WEBHOOK_URL` | Optional | — | Operator alerts (payments, platform notices) when no Ops hub key is set. |
+| `OPERATOR_DISCORD_WEBHOOK_URL` | Optional | — | — |
+
+### Observability (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `LANGFUSE_PUBLIC_KEY` | Optional | — | Langfuse LLM traces. LANGFUSE_HOST is an alias of LANGFUSE_BASE_URL. |
+| `LANGFUSE_SECRET_KEY` | Optional | — | — |
+| `LANGFUSE_BASE_URL` | Optional | — | — |
+| `LANGFUSE_HOST` | Optional | — | — |
+| `SENTRY_DSN_SERVER` | Optional | — | Server errors to Sentry. SENTRY_DSN_SERVER wins; SENTRY_DSN also works. |
+| `SENTRY_DSN` | Optional | — | — |
+| `SENTRY_RELEASE` | Optional | — | — |
+| `SENTRY_TRACES_SAMPLE_RATE` | Optional | `0` | Default: 0.05 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Optional | — | OpenTelemetry span per classification (classify-report). |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Optional | — | — |
+
+### Integration probes (optional; operator-wide tokens)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `CURSOR_API_KEY` | Optional | — | Used by the Integrations health probes when an app has no key of its own. |
+| `LINEAR_API_KEY` | Optional | — | — |
+
+### Mushi Mushi Cloud billing (hosted only; a self-host leaves these unset)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `STRIPE_SECRET_KEY` | Optional | — | — |
+| `STRIPE_WEBHOOK_SECRET` | Optional | — | — |
+| `STRIPE_LIVEMODE` | Optional | — | — |
+| `STRIPE_SUCCESS_URL` | Optional | — | — |
+| `STRIPE_CANCEL_URL` | Optional | — | — |
+| `STRIPE_PORTAL_RETURN_URL` | Optional | — | — |
+| `STRIPE_DEFAULT_PRICE_ID` | Optional | — | — |
+| `STRIPE_METER_EVENT_NAME` | Optional | — | — |
+| `STRIPE_METER_REPORTS_EVENT_NAME` | Optional | — | — |
+| `STRIPE_METER_DIAGNOSES_EVENT_NAME` | Optional | — | — |
+| `STRIPE_METER_FIXES_EVENT_NAME` | Optional | — | — |
+| `STRIPE_PRICE_STARTER_BASE` | Optional | — | — |
+| `STRIPE_PRICE_STARTER_OVERAGE` | Optional | — | — |
+| `STRIPE_PRICE_INDIE_BASE` | Optional | — | — |
+| `STRIPE_PRICE_INDIE_ANNUAL` | Optional | — | — |
+| `STRIPE_PRICE_INDIE_DIAGNOSES_OVERAGE` | Optional | — | — |
+| `STRIPE_PRICE_PRO_BASE` | Optional | — | — |
+| `STRIPE_PRICE_PRO_BASE_V2` | Optional | — | — |
+| `STRIPE_PRICE_PRO_ANNUAL` | Optional | — | — |
+| `STRIPE_PRICE_PRO_OVERAGE` | Optional | — | — |
+| `STRIPE_PRICE_PRO_DIAGNOSES_OVERAGE` | Optional | — | — |
+
+## Docker Compose (`deploy/.env`)
+
+The `deploy/.env` file Compose reads. Generate it with `npx mushi-mushi selfhost secrets` or `./deploy/generate-secrets.sh`; never fill it by hand.
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_PUBLIC_URL` | Optional | — | Public address of the stack. Caddy serves the console at / and the API under /functions/v1, /auth/v1, /rest/v1 and /storage/v1 on the same origin. A domain name (https://mushi.example.com) gets a certificate automatically. |
+| `MUSHI_SITE_ADDRESS` | Optional | — | — |
+| `POSTGRES_PASSWORD` | Required: generated | — | Required (generated) |
+| `JWT_SECRET` | Required: generated | — | — |
+| `SUPABASE_ANON_KEY` | Required: generated (signed with JWT_SECRET) | — | — |
+| `SUPABASE_SERVICE_ROLE_KEY` | Required: generated (signed with JWT_SECRET) | — | — |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Required: generated | — | — |
+| `ANTHROPIC_API_KEY` | Optional | — | Optional: one LLM key turns on the plain-English diagnosis and fix drafts. Either provider works. Without one, reports get rule-based triage only. |
+| `OPENAI_API_KEY` | Optional | — | — |
+| `LANGFUSE_SECRET_KEY` | Optional | — | Optional: Langfuse tracing |
+| `LANGFUSE_PUBLIC_KEY` | Optional | — | — |
+| `LANGFUSE_BASE_URL` | Optional | — | — |
+| `MUSHI_INIT_OWNER_EMAIL` | Optional | — | Optional: headless bootstrap of the first team, app and reporter key (POST /v1/admin/bootstrap). The owner signs up in the console first. |
+| `MUSHI_INIT_ORG_NAME` | Optional | — | — |
+| `MUSHI_INIT_PROJECT_NAME` | Optional | — | — |
+| `MUSHI_INIT_REPORTER_KEY` | Optional | — | — |
+
+## Console build (`VITE_*`)
+
+Build-time values for the admin console. Vite bakes them into the bundle, so changing one means rebuilding (a static build, `docker build --build-arg`, or `apps/admin/.env` for `pnpm dev`). A console built without them asks for the URL and anon key on first open.
+
+### Supabase (required for self-hosted, optional for cloud)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_SUPABASE_URL` | Required: on a self-host | — | — |
+| `VITE_SUPABASE_ANON_KEY` | Required: on a self-host | — | — |
+
+### API endpoint (optional — defaults to $&#123;VITE_SUPABASE_URL&#125;/functions/v1/api)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_API_URL` | Optional | — | In `pnpm dev`, any VITE_API_URL that points at \*.supabase.co is rewritten to the Vite same-origin proxy (`/functions/v1/api`) so the browser avoids CORS failures. Production builds use the absolute URL as-is (edge CORS must allow the console origin). |
+
+### Instance type (optional — auto-detected from VITE_SUPABASE_URL)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_INSTANCE_TYPE` | Optional | — | — |
+
+### Sentry error monitoring (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_SENTRY_DSN` | Optional | — | Leave blank to disable telemetry locally. The Sentry SDK no-ops when DSN is unset. DSNs are designed to be public — safe to bake into builds. |
+| `VITE_RELEASE` | Optional | — | Set in CI to tag releases (e.g. the package version or commit SHA). |
+
+### GitHub App (one-click repo connect on /integrations)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_GITHUB_APP_SLUG` | Optional | — | The `github.com/apps/` segment of your Mushi GitHub App. Without it the "Install GitHub App" CTA renders an "unavailable" note instead of the button, and users must paste an installation id by hand. Self-hosted installs without a public webhook callback can leave this blank and use the PAT disclosure instead. |
+
+### Cloud fork builds (GitHub Actions deploy-admin.yml)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_CLOUD_SUPABASE_URL` | Optional | — | When building a console that talks to Mushi Cloud Supabase while hosted elsewhere: |
+| `VITE_CLOUD_SUPABASE_ANON_KEY` | Optional | — | — |
+
+### Console self-analytics (optional; dogfood)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_MUSHI_SELF_PROJECT_ID` | Optional | — | When both are set the console reports its own bugs and funnel events to this Mushi project through the web SDK (apps/admin/src/lib/mushi-self.ts). |
+| `VITE_MUSHI_SELF_API_KEY` | Optional | — | — |
+| `VITE_MUSHI_SELF_API_ENDPOINT` | Optional | — | — |
+
+### Docs links and hosted MCP (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_DOCS_URL` | Optional | — | — |
+| `VITE_DOCS_ORIGIN_ALLOWLIST` | Optional | — | — |
+| `VITE_MCP_HTTP_URL` | Optional | — | — |
+| `VITE_LANGFUSE_HOST` | Optional | — | — |
+
+### Feature flags (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `VITE_MUSHI_ASK_STREAMING` | Optional | — | Ask streaming defaults on. Set 0 to opt out of production builds. |
+| `VITE_ACTIVATION_COCKPIT_V2` | Optional | — | Activation cockpit defaults on. Set false to disable. |
 
 ---
 
@@ -16990,7 +17355,7 @@ description: Wire Langfuse LLM tracing and Sentry error tracking into a self-hos
 
 # Observability
 
-Mushi Mushi integrates Langfuse (LLM traces) and Sentry (error tracking). Both are optional and configured as Edge Function secrets.
+**Use this when** you want a trace of every AI call (Langfuse) or the server's errors in Sentry. Both are optional function secrets. Without them `selfhost doctor` prints one `INFO` line and still exits 0; every AI call is recorded in the `llm_invocations` table either way. In Docker Compose, put the Langfuse keys in `deploy/.env`, and add any other secret to the `edge-functions` service's `environment:` block.
 
 ## Langfuse (LLM tracing)
 
@@ -17029,7 +17394,7 @@ Every Edge Function wraps its handler with `withSentry()` from `_shared/sentry.t
 
 ```bash
 cd packages/server
-npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # SENTRY_DSN also works
+npx supabase secrets set SENTRY_DSN_SERVER=https://…@sentry.io/…   # preferred; SENTRY_DSN also works
 npx supabase secrets set SUPABASE_ENV=production                     # Sentry environment
 npx supabase secrets set SENTRY_RELEASE=$GIT_SHA
 ```
@@ -17061,102 +17426,233 @@ latency and cost) and the background jobs' last runs. Integration probes
 
 ---
 
-## Supabase setup
+## Operate and upgrade
+
+Source: https://kensaur.us/mushi-mushi/docs/self-hosting/operate
+
+---
+title: Operate and upgrade
+description: Keep a self-hosted Mushi Mushi healthy. The doctor, upgrades, headless bootstrap, extra cron jobs, integrations, security notes and multi-region.
+---
+
+# Operate and upgrade
+
+**Use this page** once your server runs ([quickstart](/self-hosting) or [Docker Compose](/self-hosting/docker-compose)).
+
+## Check health
+
+| Where | What it checks |
+| --- | --- |
+| `npx mushi-mushi selfhost doctor` | The server deploy, the console address, cron URL, screenshots bucket, AI key, background jobs, stuck reports. Exit 0 healthy (`INFO` = optional, not set up), 2 warnings, 1 failure. `--json` for scripts |
+| Console → Settings → SDK & connection | The **Self-host setup** checklist: the same checks, each with its fix |
+| `GET /functions/v1/api/health` | Process up, deployed commit, `mode` |
+| `GET /functions/v1/api/health/ready` | Database reachable (503 when not) |
+| `GET /functions/v1/healthz` | Uptime probe that skips the API router |
+
+## Upgrade
+
+Supabase project:
+
+```bash
+git pull
+npx mushi-mushi@latest selfhost up --yes
+```
+
+It applies only the new migrations, re-applies the runtime config and plan limits, and redeploys every function stamped with the new commit. Export `MUSHI_INTERNAL_CALLER_SECRET` first to keep the current secret; otherwise it is rotated in both places at once. Then rebuild and redeploy the console ([Host the console](/self-hosting/admin-spa)).
+
+Docker Compose: `git pull`, then `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build`.
+
+## Headless bootstrap (`MUSHI_INIT_*`)
+
+For IaC, CI seeds and one-click deploys: create the first team, app and reporter key without clicking through the console. It mirrors [Langfuse's `LANGFUSE_INIT_*`](https://langfuse.com/docs/self-hosting).
+
+The owner signs up in the console first: a team and an app each need a real owner account. Then set the function secrets (Compose: in `deploy/.env`):
+
+```bash
+npx supabase secrets set MUSHI_INIT_OWNER_EMAIL="you@example.com"     # required once you set a team or app
+npx supabase secrets set MUSHI_INIT_ORG_NAME="My Team"                # optional: the owner's personal team otherwise
+npx supabase secrets set MUSHI_INIT_PROJECT_NAME="Production"
+npx supabase secrets set MUSHI_INIT_REPORTER_KEY="mushi_mystaticreporterkey123"   # stored hashed
+```
+
+`MUSHI_INIT_ORG_ID` and `MUSHI_INIT_PROJECT_ID` make it reuse an existing team or app. Then call the endpoint once, with the service-role key:
+
+```bash
+curl -X POST https://<your-ref>.supabase.co/functions/v1/api/v1/admin/bootstrap \
+  -H "Authorization: Bearer <service-role key>" \
+  -H "Content-Type: application/json" --data '{}'
+```
+
+It is idempotent: it skips what already exists and lists what it created and skipped. Never expose the service-role key.
+
+## Who counts as the operator
+
+The server-wide `GITHUB_TOKEN`, `SLACK_BOT_TOKEN` and `LANGFUSE_*` keys belong to the operator's own accounts, so they serve as an app's own GitHub, Slack or Langfuse connection only for apps owned by a user in `MUSHI_OPERATOR_USER_IDS` (comma-separated user ids). On a single-team self-host, put your own user id there, or the server-wide token serves no app. Every other app connects its own GitHub (the GitHub App, or a token on its Integrations page) and its own Slack. The pipeline's own Langfuse tracing uses the keys for every app.
+
+## Extra cron jobs
+
+The migrations schedule the core jobs. These are extra. Use the `mushi.edge_function_post` helper (it reads the runtime config `selfhost up` writes); never `current_setting('app.settings.…')`, which is NULL on hosted Supabase, so the job fails silently every tick.
+
+```sql
+SELECT cron.schedule('mushi-judge-batch', '0 3 * * *',
+  $$ SELECT mushi.edge_function_post('judge-batch', '{}'::jsonb); $$);
+SELECT cron.schedule('mushi-mistake-clusterer', '0 */6 * * *',
+  $$ SELECT mushi.edge_function_post('mistake-clusterer', '{}'::jsonb); $$);
+SELECT cron.schedule('mushi-drift-walker', '0 3 * * *',
+  $$ SELECT mushi.edge_function_post('drift-walker', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$);
+SELECT cron.schedule('mushi-anomaly-detector', '0 * * * *',
+  $$ SELECT mushi.edge_function_post('anomaly-detector', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$);
+```
+
+## Integrations
+
+- **Voice**: `POST /v1/intake/voice` takes a project key with the `voice:write` scope; turn on voice intake per app first. Transcription uses the app's OpenAI key. Audio is deleted after transcription unless a retention is set.
+- **Telegram**: create a bot with @BotFather, paste its token in the app's Voice intake settings, call `POST /v1/admin/telegram/setup` (it registers the webhook), mint a bind code with `POST /v1/admin/telegram/bind-code`, then send `/start ` to the bot.
+- **Slack**: install the app from `packages/plugin-slack-app/manifest.json` after deploying `api`; Slack verifies the Events URL on save. The OAuth secrets are on [Environment variables](/self-hosting/environment#slack-oauth-optional-operator-workspace).
+- **Cursor Cloud**: `autofix_agent = 'cursor_cloud'` or `mushi fix --agent cursor_cloud`, with the app's Cursor key. `agent-status-poll` polls completion; `CURSOR_USE_V0_WEBHOOK=1` uses the v0 callback into `cursor-webhook` instead.
+- **GitHub cloud agent**: `autofix_agent = 'github_cloud_agent'` needs a user-to-server token (a fine-grained PAT with Agent tasks, Contents and Pull requests, or a GitHub App user token) and a Copilot plan with the coding agent on. Installation tokens are rejected by GitHub.
+- **Web Push**: set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (`mailto:`); the installed console subscribes devices.
+
+## Security notes
+
+- **Only `api` should face the internet.** Internal functions (`fast-filter`, `classify-report`, `judge-batch`, …) accept only `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key ([JWT verification](/self-hosting/edge-functions#jwt-verification)).
+- **Screenshots** go to the private `screenshots` bucket (service role only). Never make it public; the doctor fails if it is.
+- **Fix agent sandbox**: `packages/agents/src/sandbox.ts` describes container limits but does not enforce them. The fix agent runs with the host process's permissions; isolate it yourself (Docker, gVisor, Firecracker) before running it in production.
+- **PII scrubbing** (`_shared/pii-scrubber.ts`) redacts emails, SSNs, phone and card numbers by pattern. It is not a full DLP tool.
+- **Database linter warnings** you can leave: `vector` and `pg_net` live in `public` on managed Supabase (moving them would drop every embedding column). Turn on leaked-password protection (Authentication → Sign In / Providers → Password security) and a second factor such as TOTP (Authentication → Providers) to clear the two auth warnings.
+- **Screenshot capture** uses canvas/SVG serialization: cross-origin iframes, tainted canvases and strict CSPs are not captured.
+
+## Multi-region (Helm, not yet proven end to end)
+
+Deploy one [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm) per region with `global.region` and `global.peerRegions`; the chart sets `MUSHI_CLUSTER_REGION` and `MUSHI_PEER_REGIONS` so reports carry the right data-residency region. Escape the comma for `--set-string` and single-quote the argument:
+
+```bash
+helm install mushi-us ./deploy/helm --namespace mushi --create-namespace \
+  --set global.database.host=postgres-us.internal \
+  --set global.region=us --set-string 'global.peerRegions=eu\,jp'
+```
+
+Route traffic with GeoDNS. Replication: [`docs/runbooks/region-routing-replication.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/runbooks/region-routing-replication.md).
+
+  Active/active write replication is not automated: `region_routing` replicates read-only, and write routing relies on GeoDNS stickiness. Cross-region write conflicts are yours to handle.
+
+---
+
+## Supabase by hand
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/supabase
 
 ---
-title: Supabase setup
-description: Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI, push every migration, and check the Postgres extensions the server needs.
+title: Supabase by hand
+description: "Set up Supabase for self-hosted Mushi Mushi by hand: link, push migrations, set secrets, point cron at your project, deploy the functions."
 ---
 
-# Supabase setup
+# Supabase by hand
 
-The one-command path, `mushi selfhost up --project-ref <your-ref>`, does all of
-this page ([Self-hosting](/self-hosting)). By hand:
+**Use this when** you cannot run `npx mushi-mushi selfhost up` (a locked-down CI, no Node), or you want to know exactly what it did. The [quickstart](/self-hosting) does all of this in one command; `selfhost up --print-commands` prints this same sequence with your values filled in.
+
+  Run every `supabase` command from `packages/server/`. The CLI looks for `supabase/` under the current directory; from the repo root it fails with "entrypoint path does not exist".
+
+## 1. Link and push the migrations
 
 ```bash
 cd packages/server
-npx supabase login
-npx supabase link --project-ref <your-ref>
-npx supabase db push --remote # every migration; CLI 2.x: --linked (3.x without it pushes to your LOCAL db)
+supabase login
+supabase link --project-ref <your-ref>
+supabase db push --remote      # CLI 2.x: --linked. Without either, CLI 3.x pushes to your LOCAL database
 ```
 
-  Run these commands from `packages/server/` — the Supabase CLI looks for `supabase/` relative to the current directory.
+The migrations enable the extensions they need (`vector`, `pgcrypto`, `pg_cron`, `pg_net`, `citext`; `age` when available). Vault is part of every Supabase project.
 
-## Required extensions
+## 2. Set the function secrets
 
-Enable these extensions in your Supabase project (**Database → Extensions**):
+Generate one secret and keep it: the same value goes into the database in step 3.
 
-| Extension | Purpose |
-| --- | --- |
-| `vector` | Embeddings for dedup + semantic search (commonly called pgvector) |
-| `pg_cron` | Scheduled MV refreshes, nightly judge runs, retention cron |
-| `pgcrypto` | UUIDs and HMAC |
-| `pg_net` | Async HTTP from cron jobs and triggers (plugin dispatcher, edge-function crons) |
-| `citext` | Case-insensitive text columns |
-| `supabase_vault` | BYOK + plugin-secret storage (on by default in Supabase projects) |
-| `age` *(optional)* | Apache AGE graph backend for the knowledge graph |
+```bash
+openssl rand -hex 32
+```
 
-The migrations run `create extension if not exists` for `vector`, `pgcrypto`, `pg_cron`, `pg_net`, `citext` and `age`. Vault is part of every Supabase project. Report columns are not encrypted with `pgsodium`.
+```bash
+cat > mushi-secrets.env <<'EOF'
+MUSHI_INTERNAL_CALLER_SECRET=<the secret>
+MUSHI_INSTANCE_MODE=self-hosted
+ADMIN_BASE_URL=https://mushi.example.com
+MUSHI_ADMIN_ORIGIN_ALLOWLIST=https://mushi.example.com
+ANTHROPIC_API_KEY=sk-ant-...
+EOF
+supabase secrets set --env-file mushi-secrets.env && rm mushi-secrets.env
+```
 
-## Required custom functions
+`ADMIN_BASE_URL` is your console's address: links in Slack, Discord and email, and the `mushi login` approval page, open it. `MUSHI_ADMIN_ORIGIN_ALLOWLIST` lets the console's browser calls through (CORS); the built-in list covers only Mushi Mushi Cloud and `http://localhost:6464`-style dev ports. The AI key is optional; `OPENAI_API_KEY` works instead. Every other secret is on [Environment variables](/self-hosting/environment).
 
-The migration sequence creates the following custom Postgres functions:
+## 3. Point cron at your project
 
-| Function | Purpose |
-| --- | --- |
-| `mushi_rls_coverage_snapshot()` | Lists every public table and whether RLS is enabled on it |
-| `mushi_apply_retention()` | Applies `project_retention_policies` (also scheduled by pg_cron) |
+**`db push` alone is not enough.** The migrations seed `mushi_runtime_config.supabase_url` with Mushi Mushi Cloud's URL and leave the two tokens empty, so until you overwrite them every pg_cron job calls Mushi Mushi Cloud, or fails. New orgs also land on a Cloud plan row (300 diagnoses a month, 3 apps, 1 seat), which means nothing on your own instance.
 
-DSARs are handled via the `data_subject_requests` table + the `api` edge function (`POST /v1/admin/compliance/dsars`), not a stored procedure. SOC 2 evidence is generated by the `soc2-evidence` edge function triggered from the admin console — no `soc2_evidence_snapshot()` RPC exists. Both routes are documented in the [Security & Compliance](/security/soc2) section.
+```bash
+cat > mushi-runtime-config.sql <<'EOF'
+insert into public.mushi_runtime_config (key, value) values
+  ('supabase_url', 'https://<your-ref>.supabase.co'),
+  ('service_role_key', '<the secret>'),
+  ('internal_caller_token', '<the secret>')
+on conflict (key) do update set value = excluded.value, updated_at = now();
+EOF
+supabase db query --remote --file mushi-runtime-config.sql && rm mushi-runtime-config.sql
+```
 
-## RLS pattern
+`mushi.edge_function_post` (every cron job) reads `supabase_url` and `service_role_key`; pipeline recovery reads `internal_caller_token`. To also lift the plan limits, run the full file `selfhost up --print-commands` prints: it adds an `update public.pricing_plans …` and makes sure the private `screenshots` bucket exists.
 
-Every table ships with RLS enabled and project-scoped policies. The canonical policy pattern is:
+## 4. Deploy the functions
+
+```bash
+supabase functions deploy       # every function; verify_jwt comes from supabase/config.toml
+```
+
+A plain deploy leaves `_shared/deploy-info.ts` unstamped, so `/health` reports `"version": "dev"` (`selfhost up` stamps the commit). If one function is rejected as too large (the deploy endpoint caps a request at about 5 MB; `api` is the biggest), deploy it with the repo's compacting uploader, which also stamps the commit:
+
+```bash
+SUPABASE_PROJECT_REF=<your-ref> SUPABASE_ACCESS_TOKEN=sbp_... node scripts/deploy-edge-function.mjs api
+```
+
+Always set `SUPABASE_PROJECT_REF`: without it the script targets Mushi Mushi Cloud.
+
+## 5. Check it
+
+```bash
+curl https://<your-ref>.supabase.co/functions/v1/api/health        # {"status":"ok","mode":"self-hosted",…}
+curl https://<your-ref>.supabase.co/functions/v1/api/health/ready  # database reachable
+npx mushi-mushi@latest selfhost doctor
+```
+
+In SQL:
 
 ```sql
--- Use the subquery form — Postgres caches via initPlan, not per-row
+-- Cron jobs reach your project, not Mushi Mushi Cloud
+select key, case when key = 'supabase_url' then value else '(set)' end
+  from mushi_runtime_config
+ where key in ('supabase_url', 'service_role_key', 'internal_caller_token');
+
+-- Pipeline recovery: success or degraded, not skipped
+select status, metadata from cron_runs
+ where job_name = 'pipeline-recovery' order by finished_at desc limit 3;
+
+-- Tables with RLS disabled (should return no rows)
+select * from mushi_rls_coverage_snapshot() where not rls_enabled;
+```
+
+Then serve the console: [Host the console](/self-hosting/admin-spa).
+
+## Row-level security
+
+Every table ships with RLS on and project-scoped policies. The edge functions use the service-role client, which bypasses RLS, so a custom function or route must always scope its queries by `project_id`. Policies use the subquery form, evaluated once per query instead of once per row:
+
+```sql
 create policy "users see own project data"
-on public.reports
-for select
+on public.reports for select
 using (project_id in (
   select project_id from public.project_members
   where user_id = (select auth.uid())
 ));
-```
-
-Do **not** use bare `auth.uid()`: the subquery form is evaluated once per query instead of once per row, which matters on large tables.
-
-## Seed data and runtime config
-
-There is no separate seed file. The migrations insert the lookup rows
-themselves (pricing plans, the plugin registry, `mushi_runtime_config`
-defaults). **`db push` alone is not enough for a self-hosted project:**
-
-- The migrations seed `mushi_runtime_config.supabase_url` with the Mushi Mushi
-  Cloud URL, and leave `service_role_key` and `internal_caller_token` empty.
-  Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
-  fails.
-- New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
-  Mushi Cloud: on Free, 300 diagnoses a month (then reports stop at
-  `quota_exceeded`), 3 apps, 1 seat and 30-day retention.
-
-`mushi selfhost up` fixes both after every `db push`. It upserts the three
-runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and
-lifts the plan limits on your instance. `mushi selfhost up --print-commands`
-prints the SQL if you run it by hand.
-
-## Verifying the setup
-
-```sql
--- Tables with RLS disabled (should return no rows)
-select * from mushi_rls_coverage_snapshot() where not rls_enabled;
-
--- Check extensions
-select name, default_version, installed_version
-from pg_available_extensions
-where name in ('vector', 'pg_cron', 'pg_net', 'pgcrypto', 'supabase_vault');
 ```
 
 ---
@@ -18952,7 +19448,8 @@ mushi runner status --json
 
 | Permission | Needed for |
 | --- | --- |
-| Actions: read | Jobs, their times, runner names and why a job was cancelled |
+| Actions: read | Jobs, their times, runner names and why a job was cancelled, and a failed job's log in the console's **Why?** panel |
+| Actions: read and write (optional) | **Re-run failed jobs** and **Cancel run** from the console. The Mushi Mushi GitHub App asks for Actions: read only, so add a fine-grained token with Actions: Read and write in the app's GitHub connection. Without it the console says so and links that setting |
 | Administration: read (optional) | The runner list: online, offline, busy, labels |
 | Metadata: read | Whether a repo is public or private (read once a day): it decides what GitHub-hosted minutes cost |
 | Variables: read and write (optional) | Changing where CI runs: Mushi Mushi reads and writes only `LINUX_RUNNER`, `RUNNER_` and `CI_PROFILE`, with the GitHub token stored in the project's settings (or, without one, the organization's), else the Mushi Mushi GitHub App installation for that repo once you approve its "Variables: Read and write" permission. Never Mushi Mushi's own token |
@@ -20677,11 +21174,30 @@ The **Now** view opens with plain answers, in this order:
 | --- | --- |
 | The top line | Is CI OK? It names a machine that stopped reporting, jobs waiting a long time for a machine, and a job running slower than usual. For waiting jobs it says why: which machine takes jobs with their labels, and which idle machines are not set up for them. |
 | **Machines right now** | Which machine runs what: one card per real machine, by name, with how busy its CPU and memory are. Jobs on GitHub's machines show as **GitHub's cloud**. Idle machines are listed on one line. |
-| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. |
+| **Running now** | Each running job, the machine it is on, how long it usually takes, and about how long is left. A job type needs 3 runs before it has a usual time. **Inspect** shows the live steps and **Cancel run**. |
 | **What broke in the last 2 hours** | One group per pull request. Each job that broke names the step that failed. A summary check such as **gate**, which fails whenever another job fails, is listed under the job that broke. A job that failed in a re-run too is listed once. Draft pull requests that skipped CI on purpose are one line below the list, not failures. |
 | **Where the time goes this week** | Per app: how long jobs can wait for a machine, how long a run usually takes, how often checks pass, and the main delay. The line above the table names the worst one. Two repos of one app show their repo name. |
 
 **Last 7 days** follows: the week's counts and pass rate. It does not repeat what is waiting or running now; that is the board above.
+
+The cards at the top merge one cause seen in several places: a job that keeps failing in three apps is one card with a bar per app, not three cards.
+
+### All apps
+
+With **All apps** and two or more apps, **Running now** and **What broke** become one section per app, worst app first. Each app's header counts what failed, is running and is waiting, and shows its pass rate as a bar. Apps where nothing is wrong start collapsed. A cause seen in several apps, and a card about a machine, are listed once above the apps. **Open →** switches the page to that app.
+
+## Why it failed
+
+Every failed job has a **Why?** button: on the cards at the top (**Why it failed**), in **What broke**, in the finished queue, under **Stopped by the test machine** and in a job's details. It opens a panel with:
+
+| Part | What it shows |
+| --- | --- |
+| The failing step | The first step that failed, with every step and its time below. |
+| **Explain this failure** | A plain-English cause, one next step, and whether it looks like your code, a flaky run or the test machine. A machine stop or a cancel is explained from the job's own result, with no AI call. A code failure is read by OpenAI's small model through your app's AI keys, within its spend limit. The answer is kept for that job attempt, so opening it again costs nothing. |
+| **Log around the failure** | The lines around the errors in the job's log, read from GitHub when you open the panel. Lines that read like instructions to an AI or name a secret are hidden, and links show as `[url]`. Mushi Mushi does not store the log. GitHub's annotations are listed under it. |
+| Actions | **Re-run failed jobs** for that run, **Cancel run** while it is still going, and **Send to CI repair** when the job tested a Mushi Mushi fix: an agent makes CI green without weakening tests. **Open on GitHub** is last. |
+
+Re-run and cancel need **Actions: Read and write** on the GitHub access Mushi Mushi uses. The Mushi Mushi GitHub App reads Actions only, so the panel says so and links the GitHub connection, where a fine-grained token with that permission can be added. A missing OpenAI key or a spent AI limit shows its own fix button.
 
 ## Test machine or your code
 
@@ -20717,7 +21233,7 @@ Runners that live for a single job, named as a label plus a number of seconds, a
 
 **Slow jobs** is the jobs and steps that take the longest.
 
-**Stopped by the test machine** lists jobs that never finished testing. Re-run them.
+**Stopped by the test machine** lists jobs that never finished testing. **Re-run** them here; with several runs, **Re-run all** re-runs each run once.
 
 ## Your real bill
 
@@ -21271,8 +21787,13 @@ description: The Content checks page in the Mushi Mushi console queues low-scori
 
 **Route:** `/content` (sidebar: **Content checks**, under Verify)
 
-With nothing open and no filter from a link, the page is its empty state with
-**Show past issues**; the filter row appears once there is something to filter.
+When your app has never sent anything, the page is one first step: **Copy the
+request** copies a ready `curl` call to `POST /v1/content-quality` (put your
+project API key in `X-Mushi-Api-Key` and send it from your app). With nothing
+open but past issues, the page is one all-clear line with **Show past issues**;
+the filter row appears once there is something to filter. When issues are open,
+a status line says how many need a look, how many your users flagged and how
+many regenerations failed, with **Show what users flagged**.
 
 > **Scenario:** AI-generated copy, release notes, or knowledge snippets scored
 > poorly or got user flags, and you need a queue of fixable assets.
@@ -21593,16 +22114,20 @@ With no token files read yet, the page is one step: point Mushi Mushi at the fil
 
 ## Tokens
 
-A status chip (OK, Needs attention, Not checked yet, Not set up, or Check failed) sits with the reason and where the snapshot came from: repo files, a CI push, derived data, or a connector, plus the short commit when one is recorded. When the scan is OK but the token files have issues, the chip reads Needs attention and the reason counts those issues. A failed refresh or scan is printed under the chip.
+The page opens on one status line: how many places use a hard-coded style instead of your tokens and in how many files, up to three numbers (hard-coded styles, files, drift score) and one button: **Copy fix prompt for all files**, or **Check for drift** when no check has run or the last one failed.
 
-Under it, **Your colours** shows the colour tokens as swatches and **Drift from your design** draws the deviance score over time (lower is better; unscored checks are left out).
+**Hard-coded styles by file** comes next: one row per file, worst first, with its count as a bar, the kinds of problem in plain words (off-token colour, off-scale spacing…) and **Copy fix prompt** for that file. A row opens to its findings: the line, the value, and the token to use instead. Up to 200 stored findings are grouped; when the scan counted more, the section says so.
+
+**Token files** lists real problems in the token files (invalid JSON, an alias to a missing token, a token defined twice). Format notes, tokens written in an older DTCG form that are still read correctly, fold into one row ("67 token format notes · not breaking") with **Fix all (prompt)**; it opens to the count per kind in plain words.
+
+Then **Drift from your design** (the score, **Check for drift**, and the per-rule breakdown behind a disclosure), **Your colours** with the drift trend, and the status chip with where the tokens were read from (repo files, a CI push, derived data or a connector, plus the short commit) and any failed refresh.
 
 When the project has more than one token set, a switch lists them and marks the active set from `mushi.recipe.json`. The view then shows:
 
 | Section | What you see |
 | --- | --- |
-| **Token issues** | Severity, message, and file or token path. Empty: "No token issues in this set." |
-| **Drift from your design** | The deviance score, a per-rule breakdown, a trend, the top findings, and **Check for drift**. |
+| **Token files** | Problems in the token files, then the format notes folded into one row. Hidden when there are none. |
+| **Drift from your design** | The deviance score, **Check for drift**, and the per-rule breakdown. |
 | **Contrast** | An "Aa" sample for each declared pair, the ratio, the minimum it needs, and Pass, Fail, or Not judged. |
 | **When the score is too high** | A 0–100 threshold and two switches, off until an owner or admin turns them on. |
 | **Token catalogue** | Closed until the edit queue has an edit. Swatches, Latin and Thai type samples, spacing bars, radius boxes, motion values, and other tokens. Filter by name. The first 12 tokens in a section, then **View all**. **Edit** queues a new value. |
@@ -22768,7 +23293,12 @@ the table list or the gate runs), the page lists it and the verdict reads
 ## Open findings by check
 
 Below the scorecard, every open finding of each check's newest run is listed
-with its rule, file and line. This list is available on **every plan**; it
+with its rule, file and line. Each check leads with a status mark (▲ failing,
+◆ needs a look, ○ could not finish, ● passing) and, when it has more than one
+open finding, **Fix all N: copy prompt**: one prompt for every finding in that
+check. Lists longer than three findings stay folded. The audit's backend
+findings are rows with a mark, folded past five, and each known dependency
+hole keeps its advisories behind **Show the advisories**. This list is available on **every plan**; it
 reads `GET /v1/admin/inventory/:projectId/findings`, the same data as the MCP
 tool `list_gate_findings`. Running gates, crawls and test generation still need
 a plan with the inventory features.
@@ -22953,6 +23483,22 @@ The page has four views, picked at the top: **Mushi Mushi’s AI & jobs** (descr
 **[Unusual spikes](/admin/anomalies)**. Inside **Mushi Mushi’s AI & jobs**, the tabs are
 **Overview**, **AI calls**, **Scheduled jobs** and **Recent traces**.
 
+**First on the page:** one line with the worst problem and its button, in this order:
+
+| The line says | Button |
+|---|---|
+| "1 scheduled job failed on its last run: Triage grading." | **Run now** (or **Open jobs** for several jobs, or one the console can't run) |
+| "9% of AI calls failed in the last 24h, usually a provider outage or an expired key." | **See failed calls** |
+| "1 scheduled job is overdue: Weekly summary." | **Run now** / **Open jobs** |
+| "2% of AI calls failed …" or "… switched to the backup model …" | **See failed calls** / **See AI calls** |
+
+When nothing is wrong the line points at **Home** for your app's own health. **Run now**
+runs Triage grading or Weekly summary straight away (it spends AI budget; admins only);
+Data clean-up only runs on its schedule. The three numbers beside it are pictures: **AI
+calls** as one bar split into answered, answered by the backup model and failed;
+**Failed calls** against the 5% line; **Background jobs on time** with one status mark per
+job.
+
 ---
 
 ## Time window
@@ -23011,6 +23557,20 @@ The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
 Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
 It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
 
+### Stuck reports
+
+Above the job cards, **Stuck reports** counts this app's reports stuck before triage
+(new or held for over 5 minutes, under 3 tries), failed triage jobs with tries left,
+and jobs that have waited for the worker for over 15 minutes. **Run recovery now**
+does what the 5-minute `pipeline-recovery` job does, for this app only: it sends the
+stuck reports to triage again, retries the failed jobs, and closes jobs whose report
+was already triaged. The result shows on the same line ("Re-sent 3 stuck reports to
+triage, retried 1 failed job."). It spends AI budget, so only owners and admins can
+run it. The same line shows on the **Overview** tab while something is stuck.
+
+A run by hand does not count as a run of the scheduled job, so a scheduled job that
+is not running still shows as late.
+
 ---
 
 ## Recent LLM calls log
@@ -23030,6 +23590,17 @@ On the **Overview** tab, the summary reads **Critical probes failing**, **Degrad
 probes** or **All systems nominal**, from the count of red and amber signals on the page.
 When something needs you (error rate, a fallback spike, a failed or late job, or no AI
 calls at all in the window), a recommended next step appears with a link.
+
+---
+
+## Server doctor (operators only)
+
+Super-admins also see the **Server doctor** card: the same checks as
+`npx mushi-mushi selfhost doctor`. Problems come first, each with the app it belongs to,
+a one-line fix and a button where the console can fix it (**Re-index** for a stalled code
+index, **Fix** for a missing AI key). Optional extras that are not set up (Langfuse,
+Sentry, an AI key) and passing checks fold into "N optional" and "N checks OK". Server
+secrets are named as set or missing, never shown.
 
 ---
 
@@ -23889,13 +24460,34 @@ A second AI grades each diagnosis Mushi Mushi makes: was the category right, the
 severity, the part of the app, and were the steps to reproduce usable. This page shows
 how often it agrees, so you can tell whether to trust a diagnosis before you merge its fix.
 
-**First on the page:** one sentence with this week's score and how often the grader
-disagreed **in the last 14 days** (the window is named; an older server without it
-gets "so far", all time), with **See disagreements**. Under it, **How often the grader
-agrees** draws the weekly agreement share for 12 weeks, and **Worst disagreements,
-last 14 days** lists the 3 lowest-scored disagreements with the grader's reason and a
-link to each report. `GET /v1/admin/judge/stats` returns `recentWindowDays`,
-`recentEvaluations`, `recentDisagreements` and `agreementWeeks` for this.
+**First on the page:** one line that says how many diagnoses the grader disagreed with
+**in the last 14 days** ("7 of 12 diagnoses in the last 14 days disagreed with the grader")
+and a **Review 7** button. An older server without the window says "so far", all time.
+Beside it: **Agreed** as a bar against the 80% target, the disagreements still to review,
+and the reports ready to grade.
+
+Under it, **How often the grader agrees** draws one bar per week for 12 weeks against a
+dashed 80% target line (green at or over it, amber under, red under 60%). **Worst
+disagreements, last 14 days** lists the 3 lowest-graded disagreements as review rows.
+
+### Reviewing a disagreement
+
+**Review N** opens **Grades** filtered to the last 14 days of disagreements, rows still to review first, one compact row each: the report,
+its grade as a bar, the grader's reason in one line, and the decision:
+
+- **Accept grader's view** applies the grader's correction to the report (category,
+  severity or area; only values the report accepts are offered).
+- **Keep diagnosis** keeps the report as it is and adds a team note.
+
+Both confirm the report's category as a person, so the row turns into **✓ Reviewed** and
+leaves the count. Confirming a category also lets a reporter's feature request go to
+auto-fix. A row with no correction to offer, a report filed under a reporter's own category
+(feature, question, feedback), or a server older than this page, shows
+**Open report** instead. Viewers can read the rows but not decide.
+
+`GET /v1/admin/judge/stats` returns `recentWindowDays`, `recentEvaluations`,
+`recentDisagreements`, `recentToReview` and `agreementWeeks`; each row of
+`GET /v1/admin/judge/evaluations` carries `grader_patch` and `reviewed`.
 
 ---
 
@@ -23964,6 +24556,11 @@ In Mushi Mushi, a lesson is a structured coding rule extracted from a cluster of
 bug reports. Once promoted, your editor agent can read it before it writes a fix: through
 the MCP tools `query_lessons` and `list_lessons`, or from `.mushi/lessons.json` in your repo.
 
+**First on the page:** one line on what the rules do and how things stand, with one
+button: **Promote N** when a recurring bug is ready to become a rule, **Review rules**
+when a critical rule is in use, or **Try a change** (see which rules apply to a diff)
+when rules are in use and nothing is ready.
+
 ---
 
 ## The lifecycle: how a report becomes a rule
@@ -24007,10 +24604,12 @@ A pattern of 2 reports isn't reliable enough to write a codebase rule: it reads
 
 ## Tab: Rules in use (`?tab=lessons`)
 
-Your active coding rules. Each row shows the severity, how many times it was seen,
-the pattern it came from, and the first two lines of the rule text.
+Your active coding rules as dense rows, the most-seen first. Each row shows the
+severity as a glyph (▲ critical, ◆ warning, ■ note), a **seen N×** bar on one scale for
+the whole list, the rule clamped to two lines (**More** expands it in place, with what to
+avoid), when it was last seen, and **Retire**.
 
-**Click any row** to open the detail drawer with the full content:
+**›** opens the detail drawer with the full content:
 
 - **Rule** — the positive instruction (e.g. *"Always await the form submit handler
   before accessing `event.target` values in Safari"*)
@@ -24896,6 +25495,10 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
 
+In **All apps**, an open group lists its items in one block per app: the app with the item that has waited longest comes first, its header shows how many of the group's items are in that app and how long the oldest has waited, and **Open →** switches to that app's own Pipeline at the same group. With one app, or in **This app**, the list stays flat.
+
+The status line at the top names the group to start with, and in **All apps** the apps it is in. Its button is that group's first fix the server would take. When nothing is stuck but nothing opens fixes either, the button opens the **Workers** tab.
+
 ## Release trains
 
 One row per repository with the trains of the last 7 days: green merged, red failed, blue on the way. Click a square for that train's detail. The checks that failed the trains most often are listed under the row. **Run merge queue now** checks the queue at once and says whether a train left, and if not, when the next one may leave or why it waits.
@@ -25326,10 +25929,24 @@ robots:
 AI prompts is a Lab: it is under **More pages** in the sidebar, and Settings → Display & sidebar can keep it in the sidebar. The page
 works by URL either way.
 
-**First on the page:** **Versions and their grades**, one row per AI step (Fast
-filter, Diagnosis, Grading, Fix writer, …) with the version in use, the best version
-being tested, their grades, and a verdict: ahead (consider promoting), behind, or
-waiting for grades. A row opens that step's editing table.
+**First on the page:** one recommendation in plain words and its button, picked from
+every step:
+
+| The line says | Button |
+|---|---|
+| "A newer Diagnosis prompt scores 72% vs 61% for the one in use. Switch to it." | **Switch to it** (asks first) |
+| "Fast filter has a test version that gets no reports … Start it on 1 in 10 reports." | **Start on 1 in 10 reports** |
+| "A newer Diagnosis prompt scores 49% vs no grade yet … Not enough grades yet: 6 more needed." | **Open grading** (points at Triage grading's Run button) |
+| "Each step runs one prompt; nothing is being tested." | none |
+
+Switching is suggested only when the nightly auto-promotion would do it too: 30 grades
+and more than 5% better than the version in use. Built-in versions are never switched
+to from here; clone them first.
+
+Under it, **Versions and their grades** has one row per AI step (Fast filter, Diagnosis,
+Grading, Fix writer, …) with the version in use, the version being tested, their grades,
+and a verdict ("Testing on half of reports, waiting for grades", "Not started: gets no
+reports"). A row opens that step's version table.
 
 > **Scenario:** Your fix-worker has been generating patches that touch the wrong file
 > 20% of the time. You suspect the Stage 1 classifier is mislabelling the component
@@ -25351,19 +25968,21 @@ The **How prompt tuning works** panel lists the steps:
 ```
 
 **Step 1 — Build eval dataset:** grades need classified reports. The **Eval dataset**
-card shows the recent classified reports the grader can use.
+card shows the recent classified reports the grader can use, one line each: a severity
+glyph and the report's title. **Details** shows its category, area and full text.
 
 **Step 2 — Clone a baseline:** click **Clone** (the copy icon) on the version in use. The
 copy starts at 0% traffic, so it serves no live requests yet. Click **Edit** to change
 its template. Steps marked **Built-in** cannot be cloned: no worker reads a project copy
 of that prompt yet.
 
-**Step 3 — A/B at low traffic:** use **Set A/B traffic share** to give the copy a small
-share (for example 10%). The judge runs nightly and grades both versions. Compare their
-**Judge score** columns once each has a fair number of **Evals**.
+**Step 3 — Test on a share of reports:** use the sliders icon (**Choose how many reports
+this version tests on**) to give the copy a small share (for example 10%, "1 in 10
+reports"). The judge runs nightly and grades both versions. Compare their **Grade** bars
+once each has a fair number of **Grades**.
 
-**Step 4 — Promote:** click **Make this the live prompt** and confirm **Activate at 100%**.
-This removes all A/B splits. The nightly judge run also promotes a candidate on its own
+**Step 4 — Switch:** click **Switch to this** and confirm **Switch to it**. Every new
+report in that step uses the version, and the step's tests stop. The nightly judge run also promotes a candidate on its own
 once it has at least 30 evaluations and scores more than 5% above the version in use.
 
 The judge runs once per night, so an A/B test needs a few nights of data. Don't promote
@@ -25405,11 +26024,11 @@ show up when they have prompt rows.
 
 | Column | What it tells you |
 |--------|------------------|
-| **Version** | The version name, with an **Auto** badge when the weekly prompt tuner drafted it |
-| **State** | **Active**, **Candidate** or **Idle**, plus **Global** for a built-in version |
-| **Traffic** | What share of live requests this version serves |
-| **Judge score** | Higher is better. Uses the rolling 7-day evaluation window |
-| **Evals** | How many evaluations the score is based on. A low count means an unreliable score |
+| **State** | A glyph and plain words: **In use**, **Testing on half of reports**, **Not started**, **Idle**; plus **Global** for a built-in version and **Auto** when the weekly prompt tuner drafted it |
+| **Version** | The raw version id, as small grey text |
+| **Grade** | A bar on 0–100%. Higher is better. Uses the rolling 7-day evaluation window |
+| **Grades** | How many grades the score is based on. A low count means an unreliable score |
+| **Share of reports** | A bar of what share of new reports this version diagnoses |
 | **Updated** | When the version last changed |
 
 ---
@@ -25421,8 +26040,8 @@ show up when they have prompt rows.
 | **Clone** | Starting point for any edit. Built-in versions are read-only; clone first |
 | **Edit** | Open the template editor for a project version |
 | **Diff** | Compare against the version it was cloned from. Use before promoting |
-| **Set A/B traffic share** | Raise a candidate's traffic share gradually |
-| **Make this the live prompt** | Activate at 100% and remove all A/B splits |
+| **Choose how many reports** (sliders) | Raise a test's share of reports gradually |
+| **Switch to this** | Use this version for every report in the step; tests stop |
 | **Delete** | Remove a candidate that didn't work out. Its past evaluations stay |
 
 ---
@@ -25433,13 +26052,13 @@ show up when they have prompt rows.
 1. Open the **Diagnosis** tab.
 2. **Clone** the version in use.
 3. **Edit** the template: add explicit examples of the component names your codebase uses.
-4. Give it a 10% traffic share.
-5. Wait a few nights. Is its **Judge score** above the version in use?
+4. Give it a 10% share of reports.
+5. Wait a few nights. Is its **Grade** above the version in use?
 6. If yes: **Diff**, then make it the live prompt. If not: edit and try again.
 
 ### Investigating a bad judge score
 1. Open the tab for the step with the low score.
-2. Check **Evals**. With fewer than 10, the score isn't meaningful yet: wait.
+2. Check **Grades**. With fewer than 10, the score isn't meaningful yet: wait.
 3. With more than 20 and a still-low score, the prompt is likely wrong. Clone and start fresh.
 
 ---
@@ -25490,7 +26109,11 @@ robots:
 
 **Route:** `/providers` (operators only; other accounts never see it)
 
-- **Providers:** one row per provider account, worst first: ✕ down, ⧗ warn, ✓ ok, ◷ stale. Each row shows its balance or quota bar.
+**First on the page:** one line naming the accounts that need a look, worst first ("3 accounts need a look: OpenAI is down, fal.ai is not checked, ElevenLabs is off."), with **Turn on** for an account that is off. Beside it: accounts working as a bar, how many need a look, and open incidents.
+
+- **Providers:** one row per provider account, worst first, each state a glyph and a plain word: ✕ Down, ⧗ Warning, ✓ Working, ◷ Not checked lately, ○ Not checked, ⊘ Off. Each row shows its balance or quota bar; with no balance it says why ("key check only" when the account's check only tests its key). **Used by** is one chip per app with its icon; hover a chip for the features that app calls the account for.
+  - An account that is off says so in one line with **Turn on**.
+  - An unchecked account says so in one line: the provider watch on kenji has no reading for it yet. Its health check is set up on kenji, so there is no button.
 - **Spend:** what each app's AI calls cost against what the app sells, with the margin as ▲/▼.
 - **Routes:** the models each app tries, in order. Toggle, reorder or edit a route; a change that would leave an app with no enabled default route is refused.
 - **History:** every change, who made it, and when.
@@ -25514,6 +26137,20 @@ description: Scheduled tests in the Mushi Mushi console turn plain-English user 
 > if it still works — without writing a full Playwright suite from scratch.
 
 Scheduled tests in Mushi Mushi let you describe user flows in plain English, run them on a schedule, and get screenshots plus failure evidence when something breaks.
+
+## The status line
+
+The page opens on one line that says what is wrong and holds the one button
+that fixes it, worst first:
+
+| What it says | The button |
+|--------------|-----------|
+| *N tests failing in the last 24 hours. Worst: Login.* | **Open Login** (its run history) |
+| *N tests never ran: they are set to run on your computer only.* | **Run all N in the cloud** (switches them to Firecrawl, so the schedule runs them). Viewers get the `mushi qa run ` command instead |
+| *N runs in progress.* / *All N tests passed in the last 24 hours.* | **Refresh** |
+
+Beside it, up to three numbers: **Passing**, **Failing** and **Never ran**
+(turned-on tests the schedule skipped all day, so nothing was checked).
 
 ---
 
@@ -25567,21 +26204,39 @@ with a full Playwright test. The story uses the `local` provider and runs weekly
 ## Story cards
 
 The main grid shows one card per story with:
-- **Provider badge** — Local / Browserbase / Firecrawl
-- **24h pass rate** — colour-coded bar and percentage
-- **7 days** — one square per UTC day: red when a run failed that day, green when
-  every finished run passed, grey with none. Skipped runs never count as failures.
-  From `last_7d` on `GET /v1/admin/projects/:id/qa-coverage` (`null` when the runs
-  could not be read).
+- **State** as a mark and a word: ✓ Passed, ✕ Failed, ⊘ Skipped, ○ Never ran,
+  Queued, Turned off
+- **Where it runs**: *On your computer*, *Cloud · Firecrawl* or *Cloud · Browserbase*
+- **Why it was skipped**, with the fix in the card:
+
+  | Runner | Why the schedule skips it | Fix on the card |
+  |--------|---------------------------|-----------------|
+  | On your computer | The cloud runner never runs it; only `mushi qa run ` on your computer does | **Run in the cloud**, or copy the command |
+  | Cloud · Browserbase | Browserbase opens the session, but the test still needs the CLI runner | **Run in the cloud** (Firecrawl), or copy the command |
+  | Cloud · Firecrawl | Too many tests ran at once for this app; the next tick runs it | none needed |
+
+  **Run in the cloud** reads each test first. A test that holds a Playwright
+  script (the kind **Generate test from report** writes) stays on your
+  computer: the cloud runner would ignore the script and could pass without
+  running the test. The page says so and points you at its `mushi qa run `
+  command; the story drawer shows only the command for it.
+
+- **24h pass rate** over finished runs — bar and percentage; "nothing checked"
+  when every run was skipped
+- **7 days** — one heat cell per UTC day with a glyph: ✕ red when a run failed
+  that day, ✓ green when every finished run passed, ⊘ grey when every run was
+  skipped, blank with none. Skipped runs never count as failures. From `last_7d`
+  on `GET /v1/admin/projects/:id/qa-coverage` (`{ day, passed, failed, skipped }`;
+  `null` when the runs could not be read)
 - **Run count** and **last run** time
-- **disabled** / **queued** chip when applicable
 - Link to last failure Browserbase replay session
 
 ## Story drawer
 
 Click any card to open the story drawer:
 
-- **Story prompt** and **provider** at the top
+- **Story prompt** and **where it runs** at the top, with **Run in the cloud**
+  and the `mushi qa run ` command when it is not on Firecrawl
 - **Script** section (collapsible) — the raw Playwright script if one was generated
 - **Run history** — newest runs first. Expand any run to see:
   - Meta (status, provider, latency)
@@ -25985,9 +26640,16 @@ App blueprint is the Mushi Mushi console screen for one project's recipe: what t
 
 **Refresh** reads the repo again — the recipe file, design tokens, CI builds and environment variable names — and reloads this page. A failure shows the reason. Until the recipe loads, the page says **Composing the recipe…**. A load error names the app recipe and offers a retry.
 
-The status card has two sides:
+The page opens on one status line: a plain sentence on the worst thing on the page, up to three numbers (risk checks not met, dependencies with known holes, blueprint parts to check) and one button that fixes it:
 
-- **Overall** is the worst state on the page. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
+- dependency holes lead with **Fix all holes: copy prompt**, one prompt for your editor that makes every upgrade;
+- another failed risk check leads with its **Copy fix prompt**;
+- a check that could not finish, or no result yet, leads with **Run checks**;
+- with no risk problem, the first blueprint card that needs a look leads with **Show how to fix**.
+
+The blueprint card under the risk checks has two sides:
+
+- **Blueprint** is the worst state of the cards. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
 - **Recipe file** says the page is built from what Mushi Mushi already sees when `mushi.recipe.json` is missing, and tells you to add that file at the repo root to declare design tokens, deploy targets and budgets. When the file is present, the card shows its path, the short commit and when it was read. Problems in the file are listed: fix them in the repo, then press Refresh.
 
 ---
@@ -26037,7 +26699,11 @@ With nothing selected, the panel says to pick a card. A selected card shows the 
 
 ## Risk checks
 
-**Risk checks** sits under the cards: store rules, an expiring domain, a broken privacy link, storage that keeps billing. Problems are listed first. Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
+**Risk checks** comes right after the status line: store rules, an expiring domain, a broken privacy link, a known hole in a dependency. Each check that is not met is one row, worst first: a status mark (▲ error, ◆ warning, ○ could not finish), its name, one line of cause and its own fix (**Copy fix prompt**, or **Run again** for a check that could not finish). More than three findings fold under the row.
+
+Known holes in dependencies are one table: package, installed version → the version that fixes it, the hole count as a bar, and the row's fix. **Fix in a PR** opens the bug report Mushi Mushi filed for that upgrade, where the Fix button opens a pull request; a row with no report yet has **Copy prompt**. **Fix all: copy prompt** sits on the check's row. Development-only packages are greyed and sorted last. Past ten rows, **Show N more**.
+
+Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
 
 ---
 
@@ -26401,6 +27067,38 @@ Selecting a report opens the full detail view:
   the active attempt, CI badge, and merge controls.
 - **Related links**: other reports for this component, this reporter's history,
   the knowledge graph, the dispatched PR and the auto-fix pipeline.
+
+---
+
+## Pipeline strip on report detail
+
+Below **The story so far**, the **Pipeline** strip shows where this report is:
+**Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
+its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
+how long it took against the longest stage, and the time itself. A stage still open
+shows the time so far. A stage that did not need to run reads **not needed**: a
+confident quick check skips the full diagnosis, and a report you sorted by hand skips
+triage.
+
+When a stage failed or is stuck, the strip names it with the reason in one plain line
+("The AI key or the internal worker token was refused.") and the try count. The raw
+error, with keys removed, is behind **Details**, with the triage job's history. The
+button next to it retries that stage:
+
+| Stage | Button | What it does |
+| --- | --- | --- |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing. A report that is already triaged or diagnosed is refused: it would spend AI budget again and could overwrite a severity set by hand. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks. Disabled with the reason when a fix PR is still open, or when a retry would reach the same answer (the agent found nothing to change, for example). |
+| CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
+
+While triage runs, the strip checks again every few seconds and the page updates when
+it finishes. The unified timeline also lists the triage job: when it was queued, and
+when it finished, failed or gave up.
+
+In **All apps**, the list groups its rows by app: the app with the most urgent open bug
+first (critical, then high, then untriaged), the counts per state in its header and
+**Open →** to that app alone. Rows inside an app keep your sort. Grouping covers the
+page you are on.
 
 ---
 
@@ -27132,8 +27830,12 @@ Report bugs by voice from your phone, Telegram or Slack. See [Voice intake](/adm
 
 ### SDK & connection
 
-**Check the connection** (whether this browser reaches Mushi Mushi and where your data
-lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
+On a self-hosted server, **Self-host setup** comes first: a checklist of what your own
+server still needs (API up, deploy stamped, database reachable, cron jobs calling your
+server, background jobs running, screenshots bucket private, AI key, console address),
+each with its status and fix. It runs the same checks as `npx mushi-mushi selfhost doctor`
+and never shows on Mushi Mushi Cloud. Then **Check the connection** (whether this browser
+reaches Mushi Mushi and where your data lives), **Install the bug widget** (a link to [Connect](/admin/connect), where the
 install snippet lives, and the API address to copy), **Send a test bug**, and **Debug
 logging (this browser)**, which logs to the browser console. Debug logging is stored in
 this browser only; it is never sent to the SDK or end users.
@@ -27883,8 +28585,12 @@ decides everything else:
 test, its live-site watch or site audit address) and the goal is plain words you can
 change. The test runs on your own computer, where its browser and AI run: if Mushi Mushi runs
 there for this app (`mushi worker install`, shown on Pipeline → Workers), it picks the
-test up within a minute and the page follows it live. If not, the page says so and shows
-the one thing to set up. Pick **Look around, file nothing** to see where a visitor gets
+test up within a minute and the page follows it live. The status at the top of the page
+shows your computer's state (online, busy, offline, paused, out of date) and, when it
+cannot run a test, the one command that fixes it with a copy button: `mushi work --daemon`
+to start an offline worker, `mushi worker install` the first time, or
+`npm i -g @mushi-mushi/cli@latest` (then restart the worker) when it is too old. A paused
+computer gets **Open Workers**, where you turn a lane back on. Pick **Look around, file nothing** to see where a visitor gets
 stuck, or **File what stops them** to turn each problem into a bug report.
 
 From a terminal it is the same run:
@@ -27901,8 +28607,11 @@ The run is signed out in a clean browser. It may only write to your app's own or
 forms and anything labelled delete or revoke are refused. Without an account it stops at
 your sign-up page and says so; `--dry-run` never writes to your app.
 
-The page shows each test: time to first value, steps, how many visitors reached the goal,
-the trend over tests, and every step with its screenshot and wait. A waiting test can be
+The status also gives the last test's time to first value, how many visitors reached the
+goal, and the number of tests. The history lists each test with a state mark (reached ✓,
+stalled ✕, running, waiting, stopped) and the time-to-goal trend. A visitor's steps are a
+strip of screenshots, each with a bar for how long the app made them wait and read on one
+scale; the step where the visitor stalled is marked red. A waiting test can be
 cancelled; a failed one says why. Once an app has a finished test, Home shows a
 **First-time setup** light with the minutes and steps.
 

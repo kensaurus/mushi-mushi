@@ -214,7 +214,8 @@ export function buildStoryNodes(
       ? 'done'
       : 'pending'
   const planHeadline = classifyFailed
-    ? `Classification failed — ${report.processing_error}`
+    // The raw error lives once, screened, behind the Pipeline strip's Details (console 2026-11-19).
+    ? 'Classification failed. The Pipeline strip below says why and has a Retry button.'
     : classified
       // The summary shows once, higher up (summaryPlace); the step says what was decided.
       ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`

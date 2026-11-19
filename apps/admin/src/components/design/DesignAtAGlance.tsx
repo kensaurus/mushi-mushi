@@ -39,7 +39,7 @@ export function DesignAtAGlance({ design }: { design: DesignPlaneResponse }) {
         action={<span className="text-2xs text-fg-faint">{colorCount.toLocaleString()} colour tokens</span>}
       >
         {swatches.length > 0 ? (
-          <ul className="grid list-none grid-cols-6 gap-1.5 p-0 sm:grid-cols-8" aria-label="Colour tokens">
+          <ul className="grid list-none grid-cols-8 gap-1 p-0 sm:grid-cols-12" aria-label="Colour tokens">
             {swatches.map((s) => (
               <li key={s.path} className="min-w-0" title={`${s.path} ${s.color}`}>
                 <span
@@ -67,7 +67,7 @@ export function DesignAtAGlance({ design }: { design: DesignPlaneResponse }) {
               title="Drift score per check (lower is better)"
               points={points}
               formatValue={(v) => String(Math.round(v))}
-              height={110}
+              height={80}
             />
             <p className="mt-1 text-2xs text-fg-faint">
               How much of your code uses colours, spacing or fonts that are not in your design. Run a drift check to add a point.

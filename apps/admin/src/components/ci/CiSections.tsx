@@ -15,6 +15,8 @@ import { Btn, CodeChip, CopyButton, DataTableCell, DataTableHead, MiniInlineBar,
 import { IconExternalLink, IconInfo } from '../icons'
 import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { CiJobOutcomeChip } from './CiJobOutcomeChip'
+import { CiRerunRunButton, CiWhyButton } from './CiJobDebug'
+import { oneJobPerRun } from '../../lib/ciDebug'
 import { CiCostFixButton, costFixKey, useCostFixJobs } from './CiCostFixButton'
 import type { CiCostFixJob } from '../../lib/ciCostFix'
 
@@ -312,33 +314,23 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
     return <p className="text-xs text-fg-muted">No test machine stopped a job in this window.</p>
   }
   const groups = groupInfraFailures(list)
-  const runs = stoppedRunUrls(list)
+  const perRun = oneJobPerRun(list)
+  // "Re-run all" for one app at a time: a refusal names that app's GitHub access.
+  const single = new Set(list.map((j) => j.projectId)).size === 1 ? list[0]!.projectId : null
   return (
     <div data-testid="ci-infra-failures">
       {/* The reason once, for every row below (it repeated on all seven, 2026-11-18). */}
       <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
         <p className="max-w-prose text-xs text-fg-secondary">
           The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
-          tested. Re-run them on GitHub.
+          tested. Re-run them here.
         </p>
-        {runs.length > 1 && (
-          <details className="text-2xs" data-testid="ci-infra-rerun-all">
-            {/* Jobs and runs named apart: "7 stopped" on the tab beside "Re-run all (6 runs)" read as two counts of one thing (round 3). */}
-            <summary className="cursor-pointer font-medium whitespace-nowrap text-fg-secondary hover:text-fg">
-              Re-run these {list.length} {list.length === 1 ? 'job' : 'jobs'} ({runs.length} runs on GitHub)
-            </summary>
-            <p className="mt-1 max-w-xs text-fg-muted">Each opens its run on GitHub; “Re-run failed jobs” there re-runs every stopped job in it.</p>
-            <ul className="mt-1 flex flex-col gap-0.5">
-              {runs.map((u) => (
-                <li key={u}>
-                  <a href={u} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-medium text-accent hover:underline">
-                    {u.replace(/^https:\/\/github\.com\/[^/]+\//, '').replace('/actions/runs/', ' run ')}
-                    <IconExternalLink size={10} />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
+        {/* Re-run in the console (2026-11-19; it linked to each run on GitHub). Jobs and runs named apart:
+            "7 stopped" on the tab beside "Re-run all (6 runs)" read as two counts of one thing (round 3). */}
+        {perRun.length > 1 && single && (
+          <span data-testid="ci-infra-rerun-all">
+            <CiRerunRunButton jobIds={perRun} projectId={single} label={`Re-run all ${list.length} jobs (${perRun.length} runs)`} />
+          </span>
         )}
       </div>
       <ul className="flex flex-col divide-y divide-edge-subtle">
@@ -351,19 +343,12 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
               </span>
               <span className="font-mono text-2xs text-fg-secondary">{g.prNumber ? `PR #${g.prNumber}` : 'no PR'}</span>
               {g.jobs.length > 1 && <span className="font-mono text-2xs font-bold whitespace-nowrap text-warn-foreground tabular-nums">{g.jobs.length} jobs</span>}
-              {/* One run behind the group: one re-run for all its jobs ("Re-run failed jobs" on GitHub). */}
-              {stoppedRunUrls(g.jobs).length === 1 && (
-                <a
-                  href={stoppedRunUrls(g.jobs)[0]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto inline-flex items-center gap-0.5 text-2xs font-medium whitespace-nowrap text-accent hover:underline"
-                  title="Open the run on GitHub: “Re-run failed jobs” re-runs every stopped job in it"
-                  data-testid="ci-infra-group-rerun"
-                >
-                  Re-run {g.jobs.length > 1 ? 'these' : 'on GitHub'}
-                  <IconExternalLink size={10} />
-                </a>
+              {/* One run behind the group: one re-run for all its jobs, here. */}
+              {oneJobPerRun(g.jobs).length === 1 && (
+                <span className="ml-auto inline-flex items-center gap-1.5" data-testid="ci-infra-group-rerun">
+                  <CiWhyButton jobId={g.jobs[0]!.id} />
+                  <CiRerunRunButton jobIds={oneJobPerRun(g.jobs)} projectId={g.jobs[0]!.projectId} label={g.jobs.length > 1 ? 'Re-run these' : 'Re-run'} />
+                </span>
               )}
             </p>
             <ul className="mt-0.5 flex flex-col">
@@ -374,17 +359,11 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
                   <span className="ml-auto text-2xs whitespace-nowrap text-fg-muted">
                     <RelativeTime value={j.completedAt ?? j.createdAt} />
                   </span>
-                  {j.htmlUrl && stoppedRunUrls(g.jobs).length !== 1 && (
-                    <a
-                      href={j.htmlUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-0.5 text-2xs font-medium whitespace-nowrap text-accent hover:underline"
-                      title="Open the job on GitHub to re-run it"
-                    >
-                      Re-run on GitHub
-                      <IconExternalLink size={10} />
-                    </a>
+                  {oneJobPerRun(g.jobs).length !== 1 && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <CiWhyButton jobId={j.id} />
+                      <CiRerunRunButton jobIds={[j.id]} projectId={j.projectId} />
+                    </span>
                   )}
                   {j.infraDetail && !sameMessage(g.jobs) && (
                     <details className="w-full text-2xs text-fg-muted">

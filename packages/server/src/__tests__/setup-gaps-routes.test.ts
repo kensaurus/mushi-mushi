@@ -289,3 +289,75 @@ describe('GET /v1/admin/doctor platform checks', () => {
     expect(JSON.stringify(res.json)).not.toContain('secret-id-value')
   })
 })
+
+describe('GET /v1/admin/doctor instance checks (self-host)', () => {
+  const CLOUD = 'https://dxptnwrhwsqckaftyymj.supabase.co'
+  function withBucket(db: FakeDb, bucket: { public: boolean } | null) {
+    ;(db as unknown as { storage: unknown }).storage = {
+      getBucket: async () => (bucket ? { data: bucket, error: null } : { data: null, error: { message: 'Bucket not found' } }),
+    }
+    return db
+  }
+
+  it('a fresh self-host: cron URL still on Cloud fails, the empty seeded token fails, missing extras are info', async () => {
+    state.env = { SUPABASE_URL: 'https://selfhostref00000000.supabase.co' }
+    state.db = withBucket(
+      seed({
+        mushi_runtime_config: [
+          { key: 'supabase_url', value: CLOUD },
+          { key: 'internal_caller_token', value: '' },
+        ],
+      }),
+      { public: false },
+    )
+    const res = await get('/v1/admin/doctor')
+    const checks = byId(res.json.data.checks.map((c: { name: string }) => ({ ...c, id: c.name })))
+    expect(checks.get('runtime_url')).toMatchObject({ status: 'fail', label: 'Cron jobs call this server', summary: expect.stringContaining('Mushi Mushi Cloud') })
+    expect(checks.get('recovery_token')!.status).toBe('fail')
+    expect(checks.get('screenshots_bucket')!.status).toBe('pass')
+    expect(checks.get('llm_key')).toMatchObject({ status: 'info', fixHref: '/settings?tab=byok' })
+    expect(checks.get('console_url')!.status).toBe('info')
+    expect(checks.get('observability')!.status).toBe('info')
+    // Every line has a human label.
+    expect(res.json.data.checks.every((c: { label?: string }) => typeof c.label === 'string' && c.label.length > 0)).toBe(true)
+  })
+
+  it('a healthy minimal self-host has no problem line: info lines never raise the status', async () => {
+    state.env = { SUPABASE_URL: 'https://selfhostref00000000.supabase.co', ADMIN_BASE_URL: 'https://mushi.example.com', OPENAI_API_KEY: 'sk-x' }
+    state.db = withBucket(
+      seed({
+        mushi_runtime_config: [
+          { key: 'supabase_url', value: 'https://selfhostref00000000.supabase.co' },
+          { key: 'internal_caller_token', value: 'tok' },
+        ],
+        cron_runs: [{ job_name: 'pipeline-recovery', status: 'success', finished_at: new Date().toISOString(), metadata: {} }],
+      }),
+      { public: false },
+    )
+    const res = await get('/v1/admin/doctor')
+    const checks = byId(res.json.data.checks.map((c: { name: string }) => ({ ...c, id: c.name })))
+    expect(checks.get('runtime_url')!.status).toBe('pass')
+    expect(checks.get('llm_key')!.status).toBe('pass')
+    expect(checks.get('observability')!.status).toBe('info')
+    expect(res.json.data.status).toBe('pass')
+  })
+
+  it('a public or missing screenshots bucket fails', async () => {
+    state.env = { SUPABASE_URL: 'https://selfhostref00000000.supabase.co' }
+    state.db = withBucket(seed(), { public: true })
+    let checks = byId((await get('/v1/admin/doctor')).json.data.checks.map((c: { name: string }) => ({ ...c, id: c.name })))
+    expect(checks.get('screenshots_bucket')).toMatchObject({ status: 'fail', summary: expect.stringContaining('public') })
+    state.db = withBucket(seed(), null)
+    checks = byId((await get('/v1/admin/doctor')).json.data.checks.map((c: { name: string }) => ({ ...c, id: c.name })))
+    expect(checks.get('screenshots_bucket')).toMatchObject({ status: 'fail', summary: expect.stringContaining('missing') })
+  })
+
+  it('on Mushi Mushi Cloud an app owner never sees the instance lines', async () => {
+    state.env = { SUPABASE_URL: CLOUD }
+    const res = await get('/v1/admin/doctor')
+    const names = res.json.data.checks.map((c: { name: string }) => c.name)
+    expect(names).not.toContain('runtime_url')
+    expect(names).not.toContain('screenshots_bucket')
+    expect(names).not.toContain('llm_key')
+  })
+})

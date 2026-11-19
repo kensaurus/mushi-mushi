@@ -75,12 +75,23 @@ describe('ContentQualityPage empty state', () => {
     expect(host.querySelector('[role="toolbar"]')).not.toBeNull()
   })
 
-  it('says none reported yet, in grey and without "Show past issues", when nothing ever came in', async () => {
+  // 2026-11-19 (owner: an empty page with only "none reported yet"): when nothing ever came in,
+  // the page is its first step, the request the app sends, copyable in one click.
+  it('shows the first step with the request to copy, without "Show past issues", when nothing ever came in', async () => {
     mocks.total = 0
     mocks.past = 0
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
     await render()
-    expect(host.querySelector('[data-testid="content-quality-scope"]')!.textContent).toContain('none reported yet')
+    const step = host.querySelector('[data-testid="content-quality-first-step"]')!
+    expect(step.textContent).toContain('No content checks yet')
+    expect(host.querySelector('[data-testid="content-quality-all-clear"]')).toBeNull()
     expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Show past issues')).toBe(false)
+    const copy = [...step.querySelectorAll('button')].find((b) => b.textContent === 'Copy the request')!
+    await act(async () => copy.click())
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(String(writeText.mock.calls[0]![0])).toContain('/v1/content-quality')
+    expect(String(writeText.mock.calls[0]![0])).toContain('X-Mushi-Api-Key')
     mocks.past = 3
   })
 

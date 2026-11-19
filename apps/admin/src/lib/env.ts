@@ -88,7 +88,7 @@ export const CLOUD_SUPABASE_URL =
 // treating it like one lets us rotate on a predictable SLA.
 // check-no-secrets: ignore-next-line
 const HARDCODED_CLOUD_ANON_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM' // gitleaks:allow
-export const CLOUD_SUPABASE_ANON_KEY =
+const CLOUD_SUPABASE_ANON_KEY =
   (import.meta.env.VITE_CLOUD_SUPABASE_ANON_KEY ?? '').trim() ||
   HARDCODED_CLOUD_ANON_KEY_FALLBACK
 const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
@@ -107,7 +107,6 @@ const SUPABASE_CLOUD_REF_RE = /^[a-z0-9]{20}$/
  * Validate a backend URL before persisting or resolving against it.
  * Rejects typo'd Supabase refs (e.g. 24-char garbage in localStorage) that
  * produce `Failed to fetch` on every admin API call.
- * @internal Exported for tests only.
  */
 export function isValidBackendUrl(url: string): boolean {
   const trimmed = stripTrailingSlash(url.trim())
@@ -126,6 +125,19 @@ export function isValidBackendUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * A self-hosted backend URL the Settings switcher may save, which is every valid backend
+ * over https, or plain http only to this machine (Docker Compose serves the
+ * API at http://localhost:8000). The old rule took https only, so a Compose
+ * install could not be connected from Settings (2026-11-19).
+ */
+export function isAcceptableSelfHostUrl(url: string): boolean {
+  if (!isValidBackendUrl(url)) return false
+  const parsed = new URL(stripTrailingSlash(url.trim()))
+  if (parsed.protocol === 'https:') return true
+  return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
 }
 
 function clearStoredKeysOnly(): void {

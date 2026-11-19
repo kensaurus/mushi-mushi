@@ -274,13 +274,27 @@ function toForwardSlash(p) {
 // and correct even on a shallow checkout). Falls back to `git rev-parse
 // HEAD` for local `npm run deploy`. Never throws — an unresolvable SHA just
 // means the hosted MCP version stays at the base semver for this deploy.
-function resolveDeploySha() {
+// Exported with deployInfoSource for `mushi selfhost up` (packages/cli
+// selfhost.ts), which imports them from the clone it deploys, so a self-host
+// deploy is stamped the same way and the format lives in one place.
+export function resolveDeploySha(cwd) {
   if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', ...(cwd ? { cwd } : {}) }).trim()
   } catch {
     return 'unknown'
   }
+}
+
+/** The stamped `_shared/deploy-info.ts` body (see that file's header). */
+export function deployInfoSource(sha, deployedAt) {
+  return (
+    `// AUTO-STAMPED at deploy time by scripts/deploy-edge-function.mjs — do not edit by hand.\n` +
+    `export const DEPLOY_INFO: { sha: string; deployedAt: string | null } = {\n` +
+    `  sha: ${JSON.stringify(sha)},\n` +
+    `  deployedAt: ${JSON.stringify(deployedAt)},\n` +
+    `}\n`
+  )
 }
 
 function flag(name) {
@@ -402,14 +416,7 @@ async function main() {
   // never written to disk — so a local `npm run deploy` never leaves a
   // dirty working tree.
   const deployInfoRel = toForwardSlash(join(FUNCTIONS_ROOT_REL, '_shared', 'deploy-info.ts'))
-  const deploySha = resolveDeploySha()
-  const deployedAt = new Date().toISOString()
-  const stampedDeployInfo =
-    `// AUTO-STAMPED at deploy time by scripts/deploy-edge-function.mjs — do not edit by hand.\n` +
-    `export const DEPLOY_INFO: { sha: string; deployedAt: string | null } = {\n` +
-    `  sha: ${JSON.stringify(deploySha)},\n` +
-    `  deployedAt: ${JSON.stringify(deployedAt)},\n` +
-    `}\n`
+  const stampedDeployInfo = deployInfoSource(resolveDeploySha(), new Date().toISOString())
 
   const entries = allFiles.map((abs) => {
     const rel = toForwardSlash(`${FUNCTIONS_ROOT_REL}/${relative(fnRootAbs, abs)}`)

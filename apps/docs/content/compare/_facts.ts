@@ -70,7 +70,7 @@ export const MUSHI: Vendor = {
     { claim: 'Free tier', value: 'Free: 3 apps, 300 diagnoses per month (hard stop; later reports are kept, not diagnosed; no cap with your own Anthropic or OpenAI key), 1 seat, 30-day retention, no card', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'Paid tiers', value: 'Builder $29/mo (3 apps, 1,000 diagnoses) · Studio $79/mo (10 apps, 3,000 diagnoses) · Enterprise from $499/mo', sourceUrl: MUSHI_PRICING, reviewedAt: MUSHI_FACTS_REVIEWED_AT },
     { claim: 'License', value: 'SDKs MIT; server AGPLv3, except the enterprise folder (packages/server/ee: SSO, audit export, retention policies), which is source-available and needs a license in production', sourceUrl: `${MUSHI_REPO}/blob/master/LICENSE`, reviewedAt: R },
-    { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works); bring your own Anthropic key (docs/SELF_HOSTED.md)', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: R },
+    { claim: 'Self-host', value: 'Free, whole stack, one command onto your own Supabase project (free tier works) or Docker Compose; an Anthropic or OpenAI key turns on the AI diagnosis', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/self-hosting', reviewedAt: R },
     { claim: 'Editor loop', value: 'MCP server for Cursor / Claude Code; no second LLM key in the MCP process', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mcp', reviewedAt: R },
     { claim: 'Diagnosis accuracy', value: 'An LLM reading of the report and your repo. It can be wrong or name the wrong file; read it before you apply the fix.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop', reviewedAt: R },
   ],
@@ -525,7 +525,7 @@ export const MUSHI_FOR_AGENCIES: Vendor = {
     { claim: 'Mobile SDKs', value: 'React Native and Capacitor SDKs on every plan, Free included. Native iOS, Android and Flutter libraries are previews.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/quickstart/mobile', reviewedAt: A },
     { claim: 'Brand mark on the widget', value: 'None on Builder and Studio. On Free, a small "Bug reports by Mushi Mushi" link that you can turn off in Settings.', sourceUrl: MUSHI_AGENCY_PAGE, reviewedAt: A },
     { claim: 'Security', value: 'No SOC 2 report. Mushi Mushi collects evidence toward one; that is not a certification. SAML single sign-on on Enterprise.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/security/soc2', reviewedAt: A },
-    { claim: 'Self-host', value: 'Yes, free: MIT SDKs and an AGPLv3 server you can run yourself.', sourceUrl: `${MUSHI_REPO}/blob/master/SELF_HOSTED.md`, reviewedAt: A },
+    { claim: 'Self-host', value: 'Yes, free: MIT SDKs and an AGPLv3 server you can run yourself.', sourceUrl: 'https://kensaur.us/mushi-mushi/docs/self-hosting', reviewedAt: A },
   ],
 }
 

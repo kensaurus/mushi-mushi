@@ -14,7 +14,7 @@ export const HEALTH_PROBE_TABS: HealthProbeTabDefinition[] = [
     id: 'llm',
     label: 'LLM calls',
     plain: 'Every classification, fix-agent, and judge call — error rate, latency, and BYOK fallback share.',
-    redMeans: 'Provider errors or 100% platform fallback — check BYOK keys on Settings → API Keys.',
+    redMeans: 'Provider errors or 100% platform fallback — check BYOK keys on Settings → AI keys.',
   },
   {
     id: 'cron',

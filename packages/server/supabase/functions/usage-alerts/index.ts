@@ -24,7 +24,7 @@
  * ENVIRONMENT:
  * - RESEND_API_KEY           — Resend API key for transactional email
  * - RESEND_FROM_EMAIL        — verified sender address (required; no default — see _shared/email.ts)
- * - MUSHI_CONSOLE_URL        — link in emails (default: https://app.mushi-mushi.dev)
+ * - MUSHI_CONSOLE_URL        — link in emails (default: this install's console, _shared/console-page-url.ts)
  */
 
 import { getServiceClient } from '../_shared/db.ts'
@@ -37,10 +37,14 @@ import { notifyOperator } from '../_shared/operator-notify.ts'
 import { sendTransactionalEmail } from '../_shared/email.ts'
 import { runLlmBudgetAlerts } from '../_shared/llm-budget-alerts.ts'
 import { sendBotMessage } from '../_shared/slack.ts'
+import { consolePageUrl } from '../_shared/console-page-url.ts'
 
 const aLog = log.child('usage-alerts')
 
-const CONSOLE_URL = Deno.env.get('MUSHI_CONSOLE_URL') ?? 'https://app.mushi-mushi.dev'
+// Links in alert emails go to this install's own console: MUSHI_CONSOLE_URL when
+// set, else the same rule CLI sign-in uses (_shared/console-page-url.ts). The old
+// default, app.mushi-mushi.dev, is not a console Mushi Mushi serves.
+const CONSOLE_URL = (Deno.env.get('MUSHI_CONSOLE_URL') ?? consolePageUrl('')).replace(/\/+$/, '')
 
 /**
  * Send a transactional email via the shared Resend sender. Fail-soft: a

@@ -168,7 +168,7 @@ async function assertLlmAvailable(c: Context, projectId: string) {
         ok: false,
         error: {
           code: 'NO_LLM_KEY',
-          message: 'Add an Anthropic or OpenAI key in Settings → API Keys to use codebase Q&A.',
+          message: 'Add an Anthropic or OpenAI key in Settings → AI keys to use codebase Q&A.',
         },
       },
       503,

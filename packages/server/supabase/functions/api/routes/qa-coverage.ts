@@ -39,12 +39,15 @@ const STRIP_DAYS = 7;
 const STRIP_PAGE = 1000;
 const STRIP_MAX_ROWS = 10_000;
 
-type StripDay = { day: string; passed: number; failed: number };
+/** `skipped` counts runs the runner skipped (local provider, rate limit): never a failure, but the console says why a day has no result. */
+type StripDay = { day: string; passed: number; failed: number; skipped: number };
 
 /**
  * One entry per UTC day (oldest first, today last) per story. A run counts as
- * passed or failed only when it finished that way: skipped, pending and
- * running runs are left out, so a skipped story is never drawn as failing.
+ * passed or failed only when it finished that way, so a skipped story is never
+ * drawn as failing. Skipped runs are counted on their own (2026-11-19: a story
+ * that only skipped drew seven empty days under "24 runs · 24h"); pending and
+ * running runs are left out.
  */
 export function buildRunStrips(
   rows: ReadonlyArray<{ story_id: string; status: string; started_at: string }>,
@@ -55,16 +58,18 @@ export function buildRunStrips(
   for (const r of rows) {
     const passed = r.status === 'passed';
     const failed = r.status === 'failed' || r.status === 'error' || r.status === 'timeout';
-    if (!passed && !failed) continue;
+    const skipped = r.status === 'skipped';
+    if (!passed && !failed && !skipped) continue;
     const idx = days.indexOf(String(r.started_at).slice(0, 10));
     if (idx < 0) continue;
     let strip = out.get(r.story_id);
     if (!strip) {
-      strip = days.map((day) => ({ day, passed: 0, failed: 0 }));
+      strip = days.map((day) => ({ day, passed: 0, failed: 0, skipped: 0 }));
       out.set(r.story_id, strip);
     }
     if (passed) strip[idx]!.passed += 1;
-    else strip[idx]!.failed += 1;
+    else if (failed) strip[idx]!.failed += 1;
+    else strip[idx]!.skipped += 1;
   }
   return out;
 }
@@ -90,6 +95,7 @@ export function blankRunStrip(now: number): StripDay[] {
     day: new Date(today - (STRIP_DAYS - 1 - i) * 86_400_000).toISOString().slice(0, 10),
     passed: 0,
     failed: 0,
+    skipped: 0,
   }));
 }
 

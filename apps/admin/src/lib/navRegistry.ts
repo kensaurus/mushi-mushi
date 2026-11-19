@@ -25,7 +25,7 @@ import type { FeatureFlag } from './useEntitlements'
 
 export type NavSectionId = 'start' | 'plan' | 'do' | 'check' | 'act' | 'workspace'
 
-export type CheckSubGroupId = 'quality-gates' | 'system-health'
+export type CheckSubGroupId = 'system-health' | 'ci' | 'quality-gates'
 
 type PaletteGroup = 'Start' | 'Plan' | 'Do' | 'Check' | 'Act' | 'Workspace'
 
@@ -123,13 +123,20 @@ export const CHECK_SUB_GROUPS: Record<
   CheckSubGroupId,
   { title: string; hint: string }
 > = {
+  // Three plain buckets (owner, 2026-11-19: "group … so it's easier to read"):
+  // what checks YOUR app, what runs YOUR builds, and Mushi Mushi's own
+  // health and AI quality. Ids kept so saved state and tests stay valid.
   'system-health': {
-    title: 'App checks',
-    hint: 'Is the app itself sound: scheduled tests, user stories, audits, its blueprint, design tokens and content, a first-time user test, plus Mushi Mushi’s own health.',
+    title: 'Your app',
+    hint: 'Is your app sound: scheduled tests, user stories, audits, its blueprint, design tokens, content and a first-time user test.',
+  },
+  ci: {
+    title: 'Builds & tests (CI)',
+    hint: 'Where your GitHub Actions jobs run, what failed and why, and what slows your fixes down.',
   },
   'quality-gates': {
-    title: 'AI quality',
-    hint: 'How good the AI’s triage is: grading, lessons learned and the prompts behind it.',
+    title: 'Mushi Mushi itself',
+    hint: 'Mushi Mushi’s own health, AI providers, and how good its triage is: grading, lessons and prompts.',
   },
 }
 
@@ -474,7 +481,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'CI runners',
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'ci',
     iconKey: 'gauge',
     paletteDescription: 'Where your tests run, how long they wait for a machine, and what slows your fixes down.',
     paletteKeywords: ['ci', 'ci runners', 'runners', 'self-hosted', 'github actions', 'actions', 'queue', 'build queue', 'test machine', 'runner', 'slow ci', 'jobs'],
@@ -489,7 +496,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Providers & AI routes',
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'cost',
     paletteDescription: 'The AI provider accounts behind every app: health and balance, spend against sales, the model each app tries first, and who changed what.',
     paletteKeywords: ['providers', 'ai providers', 'ai routes', 'model routes', 'routing', 'llm providers', 'provider health', 'balance', 'spend', 'margin', 'kensaurus', 'provider watch', 'models'],
@@ -505,7 +512,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     label: 'Mushi Mushi health',
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'health',
     paletteDescription: 'Is Mushi Mushi itself working: its AI calls and background jobs. Also your code size, schema changes and unusual spikes.',
     paletteKeywords: ['app health', 'health', 'mushi health', 'status', 'ai calls', 'llm', 'cron', 'background jobs', 'verification hub'],
@@ -783,7 +790,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'gauge',
     paletteDescription: 'Bundle-size trends and very large files, pushed from your repo’s CI.',
     paletteKeywords: ['code health', 'bundle', 'loc', 'god file', 'refactor', 'gzip', 'ci', 'budget', 'file size'],
@@ -797,7 +804,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'drift',
     paletteDescription: 'Your database schema compared with the last scan: dropped columns, missing access rules, unexpected changes.',
     paletteKeywords: ['drift', 'schema', 'backend', 'migration', 'database'],
@@ -811,7 +818,7 @@ export const NAV_REGISTRY: NavRegistryEntry[] = [
     inSidebar: false,
     sectionId: 'check',
     pdcaStage: 'check',
-    checkSubGroup: 'system-health',
+    checkSubGroup: 'quality-gates',
     iconKey: 'anomalies',
     paletteDescription: 'Sudden jumps in errors or reports, including ones that started with a release.',
     paletteKeywords: ['anomalies', 'anomaly', 'spike', 'outlier', 'metrics'],
@@ -1242,9 +1249,10 @@ export const OPERATOR_ROUTES: readonly string[] = ['/queue', '/query', '/judge',
 export const CHECK_GROUPS: ReadonlyArray<{ id: CheckSubGroupId; paths: readonly string[] }> = [
   {
     id: 'system-health',
-    paths: ['/qa-coverage', '/health', '/ci', '/providers', '/fullstack-audit', '/inventory', '/recipe', '/design', '/content', '/first-user-test'],
+    paths: ['/qa-coverage', '/first-user-test', '/inventory', '/fullstack-audit', '/recipe', '/design', '/content'],
   },
-  { id: 'quality-gates', paths: ['/judge', '/lessons', '/prompt-lab'] },
+  { id: 'ci', paths: ['/ci'] },
+  { id: 'quality-gates', paths: ['/health', '/providers', '/judge', '/lessons', '/prompt-lab'] },
 ]
 
 const SECTION_BY_STAGE: Record<PdcaStageId, NavSectionId> = {

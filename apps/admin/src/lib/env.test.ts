@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isValidBackendUrl, mcpOAuthSignInUrl } from './env'
+import { isAcceptableSelfHostUrl, isValidBackendUrl, mcpOAuthSignInUrl } from './env'
 
 describe('isValidBackendUrl', () => {
   it('accepts the canonical Mushi Cloud Supabase URL', () => {
@@ -34,5 +34,24 @@ describe('mcpOAuthSignInUrl', () => {
 
   it('leaves a self-hosted URL alone', () => {
     expect(mcpOAuthSignInUrl('https://abc.supabase.co/functions/v1/mcp')).toBe('https://abc.supabase.co/functions/v1/mcp')
+  })
+})
+
+describe('isAcceptableSelfHostUrl', () => {
+  it('takes any valid https backend', () => {
+    expect(isAcceptableSelfHostUrl('https://abcdefghijklmnopqrst.supabase.co')).toBe(true)
+    expect(isAcceptableSelfHostUrl('https://mushi.example.com')).toBe(true)
+  })
+
+  it('takes plain http only to this machine (Docker Compose)', () => {
+    expect(isAcceptableSelfHostUrl('http://localhost:8000')).toBe(true)
+    expect(isAcceptableSelfHostUrl('http://127.0.0.1:8000/')).toBe(true)
+    expect(isAcceptableSelfHostUrl('http://mushi.example.com')).toBe(false)
+  })
+
+  it('rejects garbage', () => {
+    expect(isAcceptableSelfHostUrl('')).toBe(false)
+    expect(isAcceptableSelfHostUrl('ftp://localhost')).toBe(false)
+    expect(isAcceptableSelfHostUrl('not a url')).toBe(false)
   })
 })

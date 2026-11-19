@@ -45,6 +45,7 @@ import {
 } from '../components/reports/ReportsStatsTypes'
 import { isReportsBannerVisible, TRIAGE_SEVERITY_DEFINITIONS } from '../lib/reportsExplainer'
 import { ReportsTable } from '../components/reports/ReportsTable'
+import { orderReportsByApp } from '../lib/reportsByApp'
 import { PAGE_SIZE, withLocallySeen, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
@@ -198,7 +199,11 @@ export function ReportsPage() {
   const markSeenLocally = useCallback((reportId: string) => {
     setSeenLocally((prev) => new Map(prev).set(reportId, new Date().toISOString()))
   }, [])
-  const reports = useMemo(() => withLocallySeen(data?.reports ?? [], seenLocally), [data, seenLocally])
+  // All apps: rows in app blocks (worst app first), so j/k and Enter walk them as drawn.
+  const reports = useMemo(() => {
+    const rows = withLocallySeen(data?.reports ?? [], seenLocally)
+    return allApps ? orderReportsByApp(rows) : rows
+  }, [data, seenLocally, allApps])
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -1096,6 +1101,7 @@ export function ReportsPage() {
             onDispatchFix={handleDispatchFix}
             preflight={preflight}
             preflightProjectId={allApps ? activeProjectId ?? '' : null}
+            groupedByApp={allApps}
           />
         </div>
       )}

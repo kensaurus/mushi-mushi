@@ -287,11 +287,13 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 ## Self-host
 
 ```bash
-cd deploy && cp .env.example .env   # add ANTHROPIC_API_KEY and your Supabase credentials
-docker compose up -d
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>   # your own Supabase project
+# or, everything in Docker with no Supabase account:
+npx mushi-mushi@latest selfhost secrets && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
 
-Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosting), [Docker Compose](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) and [every environment variable](https://kensaur.us/mushi-mushi/docs/self-hosting/environment). Self-host turns every feature on, with no plan limits. Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 
@@ -304,7 +306,7 @@ Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker Compose
 | Inventory and QA gates | Behind the `inventory_v2` plan flag; reachable from Checks |
 | Multi-region | Region pinning works. Active/active write replication is not automated |
 
-<sub>Repo at a glance (run `pnpm docs-stats`): ~660K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 578 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
+<sub>Repo at a glance (run `pnpm docs-stats`): ~660K TS lines · ~2,900 source files · 45 workspace / 37 npm packages · 78 edge functions · 579 SQL migrations · 19 pipeline agents. Full tour: [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).</sub>
 
 ## Community and contributing
 

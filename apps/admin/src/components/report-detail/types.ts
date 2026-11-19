@@ -91,6 +91,8 @@ export type UnifiedTimelineLane =
   | 'qa'
   | 'skill_pipeline'
   | 'ask_mushi'
+  /** The triage queue job (processing_queue): queued, then done / failed / gave up. */
+  | 'pipeline'
 
 export interface UnifiedTimelineEntry {
   id: string

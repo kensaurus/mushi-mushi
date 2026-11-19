@@ -85,6 +85,7 @@ import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { CAPTURE_LABEL, missingCaptures, screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
+import { ReportPipelineStrip } from '../components/report-detail/ReportPipelineStrip'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
 import { DiagnosisFixHero } from '../components/report-detail/DiagnosisFixHero'
@@ -623,7 +624,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           Merge sits in the same bar: "you decide" used to offer only Re-run review and Close PR, with
           Merge further down the page and "Review & merge" linking out to GitHub (owner, 2026-10-30). */}
       {latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed' ? (
-        <div className="mb-3">
+        <div className="mb-3 scroll-mt-20" id="report-fix-actions">
           <ReportFixActions fixId={latestFix.id} onChanged={onReload}>
             {mergeTarget ? (
           <MergeFixPreflight
@@ -671,6 +672,17 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       {/* The one Plan → Do → Check → Act progress display (REPORT D): the
           page used to repeat it as a flow graph and a receipt strip too. */}
       <ReportPdcaStory report={report} dispatchState={dispatchState} showInternals={showInternals} />
+
+      {/* Where the report is stuck, how long each stage took, the error in plain words and the
+          retry for that stage (console 2026-11-19). The story above says what happened; this
+          strip is the machine view with the buttons. */}
+      <ReportPipelineStrip
+        reportId={report.id}
+        onRetryDispatch={requestDispatch}
+        dispatchBlock={dispatchBlockState}
+        hasFixActions={Boolean(latestFix?.pr_url && !latestFix.merged_at && latestFix.pr_state !== 'merged' && latestFix.pr_state !== 'closed')}
+        onReportChanged={onReload}
+      />
 
       {/* Why Mushi believes the diagnosis, claim by claim, with the weak ones
           marked (console audit 2026-10-20). */}
@@ -776,10 +788,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           {isReportClassified(report) ? (
             <ClassificationFields report={report} showInternals={showInternals} />
           ) : report.processing_error ? (
+            // The reason in plain words, the raw text and the Retry live in the Pipeline strip;
+            // this card no longer repeats the raw error (console 2026-11-19).
             <Callout tone="danger" label="Classification failed">
-              {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-              <p className="text-[0.8125rem] font-mono text-fg-secondary leading-relaxed wrap-break-word">
-                {report.processing_error}
+              <p className="text-xs text-fg-secondary">
+                Triage did not finish.{' '}
+                <a href="#report-pipeline" className="font-medium text-brand hover:underline" data-testid="report-classification-to-pipeline">
+                  See why and retry ↑
+                </a>
               </p>
             </Callout>
           ) : (

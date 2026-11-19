@@ -61,6 +61,12 @@ insert into public.mushi_runtime_config (key, value) values
   ('internal_caller_token', :'token')
 on conflict (key) do update set value = excluded.value, updated_at = now();
 
+-- The private screenshots bucket (the first migration creates it; this puts it
+-- back if it was removed). Same row as buildRuntimeConfigSql in selfhost.ts.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('screenshots', 'screenshots', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
 -- Self-hosted: no billing, so lift the Mushi Mushi Cloud plan limits on every
 -- plan (300 diagnoses/month, 3 apps, 1 seat, 30-day retention on Free). Same
 -- SQL as SELFHOST_PLAN_SQL in packages/cli/src/commands/selfhost.ts.

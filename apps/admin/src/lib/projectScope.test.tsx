@@ -16,13 +16,14 @@ import {
   allAppsSupportFor,
   combinedFetchScope,
   getStoredProjectScopeMode,
+  openAppOnly,
   resolveProjectScopeMode,
   setStoredProjectScopeMode,
   useProjectScope,
   useSetProjectScopeMode,
   type ProjectScope,
 } from './projectScope'
-import { ACTIVE_PROJECT_STORAGE_KEY } from './activeProject'
+import { ACTIVE_PROJECT_STORAGE_KEY, getActiveProjectIdSnapshot } from './activeProject'
 
 const PROJECT_A = '450e6ba8-cf2b-4841-bb38-08141e1ebe77'
 const PROJECT_B = '542b34e0-019e-41fe-b900-7b637717bb86'
@@ -183,5 +184,22 @@ describe('useProjectScope', () => {
     expect(seen.scope).toEqual({ mode: 'project', projectId: PROJECT_A })
     expect(getStoredProjectScopeMode()).toBe('project')
     expect(new URLSearchParams(seen.search).has('apps')).toBe(false)
+  })
+})
+
+describe('openAppOnly', () => {
+  it('leaves All apps and pins the chosen app', () => {
+    setStoredProjectScopeMode('all')
+    window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT_A)
+    openAppOnly(PROJECT_B)
+    expect(getStoredProjectScopeMode()).toBe('project')
+    expect(window.localStorage.getItem(PROJECT_SCOPE_STORAGE_KEY)).toBeNull()
+    expect(getActiveProjectIdSnapshot()).toBe(PROJECT_B)
+  })
+
+  it('ignores an id that is not an app id, leaving the scope as it was', () => {
+    setStoredProjectScopeMode('all')
+    openAppOnly('__unassigned__')
+    expect(getStoredProjectScopeMode()).toBe('all')
   })
 })

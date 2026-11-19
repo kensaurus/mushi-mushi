@@ -162,3 +162,16 @@ describe('api upload size', () => {
     )
   })
 })
+
+describe('deployInfoSource (shared with mushi selfhost up)', () => {
+  it('declares the same DEPLOY_INFO as the checked-in file, with the sha and time filled in', async () => {
+    const { deployInfoSource } = await import('./deploy-edge-function.mjs')
+    const src = deployInfoSource('abc123', '2026-11-19T00:00:00.000Z')
+    const checkedIn = readFileSync(new URL('../packages/server/supabase/functions/_shared/deploy-info.ts', import.meta.url), 'utf8')
+    const decl = 'export const DEPLOY_INFO: { sha: string; deployedAt: string | null } = {'
+    assert.ok(checkedIn.includes(decl))
+    assert.ok(src.includes(decl))
+    assert.ok(src.includes('  sha: "abc123",'))
+    assert.ok(src.includes('  deployedAt: "2026-11-19T00:00:00.000Z",'))
+  })
+})

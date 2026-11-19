@@ -44,6 +44,7 @@ import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { consolePageUrl } from '../_shared/console-page-url.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -93,7 +94,8 @@ function adminUrl(path: string): string {
   const base =
     Deno.env.get('MUSHI_ADMIN_URL') ??
     Deno.env.get('SITE_URL') ??
-    'https://kensaur.us/mushi-mushi/admin'
+    // This install's console (a self-host's ADMIN_BASE_URL, else Cloud's).
+    consolePageUrl('')
   return `${base.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`
 }
 

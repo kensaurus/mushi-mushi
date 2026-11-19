@@ -319,7 +319,7 @@ describe('wiring', () => {
   })
 
   it('doctor builds its codebase-index check with the shared helper', () => {
-    expect(doctor).toContain('checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid)));')
+    expect(doctor).toContain('checks.push(codebaseIndexDoctorCheck(pid, repoByProject.get(pid), appName.get(pid) ?? null));')
     expect(doctor).not.toContain('Index issue:')
   })
 })
@@ -559,6 +559,12 @@ describe('codebaseIndexDoctorCheck', () => {
     const done = codebaseIndexDoctorCheck('p1', { ...base, index_files_indexed: 20, index_coverage_state: 'complete', last_indexed_at: NOW })
     expect(done.status).toBe('pass')
     expect(done.summary).toBe(`Indexed: 20 of 20 files indexed (last sweep ${NOW}).`)
+  })
+
+  it('each row carries the app name and a human label, so the console never leads with the uuid', () => {
+    const named = codebaseIndexDoctorCheck('p1', base, 'glot.it')
+    expect(named).toMatchObject({ name: 'codebase_index:p1', label: 'Code index', projectId: 'p1', appName: 'glot.it', fixHref: '/explore' })
+    expect(codebaseIndexDoctorCheck('p1', undefined).appName).toBeNull()
   })
 })
 
