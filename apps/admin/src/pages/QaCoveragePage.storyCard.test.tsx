@@ -97,7 +97,7 @@ describe('StoryCard controls', () => {
       root.render(createElement(StoryCard, { coverage, isQueued: false, onRunNow: vi.fn(), onSelect: vi.fn(), highlighted: false, onRunInCloud }))
     })
     const reason = host.querySelector('[data-testid="qa-skip-reason"]')!
-    expect(reason.textContent).toMatch(/run on your computer/)
+    expect(reason.textContent).toMatch(/runs? on your computer/i)
     expect(reason.textContent).toContain('mushi qa run s1')
     const cloud = [...reason.querySelectorAll('button')].find((b) => b.textContent?.includes('Run in the cloud'))!
     expect(cloud).toBeTruthy()

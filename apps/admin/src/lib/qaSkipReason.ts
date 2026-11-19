@@ -91,7 +91,7 @@ export function skipReason(r: QaCoverageRow): SkipReason | null {
   const skipped = r.last_run_status === 'skipped'
   if (r.browser_provider === 'local') {
     if (!skipped && !(r.last_run_status == null && r.runs_24h === 0)) return null
-    return { kind: 'local', text: 'Set to run on your computer, so the schedule skips it. Run it in the cloud, or from your terminal.', cloudFixes: true }
+    return { kind: 'local', text: 'Runs on your computer only, so the schedule skips it.', cloudFixes: true }
   }
   if (!skipped) return null
   if (r.browser_provider === 'browserbase') {

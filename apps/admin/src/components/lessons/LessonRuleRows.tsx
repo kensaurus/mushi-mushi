@@ -89,7 +89,8 @@ export function LessonRuleRows<T extends LessonRuleRow>({
             <span className="mt-0.5 hidden shrink-0 sm:inline-flex" title={`Seen ${r.frequency} ${r.frequency === 1 ? 'time' : 'times'}`}>
               <BarCell value={r.frequency} max={max} text={`${r.frequency}×`} tone="info" widthClass="w-14" />
             </span>
-            <span className="mt-0.5 w-10 shrink-0 text-right text-2xs text-fg-muted tabular-nums" title="Last seen">
+            {/* w-20 + nowrap: "4 weeks ago" wrapped onto three lines in w-10 (local check, 2026-11-19). */}
+            <span className="mt-0.5 w-20 shrink-0 whitespace-nowrap text-right text-2xs text-fg-muted tabular-nums" title="Last seen">
               <RelativeTime value={r.last_reinforced_at} />
             </span>
             <Btn

@@ -244,19 +244,39 @@ export function providersLead(providers: readonly ProviderAccount[]): {
 } {
   const sorted = sortProviders(providers)
   const working = sorted.filter((p) => p.enabled && providerState(p) === 'ok').length
-  const needLook = sorted.filter((p) => !p.enabled || providerState(p) !== 'ok')
-  const turnOn = needLook.find((p) => !p.enabled) ?? null
-  if (providers.length === 0) return { sentence: 'No provider accounts yet.', tone: 'neutral', working, needLook, turnOn }
-  if (needLook.length === 0) return { sentence: providers.length === 1 ? 'The provider account is working.' : `All ${providers.length} provider accounts are working.`, tone: 'ok', working, needLook, turnOn }
-  const shown = needLook.slice(0, 3).map((p) => `${p.label.replace(SHARED_SUFFIX, '')} ${needsWord(p)}`)
+  // An account someone switched off is a choice, not a problem (local check, 2026-11-19: the lead
+  // said "2 accounts need a look: ElevenLabs is off, fal.ai is off" and pushed "Turn on").
+  const needLook = sorted.filter((p) => p.enabled && providerState(p) !== 'ok')
+  const off = sorted.filter((p) => !p.enabled)
+  const name = (p: ProviderAccount) => p.label.replace(SHARED_SUFFIX, '')
+  const offNote =
+    off.length === 0
+      ? ''
+      : ` ${off.slice(0, 3).map(name).join(', ')}${off.length > 3 ? ` and ${off.length - 3} more` : ''} ${off.length === 1 ? 'is' : 'are'} switched off.`
+  if (providers.length === 0) return { sentence: 'No provider accounts yet.', tone: 'neutral', working, needLook, turnOn: null }
+  if (working === 0 && needLook.length === 0) {
+    // Everything is off: no app can call a provider, so turning one on is the next step.
+    return { sentence: 'Every provider account is switched off, so no app can call one.', tone: 'warn', working, needLook, turnOn: off[0] ?? null }
+  }
+  if (needLook.length === 0) {
+    const on = providers.length - off.length
+    return {
+      sentence: `${on === 1 ? 'The switched-on account is working.' : `All ${on} switched-on accounts are working.`}${offNote}`,
+      tone: 'ok',
+      working,
+      needLook,
+      turnOn: null,
+    }
+  }
+  const shown = needLook.slice(0, 3).map((p) => `${name(p)} ${needsWord(p)}`)
   const more = needLook.length > 3 ? `, and ${needLook.length - 3} more` : ''
-  const down = needLook.some((p) => p.enabled && providerState(p) === 'down')
+  const down = needLook.some((p) => providerState(p) === 'down')
   return {
-    sentence: `${needLook.length === 1 ? '1 account needs' : `${needLook.length} accounts need`} a look: ${shown.join(', ')}${more}.`,
+    sentence: `${needLook.length === 1 ? '1 account needs' : `${needLook.length} accounts need`} a look: ${shown.join(', ')}${more}.${offNote}`,
     tone: down ? 'danger' : 'warn',
     working,
     needLook,
-    turnOn,
+    turnOn: null,
   }
 }
 

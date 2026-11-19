@@ -63,20 +63,35 @@ describe('balance', () => {
 })
 
 describe('providersLead', () => {
-  it('names the accounts that need a look, worst first, and offers to turn an off one on', () => {
+  it('names the switched-on accounts that need a look, worst first; an off account is only mentioned', () => {
     const off = account({ id: 'kenji:el', label: 'ElevenLabs', enabled: false }, status({ state: 'ok' }))
     const unchecked = account({ id: 'kenji:fal', label: 'fal.ai' })
     const down = account({ id: 'kenji:openai', label: 'OpenAI (shared key)' }, status({ state: 'down' }))
     const ok = account({ id: 'kenji:anthropic', label: 'Anthropic' }, status({ state: 'ok' }))
     const lead = providersLead([ok, off, unchecked, down])
-    expect(lead.sentence).toBe('3 accounts need a look: OpenAI is down, fal.ai is not checked, ElevenLabs is off.')
+    expect(lead.sentence).toBe('2 accounts need a look: OpenAI is down, fal.ai is not checked. ElevenLabs is switched off.')
     expect(lead.tone).toBe('danger')
     expect(lead.working).toBe(1)
+    expect(lead.turnOn).toBeNull()
+  })
+
+  it('does not call a switched-off account a problem or push turning it on', () => {
+    const lead = providersLead([
+      account({ id: 'kenji:anthropic', label: 'Anthropic' }, status({ state: 'ok' })),
+      account({ id: 'kenji:el', label: 'ElevenLabs', enabled: false }),
+      account({ id: 'kenji:fal', label: 'fal.ai', enabled: false }),
+    ])
+    expect(lead).toMatchObject({ sentence: 'The switched-on account is working. ElevenLabs, fal.ai are switched off.', tone: 'ok', turnOn: null })
+  })
+
+  it('offers to turn one on only when every account is off', () => {
+    const lead = providersLead([account({ id: 'kenji:el', label: 'ElevenLabs', enabled: false })])
+    expect(lead.tone).toBe('warn')
     expect(lead.turnOn?.id).toBe('kenji:el')
   })
 
   it('says all are working when none needs a look', () => {
     const lead = providersLead([account({}, status({ state: 'ok' }))])
-    expect(lead).toMatchObject({ sentence: 'The provider account is working.', tone: 'ok', turnOn: null })
+    expect(lead).toMatchObject({ sentence: 'The switched-on account is working.', tone: 'ok', turnOn: null })
   })
 })

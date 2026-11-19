@@ -109,7 +109,7 @@ describe('provider_key_invalid inputs: BYOK key tests and integration health che
     id: 'b1', provider_slug: 'anthropic', label: 'main', key_hint: 'sk-ant-...9', status: 'active', test_status: 'ok', last_tested_at: ago(1), ...over,
   })
 
-  it('a BYOK key the provider rejected (error_auth / auth_failed) is an error finding pointing at Settings → API Keys', () => {
+  it('a BYOK key the provider rejected (error_auth / auth_failed) is an error finding pointing at Settings → AI keys', () => {
     const o = byokObservation(key({ status: 'auth_failed', test_status: 'error_auth' }))
     expect(o).toMatchObject({ credentialId: 'byok:b1', kind: 'byok', provider: 'anthropic', ok: false, failure: 'credential_rejected', source: 'key_test' })
     const r = evaluateProviderKeys([o!], NOW)
@@ -117,7 +117,7 @@ describe('provider_key_invalid inputs: BYOK key tests and integration health che
     expect(r.findings[0]).toMatchObject({ severity: 'error', target: 'main' })
     expect(r.findings[0].message).toMatch(/Anthropic rejects the key for "main"/)
     expect(r.findings[0].message).not.toMatch(/Everything Mushi reads/)
-    expect(r.findings[0].fix).toMatch(/Settings → API Keys/)
+    expect(r.findings[0].fix).toMatch(/Settings → AI keys/)
     expect(r.findings[0].fix).toContain('console.anthropic.com')
   })
 

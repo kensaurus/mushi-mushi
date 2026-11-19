@@ -90,7 +90,7 @@ export function outcomeFromProbe(key: ByokKeyRow, probe: ByokProbeResult, nowIso
       return {
         key,
         health: 'down',
-        detail: `${name}: the provider rejected this key (HTTP ${probe.httpStatus}). It was revoked or mistyped — add a new one in Settings → API Keys.`,
+        detail: `${name}: the provider rejected this key (HTTP ${probe.httpStatus}). It was revoked or mistyped — add a new one in Settings → AI keys.`,
         patch: {
           status: 'auth_failed',
           test_status: 'error_auth',
@@ -128,7 +128,7 @@ export function outcomeForUnreadableKey(key: ByokKeyRow, nowIso: string): ByokPr
   return {
     key,
     health: 'down',
-    detail: `${name}: the stored key could not be read from Vault. Add it again in Settings → API Keys.`,
+    detail: `${name}: the stored key could not be read from Vault. Add it again in Settings → AI keys.`,
     patch: {
       status: 'auth_failed',
       test_status: 'error_auth',

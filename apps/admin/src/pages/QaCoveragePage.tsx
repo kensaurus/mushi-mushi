@@ -177,6 +177,8 @@ export function StoryCard({
   switching?: boolean
 }) {
   const passRate = coverage.pass_rate_pct
+  // Nothing finished and the newest run was a skip: the attempts were skips, not runs.
+  const allSkipped = passRate === null && coverage.runs_24h > 0 && coverage.last_run_status === 'skipped'
   const barTone = passRate === null ? 'bg-fg-faint/40' : passRate >= 80 ? 'bg-ok' : passRate >= 50 ? 'bg-warn' : 'bg-danger'
   const disabled = isQueued || !coverage.enabled
   const mark = isQueued ? { status: 'waiting' as const, label: 'Queued' } : storyRunStatus(coverage)
@@ -247,14 +249,15 @@ export function StoryCard({
         <div className="space-y-1">
           <div className="flex items-center justify-between text-2xs">
             <span className="text-fg-secondary tabular-nums">
-              {coverage.runs_24h === 0 ? 'No runs in 24h' : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
+              {/* Every attempt skipped: say so, so the card agrees with the lead's "never ran" (local check 2026-11-19). */}
+              {coverage.runs_24h === 0 ? 'No runs in 24h' : allSkipped ? `${coverage.runs_24h} skipped · 24h` : `${coverage.runs_24h} run${coverage.runs_24h === 1 ? '' : 's'} · 24h`}
             </span>
             {passRate !== null ? (
               <span className={`font-mono font-bold tabular-nums ${passRate >= 80 ? 'text-ok-foreground' : passRate >= 50 ? 'text-warn-foreground' : 'text-danger-foreground'}`}>
                 {passRate}%
               </span>
             ) : (
-              <span className="text-fg-secondary">{coverage.runs_24h > 0 ? 'nothing checked' : '—'}</span>
+              <span className="text-fg-secondary">{coverage.runs_24h > 0 && !allSkipped ? 'nothing checked' : '—'}</span>
             )}
           </div>
           <div className="h-1 w-full overflow-hidden rounded-full bg-surface-overlay">
