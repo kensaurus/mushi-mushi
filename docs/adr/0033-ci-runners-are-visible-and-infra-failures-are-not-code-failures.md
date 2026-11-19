@@ -93,6 +93,7 @@ Every failed job on `/ci` opens one panel (`GET /v1/admin/ci/jobs/:id/debug`, ke
   answer is stored.
 - **Run actions keyed by the job's run, not by a fix:** re-run failed jobs and cancel
   (`POST …/rerun`, `…/cancel`, non-viewers, 20 an hour per app, audited). They need Actions write,
-  which the GitHub App does not request; a 403 becomes `GITHUB_ACTIONS_WRITE_MISSING` with the
-  GitHub-connection fix. "Send to CI repair" reuses the pipeline `ci_repair` action (ADR 0032).
+  which the GitHub App does not request: a refused App token is retried once with the project's
+  stored token, and a 403 then becomes `GITHUB_ACTIONS_WRITE_MISSING` with the GitHub-connection
+  fix. "Send to CI repair" reuses the pipeline `ci_repair` action (ADR 0032).
 
