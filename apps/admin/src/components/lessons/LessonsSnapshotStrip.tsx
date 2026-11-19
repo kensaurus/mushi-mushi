@@ -4,8 +4,8 @@
  *          which recurring patterns are ready to become one (PageStatus, P1).
  */
 
-import { PageStatus, toMetrics } from '../ui'
-import type { LessonsStats } from './LessonsStatsTypes'
+import { Btn, PageStatus, toMetrics } from '../ui'
+import type { LessonsStats, LessonsTabId } from './LessonsStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
 import { lessonsLinks } from '../../lib/statCardLinks'
 
@@ -14,21 +14,43 @@ interface Props {
   statsFetchedAt: string | null
   statsValidating?: boolean
   statLabels?: Record<string, string>
+  /** Opens the tab the lead's button names. */
+  onTab?: (tab: LessonsTabId) => void
 }
 
+/** Where the lead's one button goes. */
+export type LessonsLeadAction = { label: string; tab: 'clusters' | 'lessons' | 'query' } | null
+
 /**
- * @internal Exported for tests. The three numbers below already say how many; the sentence says
- * what to do next, so it never restates a count (fresh-eyes sweep 2026-11-18).
+ * @internal Exported for tests. One line on what the rules do and how things stand, and the one
+ * button that moves it on (console UX overhaul, 2026-11-19: "Patterns are still collecting
+ * reports. Nothing to do yet." sat over 10 rules in use with nothing to press).
  */
-function lessonsSentence(stats: LessonsStats): string {
-  if (stats.activeLessons === 0 && stats.candidateClusters === 0) {
-    return 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.'
+export function lessonsLead(stats: LessonsStats): { sentence: string; action: LessonsLeadAction } {
+  const rules = pluralizeWithCount(stats.activeLessons, 'rule')
+  if (stats.readyToPromote > 0) {
+    const ready = stats.readyToPromote === 1 ? '1 recurring bug is ready to become a rule' : `${stats.readyToPromote} recurring bugs are ready to become rules`
+    return {
+      sentence: `${stats.activeLessons > 0 ? `${rules} guide every new diagnosis and fix.` : 'Rules guide every new diagnosis and fix.'} ${ready}.`,
+      action: { label: `Promote ${stats.readyToPromote}`, tab: 'clusters' },
+    }
   }
-  if (stats.criticalLessons > 0) return `${pluralizeWithCount(stats.criticalLessons, 'critical lesson')} in use.`
-  if (stats.readyToPromote > 0) return 'Promote a ready pattern to make its rule a lesson.'
-  // The 3-report threshold is stated once, by the empty state and the hints.
-  if (stats.candidateClusters > 0) return 'Patterns are still collecting reports. Nothing to do yet.'
-  return 'Mushi Mushi applies these rules to every new report.'
+  if (stats.criticalLessons > 0) {
+    return {
+      sentence: `${pluralizeWithCount(stats.criticalLessons, 'critical rule')} guide${stats.criticalLessons === 1 ? 's' : ''} every new diagnosis and fix. Retire any that no longer apply.`,
+      action: { label: 'Review rules', tab: 'lessons' },
+    }
+  }
+  if (stats.activeLessons > 0) {
+    return {
+      sentence: `${rules} guide${stats.activeLessons === 1 ? 's' : ''} every new diagnosis and fix. No recurring bug is ready to become a rule yet.`,
+      action: { label: 'Try a change', tab: 'query' },
+    }
+  }
+  if (stats.candidateClusters > 0) {
+    return { sentence: 'No rules yet. A bug becomes a rule once 3 reports share its cause; none has yet.', action: null }
+  }
+  return { sentence: 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.', action: null }
 }
 
 /** Nothing learned, nothing growing, no reports in a pattern: the tab's empty state speaks instead. */
@@ -71,12 +93,20 @@ function lessonsMetrics(stats: LessonsStats, statLabels?: Record<string, string>
     .filter((m) => m.label !== 'In patterns' || stats.totalClusterReports > stats.candidateClusters)
 }
 
-export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {
+export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onTab }: Props) {
+  const lead = lessonsLead(stats)
   return (
     <PageStatus
       ariaLabel="Lessons status"
       tone={stats.criticalLessons > 0 ? 'warn' : stats.readyToPromote > 0 ? 'info' : stats.activeLessons > 0 ? 'ok' : 'neutral'}
-      sentence={lessonsSentence(stats)}
+      sentence={lead.sentence}
+      action={
+        lead.action && onTab ? (
+          <Btn size="sm" variant={lead.action.tab === 'query' ? 'ghost' : 'primary'} onClick={() => onTab(lead.action!.tab)} data-testid="lessons-lead-action">
+            {lead.action.label}
+          </Btn>
+        ) : undefined
+      }
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={toMetrics(lessonsMetrics(stats, statLabels))}
     />
