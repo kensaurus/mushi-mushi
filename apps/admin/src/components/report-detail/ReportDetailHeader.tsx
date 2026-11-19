@@ -1,17 +1,11 @@
 import { Badge, RelativeTime } from '../ui'
 import { ReportSourceTag } from '../reports/ReportSourceTag'
-import { REPORT_SOURCE_META, reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
+import { REPORT_SOURCE_META, reportSourceKind } from '../../lib/reportSourceKind'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
 import { MetaChip } from './ReportSurface'
 import { StatusPill } from '../signal/StatusMark'
 import { reportRunStatus } from '../reports/reportRunStatus'
-import {
-  SEVERITY,
-  CATEGORY_LABELS,
-  statusLabel,
-  severityLabel,
-  severityGlowClass,
-} from '../../lib/tokens'
+import { statusLabel, severityGlowClass } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
 import { reporterLabel } from '../../lib/reporterLabel'
@@ -19,7 +13,6 @@ import { reporterReportsHref } from '../../lib/reportsListFilters'
 import { isLocalDevUrl, LOCAL_DEV_TOOLTIP } from '../../lib/reportOrigin'
 import { routePathname } from '../reports/reportRowAttribution'
 import type { ReportDeployLive, ReportDetail } from './types'
-import { CATEGORY_NEUTRAL } from './categoryTone'
 
 export function ReportDetailHeader({
   report,
@@ -61,16 +54,9 @@ export function ReportDetailHeader({
         <div className="flex items-center gap-2 flex-wrap">
           <ReportSourceTag report={sourceRow} />
           <StatusPill status={reportRunStatus(report.status)} label={statusLabel(report.status)} />
-          {report.severity && showsSeverity(sourceKind) && (
-            <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
-          )}
-          {/* A category is a kind, not a failure: a red "Bug" chip read as an
-              alarm on every bug (R2 sweep 2026-11-18). */}
-          {report.category && (
-            <Badge className={CATEGORY_NEUTRAL}>
-              {CATEGORY_LABELS[report.category] ?? report.category}
-            </Badge>
-          )}
+          {/* Source and status only: severity and category are set in the
+              triage bar and read in the classification card. "Medium" and
+              "Bug" were on the page five times each (round-3 sweep 2026-11-19). */}
           {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
           {/* "◆ Sentry" already leads the row; "via Sentry" said it again. */}
           {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && sourceKind !== 'sentry' && (
@@ -84,10 +70,17 @@ export function ReportDetailHeader({
             </Badge>
           )}
         </div>
-        {/* The whole title, as page text: it sat cut off in a cyan box
-            behind "Show full" (R2 sweep 2026-11-18). */}
-        <h2 className="mt-2 max-w-4xl text-lg font-semibold leading-snug text-balance text-fg wrap-break-word">
-          {heading.full}
+        {/* The headline, as page text (no cut-off box, R2 sweep 2026-11-18).
+            The short summary, not the full text: a clipped summary fell back
+            to the raw Sentry dump, 3 lines at 1440 and 6 at 390, repeated word
+            for word in User report > Description (round-3 sweep 2026-11-19).
+            The full text is on hover and in Description. */}
+        <h2
+          className="mt-2 max-w-4xl text-lg font-semibold leading-snug text-balance text-fg wrap-break-word"
+          title={heading.full !== heading.text ? heading.full : undefined}
+          data-testid="report-detail-title"
+        >
+          {heading.text}
         </h2>
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <MetaChip label="Reported">

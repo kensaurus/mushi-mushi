@@ -98,7 +98,7 @@ export function CreateStoryModal({ projectId, onClose, onCreated }: CreateStoryM
         <div className="flex justify-end gap-2">
           <Btn variant="cancel" size="sm" onClick={onClose}>Cancel</Btn>
           <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
-            {saving ? 'Creating…' : 'Create story'}
+            {saving ? 'Creating…' : 'Create test'}
           </Btn>
         </div>
       }

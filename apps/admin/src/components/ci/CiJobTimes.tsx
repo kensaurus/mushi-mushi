@@ -59,10 +59,11 @@ export function jobSpread(t: Pick<CiJobType, 'durationP50s' | 'durationP90s' | '
 }
 
 /**
- * The shared scale: the slowest "slow runs" (p90) of ANY job, not only the rows on screen, so
- * "Show more" never rescales the rows already read. Not the longest single run: one 55-minute
- * outlier squeezed every bar under 30% of the column (2026-11-18). A longer run's whisker is
- * clipped at the edge (`clipped`).
+ * The shared scale: the slowest "slow runs" (p90) of the rows on screen. Round 3 (2026-11-19):
+ * a scale over every job read "0 – 55 min" while no visible bar passed 45%, so the scale follows
+ * what is shown ("Show more" rescales once). Not the longest single run: one 55-minute outlier
+ * squeezed every bar under 30% of the column (2026-11-18). A longer run's whisker is clipped at
+ * the edge (`clipped`).
  *
  * @internal Exported for tests only.
  */
@@ -181,12 +182,12 @@ function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; wait
 
 export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; days: number }) {
   const [all, setAll] = useState(false)
-  const scaleMax = useMemo(() => spreadScaleMax(byJob ?? []), [byJob])
   const sorted = useMemo(() => failingFirst(byJob ?? []), [byJob])
   const waitMax = useMemo(() => Math.max(0, ...(byJob ?? []).map((t) => t.queueP50s ?? 0)), [byJob])
   if (!byJob) return <p className="text-xs text-fg-muted">Job times appear after the next update of this page.</p>
   if (byJob.length === 0) return <p className="text-xs text-fg-muted">No finished jobs in the last {days} days.</p>
   const rows = all ? sorted : sorted.slice(0, SHOWN)
+  const scaleMax = spreadScaleMax(rows)
   return (
     <div className="@container min-w-0 overflow-x-auto">
       <ul className="divide-y divide-edge-subtle @3xl:hidden" data-testid="ci-job-times-stacked">

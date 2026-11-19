@@ -26,7 +26,7 @@
 import { useCallback, useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { PageLoadError } from '../PageLoadError'
-import { Badge, Btn, Card, CodeValue, HelpPopover, Input, Loading, PageFirstStep, PageStatus, Section } from '../ui'
+import { Badge, Btn, CodeValue, HelpPopover, Input, Loading, PageStatus, Section } from '../ui'
 import { IconServer } from '../icons'
 import { BarCell } from '../signal/BarCell'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
@@ -114,41 +114,58 @@ interface HostTelemetry {
   waitWhy?: string
 }
 
-/** What the machine last said about its account check, gh, why it waits and who holds each agent space. */
-function HostChecks({ host }: { host: WorkerHost }) {
+/** Seconds since the machine's last heartbeat. */
+const heartbeatAgeSec = (host: Pick<WorkerHost, 'lastHeartbeatAt'>, now: number) => Math.max(0, Math.round((now - Date.parse(host.lastHeartbeatAt)) / 1000))
+
+/**
+ * What the machine last said about its account check, gh, why it waits and who holds each agent
+ * space. On an offline machine all of it is its last word: grey marks, ages counted from now, and
+ * no "in use" or "at work" (an offline machine read "2/2 agent spaces in use: tsumagoi (3 min,
+ * coding agent at work)" 35 h after its last heartbeat, round-3 review 2026-11-19).
+ */
+function HostChecks({ host, now }: { host: WorkerHost; now: number }) {
   const t = host.status as HostTelemetry
   const testId = `worker-host-${host.id}`
   if (!t.checks && !t.slots) {
     return <p className="text-2xs text-fg-faint">This machine's Mushi Mushi CLI does not report its checks or what each agent space runs. Update it there (npm i -g @mushi-mushi/cli) to see them.</p>
   }
+  const stale = !host.online || host.revoked
+  const lag = stale ? heartbeatAgeSec(host, now) : 0
   const cur = t.checks?.cursor
   const gh = t.checks?.gh
   const curMeta = cur ? (CURSOR_RESULT[cur.result] ?? CURSOR_RESULT.unclear!) : null
   return (
-    <div className="space-y-1 text-2xs text-fg-muted" data-testid={`${testId}-checks`}>
+    <div className="space-y-1 text-2xs text-fg-muted" data-testid={`${testId}-checks`} data-stale={stale ? 'true' : undefined}>
       <p className="flex flex-wrap items-center gap-1.5">
         <span>Cursor account:</span>
         {cur && curMeta ? (
           <>
-            <StatusPill status={curMeta.status} label={curMeta.text} />
+            <StatusPill status={stale ? 'idle' : curMeta.status} label={curMeta.text} />
             <span>
-              {cur.account ? `(${cur.account}) ` : ''}checked {durationLabel(cur.ageSec)} ago{cur.detail ? `: "${cur.detail}"` : ''}
+              {cur.account ? `(${cur.account}) ` : ''}checked {durationLabel(cur.ageSec + lag)} ago{cur.detail ? `: "${cur.detail}"` : ''}
             </span>
           </>
         ) : (
           <StatusPill status="idle" label="not checked yet" />
         )}
         <span className="ml-2">GitHub (gh):</span>
-        {gh ? <StatusPill status={signInRunStatus(gh.result)} label={gh.result.replace('_', ' ')} /> : <StatusPill status="idle" label="not checked yet" />}
+        {gh ? <StatusPill status={stale ? 'idle' : signInRunStatus(gh.result)} label={gh.result.replace('_', ' ')} /> : <StatusPill status="idle" label="not checked yet" />}
       </p>
-      {t.waitWhy && <p data-testid={`${testId}-wait`}>Waiting: {t.waitWhy}.</p>}
-      {t.slots && (
-        <p className="flex flex-wrap items-center gap-x-1.5" data-testid={`${testId}-slots`}>
-          <span>Agent spaces in use:</span>
-          <BarCell value={t.slots.length} max={host.guards.max_agents} tone={t.slots.length >= host.guards.max_agents ? 'warn' : 'info'} text={`${t.slots.length}/${host.guards.max_agents}`} />
-          {t.slots.length > 0 && `: ${t.slots.map((x) => `${x.lane} (${durationLabel(x.ageSec)}, ${STAGE_LABEL[x.stage] ?? x.stage})`).join('; ')}`}.
-        </p>
-      )}
+      {!stale && t.waitWhy && <p data-testid={`${testId}-wait`}>Waiting: {t.waitWhy}.</p>}
+      {t.slots &&
+        (stale ? (
+          t.slots.length > 0 && (
+            <p data-testid={`${testId}-slots`}>
+              At its last heartbeat, {sinceLabel(host.lastHeartbeatAt, now)}, {t.slots.length} of {host.guards.max_agents} agent spaces were held: {t.slots.map((x) => x.lane).join(', ')}.
+            </p>
+          )
+        ) : (
+          <p className="flex flex-wrap items-center gap-x-1.5" data-testid={`${testId}-slots`}>
+            <span>Agent spaces in use:</span>
+            <BarCell value={t.slots.length} max={host.guards.max_agents} tone={t.slots.length >= host.guards.max_agents ? 'warn' : 'info'} text={`${t.slots.length}/${host.guards.max_agents}`} />
+            {t.slots.length > 0 && `: ${t.slots.map((x) => `${x.lane} (${durationLabel(x.ageSec)}, ${STAGE_LABEL[x.stage] ?? x.stage})`).join('; ')}`}.
+          </p>
+        ))}
     </div>
   )
 }
@@ -161,6 +178,8 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
   const changed = (Object.keys(guards) as Array<keyof HostGuards>).filter((k) => guards[k] !== host.guards[k])
   const s = host.status
   const testId = `worker-host-${host.id}`
+  // An offline machine's "working · 2 of 2 agents" is its last word, not now (round-3 review, 2026-11-19).
+  const live = host.online && !host.revoked
 
   const saveGuards = async () => {
     setBusy(true)
@@ -179,16 +198,15 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
   }
 
   return (
-    <li data-testid={testId}>
-      <Card className="space-y-2 p-3">
+    <li data-testid={testId} className="space-y-2 py-3 first:pt-1">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="text-xs font-semibold text-fg">{host.hostname}</span>
         <Badge tone="neutral">{host.platform}</Badge>
         <StatusPill status={hostRunStatus(host)} label={host.revoked ? 'revoked' : host.online ? 'online' : 'offline'} />
         <span className="text-2xs text-fg-muted" data-testid={`${testId}-heartbeat`}>
           last heartbeat {sinceLabel(host.lastHeartbeatAt, now)}
-          {s.state ? ` · ${String(s.state)}` : ''}
-          {s.agents != null ? ` · ${String(s.agents)} of ${host.guards.max_agents} agents` : ''}
+          {live && s.state ? ` · ${String(s.state)}` : ''}
+          {live && s.agents != null ? ` · ${String(s.agents)} of ${host.guards.max_agents} agents` : ''}
         </span>
       </div>
       <p className="text-2xs text-fg-muted">
@@ -197,7 +215,7 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
         {s.ghRemaining != null ? ` · ${String(s.ghRemaining)} GitHub API calls left` : ''}
         {host.version ? ` · mushi ${host.version}` : ''}
       </p>
-      <HostChecks host={host} />
+      <HostChecks host={host} now={now} />
       <CursorAccountRow host={host} onChanged={onChanged} />
       {host.mine && !host.revoked ? (
         <div className="flex flex-wrap items-end gap-2">
@@ -234,7 +252,6 @@ function HostCard({ host, now, onChanged }: { host: WorkerHost; now: number; onC
           onCancel={() => setAsking(false)}
         />
       )}
-      </Card>
     </li>
   )
 }
@@ -308,16 +325,18 @@ export function WorkersPanel({ projectId, now }: Props) {
       <div className="space-y-3" data-testid="workers-empty">
         {flags.length > 0 && <p className="text-sm font-semibold text-fg">{flagsSentence(flags)}</p>}
         {flagList}
-        <PageFirstStep
-          marksPageEmpty={false}
-          icon={<IconServer size={16} />}
-          title="No local worker yet"
-          sentence="A local worker fixes reports on your own machine with your Cursor account, and you steer it from here. Create its key below, then run the install on that machine."
-          action={{ label: 'Create a worker key', onClick: () => setShowKeyForm(true) }}
-          data-testid="workers-first-step"
-        />
-        <Section title="Set up a worker" id="workers-setup" action={help}>
+        <Section title="Set up a worker" id="workers-setup" icon={<IconServer />} action={help}>
           <div className="space-y-2 text-xs text-fg-muted">
+            {/* A solid line with its one action, not a dashed box with a paragraph (round-3 review, 2026-11-19). */}
+            <p className="flex flex-wrap items-center gap-2" data-testid="workers-first-step">
+              <span className="font-medium text-fg">No local worker yet.</span>
+              <span>It fixes reports on your machine with your Cursor account.</span>
+              {!showKeyForm && (
+                <Btn size="sm" onClick={() => setShowKeyForm(true)} data-testid="workers-create-key">
+                  Create a worker key
+                </Btn>
+              )}
+            </p>
             <p>On the machine, with the Cursor CLI and gh signed in:</p>
             <CodeValue value={INSTALL_ONE} className="w-full" />
             <p>Already run lanes from a lanes.conf file (name, profile, clone, app id, model, mode)? Import it; each lane keeps its model, and its queue now lives here:</p>
@@ -362,7 +381,7 @@ export function WorkersPanel({ projectId, now }: Props) {
       )}
 
       <Section title={`Machines (${data.hosts.length})`} id="workers-hosts" icon={<IconServer />}>
-        <ul className="space-y-2">
+        <ul className="divide-y divide-edge-subtle">
           {data.hosts.map((h) => (
             <HostCard key={`${h.id}:${h.lastHeartbeatAt}`} host={h} now={now} onChanged={reload} />
           ))}
@@ -376,7 +395,8 @@ export function WorkersPanel({ projectId, now }: Props) {
           <>
             {/* Settings every lane shares, said once (the same model, "1 at once" and stop date sat on all 20 cards). */}
             {common && <p className="mb-2 text-2xs text-fg-muted" data-testid="workers-lanes-common">{commonSettingsLine(common, data.lanes.length)}</p>}
-            <ul className="space-y-2">
+            {/* One card, lanes as divider rows (lane cards with bordered queues sat inside this card, round-3 review 2026-11-19). */}
+            <ul className="divide-y divide-edge-subtle" data-testid="workers-lanes-list">
               {data.lanes.map((l) => (
                 <WorkerLaneCard key={`${l.id}:${JSON.stringify(l.config)}:${l.reviewModel ?? ''}`} lane={l} host={hosts.get(l.hostId)} now={now} showApp={showApp} common={common} onPatch={onPatch} onQueue={onQueue} onMove={onMove} onChanged={reload} />
               ))}

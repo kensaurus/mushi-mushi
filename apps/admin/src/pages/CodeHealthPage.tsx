@@ -146,12 +146,15 @@ function DependencyHolesLink({ projectId, problemsOnly }: { projectId: string; p
   if (!line || line.problem !== problemsOnly) return null
   if (line.problem) {
     return (
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border-l-2 border-danger bg-danger-muted/40 px-2.5 py-1.5 text-xs font-medium text-fg" data-testid="code-size-holes-link" data-problem="true">
-        <StatusGlyph tone="danger" label="Problem" />
-        {line.text}
-        <Link to="/fullstack-audit#dependency-holes" className={LINK_ACCENT}>
-          {line.link} →
-        </Link>
+      // The mark stays on the sentence's first line: at 390 it sat alone above it (round 3).
+      <p className="flex items-start gap-2 rounded-sm border-l-2 border-danger bg-danger-muted/40 px-2.5 py-1.5 text-xs font-medium text-fg" data-testid="code-size-holes-link" data-problem="true">
+        <StatusGlyph tone="danger" label="Problem" className="mt-0.5 shrink-0" />
+        <span className="min-w-0">
+          {line.text}{' '}
+          <Link to="/fullstack-audit#dependency-holes" className={LINK_ACCENT}>
+            {line.link} →
+          </Link>
+        </span>
       </p>
     )
   }

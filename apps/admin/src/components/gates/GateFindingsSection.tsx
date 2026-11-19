@@ -122,7 +122,8 @@ export function GateFindingsSection({ projectId, gate, neverRunText, limit = 50,
   const truncated = findingsReadTruncated(data)
   const latestByGate = latestRunPerGate(data.runs)
   const truncatedNote = truncated ? (
-    <p className="text-xs text-warn" role="status">
+    // A note about the read, not a warning: neutral (round 3).
+    <p className="text-xs text-fg-muted" role="status">
       Only the newest {FINDINGS_ROUTE_MAX_RUNS} runs were read; a check that last ran before them is not shown here.
     </p>
   ) : null

@@ -67,6 +67,22 @@ export function points30dCell(points30d: number, lastSeenAt: string | null | und
   return { kind: 'value', points: points30d }
 }
 
+/**
+ * Top testers for the Overview card from a leaderboard page: the same stale rule as the
+ * Contributors table, so a tester the table shows as not recounted can't lead the Overview
+ * (2026-11-19: "Tester #23ba 9,777 pts" on Overview, "not recounted · 5 months ago" on
+ * Contributors).
+ */
+export function topTesters<T extends { points_30d: number; end_users: { last_seen_at?: string | null } | null }>(
+  rows: readonly T[],
+  max = 5,
+  now = Date.now(),
+): T[] {
+  return rows
+    .filter((r) => points30dCell(r.points_30d, r.end_users?.last_seen_at, now).kind === 'value' && r.points_30d > 0)
+    .slice(0, max)
+}
+
 /** The server counts tier holders from its first 500 rows. */
 const TIER_DISTRIBUTION_ROW_CAP = 500
 
@@ -85,6 +101,19 @@ export function flagLabel(flag: string): string {
 /** Rewards are paused for the open app: entitled, an app is picked, and its switch is off. */
 export function rewardsPaused(input: { entitled: boolean; projectId: string | null; projectEnabled: boolean }): boolean {
   return input.entitled && input.projectId != null && !input.projectEnabled
+}
+
+/**
+ * Quests for the open app: its own plus org-wide ones (no app). The server lists every quest
+ * in the org, so kensaur.us showed glot.it's "Welcome to glot.it" (2026-11-19).
+ */
+export function questsForApp<T extends { project_id?: string | null }>(
+  quests: readonly T[],
+  projectId: string | null | undefined,
+): { mine: T[]; otherApps: number } {
+  if (!projectId) return { mine: [...quests], otherApps: 0 }
+  const mine = quests.filter((q) => q.project_id == null || q.project_id === projectId)
+  return { mine, otherApps: quests.length - mine.length }
 }
 
 export type RowState = { label: string; tone: 'on' | 'off' | 'paused' }

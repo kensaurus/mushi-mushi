@@ -15,6 +15,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ciCompareFixture, costSettingsFixture } from './__fixtures__/ciOverview'
+import { CI_READ_TIMEOUT_MS } from '../../lib/ciReadTimeout'
 
 const state = vi.hoisted(() => ({ data: null as unknown, bill: null as unknown, error: null as string | null, loading: false, paths: [] as Array<{ path: string | null; scope?: string }>, reload: vi.fn() }))
 
@@ -27,7 +28,7 @@ vi.mock('../../lib/usePageData', () => ({
   },
 }))
 
-import { CiCostSection } from './CiCostSection'
+import { CiCostSection, foldGoneRunners } from './CiCostSection'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -75,7 +76,7 @@ describe('CiCostSection', () => {
     expect(head).toContain('PR pass ratemeasured')
     expect(head).toContain('Minutes billedestimated')
     expect(head).toContain('Per monthestimated')
-    expect(host.textContent).toContain('Wait and run times are measured; minutes billed and money are estimated from GitHub’s list prices (read 2026-10-22)')
+    expect(host.textContent).toContain('Waits and run times are measured; minutes and money are estimated from GitHub’s list prices (read 2026-10-22)')
   })
 
   it('groups rows by repo with its visibility, most expensive first, and says why each cost is what it is', async () => {
@@ -96,7 +97,11 @@ describe('CiCostSection', () => {
     expect(q('ci-compare-row-d')!.textContent).toContain('Never picked up')
     expect(q('ci-compare-row-d')!.textContent).toContain('202 expired after 24 h unpicked')
     // Phones get the same figures as a list.
-    expect(q('ci-compare-cards')!.textContent).toContain('Minutes billed (estimated)')
+    // Round 3: each phone card names Measured and Estimated once, not on every label.
+    const cards = q('ci-compare-cards')!.textContent!
+    expect(cards).toContain('EstimatedMinutes billed')
+    expect(cards).not.toContain('(estimated)')
+    expect(cards).not.toContain('(measured)')
   })
 
   it('shows included minutes per account, machines, and speed with sample sizes', async () => {
@@ -174,7 +179,7 @@ describe('CiCostSection', () => {
     expect(host.textContent).toContain('No CI jobs in this window')
   })
 
-  // Never an endless spinner (2026-11-18): a read with no answer after 20 s says "not checked" with a retry.
+  // Never an endless spinner (2026-11-18): a read with no answer after 10 s says "not checked" with a retry.
   it('turns a read that never answers into "not checked" with a retry', async () => {
     vi.useFakeTimers()
     try {
@@ -185,7 +190,11 @@ describe('CiCostSection', () => {
       expect(host.textContent).toContain('Working out what CI costs')
       expect(q('ci-cost-not-checked')).toBeNull()
       await act(async () => {
-        vi.advanceTimersByTime(20_000)
+        vi.advanceTimersByTime(CI_READ_TIMEOUT_MS - 1)
+      })
+      expect(q('ci-cost-not-checked')).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(1)
       })
       expect(host.textContent).not.toContain('Working out what CI costs')
       const box = q('ci-cost-not-checked')!
@@ -200,5 +209,21 @@ describe('CiCostSection', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// Round 3 (2026-11-19): five "nuc12-oneoff-… not listed by GitHub now · $0.00" rows became one.
+describe('foldGoneRunners', () => {
+  const m = (name: string, online: boolean | null, cost = 0) => ({ name, online, monthEnergyCost: cost, monthWearCost: 0, monthPlatformFee: 0 })
+
+  it('folds two or more unlisted runners that cost nothing into one group', () => {
+    const r = foldGoneRunners([m('overseas-ci', true, 0.39), m('nuc-1', false), m('nuc-2', false), m('nuc-3', false)], [])
+    expect(r.shown.map((x) => x.name)).toEqual(['overseas-ci'])
+    expect(r.gone.map((x) => x.name)).toEqual(['nuc-1', 'nuc-2', 'nuc-3'])
+  })
+
+  it('keeps a lone unlisted runner, and one that still costs money, as rows', () => {
+    expect(foldGoneRunners([m('a', true), m('nuc-1', false)], []).gone).toEqual([])
+    expect(foldGoneRunners([m('nuc-1', false, 1), m('nuc-2', false, 1)], []).gone).toEqual([])
   })
 })

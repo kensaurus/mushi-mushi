@@ -121,7 +121,9 @@ describe('ReleaseBatchTab', () => {
     expect(gap.querySelector('a')!.getAttribute('href')).toBe('/onboarding#setup-gaps')
     const card = q('batch-repo-kensaurus/glot.it')!
     expect(card.textContent!.indexOf('No deploy of this app seen in 14 days')).toBeLessThan(card.textContent!.indexOf('Next train'))
-    expect(q('batch-status')!.textContent).toMatch(/^No deploy seen in 14 days, so reporters are not told when their fix is live\./)
+    // Round 3: the strip leads with the count; the why is said once, in the amber row.
+    expect(q('batch-status')!.textContent).toMatch(/^1 repo has no deploy in 14 days\./)
+    expect(q('batch-status')!.textContent).not.toContain('so reporters are not told')
   })
 
   it('an idle repo says "nothing queued" once', async () => {

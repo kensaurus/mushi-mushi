@@ -32,7 +32,7 @@ import { BarSparkline } from '../components/charts'
 import { relTime } from '../components/dashboard/types'
 import { IconGauge } from '../components/icons'
 import { HEARTBEAT_HINT } from '../lib/heartbeat'
-import { HEALTH_BADGE_TONE, HEALTH_RANK, healthBadgeLabel, healthToneFor, isCalmTone, type HealthTone } from '../lib/overviewView'
+import { HEALTH_BADGE_TONE, HEALTH_RANK, healthBadgeLabel, healthToneFor, isCalmTone, splitBySessions, type HealthTone } from '../lib/overviewView'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -158,7 +158,7 @@ export function OverviewPage() {
                 <StatCard label="Open reports" value={fmt(portfolioTotals.totalOpen)} />
                 {portfolioTotals.totalCritical > 0 && (
                   <StatCard
-                    label="Critical"
+                    label="Open critical"
                     value={fmt(portfolioTotals.totalCritical)}
                     accent="text-danger"
                   />
@@ -228,18 +228,25 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
     [cards],
   )
 
-  const attention = sorted.filter((c) => !isCalmTone(healthToneFor(c)))
-  const healthy = sorted.filter((c) => isCalmTone(healthToneFor(c)))
+  const { active, idle } = splitBySessions(sorted)
+  const attention = active.filter((c) => !isCalmTone(healthToneFor(c)))
+  const healthy = active.filter((c) => isCalmTone(healthToneFor(c)))
   const showGroups = isAdvanced && attention.length > 0 && healthy.length > 0
+  const idleList = idle.length > 0 ? <NoSessionsList cards={idle} recipeWorst={recipeWorst} /> : null
 
   // No per-card entrance stagger: the tenth card was still fading in when the
   // page settled and read as "dimmed" with no reason (round-2 sweep 2026-11-18).
   if (!showGroups) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {sorted.map((card) => (
-          <ProjectHealthCard key={card.project_id} card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
-        ))}
+      <div className="flex flex-col gap-4">
+        {active.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {active.map((card) => (
+              <ProjectHealthCard key={card.project_id} card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
+            ))}
+          </div>
+        )}
+        {idleList}
       </div>
     )
   }
@@ -272,7 +279,55 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
           ))}
         </div>
       </section>
+      {idleList}
     </div>
+  )
+}
+
+/**
+ * Apps with no sessions this week, one row each in one card: name, the same
+ * badge the card would carry and when the last bug came in.
+ */
+function NoSessionsList({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWorst: ReadonlyMap<string, ElementState> }) {
+  return (
+    <Card className="overflow-hidden" data-testid="overview-no-sessions">
+      <h3 className="border-b border-edge px-4 py-2 text-xs font-semibold text-fg-secondary">
+        No sessions this week ({cards.length})
+      </h3>
+      <ul className="divide-y divide-edge">
+        {cards.map((card) => {
+          const tone = healthToneFor(card)
+          const badge = healthBadgeLabel(card, tone)
+          const worst = recipeWorst.get(card.project_id) ?? null
+          const pick = () => setActiveProjectIdSnapshot(card.project_id)
+          return (
+            <li key={card.project_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs">
+              <Link to="/dashboard" onClick={pick} className="min-w-0 truncate text-sm font-medium text-fg hover:underline" title={card.slug ?? undefined}>
+                {card.label}
+              </Link>
+              {badge && (
+                <Link to={card.open_reports > 0 ? '/reports?status=open' : '/reports'} onClick={pick} aria-label={`${badge}: open this app's bugs`}>
+                  <Badge tone={HEALTH_BADGE_TONE[tone]} title={HEALTH_BADGE_HINT[tone]}>
+                    {badge}
+                  </Badge>
+                </Link>
+              )}
+              {worst && (
+                <Link to="/recipe" onClick={pick} className="inline-flex items-center gap-1 text-2xs text-fg-muted hover:text-fg" aria-label="Open this project's recipe">
+                  <span>Recipe</span>
+                  <RecipeStateChip state={worst} />
+                </Link>
+              )}
+              {card.last_report_at && (
+                <span className="ml-auto text-fg-faint" title={`Last bug report ${card.last_report_at}`}>
+                  last bug {relTime(card.last_report_at)}
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }
 
@@ -331,10 +386,16 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
         )}
       </div>
 
-      {/* Sparkline only with sessions; "No sessions this week" is said once, below. */}
+      {/* Sessions a day; the ringed last bar is today so far. */}
       {hasSessions && dauValues.length > 0 && (
         <div className="mt-3 px-4">
-          <BarSparkline values={dauValues} height={32} />
+          <BarSparkline
+            values={dauValues}
+            height={32}
+            ariaLabel={`Sessions a day, last ${dauValues.length} days; the last bar is today so far`}
+            barTitles={(card.dau_spark ?? []).map((p, i, all) => `${p.day}: ${p.dau} sessions${i === all.length - 1 ? ' (today so far)' : ''}`)}
+          />
+          <p className="mt-1 text-3xs text-fg-faint">Sessions a day, last {dauValues.length} d · last bar is today so far</p>
         </div>
       )}
 
@@ -361,7 +422,7 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
         )}
         {card.last_report_at && (
           <span className="ml-auto text-fg-faint" title={`Last bug report ${card.last_report_at}`}>
-            {relTime(card.last_report_at)}
+            last bug {relTime(card.last_report_at)}
           </span>
         )}
         {recipeWorst && (

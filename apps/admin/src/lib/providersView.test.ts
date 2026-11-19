@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AiRoute, ModelPrice, OpsMeta, OpsSnapshot, ProviderAccount, ProviderState } from './kensaurusOpsTypes'
 import {
+  accountLabel,
+  allSharedAccounts,
   actorLabel,
   ageLabel,
   applyOptimistic,
@@ -407,5 +409,17 @@ describe('provider states and margins in the kit (2026-11-18)', () => {
     expect(marginChange(0.12)).toEqual({ text: '▲ +12%', worse: false })
     expect(marginChange(-0.08)).toEqual({ text: '▼ -8%', worse: true })
     expect(marginChange(null)).toBeNull()
+  })
+})
+
+// Round 3 (2026-11-19): "(shared key)" on every row and an "anthropic" chip beside "Anthropic".
+describe('account labels', () => {
+  it('says "shared" once when every account is shared, and drops a chip the name already says', () => {
+    const rows = [{ label: 'Anthropic (shared key)', provider: 'anthropic' }, { label: 'fal.ai (shared account)', provider: 'fal' }]
+    expect(allSharedAccounts(rows)).toBe(true)
+    expect(accountLabel(rows[0]!, true)).toEqual({ text: 'Anthropic', showProvider: false })
+    expect(accountLabel(rows[1]!, true)).toEqual({ text: 'fal.ai', showProvider: false })
+    expect(accountLabel({ label: 'Team key', provider: 'openai' }, false)).toEqual({ text: 'Team key', showProvider: true })
+    expect(allSharedAccounts([...rows, { label: 'Own key' }])).toBe(false)
   })
 })

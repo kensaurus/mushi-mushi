@@ -10,6 +10,7 @@ import {
   notificationsStatusAction,
   notificationsStatusSentence,
   reporterChannelBadge,
+  reporterLabel,
   reporterSetupChecks,
   sentRowTitle,
 } from './notificationsView'
@@ -58,5 +59,13 @@ describe('sentRowTitle', () => {
     expect(sentRowTitle({ message: 'Your bug was fixed', notification_type: 'fixed' })).toBe('Your bug was fixed')
     expect(sentRowTitle({ message: null, notification_type: 'classified' })).toBe('Bug diagnosed')
     expect(sentRowTitle({ message: '  ', notification_type: 'some_new_type' })).toBe('some new type')
+  })
+})
+
+describe('reporterLabel (2026-11-19)', () => {
+  it('shows a hashed key short and a named source as its whole first word', () => {
+    expect(reporterLabel('rk1_9f3a2b1c4d5e6f70')).toBe('9f3a2b1c')
+    expect(reporterLabel('cloudwatch-alarm-kensaurus')).toBe('cloudwatch')
+    expect(reporterLabel('cloudwatch-alarm-kensaurus')).not.toBe('cloudwat')
   })
 })

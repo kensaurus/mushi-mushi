@@ -58,7 +58,8 @@ export function SdkInstallConfigurator({
 
   return (
     <div className="space-y-3 text-2xs">
-      <label className="flex items-start gap-2 rounded-sm border border-edge-subtle bg-surface-raised/60 p-2">
+      {/* A row, not a box inside the install card (round-3 review, 2026-11-19). */}
+      <label className="flex items-start gap-2">
         <input
           type="checkbox"
           checked={enabled}
@@ -79,8 +80,9 @@ export function SdkInstallConfigurator({
           Position
           <ConfigHelp helpId="sdk-install.position" />
         </legend>
+        {/* Each corner says which corner it is; four blank boxes named nothing (round-3 review). */}
         <div
-          className="grid grid-cols-2 gap-1 w-32 p-1 bg-surface-raised border border-edge-subtle rounded-sm"
+          className="grid grid-cols-2 gap-1 w-48"
           role="radiogroup"
           aria-label="Widget position"
         >
@@ -92,13 +94,12 @@ export function SdkInstallConfigurator({
               aria-checked={config.position === pos}
               aria-label={POSITION_LABEL[pos]}
               onClick={() => update('position', pos)}
-              className={`h-6 rounded-sm transition-opacity ${
-                config.position === pos
-                  ? 'bg-brand'
-                  : 'bg-surface-overlay hover:bg-edge-subtle'
+              className={`rounded-sm border px-2 py-1 text-2xs transition-opacity ${
+                config.position === pos ? SELECTED_TONE : SELECTED_TONE_IDLE
               }`}
-              title={POSITION_LABEL[pos]}
-            />
+            >
+              {POSITION_LABEL[pos]}
+            </button>
           ))}
         </div>
       </fieldset>
@@ -344,7 +345,7 @@ export function SdkInstallConfigurator({
           </select>
         </label>
         {config.capture.screenshot !== 'off' && (
-          <div className="mt-2 rounded-sm border border-edge-subtle bg-surface-raised/40 p-2">
+          <div className="mt-2 pl-4">
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"

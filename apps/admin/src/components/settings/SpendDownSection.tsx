@@ -20,7 +20,7 @@ import { Link } from 'react-router-dom';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
-import { Btn, Checkbox, Input, ResultChip } from '../ui';
+import { Btn, Checkbox, InfoHint, Input, ResultChip } from '../ui';
 import {
   spendDownLine,
   spendDownOutOfWork,
@@ -125,12 +125,12 @@ export function SpendDownSection({ canManageShared, keysToken }: Props) {
   return (
     <section aria-label="Spend down expiring credits" className="space-y-2 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Spend down expiring credits</h4>
-      <p className="text-xs text-fg-muted">
-        Before a key&apos;s credits expire, Mushi Mushi sends open bugs to Cursor on its own, best first, so the credits
-        fix something. It only uses the apps this key already pays for, never goes past their auto-fix limits, and
-        every fix opens a draft pull request for you to review.{' '}
+      {/* One line + (i); the paragraph ran three lines with a link dangling at its end (round-3 review 2026-11-19). */}
+      <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+        <span>Before credits expire, send open bugs to Cursor, best first.</span>
+        <InfoHint content="Mushi Mushi only uses the apps this key already pays for, never goes past their auto-fix limits, and every fix opens a draft pull request for you to review." />
         <Link className="text-brand underline-offset-2 hover:underline" to="/credits">
-          Every way to spend expiring credits
+          Other ways to use credits →
         </Link>
       </p>
       {followups && <p className="text-xs tabular-nums text-fg-secondary">{followups}</p>}

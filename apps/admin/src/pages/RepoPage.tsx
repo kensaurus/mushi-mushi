@@ -502,6 +502,17 @@ export function RepoPage() {
     </div>
   )
 
+  // A repo with no fix branches: one row in the pull-request card, not a second empty state floating
+  // under it (round 3). "Bugs", as the sidebar names them.
+  const emptyBranchesRow = (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-edge-subtle pt-2 text-xs text-fg-muted" data-testid="repo-no-fix-branches">
+      No fix branches yet: dispatch a fix on a classified bug and its branch lands here.
+      <Btn to="/reports" variant="ghost" size="sm">
+        Open Bugs
+      </Btn>
+    </p>
+  )
+
   const emptyBranches = (
     <EmptyState
       title={hasRepo ? 'No fix branches yet' : 'Connect your repo'}
@@ -569,7 +580,9 @@ export function RepoPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideRepoSnapshot,
+            // Clean up's own blocker (a missing token) is its status; "1 PR ready to merge" above it
+            // pointed at another tab (round 3).
+            show: !ux.hideRepoSnapshot && activeTab !== 'cleanup',
             children: (
               <RepoSnapshotStrip
                 stats={repoStats}
@@ -594,11 +607,13 @@ export function RepoPage() {
       )}
 
       {/* Every open PR in the connected repos, fix or not, with Merge once its checks pass. */}
-      {activeTab === 'branches' && activeProjectId && <OpenPullRequests projectId={activeProjectId} onCounts={setPrCounts} />}
+      {activeTab === 'branches' && activeProjectId && (
+        <OpenPullRequests projectId={activeProjectId} onCounts={setPrCounts} footer={hasRepo && branches.length === 0 ? emptyBranchesRow : undefined} />
+      )}
 
       {/* Open PRs lead; the per-attempt history is a closed panel under them. */}
       {activeTab === 'branches' && (
-        branches.length === 0 ? emptyBranches : (
+        branches.length === 0 ? (hasRepo && activeProjectId ? null : emptyBranches) : (
           <DisclosurePanel
             title="Fix attempt branches"
             trailing={<span className="text-2xs font-normal text-fg-faint">{branches.length} attempts</span>}

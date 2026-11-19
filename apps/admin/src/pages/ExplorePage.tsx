@@ -35,7 +35,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
 import { SnapshotSectionHint,
   SegmentedControl,
-  Section,
   StatCard,
   StatGrid,
   FreshnessPill,
@@ -652,15 +651,21 @@ export function ExplorePage() {
     activeTab === 'graph' || activeTab === 'layers' ? (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Files / Symbols sits in the Map views row above (round 3: three stacked tab bars); with
+              the tabs hidden it stays here. */}
           <div className="flex items-center gap-2">
-            <SegmentedControl
-              value={density}
-              onChange={(v) => setDensity(v as DensityMode)}
-              options={[
-                { id: 'files', label: 'Files' },
-                { id: 'symbols', label: 'Symbols' },
-              ]}
-            />
+            {ux.hideTabs && (
+              <SegmentedControl
+                size="sm"
+                ariaLabel="Show files or symbols"
+                value={density}
+                onChange={(v) => setDensity(v as DensityMode)}
+                options={[
+                  { id: 'files', label: 'Files' },
+                  { id: 'symbols', label: 'Symbols' },
+                ]}
+              />
+            )}
             {(loading || exploreQuery.isValidating) && (
               <SignalChip tone="info" className="animate-pulse font-normal">
                 Loading…
@@ -902,25 +907,39 @@ export function ExplorePage() {
             />
           )}
           {primaryTab === 'map' && isMapView(activeTab) && (
-            <SegmentedControl<ExploreMapView>
-              size="sm"
-              scrollable
-              ariaLabel="Map views"
-              value={activeTab}
-              options={mapViewOptions}
-              onChange={setActiveTab}
-              className={INNER_TABS}
-            />
+            // Views and Files / Symbols on one row: two levels of control, not three bars (round 3).
+            <div className="flex flex-wrap items-center gap-2" data-testid="explore-map-controls">
+              <SegmentedControl<ExploreMapView>
+                size="sm"
+                scrollable
+                ariaLabel="Map views"
+                value={activeTab}
+                options={mapViewOptions}
+                onChange={setActiveTab}
+                className={INNER_TABS}
+              />
+              {(activeTab === 'graph' || activeTab === 'layers') && (
+                <SegmentedControl
+                  size="sm"
+                  ariaLabel="Show files or symbols"
+                  value={density}
+                  onChange={(v) => setDensity(v as DensityMode)}
+                  options={[
+                    { id: 'files', label: 'Files' },
+                    { id: 'symbols', label: 'Symbols' },
+                  ]}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
 
       {!ux.hideExploreSnapshot && activeTab === 'overview' && (
-      <Section
-        title={copy?.sections?.snapshot ?? (isWorkbenchTab ? 'At a glance' : 'EXPLORE SNAPSHOT')}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-        className={isWorkbenchTab ? 'xl:py-2.5' : undefined}
-      >
+      // One level of box: the four tiles under a plain heading, not tiles in a card; no second time
+      // beside the status's "indexed 14 hours ago" (round 3).
+      <section aria-label="Code map at a glance" data-testid="explore-snapshot">
+        <h2 className="mb-1.5 text-xs font-semibold text-fg">{copy?.sections?.snapshot ?? 'At a glance'}</h2>
         {!isWorkbenchTab && <SnapshotSectionHint text={activeTabMeta.description} />}
         <StatGrid minCol={isWorkbenchTab ? '8.5rem' : '10.5rem'}>
           <StatCard
@@ -957,7 +976,7 @@ export function ExplorePage() {
             to={exploreLinks.embedded}
           />
         </StatGrid>
-      </Section>
+      </section>
       )}
 
       {activeTab === 'overview' && (

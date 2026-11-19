@@ -257,6 +257,14 @@ describe('symptom node with no stated symptom', () => {
     expect(g.verdict).toEqual({ tone: 'info', label: 'Sorted; cause not diagnosed' })
   })
 
+  // Round-3 sweep 2026-11-19: the side panel opened on the quick-summary node
+  // and repeated the classification card's sentence word for word.
+  it('opens a quick-summary report on the next step, not the no-diagnosis node', () => {
+    const g = buildDiagnosisGraph(report({ stage2_analysis: null, stage2_partial: null, stage1_classification: { category: 'bug' }, processing_error: null, confidence: 0.97, judge_eval: null, fix_attempts: [] }))
+    expect(g.nodes.some((n) => n.id === 'next')).toBe(true)
+    expect(initialDiagnosisSelection(g)).toBe('next')
+  })
+
   it('an ungraded report is "not checked", not "in progress"', () => {
     const g = buildDiagnosisGraph(report({ judge_eval: null }))
     const judge = g.nodes.find((n) => n.id === 'judge')!

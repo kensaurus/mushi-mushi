@@ -98,7 +98,18 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
       )}
       {error && <PageLoadError error={error} resource="store reviews" endpoint={path} onRetry={reload} />}
       <TimedLoading waiting={loading && !data && !error} text="Reading the store review settings…" what="Store reviews" onRetry={reload} testId="portfolio-store-reviews-not-checked" />
-      {data && s && (
+      {data && s && data.sources.length === 0 && (
+        // The blocker first and alone: the controls do nothing until a store is bound (round 3:
+        // a checkbox and "Only reviews of 1–2 stars" came first, the reason at the bottom).
+        <p className="text-xs text-fg-secondary" data-testid="store-reviews-blocker">
+          No App Store Connect or Google Play source is bound to this app. Connect one under{' '}
+          <Link to="/portfolio?tab=spend#portfolio-connectors" className="font-medium text-brand hover:underline">
+            Apps → Spend → Connected sources
+          </Link>{' '}
+          and bind this app&apos;s Apple id or Android package.
+        </p>
+      )}
+      {data && s && data.sources.length > 0 && (
         <div className="flex flex-col gap-3 text-sm">
           <fieldset className="flex flex-col gap-2" disabled={busy || !data.canManage}>
             <legend className="sr-only">Store reviews as reports</legend>
@@ -114,21 +125,15 @@ export function StoreReviewsPanel({ projectId }: { projectId: string }) {
               </select>
             </label>
           </fieldset>
-          {data.sources.length === 0 ? (
-            <p className="text-xs text-fg-muted">
-              No App Store Connect or Google Play source is bound to this app. Connect one under Portfolio → Connected sources and bind this app's Apple id or Android package.
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {data.sources.map((src) => (
-                <li key={`${src.store}:${src.appId}`}>
-                  <Badge tone={src.connected ? 'okSubtle' : 'warnSubtle'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
-                    {storeLabel(src.store)} {src.appId}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="flex flex-wrap gap-1.5">
+            {data.sources.map((src) => (
+              <li key={`${src.store}:${src.appId}`}>
+                <Badge tone={src.connected ? 'okSubtle' : 'warnSubtle'} title={src.connected ? 'Key stored' : 'The key could not be read'}>
+                  {storeLabel(src.store)} {src.appId}
+                </Badge>
+              </li>
+            ))}
+          </ul>
           <p className="text-xs text-fg-muted">
             {s.lastPulledAt ? `Last pulled ${new Date(s.lastPulledAt).toLocaleString()} (${s.lastStatus ?? 'unknown'}).` : 'Not pulled yet.'}
             {s.lastError ? ` ${s.lastError}` : ''}

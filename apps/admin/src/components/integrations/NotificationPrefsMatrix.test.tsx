@@ -119,11 +119,13 @@ describe('NotificationPrefsMatrix', () => {
   })
 
   // Round-2 review 2026-11-18: eight toggles ON with no channel connected.
-  it('disables the toggles and Save until a channel exists, and says why', async () => {
+  it('disables the toggles and Save until a channel exists, and shows them unset', async () => {
     api.apiFetch.mockResolvedValue({ ok: true, data: { notification_prefs: null } })
     await render({ channelConnected: false })
     expect(switches(container).every((t) => t.disabled)).toBe(true)
-    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')?.textContent).toContain('Connect Slack, Discord or Teams')
+    // 2026-11-19: not eight dimmed ONs, and no second "connect a channel" sentence (the page's top row says it).
+    expect(switches(container).every((t) => t.getAttribute('aria-checked') === 'false')).toBe(true)
+    expect(container.querySelector('[data-testid="notification-prefs-no-channel"]')).toBeNull()
     const save = Array.from(container.querySelectorAll('button')).find((b) => /Save preferences/.test(b.textContent ?? ''))!
     expect(save.disabled).toBe(true)
   })

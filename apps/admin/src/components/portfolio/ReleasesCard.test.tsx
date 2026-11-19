@@ -107,4 +107,26 @@ describe('ReleasesCard', () => {
     expect([...reviewRows].every((r) => r.querySelector('[data-testid="status-pill"]') === null)).toBe(true)
     expect(host.querySelector('tr[data-stage="ota_ready"] [data-testid="status-pill"]')?.textContent).toBe('OTA ready')
   })
+
+  // Round 3 (2026-11-19): the header says "Not checked · 3 apps" once, the demo app is not listed,
+  // and a phone gets stacked rows with the OTA count instead of a sideways-scrolling table.
+  it('says "not checked" once for a group, hides the demo app, and stacks rows on a phone', async () => {
+    state.data = {
+      rows: [row('glot.it', 'ota_ready', 109, 0, { version: '1.105.0', rolloutPct: 100 }), row('solo-boss-cloud', 'unknown'), row('kensaur.us', 'unknown'), row('Mushi demo (sample data)', 'unknown')],
+      batchSuggestion: null,
+    }
+    await act(async () => root.render(createElement(ReleasesCard, { orgId: 'org-1' })))
+    const table = host.querySelector('[data-testid="releases-table"]')!
+    expect(table.textContent).not.toContain('Mushi demo')
+    expect(host.querySelector('[data-testid="releases-stage-unknown"]')?.textContent).toContain('2 apps')
+    const unknownRows = table.querySelectorAll('tbody tr[data-stage="unknown"]')
+    expect(unknownRows).toHaveLength(2)
+    for (const r of unknownRows) {
+      expect(r.textContent).not.toContain('not checked')
+      expect(r.querySelector('.ci-nodata')).toBeNull()
+    }
+    const stacked = host.querySelector('[data-testid="releases-stacked"]')!
+    expect(stacked.textContent).toContain('OTA 109')
+    expect(stacked.textContent).not.toContain('Mushi demo')
+  })
 })

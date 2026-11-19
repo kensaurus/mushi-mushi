@@ -29,6 +29,12 @@ describe('reports a Mushi job filed itself', () => {
     expect(captureMode('captureException', r).label).toBe('server')
     expect(reporterWho(r).label.startsWith('anon·')).toBe(true)
   })
+
+  // Round-3 sweep 2026-11-19: intake names were cut to "anon·cloudw", "anon·site-a".
+  it('names an intake whole instead of cutting it like a key', () => {
+    expect(reporterWho(row('cloudwatch')).label).toBe('cloudwatch')
+    expect(reporterWho(row('site-audit')).label).toBe('site-audit')
+  })
 })
 
 describe('routePathname', () => {

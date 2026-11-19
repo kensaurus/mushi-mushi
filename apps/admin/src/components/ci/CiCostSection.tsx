@@ -48,9 +48,14 @@ const STATUS_TONE = { ok: 'text-st-running-ink', warn: 'text-warn-foreground', m
 
 const CI_COST_SETTINGS_HREF = '/settings?tab=ci-cost'
 
-function Accounts({ data }: { data: CiCompare }) {
+function Accounts({ data, scope }: { data: CiCompare; scope: 'project' | 'all' }) {
   if (data.accounts.length === 0) return null
   return (
+    <div>
+    {/* Scope named: "$200.80 charged" above and "$0.00 a month, estimated" here read as one bill (round 3). */}
+    <h3 className="mb-1 text-xs font-semibold text-fg" data-testid="ci-cost-accounts-scope">
+      {scope === 'project' ? "Estimate for this app's repos" : "Estimate for every app's repos"}
+    </h3>
     <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-testid="ci-cost-accounts">
       {data.accounts.map((a) => {
         const used = a.includedMinutes > 0 ? Math.min(1, a.monthMinutes / a.includedMinutes) : 1
@@ -81,7 +86,24 @@ function Accounts({ data }: { data: CiCompare }) {
         )
       })}
     </ul>
+    </div>
   )
+}
+
+/**
+ * One-job runners GitHub no longer lists, costing nothing: one row for all of them (round 3,
+ * 2026-11-19: five "nuc12-oneoff-… not listed by GitHub now · $0.00 a month · 150 W" rows).
+ *
+ * @internal Exported for tests.
+ */
+export function foldGoneRunners<M extends { name: string; online: boolean | null; monthEnergyCost: number; monthWearCost: number; monthPlatformFee: number }>(
+  machines: readonly M[],
+  live: readonly MachineNow[],
+): { shown: M[]; gone: M[] } {
+  const isGone = (m: M) =>
+    costMachineStatus(m.name, m.online, live)?.word === 'not listed by GitHub now' && m.monthEnergyCost + m.monthWearCost + m.monthPlatformFee === 0
+  const gone = machines.filter(isGone)
+  return gone.length >= 2 ? { shown: machines.filter((m) => !isGone(m)), gone } : { shown: [...machines], gone: [] }
 }
 
 /** Machines shown before "Show all": one-job runners that do not group each count as one (2026-11-06: 30+ lines). */
@@ -90,7 +112,8 @@ const MACHINES_SHOWN = 6
 function Machines({ data, live }: { data: CiCompare; live: readonly MachineNow[] }) {
   const [all, setAll] = useState(false)
   if (data.machines.length === 0) return null
-  const busiest = [...data.machines].sort((a, b) => b.busyHours - a.busyHours)
+  const { shown: listed, gone } = foldGoneRunners([...data.machines].sort((a, b) => b.busyHours - a.busyHours), live)
+  const busiest = listed
   const machines = all ? busiest : busiest.slice(0, MACHINES_SHOWN)
   const hidden = busiest.length - machines.length
   return (
@@ -121,6 +144,14 @@ function Machines({ data, live }: { data: CiCompare; live: readonly MachineNow[]
           </li>
           )
         })}
+        {gone.length > 0 && (
+          <li className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-xs" title={gone.map((m) => m.name).join(', ')} data-testid="ci-cost-machines-gone">
+            <IconServer size={14} className="shrink-0 text-fg-faint" />
+            <span className="font-medium text-fg">{gone.length} one-job runners</span>
+            <span className="text-2xs text-fg-muted">not listed by GitHub now</span>
+            <span className="ml-auto tabular-nums text-fg">{formatMoney(0, gone[0].currency)} a month</span>
+          </li>
+        )}
       </ul>
       {(hidden > 0 || all) && (
         <Btn size="sm" variant="ghost" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="ci-cost-machines-more">
@@ -216,13 +247,24 @@ function WhatIfs({ data }: { data: CiCompare }) {
   )
 }
 
-export function CiCostSection({ projectId, scope, machines = [] }: { projectId: string | null; scope: 'project' | 'all'; machines?: readonly MachineNow[] }) {
+export function CiCostSection({
+  projectId,
+  scope,
+  machines = [],
+  repoNames,
+}: {
+  projectId: string | null
+  scope: 'project' | 'all'
+  machines?: readonly MachineNow[]
+  /** Repo slug (lower case) → app name, for the bill's per-repo rows. */
+  repoNames?: ReadonlyMap<string, string>
+}) {
   const path = scope === 'project' && projectId ? `/v1/admin/ci/compare?project_id=${encodeURIComponent(projectId)}&days=30` : '/v1/admin/ci/compare?days=30'
   const page = usePageData<CiCompare>(path, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const data = page.data
   const wait = useReadTimedOut(page.loading && !data)
   // The measured bill reads its own route: it shows while the estimates load or fail.
-  const bill = <CiBillCard projectId={projectId} scope={scope} hideLoader={!data && page.loading && !wait.timedOut} />
+  const bill = <CiBillCard projectId={projectId} scope={scope} hideLoader={!data && page.loading && !wait.timedOut} repoNames={repoNames} />
 
   if (!data) {
     return (
@@ -252,8 +294,8 @@ export function CiCostSection({ projectId, scope, machines = [] }: { projectId: 
     <div className="flex flex-col gap-4" data-testid="ci-cost-section">
       {bill}
       <p className="text-xs text-fg-muted">
-        GitHub-hosted runners versus your own machines, over the last {data.window.days} days. Wait and run times are measured; minutes billed and money are
-        estimated from GitHub’s list prices (read {data.rates.fetchedAt}). GitHub’s bill is the real figure.
+        GitHub-hosted runners against your own machines, last {data.window.days} days. Waits and run times are measured; minutes and money are estimated
+        from GitHub’s list prices (read {data.rates.fetchedAt}).
       </p>
       {data.lowConfidence && (
         <Callout tone="warn" label="Thin data" icon={<IconAlertTriangle size={14} />}>
@@ -261,17 +303,19 @@ export function CiCostSection({ projectId, scope, machines = [] }: { projectId: 
         </Callout>
       )}
       {data.sourceNote && <Callout tone="neutral" label="Partial">{data.sourceNote}</Callout>}
+      {/* A line, not a grey box inside the card (round 3: three levels of boxes on this tab). */}
       {exampleFigures && (
-        <Callout tone="neutral" label="Example figures" icon={<IconCost size={14} />}>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>Electricity and your GitHub plan use example figures.</span>
-            <Link to={CI_COST_SETTINGS_HREF} className="font-medium text-brand hover:underline">
-              Set yours in Settings → CI cost
-            </Link>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-secondary" data-testid="ci-cost-example-figures">
+          <span className="inline-flex items-center gap-1">
+            <IconCost size={14} className="text-fg-muted" />
+            Electricity and your GitHub plan use example figures.
           </span>
-        </Callout>
+          <Link to={CI_COST_SETTINGS_HREF} className="font-medium text-brand hover:underline">
+            Set yours in Settings → CI cost
+          </Link>
+        </p>
       )}
-      <Accounts data={data} />
+      <Accounts data={data} scope={scope} />
       <CiCompareTable data={data} />
       <Machines data={data} live={machines} />
       {/* What to do sits next to the figures it acts on; the explanations follow, folded (2026-11-06). */}

@@ -83,7 +83,9 @@ describe('RepoCleanup blocker', () => {
     const add = [...host.querySelectorAll('a')].find((a) => a.textContent === 'Add token')
     expect(add?.getAttribute('href')).toBe(GITHUB_TOKEN_SETTINGS_PATH.replace(/#.*/, '') + '#platform-card-github')
     expect(text).not.toContain('Nothing changes until an owner or admin approves')
-    expect(text).toContain('A push in that second could be lost.')
+    // Round 3: the race note sits behind the info mark with the rules, not inline.
+    expect(text).not.toContain('A push in that second could be lost.')
+    expect(host.querySelector('[data-testid="repo-cleanup-how"] [aria-label*="A push in that second could be lost."]')).not.toBeNull()
   })
 
   it('keeps the rules available for the info mark', () => {

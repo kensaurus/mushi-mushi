@@ -137,6 +137,15 @@ describe('StatusStepper', () => {
     expect(host.textContent).toContain('Fixed')
   })
 
+  // Round-3 sweep 2026-11-19: "○ Classified" on almost every row beside the bar.
+  it('draws the resting Classified step as the bar alone in the table row', () => {
+    act(() => root.render(createElement(StatusStepper, { status: 'classified', size: 'table' })))
+    expect(host.querySelector('[data-testid="status-stepper-word"]')).toBeNull()
+    expect(accessibleNames(host)).toEqual(['Status: Classified, step 2 of 4'])
+    act(() => root.render(createElement(StatusStepper, { status: 'fixing', size: 'table' })))
+    expect(host.querySelector('[data-testid="status-stepper-word"]')?.textContent).toBe('Fixing')
+  })
+
   // 2026-11-18: the step's word carries the status mark (colour plus glyph).
   it('marks the step word with the report status', () => {
     const cases: Array<[string, string]> = [['new', 'waiting'], ['fixing', 'running'], ['fixed', 'passed'], ['reopened', 'failed']]

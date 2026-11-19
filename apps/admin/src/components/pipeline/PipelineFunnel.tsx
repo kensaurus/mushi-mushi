@@ -157,24 +157,38 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
   )
 }
 
-/** The bar's key, once under the stages. */
-export function FunnelLegend() {
+/**
+ * The bar's key, once under the stages: only the marks on screen. It explained ▲ and ◆ and a
+ * square-root scale beside one stage box with neither mark (round-3 review, 2026-11-19); with one
+ * box or none there is nothing to compare, so no key.
+ */
+export function FunnelLegend({ stages, selected = null }: { stages: PipelineStage[]; selected?: string | null }) {
+  const { boxes } = splitEmptyStages(stages, selected)
+  if (boxes.length < 2) return null
+  const tones = Object.values(stageTones(stages))
+  const anyStuck = boxes.some((s) => s.stuck > 0)
   return (
-    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary">
-      <span className="inline-flex items-center gap-1">
-        <StatusGlyph tone="danger" />
-        the bottleneck
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <StatusGlyph tone="warn" />
-        nearly as stuck
-      </span>
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary" data-testid="pipeline-funnel-legend">
+      {tones.includes('danger') && (
+        <span className="inline-flex items-center gap-1">
+          <StatusGlyph tone="danger" />
+          the bottleneck
+        </span>
+      )}
+      {tones.includes('warn') && (
+        <span className="inline-flex items-center gap-1">
+          <StatusGlyph tone="warn" />
+          nearly as stuck
+        </span>
+      )}
+      {anyStuck && (
       <span className="inline-flex items-center gap-1">
         <span className="inline-flex h-1.5 w-6 overflow-hidden rounded-full bg-fg-faint" aria-hidden="true">
           <span className="h-full w-1/2 bg-fg-secondary" />
         </span>
         darker part = stuck
       </span>
+      )}
       <span>Bar width: items in the stage (square-root scale). Click a stage to see only its groups.</span>
     </p>
   )

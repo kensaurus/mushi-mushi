@@ -38,6 +38,8 @@ import { buildDailySpendSeries, formatShortDay } from '../components/cost/dailyS
 import { DailySpendChart } from '../components/cost/DailySpendChart'
 import { BudgetForecastCard } from '../components/cost/BudgetForecastCard'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { CostRawLogTable } from '../components/cost/CostRawLogTable'
 import { CostStatusBanner } from '../components/cost/CostStatusBanner'
@@ -106,6 +108,9 @@ export function CostPage() {
     isValidating,
   } = usePageData<CostStats>(statsPath)
   const stats = statsData ?? EMPTY_COST_STATS
+  // Never an endless skeleton (2026-11-19: Team → AI spend sat on it at 1440): after 20 s the
+  // read says "not checked" with one Retry.
+  const statsWait = useReadTimedOut(statsLoading && !statsData)
 
   const summaryPath = activeProjectId
     ? `/v1/admin/costs/summary?project_id=${activeProjectId}`
@@ -241,6 +246,18 @@ export function CostPage() {
   }
 
   if (statsLoading && !statsData) {
+    if (statsWait.timedOut) {
+      return (
+        <CiNotChecked
+          what="AI spend"
+          testId="cost-not-checked"
+          onRetry={() => {
+            statsWait.restart()
+            reloadAll()
+          }}
+        />
+      )
+    }
     return <PanelSkeleton rows={6} label="Loading LLM cost" />
   }
   if (statsError) {
@@ -356,7 +373,6 @@ export function CostPage() {
               <BudgetForecastCard
                 projectId={activeProjectId}
                 series={dailySeries}
-                monthToDateUsd={stats.spendMonthUsd}
                 fmtSpend={fmtSpend}
               />
             )}

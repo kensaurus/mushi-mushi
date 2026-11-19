@@ -21,7 +21,7 @@
  *          confident root cause from a guess.
  */
 
-import { NEEDS_LOOK_BELOW, type DiagnosisGraph, type DiagnosisNode } from './reportDiagnosisModel'
+import { NEEDS_LOOK_BELOW, STAGE1_ONLY_DETAIL, type DiagnosisGraph, type DiagnosisNode } from './reportDiagnosisModel'
 import { reportDiagnosisView } from './reportDiagnosis'
 import { checkNodes, diagnosisNodes, evidenceNodes, fixNodes, signalNodes } from './reportDiagnosisNodes'
 import type { ReportDetail } from '../components/report-detail/types'
@@ -80,5 +80,12 @@ export function buildDiagnosisGraph(report: ReportDetail): DiagnosisGraph {
 /** The node to open first: the first marked node on the path, else the root cause. */
 export function initialDiagnosisSelection(graph: DiagnosisGraph): string | null {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]))
-  return graph.path.find((id) => byId.get(id)?.needsLook) ?? (byId.has('cause') ? 'cause' : graph.path[0] ?? null)
+  const flagged = graph.path.find((id) => byId.get(id)?.needsLook)
+  if (flagged) return flagged
+  // A quick summary has no diagnosis to explain, and the page already says
+  // so above the graph: open on the next step instead of repeating it in the
+  // side panel (round-3 sweep 2026-11-19).
+  const cause = byId.get('cause')
+  if (cause && cause.detail === STAGE1_ONLY_DETAIL && byId.has('next')) return 'next'
+  return byId.has('cause') ? 'cause' : graph.path[0] ?? null
 }

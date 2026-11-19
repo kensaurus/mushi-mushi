@@ -76,6 +76,24 @@ function resolveJudgeAction(ctx: InboxCardBuildContext): PageAction | null {
   return null
 }
 
+/**
+ * The one count every place on /inbox reads: the banner, the Stages tab badge and the filter
+ * chips. The banner said "1 thing needs you" from /inbox/stats over three open cards, and the
+ * chips read "All 6 · Open 3 · Clear 2" with the sixth card in neither (round-3 review,
+ * 2026-11-19). `unchecked` holds the cards with nothing to check yet or no read, so
+ * open + settled + unchecked = total.
+ */
+export function inboxCardCounts(cards: ReadonlyArray<Pick<InboxCard, 'action' | 'state'>>): {
+  open: number
+  settled: number
+  unchecked: number
+  total: number
+} {
+  const open = cards.filter((c) => c.action !== null).length
+  const settled = cards.filter((c) => c.action === null && c.state === 'pass').length
+  return { open, settled, unchecked: cards.length - open - settled, total: cards.length }
+}
+
 export function buildInboxCards(
   data: DashboardData | undefined,
   ctx?: InboxCardBuildContext,
@@ -107,17 +125,17 @@ export function buildInboxCards(
     redCount: redIntegrations,
     amberCount: amberIntegrations,
   })
-  // Local worker problems are this app's health too: Pipeline listed two while this card said ✓.
+  // Local worker problems get their own card. On Integration health they read as an integration
+  // fault while "Act · Integrations" stayed ✓ on the same page (round-3 review, 2026-11-19).
   const workerAction: PageAction | null =
     workerProblems > 0
       ? {
           tone: 'do',
           title: `${workerProblems} local worker problem${workerProblems === 1 ? ' stops' : 's stop'} fixes`,
-          reason: 'A machine running mushi work is offline, stuck or out of credits. Each problem has its fix on the Workers tab.',
+          reason: 'A machine running Mushi Mushi work is offline, stuck or out of credits. Each problem has its fix on the Workers tab.',
           primary: { kind: 'link', to: '/pipeline?tab=workers', label: 'Open Workers' },
         }
       : null
-  const healthOpen = healthAction ?? workerAction
   const integrationsAction = computeNextBestAction({
     scope: 'integrations',
     disconnectedCount: redIntegrations,
@@ -160,6 +178,21 @@ export function buildInboxCards(
             pageTo: '/pipeline',
             action: pipelineAction,
             state: pipelineGroups === null ? 'unknown' : stateOf(pipelineAction),
+          },
+        ]
+
+  const workerCard: InboxCard[] =
+    ctx?.workerProblems === undefined
+      ? []
+      : [
+          {
+            id: 'workers-do',
+            scope: 'workers',
+            group: 'do',
+            pageLabel: 'Local workers',
+            pageTo: '/pipeline?tab=workers',
+            action: workerAction,
+            state: ctx?.workerProblems === null ? 'unknown' : stateOf(workerAction),
           },
         ]
 
@@ -226,14 +259,15 @@ export function buildInboxCards(
       // No fix ever ran (or none in the window): nothing to pass, so no ✓.
       state: stateOf(fixesAction, !data ? 'unknown' : (fixSummary?.total ?? 0) === 0 ? 'none' : 'pass'),
     },
+    ...workerCard,
     {
       id: 'health-ops',
       scope: 'health',
       group: 'ops',
       pageLabel: 'Integration health',
       pageTo: '/health',
-      action: healthOpen,
-      state: stateOf(healthOpen, noIntegrations && ctx?.workerProblems == null ? 'none' : 'pass'),
+      action: healthAction,
+      state: stateOf(healthAction, noIntegrations ? 'none' : 'pass'),
     },
     {
       id: 'integrations-act',

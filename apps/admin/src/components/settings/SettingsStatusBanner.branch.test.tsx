@@ -51,7 +51,7 @@ describe('SettingsStatusBanner branch pattern', () => {
   it('sits next to the key problem in the same banner', () => {
     const onFixBranch = vi.fn()
     render({
-      keySummary: { attention: 1, expiring: 0, checking: 0, working: 0, replaced: 0, off: 0, total: 1 },
+      keySummary: { attention: 1, expiring: 0, checking: 0, working: 0, replaced: 0, off: 0, duplicate: 0, total: 1 },
       branchPatternInvalid: true,
       onFixBranch,
     })
@@ -59,6 +59,21 @@ describe('SettingsStatusBanner branch pattern', () => {
     expect(host.querySelector('[data-testid="settings-banner-branch"]')?.textContent).toContain('fix branch pattern is no longer allowed')
     act(() => (host.querySelector('[data-testid="settings-banner-fix-branch"]') as HTMLButtonElement).click())
     expect(onFixBranch).toHaveBeenCalled()
+  })
+
+  it('counts every key row that asks for something, as the AI keys tab badge does (round-3 review 2026-11-19)', () => {
+    render({
+      keySummary: { attention: 1, expiring: 0, checking: 0, working: 3, replaced: 1, off: 0, duplicate: 1, total: 6 },
+    })
+    expect(host.textContent).toContain('3 keys need your attention')
+    expect(host.textContent).toContain('1 not working, 2 to tidy up.')
+  })
+
+  it('only tidy-up left: an info line, not a red banner', () => {
+    render({
+      keySummary: { attention: 0, expiring: 0, checking: 0, working: 3, replaced: 1, off: 0, duplicate: 1, total: 5 },
+    })
+    expect(host.textContent).toContain('2 keys to tidy up')
   })
 
   it('rides under "The bug widget is off", which still leads', () => {

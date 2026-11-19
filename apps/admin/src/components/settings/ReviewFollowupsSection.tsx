@@ -15,11 +15,14 @@ import { useEffect, useState } from 'react';
 import { apiFetch } from '../../lib/supabase';
 import { usePageData } from '../../lib/usePageData';
 import { describeByokError } from '../../lib/byokErrors';
-import { Btn, Checkbox, Input, ResultChip, SelectField } from '../ui';
+import { Btn, Checkbox, InfoHint, Input, ResultChip, SelectField } from '../ui';
+import { StatusMark } from '../signal/StatusMark';
 import { CursorModelPicker } from './CursorModelPicker';
 import {
+  cursorModelName,
   followupKeyLabel,
-  followupRecentLine,
+  followupRecentMark,
+  followupRecentResult,
   followupScoreLine,
   type ReviewFollowupSettings,
   type ReviewFollowupsResponse,
@@ -100,15 +103,14 @@ export function ReviewFollowupsSection({ keysToken }: Props) {
   return (
     <section id="review-followups" aria-label="Review follow-ups" className="space-y-2 scroll-mt-20 border-t border-edge-subtle pt-3">
       <h4 className="text-sm font-medium text-fg">Review follow-ups</h4>
-      <p className="text-xs text-fg-muted">
-        When Opus says an agent&apos;s pull request needs fixes first, Mushi Mushi sends it back to a new Cursor agent once,
-        with exactly those findings, and Opus reviews the push. Only pull requests a Mushi Mushi cloud agent opened, at most
-        two per pull request, never on a hold, inside each app&apos;s auto-fix limits. Off until you turn it on; turning
-        it on also picks up the last 3 days of fix-first pull requests.
+      {/* One line + (i): the rules ran three lines, six at 390 px (round-3 review 2026-11-19). */}
+      <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+        <span>A fix-first pull request goes back to a new Cursor agent once, with the review&apos;s findings.</span>
+        <InfoHint content="Opus reviews the push. Only pull requests a Mushi Mushi cloud agent opened, at most two per pull request, never on a hold, inside each app's auto-fix limits. Off until you turn it on; turning it on also picks up the last 3 days of fix-first pull requests." />
       </p>
       <p className="text-xs text-fg-secondary">
         {settings.enabled
-          ? `On: up to ${settings.dailyLimit} a day, on ${chosen ? followupKeyLabel(chosen) : "the key each app's fixes use"}${settings.model ? `, model ${settings.model}` : ''}${settings.escalationModel ? `, last round on ${settings.escalationModel}` : ''}.`
+          ? `On: up to ${settings.dailyLimit} a day, on ${chosen ? followupKeyLabel(chosen) : "the key each app's fixes use"}${settings.model ? `, model ${cursorModelName(settings.model)}` : ''}${settings.escalationModel ? `, last round on ${cursorModelName(settings.escalationModel)}` : ''}.`
           : 'Off.'}
       </p>
       {!settings.enabled && settings.offReason && <p className="text-xs text-warn">{settings.offReason}</p>}
@@ -116,8 +118,11 @@ export function ReviewFollowupsSection({ keysToken }: Props) {
       {recent.length > 0 && (
         <ul className="space-y-0.5" aria-label="Latest follow-ups">
           {recent.map((r) => (
-            <li key={r.id} className="text-xs text-fg-muted">
-              {followupRecentLine(r)}
+            <li key={r.id} className="flex items-start gap-1.5 text-xs text-fg-muted">
+              <StatusMark status={followupRecentMark(r)} size={12} className="mt-0.5 shrink-0" />
+              <span className="min-w-0">
+                <span className="font-medium text-fg-secondary">{r.appName ?? 'An app'}</span>: {followupRecentResult(r)}
+              </span>
             </li>
           ))}
         </ul>

@@ -3,6 +3,7 @@
  */
 
 import { shortReporterKey } from '../../lib/reporterKey'
+import { isReporterKeyHash } from '../report-detail/reporterPresence'
 import type { ReportRow } from './types'
 
 export type ReportLayer = 'frontend' | 'backend' | 'server' | 'mobile'
@@ -188,6 +189,12 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     const id = row.reporter_user_id
     const short = id.length > 20 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
     return { label: short, tooltip: `Identified user: ${id}` }
+  }
+  // An intake name ("site-audit", "cloudwatch", "sentry-webhook") is not a
+  // key: cutting it to 6 characters read "anon·cloudw" (round-3 sweep
+  // 2026-11-19). It shows whole, as what filed the report.
+  if (row.reporter_token_hash && !isReporterKeyHash(row.reporter_token_hash)) {
+    return { label: row.reporter_token_hash, tooltip: `Filed by the ${row.reporter_token_hash} intake, not a person` }
   }
   if (row.reporter_token_hash) {
     const hex = shortReporterKey(row.reporter_token_hash, 6)

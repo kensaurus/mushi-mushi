@@ -38,9 +38,12 @@ import { PromptLabGuide } from '../components/prompt-lab/PromptLabGuide'
 import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapshotStrip'
 import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
-import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
-import { reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
+import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats, type PromptLabTopPriority } from '../components/prompt-lab/PromptLabStatsTypes'
+import { promptTestSummary, reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
 import { opensFineTuning } from '../components/prompt-lab/fineTuneActions'
+
+/** Postures the status line states from the prompt list, so no banner repeats them. */
+const TEST_STATE_PRIORITIES: ReadonlySet<PromptLabTopPriority> = new Set(['untested_ab', 'candidates_idle', 'ab_running'])
 
 export function PromptLabPage() {
   const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -254,13 +257,27 @@ export function PromptLabPage() {
         : `${activePrompts} active · ${candidatePrompts} candidate${candidatePrompts === 1 ? '' : 's'}`,
   })
 
-  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading AI prompts" />
   if (error) return <PageLoadError error={error} code={errorCode} onRetry={reload} />
   if (!data) return null
 
   const parentForDiff = diffing
     ? data.prompts.find((p) => p.id === diffing.parent_version_id)
     : undefined
+  const testSummary = promptTestSummary(data.prompts)
+
+  // Rare-use tools. Opened from a fine-tuning link they render first, under the status, instead
+  // of at the foot of the page under the eval dataset (2026-11-19: y about 3,300 at 390).
+  const advanced = (
+    <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
+      <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <div className="space-y-4">
+          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+          <SyntheticReportsCard />
+        </div>
+      </DisclosurePanel>
+    </div>
+  )
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-prompt-lab">
@@ -282,6 +299,8 @@ export function PromptLabPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Test states ride in the status line below; a second card said them again.
+            show: !TEST_STATE_PRIORITIES.has(promptLabStats.topPriority) || testSummary == null,
             children: (
               <PromptLabStatusBanner
                 stats={promptLabStats}
@@ -300,6 +319,8 @@ export function PromptLabPage() {
                 stats={promptLabStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
+                testSummary={testSummary}
+                promptsHref={promptLabStats.topPriorityTo ?? '/prompt-lab?tab=prompts'}
                 bestIsBuiltIn={data.prompts.some(
                   (p) =>
                     p.project_id == null &&
@@ -320,6 +341,8 @@ export function PromptLabPage() {
           },
         ]}
       />
+
+      {fineTuningLink && advanced}
 
       <PromptScoreboard
         stages={orderedStages}
@@ -358,14 +381,7 @@ export function PromptLabPage() {
       />
 
       {/* Rare-use tools: vendor fine-tuning jobs and synthetic test reports. */}
-      <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
-        <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
-          <div className="space-y-4">
-            <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
-            <SyntheticReportsCard />
-          </div>
-        </DisclosurePanel>
-      </div>
+      {!fineTuningLink && advanced}
 
       {/* Endpoints and raw counts: developer detail, at the foot of the page. */}
       <PromptLabReadout

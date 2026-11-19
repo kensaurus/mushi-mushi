@@ -10,7 +10,6 @@ import type { InboxCard, InboxCardGroup } from '../../lib/actionInboxFromDashboa
 import {
   ActionPill,
   ActionPillRow,
-  MetaChip,
   SignalChip,
 } from '../report-detail/ReportSurface'
 import { AgeChip } from '../ui'
@@ -116,7 +115,8 @@ export function OpenInboxCard({
       {/* No "#1" or "Plan" chips: the order is the list's own, and the stage named nothing a
           person acts on (round-2 review, 2026-11-18). */}
       <header className="mb-2 flex flex-wrap items-center gap-1.5">
-        <MetaChip label="Page">{card.pageLabel}</MetaChip>
+        {/* The page name alone: "Page:" on every card was a label for the obvious (round-3 review, 2026-11-19). */}
+        <span className="text-2xs font-medium whitespace-nowrap text-fg-secondary">{card.pageLabel}</span>
         {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
       <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>

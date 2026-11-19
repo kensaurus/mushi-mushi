@@ -70,7 +70,9 @@ function ReportRowCardInner({ row, isSelected, dispatchBusy = false, variantCoun
           className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand"
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <Link to={detailPath} className="line-clamp-2 text-sm font-medium leading-snug text-fg hover:underline" title={title}>
+          {/* Three lines on a phone: two cut titles mid-phrase ("projects-to-…",
+              "relationship wa…", round-3 sweep 2026-11-19). */}
+          <Link to={detailPath} className="line-clamp-3 text-sm font-medium leading-snug text-fg hover:underline" title={title}>
             <ReportSourceTag report={row} className="mr-1.5 align-middle" />
             {title}
             {variantCount && variantCount > 1 ? (

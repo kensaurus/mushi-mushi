@@ -40,3 +40,22 @@ export function accountKeyForProject<T extends AccountKeyLike>(keys: readonly T[
     ) ?? null
   )
 }
+
+/**
+ * Step 1 of the Editor agents quick start: which key gives an editor access.
+ * A green tick sat over a green "0 MCP keys on kensaur.us" while the account
+ * key cursor-mcp-org reached the app (round-3 review 2026-11-19); the step now
+ * names the key that counts, and is open only when none does.
+ */
+export function mcpKeyStep(
+  projectKeyCount: number,
+  accountKeyLabel: string | null | undefined,
+): { done: boolean; text: string | null } {
+  if (projectKeyCount > 0) {
+    return { done: true, text: `${projectKeyCount} MCP key${projectKeyCount === 1 ? '' : 's'} on this app.` }
+  }
+  if (accountKeyLabel !== undefined && accountKeyLabel !== null) {
+    return { done: true, text: `Your account key ${accountKeyLabel || '(unnamed)'} reaches this app.` }
+  }
+  return { done: false, text: null }
+}

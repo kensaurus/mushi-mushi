@@ -30,7 +30,7 @@ import {
 } from '../components/ui'
 import { ActionPill } from '../components/report-detail/ReportSurface'
 import { StatusPill } from '../components/signal/StatusMark'
-import { reporterSetupChecks, sentRowTitle } from '../lib/notificationsView'
+import { reporterLabel, reporterSetupChecks, sentRowTitle } from '../lib/notificationsView'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -52,7 +52,6 @@ import {
   type ReporterNotification,
 } from '../components/notifications/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
-import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
@@ -324,38 +323,6 @@ export function NotificationsPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
           Refresh
         </Btn>
-        {/* One row of same-height filters, each named inside its select ("All updates",
-            "All types"); a visible "Show" label above one of them made the row ragged. The
-            unread count is the status row's number, not repeated on the filter or the button. */}
-        {activeTab === 'inbox' && (
-              <>
-                <FilterSelect
-                  id="filter-show"
-                  label="updates"
-                  value={filter === 'unread' ? 'unread' : ''}
-                  options={['unread']}
-                  optionLabel={() => 'Unread only'}
-                  onChange={(e) => updateParam('show', e.currentTarget.value)}
-                />
-                <FilterSelect
-                  id="filter-type"
-                  label="types"
-                  value={type}
-                  options={TYPE_OPTIONS}
-                  onChange={(e) => updateParam('type', e.currentTarget.value)}
-                />
-                <ConfigHelp helpId="notifications.type_filter" />
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={markAllRead}
-                  disabled={bulking || unreadCount === 0}
-                  loading={bulking}
-                >
-                  Mark all read
-                </Btn>
-              </>
-            )}
       </PageHeaderBar>
 
       <PagePosture
@@ -410,7 +377,41 @@ export function NotificationsPage() {
       ) : null}
 
       {activeTab === 'inbox' && (
-        <Section title="Reporter inbox">
+        // Filters ride in the inbox card's header at its size: in the page header they added two
+        // rows of larger chrome above the status at 390 (2026-11-19). One row of same-height
+        // filters, each named inside its select; the unread count is the status row's number.
+        <Section
+          title="Reporter inbox"
+          action={
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="notifications-inbox-filters">
+              <FilterSelect
+                id="filter-show"
+                label="updates"
+                value={filter === 'unread' ? 'unread' : ''}
+                options={['unread']}
+                optionLabel={() => 'Unread only'}
+                onChange={(e) => updateParam('show', e.currentTarget.value)}
+              />
+              <FilterSelect
+                id="filter-type"
+                label="types"
+                value={type}
+                options={TYPE_OPTIONS}
+                onChange={(e) => updateParam('type', e.currentTarget.value)}
+              />
+              <ConfigHelp helpId="notifications.type_filter" />
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={markAllRead}
+                disabled={bulking || unreadCount === 0}
+                loading={bulking}
+              >
+                Mark all read
+              </Btn>
+            </div>
+          }
+        >
           <div data-dav-anchor="notifications:decide">
             {notifications.length === 0 ? (
               filter === 'unread' || type ? (
@@ -461,11 +462,7 @@ export function NotificationsPage() {
                       {/* Actions wrap under the text on a phone, so the meta line keeps its width
                           (it stacked one clipped chip per line at 390: "11… / un… / to…"). */}
                       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                        <Badge
-                          className={`${TYPE_BADGE[n.notification_type] ?? 'bg-surface-overlay text-fg-muted border border-edge-subtle'} shrink-0`}
-                        >
-                          {n.notification_type}
-                        </Badge>
+                        {/* No "classified" chip: the title already says "Bug diagnosed" (2026-11-19). */}
                         <div className="min-w-0 flex-1 basis-48">
                           <p className="text-xs font-medium text-fg">{sentRowTitle(n)}</p>
                           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary">
@@ -477,7 +474,7 @@ export function NotificationsPage() {
                                 opened <RelativeTime value={n.read_at} />
                               </span>
                             ) : null}
-                            <span className="whitespace-nowrap">reporter {shortReporterKey(n.reporter_token_hash)}</span>
+                            <span className="whitespace-nowrap" title={n.reporter_token_hash}>reporter · {reporterLabel(n.reporter_token_hash)}</span>
                             {n.report_id ? (
                               <ActionPill to={`/reports/${n.report_id}`} tone="brand">
                                 report {n.report_id.slice(0, 8)}
@@ -560,7 +557,8 @@ export function NotificationsPage() {
               </div>
             </div>
 
-            {Object.keys(stats.byType).length > 0 && (
+            {/* One type is just the total again ("classified: 2"); the breakdown shows from two. */}
+            {Object.keys(stats.byType).length > 1 && (
               <div className="space-y-2 border-t border-edge-subtle pt-3">
                 <h3 className="text-sm font-semibold text-fg">Messages by type</h3>
                 <div className="flex flex-wrap gap-2">

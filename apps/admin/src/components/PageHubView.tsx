@@ -11,6 +11,7 @@ import { Loading, SegmentedControl } from './ui'
 import { LockedHubView } from './LockedHubView'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useEdgeFade } from '../lib/useEdgeFade'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { hubRedirectTarget, lockedHubView, resolveHubView, visibleViews, type PageHub } from '../lib/pageHubs'
 
 export function PageHubView({ hub, render }: { hub: PageHub; render: Record<string, () => ReactNode> }) {
@@ -25,6 +26,9 @@ export function PageHubView({ hub, render }: { hub: PageHub; render: Record<stri
   const options = locked ? hub.views.filter((v) => v === locked || views.includes(v)) : views
   // Phone: the view picker scrolls with a fade at the edge, never a raw scrollbar (fresh-eyes 2026-11-18).
   const fade = useEdgeFade<HTMLDivElement>(options.length)
+  // Phone: the views wrap onto a second row; the scroll strip still showed a native scrollbar
+  // and cut "Storag" at the edge (2026-11-19).
+  const wide = useMediaQuery('(min-width: 640px)', true)
 
   const select = (id: string) => {
     const next = new URLSearchParams(searchParams)
@@ -35,7 +39,17 @@ export function PageHubView({ hub, render }: { hub: PageHub; render: Record<stri
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      {options.length > 1 && (
+      {options.length > 1 && !wide && (
+        <SegmentedControl<string>
+          value={view}
+          options={options.map((v) => ({ id: v.id, label: v.label }))}
+          onChange={select}
+          ariaLabel={hub.title}
+          size="sm"
+          wrap
+        />
+      )}
+      {options.length > 1 && wide && (
         <div ref={fade.ref} className={`max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`}>
           <SegmentedControl<string>
             value={view}

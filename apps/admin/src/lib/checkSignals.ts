@@ -146,7 +146,8 @@ export function checkAlerts(cards: readonly CheckSignalInput[], baseline: CheckB
         id: c.path.slice(1),
         severity: 'critical',
         label: 'Failed',
-        title: `${c.label} failed`,
+        // "Failed" is the card's label and "✕ failed" its metric: the title is the check (round 3).
+        title: c.label,
         detail: [change ? `${change.text} since your last visit` : null, when ?? c.description].filter(Boolean).join(' · '),
         metric: { value: '✕', unit: change ? `failed · ${change.text}` : 'failed' },
         keys,

@@ -80,7 +80,10 @@ describe('AntiGamingPage with no tracked device', () => {
     expect(host.textContent).not.toContain('Cross-account')
     expect(host.querySelector('[data-testid="anti-gaming-not-checked"]')?.textContent).toContain('Not checked yet')
     expect(host.textContent).not.toContain('Waiting for SDK devices')
-    expect(host.querySelectorAll('[data-testid="anti-gaming-empty-line"]').length).toBeGreaterThan(0)
+    // 2026-11-19: empty is said once, by the status card; the device and event cards wait for data.
+    expect(host.querySelectorAll('[data-testid="anti-gaming-empty-line"]')).toHaveLength(0)
+    expect(host.textContent).not.toContain('No anti-gaming events yet.')
+    expect(host.textContent).not.toContain('No tracked devices yet.')
     expect(host.querySelector('.border-dashed')).toBeNull()
   })
 

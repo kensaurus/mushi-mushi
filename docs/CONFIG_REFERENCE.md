@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_120 configuration knobs across 19 sections · last regenerated 2026-11-13._
+_120 configuration knobs across 19 sections · last regenerated 2026-11-19._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -449,7 +449,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `projects.create_project`
 
-**Summary** — Names a new project — the bucket every report, key, and integration is scoped to.
+**Summary** — Names a new app: one per app or environment, the bucket every report, key, and integration is scoped to. Your API key and setup command appear on the next screen.
 
 **How it works** — Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs. After you click Create, the success panel shows the Project UUID to paste into the CLI (`MUSHI_PROJECT_ID`).
 

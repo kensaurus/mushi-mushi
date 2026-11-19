@@ -94,7 +94,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         helpFlowPath="/ux-runs"
       />
       <p className="text-2xs text-fg-muted">
-        Want to know if a new user gets through your app? That is the <Link className="text-brand hover:underline" to="/first-user-test">first-time user test</Link>.
+        Want to know if a new user gets through your app? That is the <Link className="text-brand underline underline-offset-2" to="/first-user-test">first-time user test</Link>.
       </p>
 
         <PagePosture

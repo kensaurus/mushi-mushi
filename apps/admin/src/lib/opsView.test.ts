@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCoverageRows, freshness, needsLookView, nestThreads, paymentsToday, slackChipShown, slackState, splitBodyCta, splitOpsColumns } from './opsView'
+import { buildCoverageRows, freshness, opsAppName, needsLookView, nestThreads, paymentsToday, slackChipShown, slackState, splitBodyCta, splitOpsColumns } from './opsView'
 import type { OpsCoverageResponse, OpsEvent } from './opsTypes'
 
 const NOW = Date.parse('2026-11-17T05:00:00Z')
@@ -61,6 +61,23 @@ describe('buildCoverageRows', () => {
     ])
     expect(rows[1].mutedUntil).toBe('2026-11-17T09:00:00Z')
     expect(rows[1].cells.find((c) => c.column === 'payments')).toMatchObject({ count7d: 3 })
+  })
+
+  // Round 3: the public demo app gets no row, and names keep their own case.
+  it('leaves out the demo app and keeps the app name as written', () => {
+    const data: OpsCoverageResponse = {
+      apps: [
+        { id: 'p1', name: 'Help Her Take Photo', slug: 'hhtp', icon_url: null },
+        { id: 'd', name: 'Mushi demo (sample data)', slug: 'mushi-demo', icon_url: null },
+      ],
+      coverage: [],
+      today: { payments: {}, releases: 0, openAlerts: 0, since: '' },
+      mutes: [],
+      slack: { enabled: true },
+    }
+    const rows = buildCoverageRows(data, NOW)
+    expect(rows.map((r) => r.app.id)).toEqual(['p1'])
+    expect(opsAppName(rows[0].app)).toBe('Help Her Take Photo')
   })
 })
 

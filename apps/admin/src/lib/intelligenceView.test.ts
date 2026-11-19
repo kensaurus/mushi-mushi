@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { digestBody, formatDigestWeek, insightsTone } from './intelligenceView'
+import { digestBody, formatDigestWeek, insightsTone, showInsightsSnapshot } from './intelligenceView'
 
 describe('digestBody (round-2 sweep 2026-11-18)', () => {
   it('is empty for a digest that is only its own title', () => {
@@ -31,5 +31,12 @@ describe('insightsTone', () => {
   it('is red only for a failed latest run, neutral with no summary', () => {
     expect(insightsTone({ ...base, topPriority: 'job_failed', daysSinceLastDigest: 9 })).toBe('danger')
     expect(insightsTone({ ...base, reportCount: 0, daysSinceLastDigest: null })).toBe('neutral')
+  })
+})
+
+describe('showInsightsSnapshot (round-3 sweep 2026-11-19)', () => {
+  it('leaves a stale summary to the amber banner alone', () => {
+    expect(showInsightsSnapshot({ topPriority: 'stale_digest' })).toBe(false)
+    expect(showInsightsSnapshot({ topPriority: 'healthy' })).toBe(true)
   })
 })

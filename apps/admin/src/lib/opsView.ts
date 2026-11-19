@@ -7,6 +7,7 @@
  */
 
 import type { OpsApp, OpsCategory, OpsCoverageResponse, OpsEvent, OpsSeverity } from './opsTypes'
+import { isPublicDemo } from './publicDemo'
 
 export type OpsColumn = OpsCategory | 'bugs'
 
@@ -20,10 +21,10 @@ export const OPS_COLUMNS: ReadonlyArray<{ id: OpsColumn; label: string; glyph: s
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 
-/** The app's name as the team writes it: lowercase. */
+/** The app's name as every other page writes it ("Help Her Take Photo", not "help her take photo"; round 3). */
 export function opsAppName(app: Pick<OpsApp, 'id' | 'name'> | undefined | null): string {
   if (!app) return 'no app'
-  return (app.name ?? app.id.slice(0, 8)).toLowerCase()
+  return app.name ?? app.id.slice(0, 8)
 }
 
 export function agoText(iso: string | null | undefined, now: number): string {
@@ -85,7 +86,8 @@ function orderOpsColumns(rows: readonly CoverageRowView[]): OpsColumn[] {
 export function buildCoverageRows(data: OpsCoverageResponse, now: number): CoverageRowView[] {
   const byKey = new Map(data.coverage.map((r) => [`${r.project_id}|${r.category}`, r]))
   const muted = new Map(data.mutes.filter((m) => Date.parse(m.until) > now).map((m) => [m.project_id, m.until]))
-  const rows = data.apps.map((app) => {
+  // The public demo app sends nothing real: no row for it (round 3).
+  const rows = data.apps.filter((app) => !isPublicDemo({ name: app.name ?? null, slug: null })).map((app) => {
     const cells = OPS_COLUMNS.map(({ id }) => {
       const r = byKey.get(`${app.id}|${id}`)
       return { column: id, lastAt: r?.last_at ?? null, count7d: r?.count_7d ?? 0, fresh: freshness(r?.last_at, now) }

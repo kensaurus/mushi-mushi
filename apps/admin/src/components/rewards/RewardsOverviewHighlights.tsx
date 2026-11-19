@@ -11,12 +11,12 @@ import { Link } from 'react-router-dom'
 import { Card } from '../ui'
 import { usePageData } from '../../lib/usePageData'
 import { testerLabel } from './overviewHelpers'
+import { questsForApp, topTesters } from './rewardsView'
 
 interface LeaderRow {
   end_user_id: string
   points_30d: number
-  end_users: { external_user_id: string; display_name: string | null } | null
-  reward_tiers: { display_name: string } | null
+  end_users: { external_user_id: string; display_name: string | null; last_seen_at?: string | null } | null
 }
 
 interface QuestRow {
@@ -24,7 +24,11 @@ interface QuestRow {
   name: string
   completion_points: number
   enabled: boolean
+  project_id?: string | null
 }
+
+/** Enough rows that dropping testers whose 30-day total was not recounted still leaves five. */
+const LEADER_FETCH = 25
 
 const LINK = 'text-2xs text-accent-foreground underline underline-offset-2 hover:text-accent'
 
@@ -32,17 +36,19 @@ function CardTitle({ children }: { children: string }) {
   return <h3 className="text-xs font-semibold text-fg-secondary">{children}</h3>
 }
 
-export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutUsd: number }) {
-  const leaders = usePageData<{ data: LeaderRow[] }>('/v1/admin/rewards/leaderboard?range=30d&limit=5&offset=0')
+export function RewardsOverviewHighlights({ pendingPayoutUsd, projectId = null }: { pendingPayoutUsd: number; projectId?: string | null }) {
+  const leaders = usePageData<{ data: LeaderRow[] }>(`/v1/admin/rewards/leaderboard?range=30d&limit=${LEADER_FETCH}&offset=0`)
   const quests = usePageData<QuestRow[]>('/v1/admin/rewards/quests')
-  const top = (leaders.data?.data ?? []).filter((r) => r.points_30d > 0)
-  const live = (quests.data ?? []).filter((q) => q.enabled).sort((a, b) => b.completion_points - a.completion_points).slice(0, 3)
+  // Same stale rule as Contributors, so the two tabs rank the same testers.
+  const top = topTesters(leaders.data?.data ?? [])
+  const live = questsForApp(quests.data ?? [], projectId).mine.filter((q) => q.enabled).sort((a, b) => b.completion_points - a.completion_points).slice(0, 3)
 
   return (
     // $0.00 waiting is already in the status line above: the Payouts card shows only when money is owed (2026-11-18).
     <div className={`grid grid-cols-1 gap-3 ${pendingPayoutUsd > 0 ? 'md:grid-cols-3' : 'md:grid-cols-2'}`} data-testid="rewards-overview-highlights">
       <Card className="p-3">
-        <CardTitle>Top testers · 30 days</CardTitle>
+        {/* Testers and points are counted across every app in the team; the open app's switch doesn't scope them. */}
+        <CardTitle>Top testers · 30 days · all apps</CardTitle>
         {leaders.loading && !leaders.data ? (
           <p className="mt-2 text-xs text-fg-muted">Loading…</p>
         ) : top.length === 0 ? (
@@ -53,7 +59,6 @@ export function RewardsOverviewHighlights({ pendingPayoutUsd }: { pendingPayoutU
               <li key={r.end_user_id} className="flex min-w-0 items-center gap-2 text-xs">
                 <span className="w-4 shrink-0 text-right tabular-nums text-fg-faint">{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate text-fg">{testerLabel(r.end_users)}</span>
-                {r.reward_tiers ? <span className="shrink-0 text-2xs text-fg-muted">{r.reward_tiers.display_name}</span> : null}
                 <span className="shrink-0 font-mono tabular-nums text-fg-secondary">{r.points_30d.toLocaleString()} pts</span>
               </li>
             ))}

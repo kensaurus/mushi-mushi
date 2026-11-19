@@ -50,7 +50,6 @@ import {
 } from '../components/drift/DriftStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
@@ -329,7 +328,7 @@ export function DriftPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        contextChip={<PdcaContextHint stage="check" />}
+        // No unexplained "C Check" stage chip before the heading (round 3): the section bar names the place.
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before.'}
         helpUseCases={copy?.help?.useCases ?? [

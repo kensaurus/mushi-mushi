@@ -28,7 +28,8 @@ vi.mock('../lib/usePageData', () => ({
   }),
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
-vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'mushi-mushi' } }) }))
+const setupSteps = vi.hoisted(() => ({ steps: [] as Array<{ id: string; complete: boolean }> }))
+vi.mock('../lib/useSetupStatus', () => ({ useSetupStatus: () => ({ activeProject: { project_name: 'mushi-mushi', steps: setupSteps.steps } }) }))
 vi.mock('../components/OrgSwitcher', () => ({ useActiveOrgId: () => null }))
 // The empty-portfolio first diagnosis pulls in the SDK install preview
 // (@mushi-mushi/core/reporter-ui), which a stale linked core build cannot
@@ -148,6 +149,22 @@ describe('Home views', () => {
       .find((a) => a.getAttribute('href') === '/reports?status=open&severity=critical')!
       .querySelector('span')!
     expect(critical.className).not.toContain('danger')
+  })
+
+  // Round-3 sweep 2026-11-19: "Check your SDK setup" while Home said the SDK was sending.
+  it('User activity asks for session tracking, not an SDK check, when the SDK is installed', async () => {
+    data.byPath = {
+      '/v1/admin/activity': {
+        window_days: 30, sessions: 0, completed_sessions: 0, unique_devices: 0, identified_users: 0, avg_page_views: 0, avg_session_minutes: 0,
+        dau_series: [], top_routes: [], reports: { total: 4, open: 4, critical: 0, high: 1 }, user_split: { identified: 0, anonymous: 0 },
+      },
+    }
+    setupSteps.steps = [{ id: 'sdk_installed', complete: true }]
+    const text = await render(ActivityPage)
+    setupSteps.steps = []
+    expect(text).toContain('trackSessions: true')
+    expect(text).toContain('Turn on session tracking')
+    expect(text).not.toContain('Check your SDK setup')
   })
 
   it('Users & funnels gives the Anonymous tile its own share', async () => {

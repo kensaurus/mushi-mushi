@@ -41,6 +41,9 @@ const STEP_LABELS: Record<StatusStep, string> = {
   fixed: 'Fixed',
 }
 
+/** The step most open reports rest on; the table row draws it as a bar only. */
+const CLASSIFIED_IDX = STATUS_STEPS.indexOf('classified')
+
 /** Map every report.status value into a step index (0..3). Anything we don't
  *  know about defaults to 0 so the stepper still renders gracefully. */
 const STATUS_TO_INDEX: Record<string, number> = {
@@ -166,7 +169,11 @@ export function StatusStepper({
       ) : (
         barRow
       )}
-      {isTable && (
+      {/* "○ Classified" sat on almost every Open row beside a bar that
+          already says step 2 (round-3 sweep 2026-11-19). The table prints the
+          word only when the step is not the resting Classified one; the bar's
+          name and tooltip still say it. */}
+      {isTable && activeIdx !== CLASSIFIED_IDX && (
         <span
           aria-hidden="true"
           className={`inline-flex shrink-0 items-center gap-1 text-2xs leading-none font-semibold ${STATUS_INK[runStatus]}`}

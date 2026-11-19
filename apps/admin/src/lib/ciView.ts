@@ -766,3 +766,39 @@ export function groupInfraFailures(jobs: readonly CiJob[]): CiInfraGroup[] {
   }
   return [...out.values()]
 }
+
+/**
+ * A job name without the workflow expression GitHub left unresolved (round 3, 2026-11-19: "Publish
+ * OTA (${{ (((inputs.track == 'beta') && 'beta') || 'production') }})"). A bracketed expression goes
+ * with its brackets; one inside the name becomes "…". The real name is never lost: an all-expression
+ * name stays as it was.
+ * @internal Exported for tests.
+ */
+export function cleanJobName(name: string): string {
+  if (!name.includes('${{')) return name
+  const out = name
+    .replace(/\s*\(\s*\$\{\{[\s\S]*?\}\}\s*\)/g, '')
+    .replace(/\$\{\{[\s\S]*?\}\}/g, '…')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return out || name
+}
+
+/** The overview with every job name cleaned (cleanJobName), once, where the page reads it. */
+export function cleanCiOverview(o: CiOverview): CiOverview {
+  const dirty = (n: string | null | undefined) => typeof n === 'string' && n.includes('${{')
+  const hasDirty =
+    o.jobs.some((j) => dirty(j.jobName)) ||
+    (o.stats.byJob ?? []).some((t) => dirty(t.job)) ||
+    o.stats.slowSteps.some((s) => dirty(s.job))
+  if (!hasDirty) return o
+  return {
+    ...o,
+    jobs: o.jobs.map((j) => (dirty(j.jobName) ? { ...j, jobName: cleanJobName(j.jobName) } : j)),
+    stats: {
+      ...o.stats,
+      slowSteps: o.stats.slowSteps.map((s) => (dirty(s.job) ? { ...s, job: cleanJobName(s.job) } : s)),
+      ...(o.stats.byJob ? { byJob: o.stats.byJob.map((t) => (dirty(t.job) ? { ...t, job: cleanJobName(t.job) } : t)) } : {}),
+    },
+  }
+}

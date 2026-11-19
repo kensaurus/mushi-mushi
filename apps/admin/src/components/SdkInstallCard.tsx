@@ -257,7 +257,9 @@ export function SdkInstallCard({
         keyPrefixes={keyPrefixes}
         onRotatedKeyChange={handleRotatedKeyChange}
         onError={handleKeyError}
-        flat={embedded}
+        // Always rows with dividers: this card is already the frame, so a bordered keys card with
+        // bordered rows inside it was three levels (round-3 review, 2026-11-19).
+        flat
       />
 
       {!compact && (
@@ -332,7 +334,7 @@ export function SdkInstallCard({
         <WidgetCustomizeColumn compact={compact}>
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-secondary font-semibold">Live preview</span>
+              <span className="text-2xs text-fg-secondary font-semibold">Preview: press the button to try it</span>
               {!isDefault && (
                 <button
                   type="button"

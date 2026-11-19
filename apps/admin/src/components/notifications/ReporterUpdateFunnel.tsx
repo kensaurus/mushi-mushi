@@ -35,11 +35,12 @@ export function funnelSentence(f: ReporterFunnel): string {
   return `${notOpened} of ${f.told} reporters have not opened their update yet. They see it the next time they open the widget.`
 }
 
-/** @internal Exported for tests. What the funnel counts over: the latest 500, or every update when there are fewer. */
-export function funnelScope(totalUpdates?: number | null): string {
-  if (totalUpdates != null && totalUpdates >= 0 && totalUpdates < 500) {
-    return `over ${totalUpdates === 1 ? 'your 1 update' : `all ${totalUpdates} updates`}`
-  }
+/**
+ * @internal Exported for tests. What the funnel counts over: the latest 500, or nothing to add
+ * when it counts every update (2026-11-19: "over all 2 updates" was the 2 said a seventh time).
+ */
+export function funnelScope(totalUpdates?: number | null): string | null {
+  if (totalUpdates != null && totalUpdates >= 0 && totalUpdates < 500) return null
   return 'over your latest 500 updates'
 }
 
@@ -62,7 +63,7 @@ export function ReporterUpdateFunnel({
   return (
     <Card className="p-4" data-testid="reporter-update-funnel">
       <h2 className="text-sm font-semibold text-fg">Did reporters hear back?</h2>
-      <p className="mb-3 text-2xs text-fg-muted">Counted in bug reports, {funnelScope(totalUpdates)}.</p>
+      <p className="mb-3 text-2xs text-fg-muted">Counted in bug reports{funnelScope(totalUpdates) ? `, ${funnelScope(totalUpdates)}` : ''}.</p>
       <dl className="space-y-2">
         {stages.map((s) => {
           const pct = funnelPct(s.value, funnel.told)

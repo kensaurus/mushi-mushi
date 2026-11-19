@@ -269,7 +269,7 @@ function OrgPortfolio({ orgId }: { orgId: string }) {
   // The "Fix once" count is the length of the one problem list the Apps tab draws, never the
   // server's group count (9 groups beside 8 rows once two merged, round 2 2026-11-18).
   const problemCount = useMemo(() => (ownFindingsData ? appProblemList(ownFindingsData, (id) => names.get(id) ?? id).length : null), [ownFindingsData, names])
-  // Never an endless "Reading each app's signals…": after 20 s it says "not checked" with Retry.
+  // Never an endless "Reading each app's signals…": after 10 s it says "not checked" with Retry.
   const appsWait = useReadTimedOut(tab === 'apps' && !portfolio && page.loading)
 
   return (

@@ -832,15 +832,8 @@ export function ReportsPage() {
         >
           Import from Sentry
         </Btn>
-        {/* The box is sized for the widest form ("137 total · page 1/4") so the
-            count landing never re-wraps the actions row and drops the whole
-            page by a line (layout shift at 390px). `ch` is exact in mono. */}
-        <span
-          className="inline-block text-right text-xs text-fg-muted font-mono tabular-nums"
-          style={{ minWidth: '21ch' }}
-        >
-          {total.toLocaleString('en-US')} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
-        </span>
+        {/* No "903 total · page 1/19" here: the Open chip and the pager carry
+            the count (round-3 sweep 2026-11-19: 903 was on the page 4×). */}
         {/* One help button: "How this page works" lists the shortcuts and the
             ? key still opens the cheat sheet; a second "?" button beside it
             read as two helps (R2 sweep 2026-11-18). */}

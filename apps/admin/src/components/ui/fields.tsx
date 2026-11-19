@@ -550,13 +550,15 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
     )
   }
   return (
-    <div className={`group/code inline-flex max-w-full items-start gap-1.5 ${className}`}>
+    // The copy button sits inside the block, top-right, as in the multiline block (round-3
+    // review 2026-11-19: beside the block it floated outside the card edge).
+    <div className={`group/code relative inline-flex max-w-full ${className}`}>
       <code
-        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${toneClass}`}
+        className={`${CODE_BLOCK_SHELL} ${CODE_BLOCK_BODY} block w-full px-2 py-1 ${copyable ? 'pr-8' : ''} ${toneClass}`}
       >
         {value}
       </code>
-      {copyable && <CopyButton value={value} className="mt-0.5 shrink-0" />}
+      {copyable && <CopyButton value={value} className="absolute right-1 top-0.5" />}
     </div>
   )
 }

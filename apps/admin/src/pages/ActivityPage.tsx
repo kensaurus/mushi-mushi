@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { journeySdkState } from '../lib/journeys'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { Btn, Card, FreshnessPill, Section, StatCard, StatGrid } from '../components/ui'
@@ -157,14 +158,14 @@ export function ActivityPage() {
           onRetry={reload}
         />
       )}
-      {data && <ActivityDashboard data={data} />}
+      {data && <ActivityDashboard data={data} sdkInstalled={journeySdkState(setup.activeProject?.steps).installed} />}
     </div>
   )
 }
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
-function ActivityDashboard({ data }: { data: ActivityData }) {
+function ActivityDashboard({ data, sdkInstalled }: { data: ActivityData; sdkInstalled: boolean }) {
   const dauValues = (data.dau_series ?? []).map((p) => p.dau)
 
   const split = identitySplit(data.user_split)
@@ -176,12 +177,19 @@ function ActivityDashboard({ data }: { data: ActivityData }) {
     <div className="space-y-4">
       {noSessions && (
         <Card className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm" data-testid="activity-empty">
+          {/* An SDK that already sends reports only lacks session tracking;
+              "Check your SDK setup" beside Home's "Sending" read as broken
+              (round-3 sweep 2026-11-19). Same wording as the Journey optimizer. */}
           <p className="min-w-0">
             <span className="font-medium text-fg">No sessions recorded yet.</span>{' '}
-            <span className="text-fg-muted">They appear once people visit pages with the Mushi Mushi SDK.</span>
+            <span className="text-fg-muted">
+              {sdkInstalled
+                ? 'Your SDK is installed: turn on session tracking (trackSessions: true) to record visits.'
+                : 'They appear once people visit pages with the Mushi Mushi SDK.'}
+            </span>
           </p>
           <Link to="/connect" className="shrink-0 whitespace-nowrap text-xs text-link hover:underline">
-            Check your SDK setup →
+            {sdkInstalled ? 'Turn on session tracking →' : 'Check your SDK setup →'}
           </Link>
         </Card>
       )}

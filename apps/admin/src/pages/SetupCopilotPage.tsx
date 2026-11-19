@@ -168,10 +168,15 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
         aria-label="Setup funnel"
         className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted"
       >
-        <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-          Set up
-        </Link>
-        <span aria-hidden="true">·</span>
+        {/* Embedded, this is the Set up page: a "Set up" link here linked to itself (round-3 review). */}
+        {embedded ? null : (
+          <>
+            <Link to="/onboarding" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+              Set up
+            </Link>
+            <span aria-hidden="true">·</span>
+          </>
+        )}
         <Link to={projectId ? `/connect?project=${projectId}` : '/connect'} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
           Connect
         </Link>
@@ -234,8 +239,9 @@ export function SetupCopilotPage({ embedded = false }: { embedded?: boolean } = 
                     reportCount={projectRow.report_count}
                     sdkConnected={sdkHeardFrom(projectRow.api_keys)}
                     connectCmd={connectCmd}
-                    // Without these the freshness pill read "● —" (round-2 review).
-                    fetchedAt={projectsFetchedAt}
+                    // Without these the freshness pill read "● —" (round-2 review). Embedded in Set
+                    // up, the page already shows one freshness pill (Setup gaps): no second one.
+                    fetchedAt={embedded ? undefined : projectsFetchedAt}
                     validating={projectsValidating}
                   />
                 ),

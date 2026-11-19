@@ -8,7 +8,6 @@ import { usePublishPageContext } from '../lib/pageContext'
 import {
   EmptyState,
   Btn,
-  Badge,
   Section,
   RelativeTime,
   Tooltip,
@@ -59,6 +58,8 @@ import { ListPager } from '../components/ListPager'
 import { judgeEvaluationsPath, judgeRunConfirmBody } from '../lib/judgeFilters'
 import { PageLoadError } from '../components/PageLoadError'
 import { BarCell } from '../components/signal/BarCell'
+import { useMediaQuery } from '../lib/useMediaQuery'
+import { VersionStateMark } from '../components/prompt-lab/VersionStateMark'
 import {
   canDrawTrend,
   groupJudgePrompts,
@@ -187,18 +188,21 @@ function ScoreBar({
   description?: string
 }) {
   const pct = Math.round(value * 100)
-  const row = (
+  const name = (
+    <span className={`text-fg-secondary ${description ? 'cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2' : ''}`}>
+      {label}
+    </span>
+  )
+  // The tooltip wraps the name only: wrapped around the row, its inline-flex span set the
+  // five rows side by side ("Overall 67%Accuracy 95%Severity…", 2026-11-19).
+  return (
     // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas): name | bar | number
-    <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)_3rem] items-center gap-2 py-1 text-xs">
-      <span className={`text-fg-secondary ${description ? 'cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2' : ''}`}>
-        {label}
-      </span>
+    <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)_3rem] items-center gap-2 py-1 text-xs" data-testid="judge-score-bar">
+      {description ? <Tooltip content={description}>{name}</Tooltip> : name}
       <BarCell value={pct} max={100} label={`${label} ${pct}%`} widthClass="w-full" className="w-full" />
       <span className="text-right tabular-nums text-fg">{pct}%</span>
     </div>
   )
-  if (!description) return row
-  return <Tooltip content={description}>{row}</Tooltip>
 }
 
 /**
@@ -345,6 +349,8 @@ export function JudgePage() {
   // /evaluations query filter. fixes the inert leaderboard rows
   // the PageHelp claimed were clickable.
   const [promptFilter, setPromptFilter] = useState<{ version: string; stage: string } | null>(null)
+  // Phone: grades as stacked rows, not a ten-column table that scrolls sideways (2026-11-19).
+  const wide = useMediaQuery('(min-width: 640px)', true)
 
   const weeksQuery = usePageData<{ weeks: WeekData[] }>('/v1/admin/judge-scores')
   // Wave T.5.8b: fetch chart events (deploys, cron anomalies, BYOK
@@ -618,17 +624,15 @@ export function JudgePage() {
               ) : latest ? (
                 // One week drew a single dot at the top edge of an empty 12-week chart
                 // (round-2 review, 2026-11-18): under two weeks, say the number.
-                <p className="text-sm text-fg" data-testid="judge-trend-single">
-                  <span className="text-lg font-semibold tabular-nums">{Math.round(latest.avg_score * 100)}%</span>{' '}
-                  <span className="text-fg-secondary">
-                    average grade, week of {shortWeek(latest.week_start)} ({latest.eval_count} grade{latest.eval_count === 1 ? '' : 's'}).
-                  </span>{' '}
+                // The average is the status tile's number; said again here it made 67% three times
+                // on one tab (2026-11-19).
+                <p className="text-xs text-fg-secondary" data-testid="judge-trend-single">
+                  {latest.eval_count} grade{latest.eval_count === 1 ? '' : 's'} in the week of {shortWeek(latest.week_start)}.{' '}
                   <span className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</span>
                 </p>
               ) : null}
               {latest && (
                 <div className="mt-3" aria-label={drawTrend ? 'Latest week by dimension' : 'By dimension'}>
-                  <ScoreBar label="Overall" value={latest.avg_score} description={DIMENSION_TOOLTIPS.Score} />
                   <ScoreBar label="Accuracy" value={latest.avg_accuracy} description={DIMENSION_TOOLTIPS.Acc} />
                   <ScoreBar label="Severity" value={latest.avg_severity} description={DIMENSION_TOOLTIPS.Sev} />
                   <ScoreBar label="Component" value={latest.avg_component} description={DIMENSION_TOOLTIPS.Comp} />
@@ -644,16 +648,18 @@ export function JudgePage() {
             <>
               <Histogram
                 buckets={dist.buckets}
-                labels={['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']}
+                // One scale: the grade in percent, one bar per 10 points (2026-11-19: the axis said
+                // a 0 to 10 score while the chip said 0 to 100).
+                labels={['0', '10', '20', '30', '40', '50', '60', '70', '80', '90']}
                 accent="bg-brand/70"
                 height={100}
                 showAxes
                 valueFormat="count"
                 yAxisCaption="Evals"
-                xAxisCaption="Score (0–10)"
+                xAxisCaption="Grade (%)"
               />
               <InlineProof className="mt-2">
-                {dist.total} evals · 0–100 scale, deciles
+                {dist.total} grade{dist.total === 1 ? '' : 's'}
               </InlineProof>
             </>
           ) : (
@@ -749,6 +755,8 @@ export function JudgePage() {
         value={activeTab}
         options={tabOptions}
         onChange={setActiveTab}
+        // Compact like every other sub-tab strip: the flex-column page stack stretched it.
+        className="self-start"
       />
       )}
 
@@ -798,6 +806,8 @@ export function JudgePage() {
             statsValidating={statsValidating}
             statLabels={copy?.statLabels}
             onSeeDisagreements={seeDisagreements}
+            // The verdict sentence once, on Overview; other tabs keep the numbers (2026-11-19).
+            showSentence={activeTab === 'overview'}
           />
         )
       )}
@@ -847,7 +857,7 @@ export function JudgePage() {
             : '—',
           to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
           secondaryTo: '/prompt-lab',
-          secondaryLabel: 'Open Prompt Lab',
+          secondaryLabel: 'Open AI prompts',
           anchor: 'judge:verify',
           evidence: lastEval ? {
             kind: 'last-event',
@@ -877,11 +887,11 @@ export function JudgePage() {
           <div className="space-y-2">
             <EmptySectionMessage
               text="No prompt versions registered yet."
-              hint="The Prompt Lab can create candidates to A/B against the active classifier prompt."
+              hint="AI prompts can create test versions to run against the prompt in use."
             />
             <ActionPillRow>
               <ActionPill to="/prompt-lab" tone="brand">
-                Open Prompt Lab →
+                Open AI prompts →
               </ActionPill>
             </ActionPillRow>
           </div>
@@ -978,6 +988,8 @@ export function JudgePage() {
                 : 'Run judge now or wait for the nightly cron to score classified reports.'
             }
           />
+        ) : !wide ? (
+          <JudgeGradeRows evals={evals} />
         ) : (
           <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs" data-dav-anchor="judge:verify">
@@ -1029,7 +1041,7 @@ export function JudgePage() {
                       <td className="py-1.5 px-3 min-w-[11rem] max-w-[14rem] sm:max-w-[22rem]">
                         <Link
                           to={`/reports/${e.report_id}`}
-                          className="text-accent-foreground hover:text-accent line-clamp-1 leading-snug"
+                          className="text-accent-foreground hover:text-accent line-clamp-2 break-words leading-snug"
                           title={summary ?? undefined}
                         >
                           {display}
@@ -1046,9 +1058,10 @@ export function JudgePage() {
                           )}
                         </InlineProof>
                         {disagreementReason && (
+                          // A note, not a warning: grey, no glyph (2026-11-19: amber italic "⚠").
                           <Tooltip content={disagreementReason}>
-                            <p className="mt-1 text-3xs text-warn line-clamp-1 cursor-help italic">
-                              ⚠ {disagreementReason}
+                            <p className="mt-1 text-3xs text-fg-muted line-clamp-2 cursor-help" data-testid="judge-note">
+                              {disagreementReason}
                             </p>
                           </Tooltip>
                         )}
@@ -1122,6 +1135,59 @@ export function JudgePage() {
 }
 
 /**
+ * Grades on a phone (2026-11-19): the ten-column table scrolled sideways and hid Category to
+ * When. One stacked row each: the report (two lines, then clamped), grade and agreement, the
+ * four dimensions on one line, the grader's note in grey, and the age.
+ */
+function JudgeGradeRows({ evals }: { evals: readonly EvalRow[] }) {
+  return (
+    <ul className="-mx-3 divide-y divide-edge-subtle" data-testid="judge-grade-rows">
+      {evals.map((e) => {
+        const summary = e.report_summary?.trim()
+        const note = e.classification_agreed === false ? e.judge_reasoning?.trim() : null
+        const dims: Array<[string, number | null]> = [
+          ['Category', e.accuracy_score],
+          ['Severity', e.severity_score],
+          ['Component', e.component_score],
+          ['Repro', e.repro_score],
+        ]
+        return (
+          <li key={e.id} className="space-y-1 px-3 py-2 text-xs">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <Link
+                to={`/reports/${e.report_id}`}
+                className="min-w-0 line-clamp-2 break-words leading-snug text-accent-foreground hover:text-accent"
+                title={summary ?? undefined}
+              >
+                {summary && summary.length > 0 ? summary : `Report ${e.report_id.slice(0, 8)}…`}
+              </Link>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <ScorePill value={e.judge_score} />
+                {e.classification_agreed === true && <span className="text-ok" aria-label="Agreed">✓</span>}
+                {e.classification_agreed === false && <span className="text-warn-foreground" aria-label="Disagreed">✗</span>}
+              </span>
+            </div>
+            <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-fg-muted">
+              {dims.map(([label, v]) => (
+                <span key={label} className="whitespace-nowrap">
+                  {label} <ScorePill value={v} />
+                </span>
+              ))}
+            </p>
+            {note ? <p className="line-clamp-2 text-2xs text-fg-muted">{note}</p> : null}
+            <p className="flex flex-wrap items-center gap-x-2 text-2xs text-fg-faint">
+              {e.report_severity ? <SignalChip tone={severityChipTone(e.report_severity)}>{e.report_severity}</SignalChip> : null}
+              {e.prompt_version ? <span className="font-mono">{e.prompt_version}</span> : null}
+              <RelativeTime value={e.created_at} />
+            </p>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/**
  * Prompt versions grouped by step (round-2 review, 2026-11-18): the step is named once, the
  * version in use shows the share the tests leave it, and when grades exist but none is linked
  * to a version the Score and Grades columns give way to one line instead of fifteen false
@@ -1178,13 +1244,8 @@ function JudgePromptTable({
           {p.share}%
         </td>
         <td className="whitespace-nowrap py-1.5 px-3">
-          {p.is_active ? (
-            <Badge className="bg-ok-muted/50 text-ok-foreground border border-ok/25">in use</Badge>
-          ) : p.is_candidate ? (
-            <Badge className="bg-info-muted/50 text-info-foreground border border-info/25">testing</Badge>
-          ) : (
-            <span className="text-2xs text-fg-faint">idle</span>
-          )}
+          {/* One word and mark with AI prompts (2026-11-19: "testing" here, "Candidate" there). */}
+          <VersionStateMark version={p} />
         </td>
       </tr>
     )

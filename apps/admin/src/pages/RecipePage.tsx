@@ -74,6 +74,8 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
   const [view, setView] = useState<ViewMode>('auto')
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<RefreshNotice>(null)
+  // The worst risk check joins Overall: never amber above a red "Error" (round 3, 2026-11-19).
+  const [risk, setRisk] = useState<{ tone: 'danger' | 'warn'; label: string } | null>(null)
   const prefersList = usePrefersRecipeList()
   // Auto shows the diagram only where every lane fits; an explicit Diagram choice still pans.
   const columnRef = useRef<HTMLDivElement>(null)
@@ -135,7 +137,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
           {
             priority: POSTURE_PRIORITY.status,
             show: data != null,
-            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} onSelect={(key) => setSelectedKey(key)} /> : null,
+            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} risk={risk} onSelect={(key) => setSelectedKey(key)} /> : null,
           },
         ]}
       />
@@ -150,7 +152,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
         {loading && !data && <Loading text="Composing the recipe…" />}
 
         {/* Problems first: Risk checks lead (at 390 px they sat about 3,000 px down, 2026-11-18). */}
-        <RadarPanel projectId={projectId} />
+        <RadarPanel projectId={projectId} onOverall={setRisk} />
 
         {data && (
           <>

@@ -78,6 +78,18 @@ export function tickVisibility(i: number): string {
 const LABEL_W = 'w-34 @min-[100rem]:w-50'
 const AXIS_INSET = 'ml-36 @min-[100rem]:ml-52'
 
+/**
+ * A lane name split so the end that tells lanes apart survives the cut (round 3, 2026-11-19:
+ * two rows read "aw-the-wanting-mi…"). The trailing " 2" or "-576" stays whole; the head
+ * truncates.
+ *
+ * @internal Exported for tests.
+ */
+export function splitLaneLabel(label: string): { head: string; tail: string } {
+  const m = label.match(/^(.*\S)(\s+\S{1,6}|-\d{1,6})$/)
+  return m ? { head: m[1], tail: m[2] } : { head: label, tail: '' }
+}
+
 function clock(t: number): string {
   return new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
@@ -160,7 +172,7 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
         ) : (
           <IconServer size={12} className="shrink-0" />
         )}
-        <span className="truncate">{lane.label}</span>
+        <LaneName label={lane.label} />
       </span>
       <div className="relative h-7 flex-1 rounded-sm bg-surface-overlay/50">
         {lane.bars.map((bar) => (
@@ -169,6 +181,16 @@ function Lane({ lane, timeline, onInspect }: { lane: Timeline['lanes'][number]; 
         <span className="absolute inset-y-0 right-0 w-px bg-brand" aria-hidden="true" />
       </div>
     </li>
+  )
+}
+
+function LaneName({ label }: { label: string }) {
+  const { head, tail } = splitLaneLabel(label)
+  return (
+    <span className="flex min-w-0">
+      <span className="truncate">{head}</span>
+      {tail && <span className="shrink-0 whitespace-pre">{tail}</span>}
+    </span>
   )
 }
 
@@ -204,6 +226,21 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
     [timeline.from, timeline.to],
   )
 
+  // Nothing in the window: one line, no legend, no hint about bars (round 3: the empty 390 card
+  // kept its legend, window picker and "Point at or tab to a bar"). A wider window is one click.
+  if (timeline.lanes.length === 0) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted" data-testid="ci-timeline">
+        No jobs in the last {WINDOW_OPTIONS.find((o) => o.id === win)!.label}.
+        {win !== '24h' && (
+          <button type="button" className="text-2xs font-medium text-fg-secondary underline underline-offset-2 hover:text-fg" onClick={() => setWin('24h')}>
+            Look back 24 h
+          </button>
+        )}
+      </p>
+    )
+  }
+
   return (
     <div className="@container flex flex-col gap-2" data-testid="ci-timeline">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -227,62 +264,58 @@ export function CiTimeline({ jobs }: { jobs: CiJob[] }) {
         <SegmentedControl<WindowId> value={win} options={WINDOW_OPTIONS} onChange={setWin} ariaLabel="Timeline window" size="sm" />
       </div>
 
-      {timeline.lanes.length === 0 ? (
-        <p className="text-xs text-fg-muted">No jobs in the last {WINDOW_OPTIONS.find((o) => o.id === win)!.label}.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-160">
-            {/* Axis: labels sit centred on their tick; the first and last align to the edges. */}
-            <div className={`${AXIS_INSET} relative h-4 text-3xs text-fg-faint tabular-nums`} aria-hidden="true" data-testid="ci-timeline-axis">
-              {ticks.map((t, i) => (
-                <span
-                  key={i}
-                  className={`absolute top-0 whitespace-nowrap ${i === 0 ? '' : i === TICK_STEPS ? '-translate-x-full' : '-translate-x-1/2'} ${tickVisibility(i)}`}
-                  style={{ left: `${(i / TICK_STEPS) * 100}%` }}
-                >
-                  {i === TICK_STEPS ? 'now' : clock(t)}
-                </span>
+      <div className="overflow-x-auto">
+        <div className="min-w-160">
+          {/* Axis: labels sit centred on their tick; the first and last align to the edges. */}
+          <div className={`${AXIS_INSET} relative h-4 text-3xs text-fg-faint tabular-nums`} aria-hidden="true" data-testid="ci-timeline-axis">
+            {ticks.map((t, i) => (
+              <span
+                key={i}
+                className={`absolute top-0 whitespace-nowrap ${i === 0 ? '' : i === TICK_STEPS ? '-translate-x-full' : '-translate-x-1/2'} ${tickVisibility(i)}`}
+                style={{ left: `${(i / TICK_STEPS) * 100}%` }}
+              >
+                {i === TICK_STEPS ? 'now' : clock(t)}
+              </span>
+            ))}
+          </div>
+          <div className="relative">
+            {/* Gridlines behind the lanes, at the ticks that show. */}
+            <div className="pointer-events-none absolute inset-y-0 right-0 left-36 @min-[100rem]:left-52" aria-hidden="true">
+              {ticks.slice(1, -1).map((_, j) => {
+                const i = j + 1
+                return (
+                  <span
+                    key={i}
+                    className={`absolute inset-y-0 w-px bg-edge-subtle/60 ${tickVisibility(i)}`}
+                    style={{ left: `${(i / TICK_STEPS) * 100}%` }}
+                  />
+                )
+              })}
+            </div>
+            <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
+              {lanes.map((lane) => (
+                <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
               ))}
-            </div>
-            <div className="relative">
-              {/* Gridlines behind the lanes, at the ticks that show. */}
-              <div className="pointer-events-none absolute inset-y-0 right-0 left-36 @min-[100rem]:left-52" aria-hidden="true">
-                {ticks.slice(1, -1).map((_, j) => {
-                  const i = j + 1
-                  return (
-                    <span
-                      key={i}
-                      className={`absolute inset-y-0 w-px bg-edge-subtle/60 ${tickVisibility(i)}`}
-                      style={{ left: `${(i / TICK_STEPS) * 100}%` }}
-                    />
-                  )
-                })}
-              </div>
-              <ul className="relative flex flex-col gap-1" aria-label="Jobs per runner">
-                {lanes.map((lane) => (
-                  <Lane key={lane.id} lane={lane} timeline={timeline} onInspect={setInspect} />
-                ))}
-                {github.rest.length > 0 && (
-                  <li className="flex items-center gap-2" data-testid="ci-timeline-github-fold">
-                    <span className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs font-medium text-fg-secondary`}>
-                      <IconCloud size={12} className="shrink-0" />
-                      <span className="truncate">{showGithub ? 'GitHub-hosted' : `+${github.rest.length} GitHub-hosted`}</span>
-                    </span>
-                    <button
-                      type="button"
-                      className="h-7 flex-1 rounded-sm bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                      aria-expanded={showGithub}
-                      onClick={() => setShowGithub((v) => !v)}
-                    >
-                      {showGithub ? 'Fold the clean GitHub-hosted rows' : `${githubJobs} ${githubJobs === 1 ? 'job' : 'jobs'}, none failed · show each row`}
-                    </button>
-                  </li>
-                )}
-              </ul>
-            </div>
+              {github.rest.length > 0 && (
+                <li className="flex items-center gap-2" data-testid="ci-timeline-github-fold">
+                  <span className={`sticky left-0 z-10 flex ${LABEL_W} shrink-0 items-center gap-1.5 bg-surface-raised text-2xs font-medium text-fg-secondary`}>
+                    <IconCloud size={12} className="shrink-0" />
+                    <span className="truncate">{showGithub ? 'GitHub-hosted' : `+${github.rest.length} GitHub-hosted`}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="h-7 flex-1 rounded-sm bg-surface-overlay/50 px-2 text-left text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                    aria-expanded={showGithub}
+                    onClick={() => setShowGithub((v) => !v)}
+                  >
+                    {showGithub ? 'Fold the clean GitHub-hosted rows' : `${githubJobs} ${githubJobs === 1 ? 'job' : 'jobs'}, none failed · show each row`}
+                  </button>
+                </li>
+              )}
+            </ul>
           </div>
         </div>
-      )}
+      </div>
 
       {quiet.length > 0 && (
         <button

@@ -26,7 +26,7 @@ describe('fixesMeter (1c802df2)', () => {
   })
 
   it("names the server agent's runs only when there are some", () => {
-    expect(fixesMeter({ fixesSucceeded: 1, fixesAttempted: 3 }).detail).toBe("3 started by Mushi Mushi's server agent this period")
+    expect(fixesMeter({ fixesSucceeded: 1, fixesAttempted: 3 }).detail).toBe('This period, from any agent · 3 by the server agent')
   })
 })
 

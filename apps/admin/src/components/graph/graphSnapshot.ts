@@ -24,13 +24,12 @@ export function planGraphSnapshot(
 ): GraphSnapshotPlan {
   const tiles: GraphSnapshotKey[] = []
   const quiet: string[] = []
+  // Round 3 (2026-11-19): the status line above already says "N bug groups, no links between them
+  // yet", so the zero line no longer repeats no clusters, no links or "hotspots: not enough links".
   if (stats.reportNodes > 0) tiles.push('clusters')
-  else quiet.push('no clusters')
   if (stats.edgeCount > 0) tiles.push('links')
-  else quiet.push('no links')
   if (stats.fragileComponents > 0) tiles.push('fragile')
-  else if (stats.edgeCount === 0) quiet.push(`${labels.fragile.toLowerCase()}: not enough links to tell`)
-  else quiet.push(`no ${labels.fragile.toLowerCase()}`)
+  else if (stats.edgeCount > 0) quiet.push(`no ${labels.fragile.toLowerCase()}`)
   if (stats.inventoryNodes > 0) tiles.push('inventory')
   else quiet.push('no inventory items')
   if (quiet.length === 0) return { tiles, zeroLine: null }

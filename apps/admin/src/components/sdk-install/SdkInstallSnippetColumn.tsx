@@ -65,7 +65,9 @@ export function SdkInstallSnippetColumn({
           "React Native" on a single line when wrapping kicks in
           (otherwise it splits into "React" / "Native" on adjacent
           lines, which the eye reads as two separate tabs). */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
+      {/* No wrap here: the chips wrap inside their own control and the ⓘ stays at the end of
+          the row. A wrapping row left a lone ⓘ under the chips (round-3 review, 2026-11-19). */}
+      <div className="flex items-start gap-1 border-b border-edge-subtle pb-2">
         <SegmentedControl
           value={framework}
           options={FRAMEWORKS.map((fw) => ({ id: fw, label: frameworkLabel(fw) }))}

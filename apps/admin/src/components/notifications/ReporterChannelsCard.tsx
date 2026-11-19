@@ -25,7 +25,7 @@ import {
   type ReporterSettingsView,
   type TemplateKey,
 } from '../../lib/reporterChannels'
-import { Badge, Btn, ErrorAlert, Textarea, Toggle } from '../ui'
+import { Badge, Btn, ErrorAlert, InfoHint, Textarea, Toggle } from '../ui'
 import { reporterChannelBadge } from '../../lib/notificationsView'
 
 /**
@@ -34,6 +34,8 @@ import { reporterChannelBadge } from '../../lib/notificationsView'
  */
 function ChannelBadge({ enabled, provider }: { enabled: boolean; provider: 'configured' | 'not_configured' }) {
   const badge = reporterChannelBadge(enabled, provider)
+  // Off is the switch's own state: no second "Off" chip beside it (2026-11-19).
+  if (badge.kind === 'off') return null
   const tone = badge.kind === 'server_missing' ? 'warnSubtle' : badge.kind === 'ready' ? 'okSubtle' : 'neutral'
   return (
     <span data-testid="reporter-channel-badge" data-kind={badge.kind}>
@@ -82,13 +84,11 @@ export function ReporterChannelsCard({ projectId }: { projectId: string }) {
   return (
     // No card of its own: the "How reporters hear back" section is the card.
     <div className="space-y-4">
-      <div>
-        <h3 className="text-sm font-semibold text-fg">Email and push updates</h3>
-        <p className="text-xs text-fg-muted">
-          Reporters always see updates in your app. Turn these on to let them also ask for an email or a browser
-          notification. Nobody gets one unless they opt in, and every email has a one-click unsubscribe.
-        </p>
-      </div>
+      {/* The how-it-works text sits behind the (i): it ran 3-4 lines above two switches (2026-11-19). */}
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
+        Email and push updates
+        <InfoHint content="Reporters always see updates in your app. Turn these on to let them also ask for an email or a browser notification. Nobody gets one unless they opt in, and every email has a one-click unsubscribe." />
+      </h3>
 
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         <div className="space-y-1.5">

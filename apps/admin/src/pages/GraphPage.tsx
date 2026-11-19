@@ -124,6 +124,8 @@ type ViewMode = 'graph' | 'table' | 'surface'
  * back to the canvas with the view switch.
  */
 const STORYBOARD_THRESHOLD = 12
+/** Below this many items the search, type filters, quick views and Re-layout stay hidden (round 3). */
+const SMALL_GRAPH = 6
 
 export function GraphPage() {
   const toast = useToast()
@@ -497,8 +499,9 @@ export function GraphPage() {
         )}
         <InlineProof className="tabular-nums border-0 bg-transparent px-0 py-0">
           {graphCanvasProof('nodes', filteredNodes.length, rawNodes.length, nodesQuery.data?.total)}
-          {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''} ·{' '}
-          {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}
+          {singletonCount > 0 ? ` (${singletonCount} with no links hidden)` : ''}
+          {/* "no links" is the status line's: the proof names links only once there are some (round 3). */}
+          {rawEdges.length > 0 && <> · {graphCanvasProof('edges', filteredEdges.length, rawEdges.length, edgesQuery.data?.total)}</>}
         </InlineProof>
         <SegmentedControl<ViewMode>
           size="sm"
@@ -509,6 +512,9 @@ export function GraphPage() {
         />
       </div>
 
+      {/* Search, type filters, quick views and Re-layout start to matter past a handful of items
+          (round 3: all of them for 2 nodes). */}
+      {rawNodes.length >= SMALL_GRAPH && (
       <div data-dav-anchor="graph:act">
         <QuickViewsRow
           isolatedToggle={isolatedToggleState(hideSingletons, isolated)}
@@ -518,6 +524,7 @@ export function GraphPage() {
           onRelayout={() => setLayoutSeed((s) => s + 1)}
         />
       </div>
+      )}
 
       {rawNodes.length === 0 ? (
         <NextStep
@@ -534,6 +541,7 @@ export function GraphPage() {
         />
       ) : (
         <div className="space-y-2" data-dav-anchor="graph:verify">
+          {rawNodes.length >= SMALL_GRAPH && (
           <GraphFilterChips
             search={search}
             onSearchChange={setSearch}
@@ -542,10 +550,13 @@ export function GraphPage() {
             onToggleNodeType={toggleNodeType}
             onToggleEdgeType={toggleEdgeType}
           />
+          )}
 
           {useStoryboard ? (
+            // The side panel only once a card is picked: alone it was an empty box repeating the
+            // strip's "click a card" hint (round 3).
             // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-            <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
+            <div className={`grid gap-3 ${selectedNode ? 'md:grid-cols-[1fr_18rem]' : ''}`}>
               <div className="space-y-2 min-w-0">
                 <StoryboardNarrative
                   nodes={filteredNodes}
@@ -563,12 +574,14 @@ export function GraphPage() {
                   onClear={clearSelection}
                 />
               </div>
-              <GraphSidePanel
-                node={selectedNode}
-                blastRadius={blastRadius}
-                blastLoading={blastLoading}
-                onClear={clearSelection}
-              />
+              {selectedNode && (
+                <GraphSidePanel
+                  node={selectedNode}
+                  blastRadius={blastRadius}
+                  blastLoading={blastLoading}
+                  onClear={clearSelection}
+                />
+              )}
             </div>
           ) : view === 'table' ? (
             // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
@@ -770,7 +783,9 @@ export function GraphPage() {
 
       {activeTab === 'backend' && (
         <div className="space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
+          {/* items-start: each card sizes to its own content; the 2-row storage card stretched to the
+              ontology list's height (round 3). */}
+          <div className="grid items-start gap-3 md:grid-cols-2">
             <GraphBackendPanel />
             <OntologyPanel />
           </div>

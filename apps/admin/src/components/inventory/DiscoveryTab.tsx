@@ -123,7 +123,7 @@ export function DiscoveryTab({ projectId, onAccepted }: Props) {
   }
 
   const data = discovery.data
-  // Never an endless "Loading observed routes…": after 20 s, "not checked" with Retry.
+  // Never an endless "Loading observed routes…": after 10 s, "not checked" with Retry.
   const firstRead = useReadTimedOut(discovery.loading && !data && !discovery.error)
   const proposalRows = proposals.data?.proposals ?? []
   const draftRow = proposalRows.find((p) => p.status === 'draft')
@@ -430,7 +430,7 @@ function ActionCard({
           </div>
         </div>
         {/* The same package and init as the install guide on Manage apps (2026-11-18: this said @mushi-mushi/web). */}
-        <pre className="mushi-code-block mushi-code-body text-2xs font-mono p-3 rounded-md border border-code-surface-border overflow-auto whitespace-pre" data-testid="discovery-snippet">{discoverySnippet(projectId)}</pre>
+        <pre className="mushi-code-block mushi-code-body text-2xs font-mono p-3 rounded-md border border-code-surface-border whitespace-pre-wrap wrap-anywhere" data-testid="discovery-snippet">{discoverySnippet(projectId)}</pre>
       </Card>
     )
   }

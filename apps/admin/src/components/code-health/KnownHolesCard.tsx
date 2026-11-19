@@ -287,7 +287,8 @@ function HoleRow({ g, busy, onDismiss, onReopen }: { g: KnownHoleGroup; busy: bo
       </p>
       <ul className="flex flex-col gap-0.5 text-xs">
         {g.advisories.slice(0, 4).map((a) => (
-          <li key={a.id} className="min-w-0 truncate">
+          // Wraps, never cut: "denial of s…" at 390 hid what the advisory is (round 3).
+          <li key={a.id} className="min-w-0 wrap-break-word">
             <a href={a.url} target="_blank" rel="noreferrer" className={LINK_ACCENT}>{a.id}</a>
             <span className="text-fg-muted"> {a.title}</span>
           </li>

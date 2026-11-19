@@ -96,7 +96,18 @@ function replacedByAnother(key: ManagedKey, pool: readonly PoolKey[], now: numbe
 
 export function keyStatusView(
   key: ManagedKey,
-  context: { pool: readonly PoolKey[]; now?: number; providerName?: string },
+  context: {
+    pool: readonly PoolKey[]
+    now?: number
+    providerName?: string
+    /**
+     * Whether this app made a call on its own keys for the provider in the
+     * last 30 days. False scopes "last used" to another app: a shared key
+     * used 12h ago elsewhere sat beside "No AI calls from this app in the
+     * last 30 days" (round-3 review 2026-11-19). Undefined when unknown.
+     */
+    usedHere?: boolean
+  },
 ): KeyStatusView {
   const now = context.now ?? Date.now()
   const provider = context.providerName ?? 'the provider'
@@ -220,7 +231,7 @@ export function keyStatusView(
   const used = relativeTime(key.last_used_at, now)
   return {
     state: 'working',
-    detail: [verified ? `Verified ${verified}` : 'Verified', used ? `last used ${used}` : null]
+    detail: [verified ? `Verified ${verified}` : 'Verified', used ? `last used ${used}${context.usedHere === false ? ' by another app' : ''}` : null]
       .filter(Boolean)
       .join(' · '),
     action: null,
@@ -245,7 +256,28 @@ export interface KeySummary {
   expiring: number
   checking: number
   off: number
+  /**
+   * Working keys that are a second copy of another saved key
+   * (duplicateKeyCopies): the row says "Same key twice", so the count does too.
+   */
+  duplicate: number
   total: number
+}
+
+/**
+ * Every key whose row asks you to do something: fix, replace, test, or tidy
+ * up (a replaced key, a second copy). The tab badge and the banner title read
+ * this, so "AI keys 3" matches the three rows that each carry an action
+ * (round-3 review 2026-11-19: the badge said 1 beside Replaced, Used up and
+ * Same key twice).
+ */
+export function keysNeedingAction(summary: KeySummary): number {
+  return summary.attention + summary.expiring + summary.checking + summary.replaced + summary.duplicate
+}
+
+/** Replaced keys and second copies: tidy-up that breaks nothing. */
+export function keysToTidy(summary: KeySummary): number {
+  return summary.replaced + summary.duplicate
 }
 
 /** Counts across every saved key, for the page banner and the tab badge. */
@@ -254,11 +286,25 @@ export function summarizeKeys(
   legacy: readonly LegacyKey[],
   now = Date.now(),
 ): KeySummary {
-  const summary: KeySummary = { working: 0, attention: 0, replaced: 0, expiring: 0, checking: 0, off: 0, total: 0 }
+  const summary: KeySummary = {
+    working: 0,
+    attention: 0,
+    replaced: 0,
+    expiring: 0,
+    checking: 0,
+    off: 0,
+    duplicate: 0,
+    total: 0,
+  }
+  const copies = duplicateKeyCopies([...pool, ...legacy])
   for (const key of [...pool, ...legacy]) {
     const { state, action } = keyStatusView(key, { pool, now })
     summary.total += 1
-    if (state === 'working') summary.working += 1
+    // A second copy that works is still one to remove. A broken copy is
+    // counted by its own state below, and a turned-off copy is a choice that
+    // never asks for anything (as a turned-off key never does).
+    if (copies.has(key.id) && state === 'working') summary.duplicate += 1
+    else if (state === 'working') summary.working += 1
     // "Remove it, another key is working": nothing is broken, so the page
     // banner and tab badge stay quiet; the row still offers Remove.
     else if (state === 'attention' && action === 'remove') summary.replaced += 1
@@ -278,7 +324,7 @@ export function providerStatusView(
   provider: string,
   pool: readonly PoolKey[],
   legacy: readonly LegacyKey[],
-  options: { now?: number; providerName?: string; emptyDetail: string },
+  options: { now?: number; providerName?: string; emptyDetail: string; usedHere?: boolean },
 ): KeyStatusView {
   const now = options.now ?? Date.now()
   const keys: ManagedKey[] = [
@@ -288,7 +334,9 @@ export function providerStatusView(
   if (keys.length === 0) {
     return { state: 'not_connected', detail: options.emptyDetail, action: null }
   }
-  const views = keys.map((k) => keyStatusView(k, { pool, now, providerName: options.providerName }))
+  const views = keys.map((k) =>
+    keyStatusView(k, { pool, now, providerName: options.providerName, usedHere: options.usedHere }),
+  )
   // Keys another working key already replaced are tidy-up, not a problem:
   // the provider reads Working, as the page banner and badge do.
   const problems = views.filter((v) => v.state === 'attention' && v.action !== 'remove').length

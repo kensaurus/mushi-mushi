@@ -13,10 +13,12 @@ import {
   points30dCell,
   publishBlockedReason,
   questRowState,
+  questsForApp,
   retentionLift,
   reviewEmptyCopy,
   rewardsPaused,
   tierHoldersLabel,
+  topTesters,
 } from './rewardsView'
 
 const cohort = (count: number, median: number) => ({ count, median_retention_days: median })
@@ -116,5 +118,33 @@ describe('tester review copy', () => {
     expect(accepted.description).not.toMatch(/publish/i)
     expect(reviewEmptyCopy('all', 'live').description).not.toMatch(/once your listing is published/)
     expect(reviewEmptyCopy('pending', 'unpublished').description).toMatch(/published/)
+  })
+})
+
+describe('one source for Overview and Contributors (2026-11-19)', () => {
+  const now = Date.parse('2026-11-19T00:00:00Z')
+  const row = (id: string, pts: number, seen: string | null) => ({ id, points_30d: pts, end_users: { last_seen_at: seen } })
+
+  it('drops testers whose 30-day total was not recounted, and zero rows, before taking five', () => {
+    const rows = [
+      row('stale', 9777, '2026-06-01T00:00:00Z'),
+      row('a', 800, '2026-11-18T00:00:00Z'),
+      row('zero', 0, '2026-11-18T00:00:00Z'),
+      row('b', 500, '2026-11-10T00:00:00Z'),
+    ]
+    expect(topTesters(rows, 5, now).map((r) => r.id)).toEqual(['a', 'b'])
+    expect(topTesters(rows, 1, now).map((r) => r.id)).toEqual(['a'])
+  })
+
+  it("lists the open app's quests and team-wide ones, and counts the other apps' quests", () => {
+    const quests = [
+      { id: 'mine', project_id: 'p1' },
+      { id: 'team', project_id: null },
+      { id: 'glot', project_id: 'p2' },
+    ]
+    const { mine, otherApps } = questsForApp(quests, 'p1')
+    expect(mine.map((q) => q.id)).toEqual(['mine', 'team'])
+    expect(otherApps).toBe(1)
+    expect(questsForApp(quests, null).mine).toHaveLength(3)
   })
 })

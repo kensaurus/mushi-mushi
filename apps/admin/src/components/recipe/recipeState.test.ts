@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { RECIPE_ELEMENT_KEYS } from '../../lib/recipeTypes'
 import {
+  cardReason,
   cardStatusLines,
   classifyLinkTarget,
   describeLastChecked,
@@ -199,5 +200,16 @@ describe('the next step said once (2026-11-18)', () => {
     expect(firstSentence('No period here')).toBe('No period here')
     expect(recipeReasonText(reason)).toContain('under Risk checks at the top of this page.')
     expect(recipeReasonText('Link Supabase so Mushi can read the schema. Mushi Mushi knows it.')).toBe('Link Supabase so Mushi Mushi can read the schema. Mushi Mushi knows it.')
+  })
+})
+
+// Round 3 (2026-11-19): the count sentence lives in the header; the card shows a mark and the number.
+describe('cardReason', () => {
+  it('drops a reason that only counts the problems, keeps any other', () => {
+    expect(cardReason('2 problems to fix: Mushi Mushi setup check (2). They are under Risk checks.', 2)).toBe('')
+    expect(cardReason('1 problem to fix.', 1)).toBe('')
+    expect(cardReason('CI passed on your latest commit.', 0)).toBe('CI passed on your latest commit.')
+    // With no counted problems the sentence is the only place that says it.
+    expect(cardReason('2 problems to fix.', 0)).toBe('2 problems to fix.')
   })
 })

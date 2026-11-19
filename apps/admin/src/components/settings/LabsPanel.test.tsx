@@ -53,7 +53,7 @@ describe('LabsPanel', () => {
   it('renders the intro, every group heading and every Lab with its own switch', () => {
     render()
     const text = container.textContent ?? ''
-    expect(text).toContain('Pages to keep in your sidebar under Labs')
+    expect(text).toContain('Switch a page on to pin it in your sidebar')
     expect(text).toContain('under More pages')
     for (const heading of Object.values(LAB_GROUP_LABEL)) expect(text).toContain(heading)
     for (const f of LAB_FEATURES) {
@@ -69,14 +69,14 @@ describe('LabsPanel', () => {
   // only decides the sidebar, so that is what it says.
   it('says where the page is listed, never that the page is off', () => {
     render()
-    const row = container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]')
+    const row = container.querySelector('#lab-to-do') ?? switchFor('To-do').closest('[id]')
     // 2026-11-18: an off row says nothing (the heading explains the switches); never "Off".
     expect(row?.textContent).not.toContain('Not in sidebar')
     expect(row?.textContent).not.toMatch(/Off/)
-    act(() => switchFor('To-do list').click())
-    expect((container.querySelector('#lab-to-do') ?? switchFor('To-do list').closest('[id]'))?.textContent).toContain('In sidebar')
+    act(() => switchFor('To-do').click())
+    expect((container.querySelector('#lab-to-do') ?? switchFor('To-do').closest('[id]'))?.textContent).toContain('In sidebar')
     // labs.ts caches the set in memory: switch it back so the next test starts clean.
-    act(() => switchFor('To-do list').click())
+    act(() => switchFor('To-do').click())
   })
 
   it('links Open to the page whether or not the Lab is on (the switch only pins it to the sidebar)', () => {

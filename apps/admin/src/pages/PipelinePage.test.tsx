@@ -407,7 +407,11 @@ describe('PipelinePage', () => {
     await render()
     const strip = q('worker-flags-strip')!
     expect(strip.textContent).toContain('glot: a run has held an agent space for 4 h.')
-    expect(strip.textContent).toContain('and 1 more on the Workers tab.')
+    // Failures in the red banner; a warning is an amber line under it, never inside (round-3 review, 2026-11-19).
+    // The label counts all four, as the tab does.
+    expect(document.body.textContent).toContain('Local workers: 4 problems')
+    expect(strip.textContent).not.toContain('The Cursor account check timed out on alienware')
+    expect(q('worker-flags-strip-warn')!.textContent).toContain('The Cursor account check timed out on alienware.')
     expect(q('worker-flags-strip-open')!.getAttribute('href')).toBe('/pipeline?tab=workers')
     expect(document.body.textContent).toContain('Workers (4 problems)')
   })
@@ -521,7 +525,7 @@ describe('PipelinePage', () => {
 
   it('the status line names the biggest stuck group and runs its first action that can succeed', async () => {
     await render()
-    expect(q('pipeline-status')!.textContent).toContain('Start with the biggest: 2 PRs: their own CI is red')
+    expect(q('pipeline-status')!.textContent).toContain('Start here: 2 PRs: their own CI is red')
     // The count is the "Need you" number, not restated in the sentence (round-2 review, 2026-11-18).
     expect(statusMetric('Need you')).toBe('5')
     // "Waiting for a fix" is the Triaged stage's own count and "Merged, 7 days" the pace row's: never repeated here.
@@ -549,12 +553,17 @@ describe('PipelinePage', () => {
     await render()
     const status = q('pipeline-status')!
     expect(status.textContent).not.toContain('Nothing needs you')
-    expect(status.textContent).toContain('Start with the biggest: 2 reports: triaged over 3 days ago, no fix started')
+    expect(status.textContent).toContain('Start here: 2 reports: triaged over 3 days ago, no fix started')
     expect(statusMetric('Need you')).toBe('2')
     // A backlog is a warning, not a failure: amber, never red.
     expect(status.querySelector('.bg-danger')).toBeNull()
     expect(status.querySelector('.bg-warn')).not.toBeNull()
-    expect(q('pipeline-age-need-you-total')!.textContent).toBe('2')
+    // One stuck group: its row has the count and oldest age, so no age bar and no stage key say
+    // "2" again, and the heading does not count it a third time (round-3 review, 2026-11-19).
+    expect(q('pipeline-age-bar')).toBeNull()
+    expect(q('pipeline-funnel-legend')).toBeNull()
+    expect(document.body.textContent).not.toContain('Stuck: 2')
+    expect(document.body.textContent).toContain('Stuck groups')
   })
 
   it('a long group pages with "Show more" instead of a scroll box inside the page', async () => {
@@ -601,7 +610,7 @@ describe('PipelinePage signals (2026-11-18)', () => {
     expect(q('pipeline-age-waiting')).toBeNull()
     expect(statusMetric('Need you')).toBe('905')
     // The failed PRs still lead the sentence; the backlog never takes the red bottleneck.
-    expect(q('pipeline-status')!.textContent).toContain('Start with the biggest: 2 PRs: their own CI is red')
+    expect(q('pipeline-status')!.textContent).toContain('Start here: 2 PRs: their own CI is red')
   })
 
   it('shows how long stuck work has waited, adding up to "Need you", from the server buckets when present', async () => {
@@ -719,5 +728,39 @@ describe('PipelinePage signals (2026-11-18)', () => {
     expect(fold.contains(q('pipeline-intake-p3'))).toBe(true)
     expect(fold.contains(q('pipeline-intake-p1'))).toBe(false)
     expect(q('pipeline-intake-p1-rejected')!.textContent).toContain('2 rejected')
+  })
+})
+
+describe('PipelinePage round-3 review (2026-11-19)', () => {
+  it('says who opens fixes once: the "Apps no one fixes" tile links to the card; the pace row and the Fix PR box drop it', async () => {
+    const d = state.data as PipelineData
+    const triaged = d.stages.find((s) => s.id === 'triaged')!
+    triaged.groups = [{ id: 'no_fix_old', stage: 'triaged', tone: 'stuck', label: '3 reports: triaged over 3 days ago, no fix started', count: 3, oldestAt: '2026-10-20T00:00:00Z', actions: [], settings: null, items: [], ages: [0, 3, 0, 0] }]
+    triaged.count = 3
+    triaged.stuck = 3
+    await render()
+    expect(statusMetric('Apps no one fixes, 24 h')).toBe('1')
+    expect(q('pipeline-status')!.querySelector('a[href$="#pipeline-openers"]')).not.toBeNull()
+    expect(q('pipeline-stage-pr-openers')).toBeNull()
+    expect(q('pipeline-pace-quiet')).toBeNull()
+    expect(q('pipeline-openers')!.querySelector('summary')!.textContent).not.toContain('nobody')
+  })
+
+  it('on This app, the Workers tab count reads the same app-scoped response as the tab body', async () => {
+    await render()
+    expect(state.paths.map((p) => p.path)).toContain('/v1/admin/work/lanes?projectId=p1')
+    expect(state.paths.map((p) => p.path)).not.toContain('/v1/admin/work/lanes')
+  })
+
+  it('folds release trains that are all green into one line', async () => {
+    const d = state.data as PipelineData
+    const green = (repo: string, merged: number) => ({ repo, projectId: 'p1', merged, failed: 0, active: 0, topFailures: [], trains: [{ id: `${repo}-t`, state: 'merged', prNumber: 1, members: 1, attempt: 1, detail: null, createdAt: '2026-10-25T10:00:00Z' }] })
+    d.trains.push(green('kensaurus/yen-yen', 3), green('kensaurus/mushi-mushi', 2))
+    await render()
+    const fold = q('pipeline-trains-green')!
+    expect(fold.querySelector('summary')!.textContent).toContain('2 repos green')
+    expect(fold.querySelector('summary')!.textContent).toContain('yen-yen 3 · mushi-mushi 2')
+    // The failing repo keeps its own row, outside the fold.
+    expect(fold.contains(q('pipeline-train-kensaurus/glot.it'))).toBe(false)
   })
 })

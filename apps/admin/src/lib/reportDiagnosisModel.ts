@@ -74,3 +74,6 @@ export function headline(value: string, max = 110): string {
   const space = cut.lastIndexOf(' ')
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[,;:\s]+$/, '')}…`
 }
+
+/** The detail line of the diagnosis node when only the first check ran. */
+export const STAGE1_ONLY_DETAIL = 'first check only'

@@ -70,7 +70,7 @@ import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import { groupCiAdvice } from '../lib/ciAdvice'
 import type { FixAttempt } from '../components/fixes/types'
-import { appRunsOn, buildCiQueue, buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { appRunsOn, buildCiQueue, buildFixLinks, cleanCiOverview, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
 import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
@@ -230,10 +230,12 @@ export function CiPage() {
       : '/v1/admin/ci/overview?days=7&refresh=1'
   const fetchScope = scope === 'all' ? 'enumeration' : 'project'
   const page = usePageData<CiOverview>(path, { scope: fetchScope })
-  const { data, reload } = page
+  const { reload } = page
+  // Job names without unresolved `${{ }}` expressions, once for every panel (round 3).
+  const data = useMemo(() => (page.data ? cleanCiOverview(page.data) : page.data), [page.data])
   const live = useBackgroundLiveSync(livePath, fetchScope, reload)
   useVisiblePolling(live.sync, POLL_MS)
-  // Never an endless "Reading your CI…" (390 All apps, 2026-11-18): after 20 s, "not checked" + Retry.
+  // Never an endless "Reading your CI…" (390 All apps, 2026-11-18): after 10 s, "not checked" + Retry.
   const firstRead = useReadTimedOut(page.loading && !data && !page.error)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
@@ -272,6 +274,8 @@ export function CiPage() {
     const runsOn = appRunsOn(data?.jobs ?? [])
     return [...byId].map(([id, name]) => ({ id, name, runsOn: runsOn.get(id) ?? null })).sort((x, y) => x.name.localeCompare(y.name))
   }, [data])
+  // App names for repo slugs on Speed and cost ("help-her-take-photo" read as a repo, not an app; round 3).
+  const repoNames = useMemo(() => new Map((data?.repos ?? []).map((r) => [r.repo.toLowerCase(), r.projectName] as const)), [data])
   // /ci#ci-placement (Connect's "CI settings" link) opens Settings, then scrolls there.
   useScrollToHash(!!data && !empty)
 
@@ -375,11 +379,11 @@ export function CiPage() {
             // Without Actions: read nothing here works, so that one shows everywhere. Without
             // Administration: read only idle and offline runners are missing, so it shows
             // where runners are (Machines, Settings), not on top of Now (2026-11-06).
-            show:
-              notice != null &&
-              (empty || data?.permissions.jobs === 'missing' || view === 'machines' || view === 'settings'),
+            // Once, on Machines (round 3: it sat on Settings too, saying "machines show below" over
+            // a page without them). Neutral: a missing read is a gap to close, not a failure.
+            show: notice != null && (empty || data?.permissions.jobs === 'missing' || view === 'machines'),
             children: (
-              <Callout tone="warn" label="GitHub access">
+              <Callout tone={data?.permissions.jobs === 'missing' ? 'warn' : 'neutral'} label="GitHub access">
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>{notice}</span>
                   <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
@@ -426,21 +430,16 @@ export function CiPage() {
           </Section>
 
           <Section title={focusLive ? 'Queue' : 'Finished jobs'} id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>
-              {focusLive
-                ? 'Every job for your fixes, from waiting for a machine to finished.'
-                : 'What finished in the last 2 hours, failures first. Re-run a job the test machine stopped; open the fix for one that failed.'}
-            </p>
+            {/* The header, the filter and the cards say what this is; no intro restating them (round 3). */}
+            {focusLive && <p className={HINT}>Every job for your fixes, from waiting for a machine to finished.</p>}
             <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} showLive={focusLive} />
           </Section>
 
           <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>One row per test machine, machines with failures first. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
 
           <Section title="Job times" id="ci-job-times" icon={<IconGauge />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>Each job over the last {data.window.days} days, most failing first, then slowest: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
             <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
           </Section>
         </div>
@@ -451,7 +450,6 @@ export function CiPage() {
       {data && !empty && view === 'machines' && (
         <>
           <Section title="Machines" id="ci-machines" icon={<IconNetwork />}>
-            <p className={HINT}>Every machine that runs your checks, what it is running now and how busy it is.</p>
             <div className="@container">
               <ul className={`grid gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-all">
                 {machinesAll.map((m) => (
@@ -495,12 +493,12 @@ export function CiPage() {
           </Section>
 
           <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>
-            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} />
+            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} repoNames={repoNames} />
           </Section>
 
           <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
             <PanelErrorBoundary label="Cost and speed">
-              <CiCostSection projectId={projectId} scope={scope} machines={machinesAll} />
+              <CiCostSection projectId={projectId} scope={scope} machines={machinesAll} repoNames={repoNames} />
             </PanelErrorBoundary>
           </Section>
         </>

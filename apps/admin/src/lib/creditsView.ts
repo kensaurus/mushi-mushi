@@ -61,7 +61,9 @@ export function creditsBlocker(data: WorkLanesData | null | undefined): CreditsB
     cause: flag.cause,
     offlineLanes: offline.length,
     offlineHosts,
-    idleHours: flag.sinceSec != null && flag.sinceSec >= 0 ? Math.round(flag.sinceSec / 3600) : null,
+    // Rounded like the flag's own title (minutes rounded, hours floored): "idle for 34 h" sat over
+    // "35 h idle" (2026-11-19).
+    idleHours: flag.sinceSec != null && flag.sinceSec >= 0 ? Math.floor(Math.round(flag.sinceSec / 60) / 60) : null,
   }
 }
 

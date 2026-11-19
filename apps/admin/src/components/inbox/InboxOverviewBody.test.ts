@@ -54,4 +54,10 @@ describe('activityMetaLabel (round-2 review, 2026-11-18: "Meta:" explained nothi
     expect(activityMetaLabel({ kind: 'fix', meta: 'claude-haiku-4-5' })).toBe('Agent')
     expect(activityMetaLabel({ kind: 'report', meta: null })).toBeNull()
   })
+
+  it('rounds raw float noise in a title (round-3: "15.341893476 GB")', async () => {
+    const { tidyActivityLabel } = await import('../../pages/InboxPage')
+    expect(tidyActivityLabel('egress exceeded 15.341893476 GB')).toBe('egress exceeded 15.3 GB')
+    expect(tidyActivityLabel('upgrade minimatch 10.2.6 to 11.0.1')).toBe('upgrade minimatch 10.2.6 to 11.0.1')
+  })
 })

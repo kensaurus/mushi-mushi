@@ -31,7 +31,8 @@ export function isCodeHealthMetricUnmeasured(metricId: string, live: Pick<CodeHe
 /** The same row shape as WorkflowStageRow, in neutral grey: nothing measured, nothing to judge. */
 function NoDataRow({ label, plain, source }: { label: string; plain?: string; source: string }) {
   return (
-    <div className="rounded-md border border-edge-subtle bg-surface-raised px-2.5 py-2" data-testid="code-health-no-data-row">
+    // A flat row under a hairline, not a box inside the panel (round 3).
+    <div className="border-b border-edge-subtle py-2 last:border-b-0" data-testid="code-health-no-data-row">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-fg">{label}</span>
         <span className="shrink-0 rounded-sm border border-edge-subtle px-1.5 py-0.5 text-3xs font-semibold whitespace-nowrap text-fg-muted">No data</span>
@@ -58,6 +59,9 @@ export function CodeHealthGuide({ topPriority, stats }: Props) {
     >
       <div className="space-y-1">
         {CODE_HEALTH_METRIC_DEFINITIONS.map((metric) => {
+          // Nothing sent yet: the empty state's "Mint ingest key" is the step, so no amber
+          // "CI ingest key · Not wired" row restating it here (round 3).
+          if (metric.id === 'ingest' && !live.hasRun) return null
           if (isCodeHealthMetricUnmeasured(metric.id, live)) {
             return <NoDataRow key={metric.id} label={metric.label} plain={metric.plain} source={metric.source} />
           }

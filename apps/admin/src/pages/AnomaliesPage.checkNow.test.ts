@@ -38,8 +38,11 @@ describe('Unusual spikes tabs', () => {
     expect(src).not.toContain('No numbers yet. Send some on the Metrics tab first.')
   })
 
-  it('says what the empty Summary will show, in plain words', () => {
-    expect(src).toContain('data-testid="anomalies-summary-empty"')
+  // Round 3 (2026-11-19): with no metrics the empty state is said once; the tabs and a second
+  // explainer line under it are gone until a number arrives.
+  it('keeps one empty state on Summary: no tabs, no second explainer line, in plain words', () => {
+    expect(src).not.toContain('Each number you send gets a chart here')
+    expect(src).toContain("(stats.metricPointCount > 0 || activeTab !== 'overview')")
     expect(src).not.toMatch(/Page-Hinkley|Z-score|hourly cron|metric_series/)
   })
 })

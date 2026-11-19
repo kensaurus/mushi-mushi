@@ -141,7 +141,8 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
   return (
     <StatusBannerShell
       tone="ok"
-      title={plainBanner ? 'AI spend tracking is active' : `Telemetry active for ${projectLabel}`}
+      // A state, not a sentence: the green mark says "on", the words say what (2026-11-19).
+      title={plainBanner ? 'Tracking' : `Tracking ${projectLabel}`}
       // The spend, call and key counts are the tiles right below: the banner
       // only adds what they don't say (review 2026-11-18).
       subtitle={
@@ -149,13 +150,7 @@ export function CostStatusBanner({ stats, onTab, onViewFailures, plainBanner = f
           <>Last call&nbsp;<RelativeTime value={stats.lastCallAt} /></>
         ) : null
       }
-      action={
-        onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('breakdown')}>
-            {actions.breakdown ?? 'View breakdown'}
-          </Btn>
-        ) : null
-      }
+      // No "View breakdown" button: the Breakdown tab sits right below (2026-11-19).
     />
   )
 }

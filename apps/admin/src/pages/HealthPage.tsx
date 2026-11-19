@@ -16,17 +16,15 @@ import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
-import { Card,
+import {
   Section,
   Badge,
   Btn,
   EmptyState,
-  StatCard,
   RecommendedAction,
   SelectField,
   FilterSelect,
   RelativeTime,
-  Pct,
   Loading, } from '../components/ui'
 import { HealthStatusBanner, isHealthStatusBannerCritical } from '../components/health/HealthStatusBanner'
 import { HealthSnapshotStrip } from '../components/health/HealthSnapshotStrip'
@@ -41,7 +39,6 @@ import {
   type HealthStats,
   type HealthTabId,
 } from '../components/health/HealthStatsTypes'
-import { statusGlowClass } from '../lib/tokens'
 import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
 import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -51,17 +48,7 @@ import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { describeApiFailure } from '../lib/humanizeApiError'
 import { ADMIN_ONLY_HINT } from '../lib/orgPermissions'
-import {
-  errorRateDetail,
-  errorRateTooltip,
-  fallbackRateDetail,
-  fallbackRateTooltip,
-  latencyDetail,
-  latencyTooltip,
-  totalCallsDetail,
-  totalCallsTooltip,
-} from '../lib/statTooltips/health'
-import { healthLinks } from '../lib/statCardLinks'
+import { fallbackRateDetail, latencyDetail } from '../lib/statTooltips/health'
 import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
@@ -71,10 +58,12 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { AlertCards } from '../components/signal/AlertCards'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
-import { CHIP_TONE } from '../lib/chipTone'
 import { HealthSectionsBar, resolveHealthView, type HealthSection } from '../components/health/HealthSectionsBar'
 import { useReadTimedOut } from '../lib/ciReadTimeout'
 import { CiNotChecked } from '../components/ci/CiNotChecked'
+import { cronJobState } from '../components/health/cronJobState'
+import { groupRecentCalls } from '../components/health/recentCalls'
+import { StatusGlyph, TONE_INK } from '../components/signal/StatusGlyph'
 import { PageLoadError } from '../components/PageLoadError'
 import { PlatformDoctorCard } from '../components/health/PlatformDoctorCard'
 
@@ -242,7 +231,7 @@ function HealthPageContent() {
 
   const llm = llmQuery.data
   const cron = cronQuery.data
-  // Never an endless skeleton: a read that has not answered in 20 s says "not checked" with Retry.
+  // Never an endless skeleton: a read that has not answered in 10 s says "not checked" with Retry.
   const statsWait = useReadTimedOut(statsLoading && !statsData)
   const detailWait = useReadTimedOut(llmQuery.loading || cronQuery.loading)
 
@@ -436,17 +425,6 @@ function HealthPageContent() {
 
   const fallbackPct = ((llm.fallbackRate ?? 0) * 100).toFixed(1)
   const errorPct = ((llm.errorRate ?? 0) * 100).toFixed(1)
-  const llmTabStats: HealthStats = {
-    ...EMPTY_HEALTH_STATS,
-    hasAnyProject: stats.hasAnyProject,
-    window,
-    totalCalls: llm.totalCalls,
-    errorRatePct: Math.round((llm.errorRate ?? 0) * 1000) / 10,
-    fallbackRatePct: Math.round((llm.fallbackRate ?? 0) * 1000) / 10,
-    avgLatencyMs: llm.avgLatencyMs ?? 0,
-    p95LatencyMs: llm.p95LatencyMs ?? 0,
-    latencyExact: llm.latencyExact,
-  }
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
   const fnNames = Object.keys(byFunction).sort()
@@ -465,14 +443,17 @@ function HealthPageContent() {
 
   // An overdue or late job is a problem too: never "All systems nominal" beside it. One count for
   // the overdue card and the summary's tone, so the summary is never green beside it (2026-11-18).
-  const overdueCron = KNOWN_JOBS.filter((j) => {
-    const s = cron?.byJob[j]?.staleness
-    return s === 'stale' || s === 'warn'
-  })
-  const lateCount = Math.max(stats.cronStaleCount + stats.cronWarnCount, overdueCron.length)
+  // Round 3: the rows, the overdue card and the strip's "Jobs on time" all read cronJobState, so a
+  // row is never green beside "1 job is overdue". The stats route stands in only without the rows.
+  const cronStates = KNOWN_JOBS.map((j) => ({ job: j, state: cronJobState(cron?.byJob[j]) }))
+  const overdueCron = cron ? cronStates.filter((c) => c.state.overdue).map((c) => c.job) : []
+  const failingCron = cron ? cronStates.filter((c) => c.state.failed).map((c) => c.job) : []
+  const lateCount = cron ? overdueCron.length : stats.cronStaleCount + stats.cronWarnCount
+  const jobsOnTime = cron
+    ? { ok: cronStates.filter((c) => c.state.tone === 'ok').length, total: KNOWN_JOBS.length, failed: failingCron.length }
+    : undefined
 
   const recommendedAction = (() => {
-    const failingCron = KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error')
     if (llm.errorRate > 0.05) {
       return (
         <RecommendedAction
@@ -607,6 +588,7 @@ function HealthPageContent() {
               <HealthSnapshotStrip
                 stats={stats}
                 lateJobs={lateCount}
+                jobs={jobsOnTime}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
@@ -688,36 +670,23 @@ function HealthPageContent() {
 
       {activeTab === 'llm' && (
         <>
-          <Section
-            title={`LLM breakdown (${window})`}
-            freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
-          >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" data-dav-anchor="health:decide">
-              <StatCard label="Total calls" value={llm.totalCalls.toString()} tooltip={totalCallsTooltip(llmTabStats)} detail={totalCallsDetail(llmTabStats)} to={healthLinks.totalCalls} />
-              <StatCard
-                label="Fallback rate"
-                value={`${fallbackPct}%`}
-                accent={llm.fallbackRate > 0.1 ? 'text-danger' : llm.fallbackRate > 0 ? 'text-warn' : 'text-ok'}
-                tooltip={fallbackRateTooltip(llmTabStats)}
-                detail={fallbackRateDetail()}
-                to={healthLinks.fallbackRate}
-              />
-              <StatCard
-                label="Error rate"
-                value={`${errorPct}%`}
-                accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
-                tooltip={errorRateTooltip(llmTabStats)}
-                detail={errorRateDetail()}
-                to={healthLinks.errorRate}
-              />
-              <StatCard
-                label="Latency avg / p95"
-                value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
-                tooltip={latencyTooltip(llmTabStats)}
-                detail={llm.latencyExact === false ? 'From the newest calls only' : latencyDetail()}
-                to={healthLinks.latency}
-              />
-            </div>
+          {/* Round 3: calls and the error rate are in the strip above, once; the strip has the one
+              "Updated". What is left are the two figures the strip does not show, flat. */}
+          <Section title={`LLM breakdown (${window})`}>
+            <dl className="grid grid-cols-2 gap-3" data-dav-anchor="health:decide" data-testid="health-llm-figures">
+              <div className="min-w-0">
+                <dt className="text-2xs text-fg-muted">Fallback rate</dt>
+                <dd className={`text-base font-semibold tabular-nums ${llm.fallbackRate > 0 ? TONE_INK.warn : 'text-fg'}`}>{fallbackPct}%</dd>
+                <dd className="text-2xs text-fg-muted">{fallbackRateDetail()}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-2xs text-fg-muted">Latency avg / p95</dt>
+                <dd className="text-base font-semibold tabular-nums text-fg">
+                  {llm.avgLatencyMs}ms / {llm.p95LatencyMs ?? 0}ms
+                </dd>
+                <dd className="text-2xs text-fg-muted">{llm.latencyExact === false ? 'From the newest calls only' : latencyDetail()}</dd>
+              </div>
+            </dl>
           </Section>
 
           <Section title="Per-function breakdown">
@@ -738,14 +707,14 @@ function HealthPageContent() {
                 ]}
               />
             ) : (
-              <div className="space-y-1.5">
+              <ul className="divide-y divide-edge-subtle">
                 {fnNames.map((fn) => {
                   const f = byFunction[fn]
                   const isFiltered = fnFilter === fn
                   const costStr = `$${(f.costUsd ?? 0).toFixed((f.costUsd ?? 0) >= 1 ? 2 : 4)}`
                   return (
-                    <Card key={fn} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
-                      <code className="min-w-0 truncate font-mono text-2xs font-medium text-fg">{fn}</code>
+                    <li key={fn} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+                      <code className="min-w-0 break-all font-mono text-2xs font-medium text-fg">{fn}</code>
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
                         <SignalChip tone="neutral">{f.calls} calls</SignalChip>
                         <SignalChip tone="info">avg {f.avgLatencyMs}ms</SignalChip>
@@ -778,10 +747,10 @@ function HealthPageContent() {
                           {isFiltered ? 'Clear filter' : 'Filter activity'}
                         </ActionPill>
                       </div>
-                    </Card>
+                    </li>
                   )
                 })}
-              </div>
+              </ul>
             )}
           </Section>
 
@@ -793,10 +762,10 @@ function HealthPageContent() {
                 description="When models start serving traffic, you'll see Haiku, Sonnet, and the judge each broken out with their own latency and cost."
               />
             ) : (
-              <div className="space-y-1.5">
+              <ul className="divide-y divide-edge-subtle">
                 {Object.entries(byModel).map(([model, m]) => (
-                  <Card key={model} className="flex flex-col gap-2 p-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <code className="min-w-0 truncate font-mono text-2xs text-fg-secondary">{model}</code>
+                  <li key={model} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <code className="min-w-0 break-all font-mono text-2xs text-fg-secondary">{model}</code>
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <SignalChip tone="neutral">{m.calls} calls</SignalChip>
                       <SignalChip tone="info">{m.tokens.toLocaleString()} tokens</SignalChip>
@@ -806,128 +775,99 @@ function HealthPageContent() {
                         </SignalChip>
                       )}
                     </div>
-                  </Card>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </Section>
         </>
       )}
 
       {activeTab === 'cron' && (
-        <Section
-          title="Cron Jobs"
-          freshness={{ at: cronQuery.lastFetchedAt, isValidating: cronQuery.isValidating }}
-        >
-          <div className="space-y-1" data-dav-anchor="health:verify">
+        // One status per job from its last run AND its schedule (cronJobState): a job that ran
+        // fine 9 days ago on a weekly schedule is "overdue 9d", never a green "success" (round 3).
+        // Flat rows, the tab's own name, and no second "Updated": the strip above has it.
+        <Section title="Scheduled jobs">
+          <ul className="divide-y divide-edge-subtle" data-dav-anchor="health:verify" data-testid="health-cron-jobs">
             {KNOWN_JOBS.map((job) => {
               const j = cron?.byJob[job]
+              const s = cronJobState(j)
               const isManual = job !== 'data-retention'
               return (
-                <Card key={job} className={`p-2.5 ${statusGlowClass(j?.lastStatus)}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <code className="text-xs font-mono font-medium">{job}</code>
-                        {j ? (
-                          <Badge className={j.lastStatus === 'success' ? CHIP_TONE.okSubtle : j.lastStatus === 'error' ? CHIP_TONE.dangerSubtle : 'bg-surface-overlay text-fg-muted'}>
-                            {j.lastStatus ?? 'never'}
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-surface-overlay text-fg-muted">never run</Badge>
-                        )}
-                      </div>
-                      {j ? (
-                        <InlineProof className="mt-1.5">
-                          Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs ·{' '}
-                          <Pct
-                            value={j.successRate * 100}
-                            precision={0}
-                            direction="higher-better"
-                            hint="Share of runs that finished without errors across the full history of this job."
-                          />{' '}
-                          success · avg {j.avgDurationMs}ms
-                          {j.staleness && j.staleness !== 'ok' && j.stalenessMinutes != null && (
-                            <span className={j.staleness === 'stale' ? ' text-danger' : ' text-warn'}>
-                              {' '}· {j.staleness} ({j.stalenessMinutes}m since last run)
-                            </span>
-                          )}
-                        </InlineProof>
-                      ) : (
-                        <InlineProof className="mt-1.5">
-                          No telemetry yet — job has not executed since the telemetry table was created.
-                        </InlineProof>
-                      )}
+                <li key={job} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2" data-testid={`health-cron-${job}`} data-tone={s.tone}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="font-mono text-xs font-medium text-fg">{job}</code>
+                      <span className={`inline-flex items-center gap-1 text-2xs font-semibold ${TONE_INK[s.tone]}`}>
+                        <StatusGlyph tone={s.tone} />
+                        {s.label}
+                      </span>
                     </div>
-                    {isManual && (
-                      <Btn
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => triggerJob(job as 'judge-batch' | 'intelligence-report')}
-                        loading={triggering === job}
-                        disabled={stats.canRunJobs === false}
-                        title={stats.canRunJobs === false ? ADMIN_ONLY_HINT : 'Runs this job now; it spends AI budget.'}
-                      >
-                        Trigger now
-                      </Btn>
-                    )}
+                    <p className="mt-0.5 text-2xs text-fg-secondary" title={j?.lastRun ? `Last run ${new Date(j.lastRun).toLocaleString()}` : undefined}>
+                      {s.detail}
+                    </p>
                   </div>
-                </Card>
+                  {isManual && (
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => triggerJob(job as 'judge-batch' | 'intelligence-report')}
+                      loading={triggering === job}
+                      disabled={stats.canRunJobs === false}
+                      title={stats.canRunJobs === false ? ADMIN_ONLY_HINT : 'Runs this job now; it spends AI budget.'}
+                    >
+                      Trigger now
+                    </Btn>
+                  )}
+                </li>
               )
             })}
-          </div>
+          </ul>
         </Section>
       )}
 
       {activeTab === 'activity' && (
         <>
+          {/* Round 3: the how-it-works sentence once, not under each "not probed" row. */}
           <Section title="Provider probes">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-dav-anchor="health:act">
+            <p className="mb-1 text-2xs text-fg-muted">A 1-token round-trip against each provider's live API, stopped after 5 s.</p>
+            <ul className="divide-y divide-edge-subtle" data-dav-anchor="health:act" data-testid="health-probes">
               {(['anthropic', 'openai'] as const).map((kind) => {
                 const r = probeResults[kind]
-                const statusColor = r?.status === 'ok'
-                  ? CHIP_TONE.okSubtle
-                  : r?.status === 'degraded'
-                    ? CHIP_TONE.warnSubtle
-                    : r?.status === 'down'
-                      ? CHIP_TONE.dangerSubtle
-                      : 'bg-surface-overlay text-fg-muted'
+                const tone = r?.status === 'ok' ? 'ok' : r?.status === 'degraded' ? 'warn' : r?.status === 'down' ? 'danger' : 'off'
                 return (
-                  <Card key={kind} className="p-2.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs font-mono font-medium capitalize">{kind}</code>
-                          <Badge className={statusColor}>{r?.status ?? 'not probed'}</Badge>
-                        </div>
-                        <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
-                          {r
-                            ? `${r.latencyMs}ms · last probed ${new Date(r.at).toLocaleTimeString()}${r.detail ? ` · ${r.detail.slice(0, 120)}` : ''}`
-                            : 'Runs a 1-token round-trip against the provider\'s live API. Abort after 5s if upstream is stuck.'}
-                        </InlineProof>
+                  <li key={kind} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-fg">{kind === 'anthropic' ? 'Anthropic' : 'OpenAI'}</span>
+                        <span className={`inline-flex items-center gap-1 text-2xs font-semibold ${TONE_INK[tone]}`}>
+                          <StatusGlyph tone={tone} />
+                          {r?.status ?? 'not probed'}
+                        </span>
                       </div>
-                      <Btn
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => probeProvider(kind)}
-                        loading={probing === kind}
-                      >
-                        Probe now
-                      </Btn>
+                      {r && (
+                        <p className="mt-0.5 text-2xs text-fg-secondary">
+                          {`${r.latencyMs}ms · last probed ${new Date(r.at).toLocaleTimeString()}${r.detail ? ` · ${r.detail.slice(0, 120)}` : ''}`}
+                        </p>
+                      )}
                     </div>
-                  </Card>
+                    <Btn size="sm" variant="ghost" onClick={() => probeProvider(kind)} loading={probing === kind}>
+                      Probe now
+                    </Btn>
+                  </li>
                 )
               })}
-            </div>
+            </ul>
           </Section>
 
           <Section
             title={fnFilter ? `Recent LLM calls · filtered to ${fnFilter}` : 'Recent LLM calls'}
             action={
               <FilterSelect
-                label="Show"
+                label="calls"
                 value={recentFilter}
                 options={RECENT_FILTER_OPTIONS}
+                optionLabel={(o) => (o === 'errors' ? 'Errors only' : o === 'fallbacks' ? 'Fallbacks only' : o)}
                 onChange={(e) => updateParam('recent', e.currentTarget.value)}
               />
             }
@@ -941,43 +881,70 @@ function HealthPageContent() {
                   : 'Once Mushi Mushi processes a report, every model call lands here with the full trace one click away in Langfuse.'}
               />
             ) : (
-              <div className="space-y-0.5 font-mono text-2xs">
-                {filteredRecent.map((r, i) => {
-                  const traceUrl = langfuseTraceUrl(r.langfuse_trace_id)
-                  return (
-                    <div
-                      key={i}
-                      className="flex min-w-0 flex-wrap items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40"
-                    >
-                      <span className="text-fg-faint w-32 min-w-0 truncate">{new Date(r.created_at).toLocaleTimeString()}</span>
-                      <span className="text-fg-secondary w-32 min-w-0 truncate">{r.function_name}</span>
-                      <span className="text-fg w-48 min-w-0 truncate">{r.used_model}</span>
-                      {r.fallback_used && <Badge tone="warnSubtle">fallback</Badge>}
-                      {r.status !== 'success' && <Badge tone="dangerSubtle">{r.status}</Badge>}
-                      {r.key_source && r.key_source !== 'env' && <Badge tone="infoSubtle">{r.key_source}</Badge>}
-                      <span className="text-fg-muted ml-auto">{r.latency_ms ?? '?'}ms</span>
-                      <span className="text-fg-faint w-24 text-right">{(r.input_tokens ?? 0) + (r.output_tokens ?? 0)} tok</span>
-                      {r.report_id && (
-                        <Link to={`/reports/${r.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity shrink-0" title="Open report">
-                          report
-                        </Link>
-                      )}
-                      {traceUrl ? (
-                        <a
-                          href={traceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity shrink-0"
-                          title="Open Langfuse trace"
-                        >
-                          trace ↗
-                        </a>
-                      ) : (
-                        <span className="text-fg-faint shrink-0" title="No Langfuse trace recorded">—</span>
-                      )}
-                    </div>
-                  )
-                })}
+              // Grouped by what the calls share, named once in full; one header row (round 3).
+              <div className="min-w-0 overflow-x-auto">
+                <table className="w-full text-2xs" data-testid="health-recent-calls">
+                  <caption className="sr-only">Recent LLM calls, newest first, grouped by function and model</caption>
+                  <thead>
+                    <tr className="text-left text-fg-muted">
+                      <th scope="col" className="py-1 pr-3 font-medium">Time</th>
+                      <th scope="col" className="py-1 pr-3 text-right font-medium">Latency</th>
+                      <th scope="col" className="py-1 pr-3 text-right font-medium">Tokens</th>
+                      <th scope="col" className="py-1 font-medium">
+                        <span className="sr-only">Links</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  {groupRecentCalls(filteredRecent).map((g) => (
+                    <tbody key={g.key} className="border-t border-edge-subtle">
+                      <tr>
+                        <th scope="rowgroup" colSpan={4} className="pt-2 pb-1 text-left font-normal">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <code className="break-all font-mono font-semibold text-fg">{g.fn}</code>
+                            <span className="break-all font-mono text-fg-secondary">{g.model}</span>
+                            {g.fallback && <Badge tone="warnSubtle">fallback</Badge>}
+                            {g.status !== 'success' && <Badge tone="dangerSubtle">{g.status}</Badge>}
+                            {g.keySource && <Badge tone="infoSubtle">{g.keySource}</Badge>}
+                            <span className="text-fg-muted tabular-nums">
+                              {g.rows.length} {g.rows.length === 1 ? 'call' : 'calls'}
+                            </span>
+                          </span>
+                        </th>
+                      </tr>
+                      {g.rows.map((r, i) => {
+                        const traceUrl = langfuseTraceUrl(r.langfuse_trace_id)
+                        const tokens = (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+                        return (
+                          <tr key={`${r.created_at}-${i}`} className="font-mono hover:bg-surface-overlay/40">
+                            <td className="py-0.5 pr-3 text-fg-secondary tabular-nums whitespace-nowrap">{new Date(r.created_at).toLocaleTimeString()}</td>
+                            <td className="py-0.5 pr-3 text-right text-fg tabular-nums">{r.latency_ms != null ? `${r.latency_ms}ms` : ''}</td>
+                            <td className="py-0.5 pr-3 text-right text-fg tabular-nums">{tokens > 0 ? tokens.toLocaleString() : ''}</td>
+                            <td className="py-0.5 whitespace-nowrap">
+                              <span className="flex items-center gap-3">
+                                {r.report_id && (
+                                  <Link to={`/reports/${r.report_id}`} className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity" title="Open report">
+                                    report
+                                  </Link>
+                                )}
+                                {traceUrl && (
+                                  <a
+                                    href={traceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
+                                    title="Open Langfuse trace"
+                                  >
+                                    trace ↗
+                                  </a>
+                                )}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  ))}
+                </table>
               </div>
             )}
           </Section>

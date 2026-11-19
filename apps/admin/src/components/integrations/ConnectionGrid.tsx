@@ -26,7 +26,7 @@ import type { InboundDeliveryLike } from '../../lib/integrationConnection'
 import { sentryConfiguredFromPlatform } from '../../lib/useSentryConnection'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
 import { HighlightProvider } from '../signal/linkedHighlight'
-import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
+import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import {
   alertChannelGap,
@@ -267,7 +267,7 @@ export function ConnectionGrid({
   )
 }
 
-/** A tool that is not set up: ○, logo, name and its own Connect, on one line. */
+/** A tool that is not set up: logo, name and its own Connect, on one line. */
 function OffChip({
   tile,
   onOpen,
@@ -294,7 +294,7 @@ function OffChip({
         title={word}
         className="inline-flex min-w-0 items-center gap-1.5 rounded-sm text-xs text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
-        <StatusMark status="idle" />
+        {/* No hollow mark: it read as a radio button, and Connect beside it says it (2026-11-19). */}
         <BrandIcon brand={tile.brand} size={14} decorative />
         <span className="truncate font-semibold">{tile.label}</span>
       </button>

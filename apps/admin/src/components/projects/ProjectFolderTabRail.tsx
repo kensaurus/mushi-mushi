@@ -131,7 +131,8 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
   return (
     <span className="mt-1 flex flex-wrap items-center gap-1">
       {repoLabel ? (
-        <span className="truncate font-mono text-3xs text-fg-muted" title={repoLabel}>
+        // Whole, wrapped: "kensaurus/help-her-tak…" hid the end that tells repos apart (round 3).
+        <span className="min-w-0 font-mono text-3xs wrap-anywhere text-fg-muted" title={repoLabel}>
           {repoLabel}
         </span>
       ) : null}
@@ -170,21 +171,50 @@ function ProjectMetaRow({ project }: { project: ProjectFolderTabItem }) {
         </SignalChip>
       ) : null}
       {project.pdca_bottleneck && project.pdca_bottleneck_label ? (
-        // Text, not a link: this row sits inside the project's <button>,
-        // and a link in a button is two tab stops for one row (QA bug 264).
-        // The selected project's panel links to the bottleneck.
-        <span
-          className="block w-full text-3xs font-medium wrap-break-word text-warn-foreground"
-          title={project.pdca_bottleneck_label}
-        >
-          {bottleneckHumanHeadline({
-            stage: project.pdca_bottleneck,
-            label: project.pdca_bottleneck_label,
-            count: project.pdca_bottleneck_count,
-          })}
+        // A mark, not the sentence: "Auto-fix stopped on N reports" sat on 8 of 10 rows (round 3).
+        // The rail says it once above the list (StuckSummary); the selected app's panel links to it.
+        <span className="inline-flex items-center" title={projectStuckHeadline(project) ?? undefined} data-testid="project-rail-stuck">
+          <span className="h-1.5 w-1.5 rounded-full bg-warn" aria-hidden />
+          <span className="sr-only">{projectStuckHeadline(project)}</span>
         </span>
       ) : null}
     </span>
+  )
+}
+
+function projectStuckHeadline(p: Pick<ProjectFolderTabItem, 'pdca_bottleneck' | 'pdca_bottleneck_label' | 'pdca_bottleneck_count'>): string | null {
+  if (!p.pdca_bottleneck || !p.pdca_bottleneck_label) return null
+  return bottleneckHumanHeadline({ stage: p.pdca_bottleneck, label: p.pdca_bottleneck_label, count: p.pdca_bottleneck_count })
+}
+
+/**
+ * The rail's stuck apps, one line per kind ("Auto-fix stopped on 8 apps"), so a row carries only an
+ * amber dot (round 3, 2026-11-19).
+ *
+ * @internal Exported for tests.
+ */
+export function stuckSummary(projects: ReadonlyArray<Pick<ProjectFolderTabItem, 'pdca_bottleneck' | 'pdca_bottleneck_label' | 'pdca_bottleneck_count'>>): string[] {
+  const kinds = new Map<string, number>()
+  for (const p of projects) {
+    const h = projectStuckHeadline(p)
+    if (!h) continue
+    const kind = /^auto-fix stopped/i.test(h) ? 'Auto-fix stopped' : h.replace(/^\d+\s+/, '').replace(/^./, (c) => c.toUpperCase())
+    kinds.set(kind, (kinds.get(kind) ?? 0) + 1)
+  }
+  return [...kinds].map(([kind, n]) => `${kind} on ${n} ${n === 1 ? 'app' : 'apps'}`)
+}
+
+function StuckSummary({ lines, className = '' }: { lines: string[]; className?: string }) {
+  if (lines.length === 0) return null
+  return (
+    <ul className={`flex flex-col gap-0.5 text-3xs font-medium text-warn-foreground ${className}`} data-testid="projects-rail-stuck-summary">
+      {lines.map((l) => (
+        <li key={l} className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden />
+          {l}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -266,12 +296,18 @@ function FolderTabButton({
 
 export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFolderTabRailProps) {
   if (projects.length === 0) return null
+  const stuck = stuckSummary(projects)
 
   return (
     <>
+      <StuckSummary lines={stuck} className="px-2 pt-2 lg:hidden" />
+      {/* `relative` is load-bearing (round 3, 2026-11-19): each chip's favicon carries an sr-only
+          label (position: absolute). Without a positioned ancestor inside this scroller, the last
+          chip's label sat at x ≈ 2,300 px and gave the whole 390 page a sideways scroll. */}
       <nav
         aria-label="Apps"
-        className="flex min-w-0 max-w-full gap-1.5 overflow-x-auto p-2 lg:hidden"
+        className="relative flex min-w-0 max-w-full gap-1.5 overflow-x-auto p-2 lg:hidden"
+        data-testid="projects-app-rail"
       >
         {projects.map((project) => (
           <FolderTabButton
@@ -293,6 +329,7 @@ export function ProjectFolderTabRail({ projects, activeId, onSelect }: ProjectFo
           <p className="px-2 pb-1 pt-0.5 text-2xs font-semibold text-fg-muted">
             Apps
           </p>
+          <StuckSummary lines={stuck} className="px-2 pb-1" />
           {projects.map((project) => (
             <FolderTabButton
               key={project.id}

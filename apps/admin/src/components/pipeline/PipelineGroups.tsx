@@ -436,6 +436,28 @@ export function actionSections(groups: readonly PipelineGroup[]): Array<{ action
   return out
 }
 
+/**
+ * The list as drawn: action sections, and every run of lone groups that follows a section under
+ * its own "Other" heading. Lone rows ("8 apps: auto-fix is on…", "5 reports: rejected at intake")
+ * sat right under "Send to CI repair: 2 groups" and read as part of it (round-3 review,
+ * 2026-11-19). Lone groups before the first section need no heading. @internal Exported for tests.
+ */
+export function sectionBlocks(groups: readonly PipelineGroup[]): Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> {
+  const out: Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> = []
+  let seenSection = false
+  for (const sec of actionSections(groups)) {
+    if (sec.action) {
+      seenSection = true
+      out.push({ kind: 'action', action: sec.action, groups: sec.groups })
+      continue
+    }
+    const last = out[out.length - 1]
+    if (last && last.kind === 'other' && last.headed === seenSection) last.groups.push(...sec.groups)
+    else out.push({ kind: 'other', groups: [...sec.groups], headed: seenSection })
+  }
+  return out
+}
+
 /** A heading for groups that take the same fix, and the one button that runs it on all of them. */
 function ActionSection({ action, groups, props, markId }: { action: PipelineAction; groups: PipelineGroup[]; props: Props; markId: string | null }) {
   const ids: string[] = []
@@ -450,11 +472,18 @@ function ActionSection({ action, groups, props, markId }: { action: PipelineActi
   const total = groups.reduce((n, g) => n + g.count, 0)
   const key = `${action}:section`
   const label = ACTION_META[action].label
+  // The heading counts what the button runs on ("14 items" over "Send to CI repair (13)",
+  // round-3 review 2026-11-19); the rest are named as such.
+  const left = Math.max(0, total - ids.length)
   return (
     <li className="space-y-1" data-testid={`pipeline-action-section-${action}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
-        <p className="text-2xs font-semibold text-fg-secondary">
-          {label}: <span className="font-normal text-fg-muted">{groups.length} groups, {total} items</span>
+        <p className="text-2xs font-semibold text-fg-secondary" data-testid={`pipeline-action-section-${action}-head`}>
+          {label}:{' '}
+          <span className="font-normal text-fg-muted">
+            {groups.length} groups, {ids.length} {ids.length === 1 ? 'item' : 'items'}
+            {left > 0 && ` (${left} more can't take it now)`}
+          </span>
         </p>
         <Btn
           size="sm"
@@ -482,13 +511,21 @@ export function PipelineGroups(props: Props) {
     return <p className="text-xs text-fg-muted" data-testid="pipeline-groups-empty">Nothing here right now.</p>
   }
   const markId = props.topGroupId ?? props.groups.find((g) => groupSignalTone(g) === 'danger')?.id ?? null
+  const card = (g: PipelineGroup) => <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} marked={g.id === markId} />
   return (
     <ul className="space-y-2" data-testid="pipeline-groups">
-      {actionSections(props.groups).map((sec) =>
-        sec.action ? (
-          <ActionSection key={`section:${sec.action}`} action={sec.action} groups={sec.groups} props={props} markId={markId} />
+      {sectionBlocks(props.groups).map((b, i) =>
+        b.kind === 'action' ? (
+          <ActionSection key={`section:${b.action}`} action={b.action} groups={b.groups} props={props} markId={markId} />
+        ) : b.headed ? (
+          <li key={`other:${i}`} className="space-y-1" data-testid="pipeline-other-section">
+            <p className="px-1 pt-1 text-2xs font-semibold text-fg-secondary">
+              Other: <span className="font-normal text-fg-muted">{b.groups.length} {b.groups.length === 1 ? 'group' : 'groups'}, {b.groups.reduce((n, g) => n + g.count, 0)} items</span>
+            </p>
+            <ul className="space-y-1">{b.groups.map(card)}</ul>
+          </li>
         ) : (
-          <GroupCard key={`${sec.groups[0]!.stage}:${sec.groups[0]!.id}`} group={sec.groups[0]!} props={props} marked={sec.groups[0]!.id === markId} />
+          b.groups.map(card)
         ),
       )}
     </ul>

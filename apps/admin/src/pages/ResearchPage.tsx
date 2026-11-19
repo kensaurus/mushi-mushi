@@ -329,6 +329,19 @@ export function ResearchPage() {
         )}
       </PageHeaderBar>
 
+      {/* Tabs sit under the heading on every tab, above the status: an empty state above them
+          moved the strip down on History/Experiments (2026-11-19). */}
+      {!ux.hideTabs && (
+      <SegmentedControl<ResearchTabId>
+        size="sm"
+        scrollable
+        ariaLabel="Research sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+      )}
+
       <PagePosture
         slots={[
           {
@@ -361,17 +374,6 @@ export function ResearchPage() {
           },
         ]}
       />
-
-      {!ux.hideTabs && (
-      <SegmentedControl<ResearchTabId>
-        size="sm"
-        scrollable
-        ariaLabel="Research sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
 
       {!activeProjectId ? (
         <NextStep

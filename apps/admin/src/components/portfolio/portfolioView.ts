@@ -137,6 +137,17 @@ export function radarBadge(d: { state: string; findings: ReadonlyArray<{ severit
 }
 
 /**
+ * The worst risk check, for the App blueprint's Overall (round 3, 2026-11-19: Overall read amber
+ * "Needs attention" while a risk check right below it said red "Error"). Same words and tone as
+ * each check's own badge; null when no check found anything.
+ */
+export function radarOverall(detectors: ReadonlyArray<{ state: string; findings: ReadonlyArray<{ severity: string }> }>): { tone: 'danger' | 'warn'; label: string } | null {
+  const found = detectors.filter((d) => d.state === 'finding')
+  if (found.length === 0) return null
+  return found.some((d) => radarBadge(d).tone === 'dangerSubtle') ? { tone: 'danger', label: 'Error' } : { tone: 'warn', label: 'Warning' }
+}
+
+/**
  * A check's name says what passing looks like ("No known holes in your dependencies"). When it
  * found something, the same name next to "Found" contradicted itself (fresh-eyes 2026-11-18), so
  * the title says the condition is not met.

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { QUERY_TABS, defaultLibraryTab, resolveQueryTab } from './queryTabs'
+import { QUERY_TABS, collapseRepeats, defaultLibraryTab, resolveQueryTab } from './queryTabs'
 
 describe('resolveQueryTab', () => {
   it('opens on Ask', () => {
@@ -31,5 +31,18 @@ describe('defaultLibraryTab', () => {
   it('opens on Saved only when it is the one list with rows', () => {
     expect(defaultLibraryTab(4, 0)).toBe('saved')
     expect(defaultLibraryTab(0, 0)).toBe('recent')
+  })
+})
+
+// Round 3: the same question twice in a row is one row.
+describe('collapseRepeats', () => {
+  it('folds back-to-back runs of one prompt, keeps the newest, and keeps repeats that are apart', () => {
+    const rows = [
+      { id: 'a', prompt: 'How many open reports are there?', mode: 'nl' },
+      { id: 'b', prompt: 'How many open reports are there? ', mode: 'nl' },
+      { id: 'c', prompt: 'select 1', mode: 'raw' },
+      { id: 'd', prompt: 'How many open reports are there?', mode: 'nl' },
+    ]
+    expect(collapseRepeats(rows).map((r) => r.id)).toEqual(['a', 'c', 'd'])
   })
 })

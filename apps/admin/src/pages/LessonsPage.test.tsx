@@ -127,7 +127,9 @@ describe('LessonsPage round-2 sweep', () => {
     mocks.clusters = []
     await render('/lessons?tab=lessons')
     const text = host.textContent ?? ''
-    expect(text.split('No lessons yet').length - 1).toBe(1)
+    // Named like its tab (2026-11-19): "No rules in use yet", said once.
+    expect(text.split('No rules in use yet').length - 1).toBe(1)
+    expect(text).not.toContain('No lessons yet')
     expect(host.querySelector('[data-testid="page-status"]')).toBeNull()
     expect(host.querySelector('.font-serif')).toBeNull()
   })
@@ -149,5 +151,23 @@ describe('LessonsPage round-2 sweep', () => {
     await render('/lessons?tab=clusters')
     const row = host.querySelector('[data-testid="lessons-cluster-group"]')!.textContent ?? ''
     expect(row.toLowerCase().split('still growing').length - 1).toBe(1)
+  })
+
+  // 2026-11-19: "Query lessons" was enabled with nothing to match against.
+  it('turns Query lessons off with its reason while there are no lessons', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, activeLessons: 0, topPriority: 'no_lessons' }
+    mocks.clusters = []
+    await render('/lessons?tab=query')
+    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('Query lessons')) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    expect(host.querySelector('[data-testid="lessons-query-blocked"]')?.textContent).toBe('No lessons to match yet.')
+  })
+
+  it('shows "In patterns" only when it says more than the pattern count', async () => {
+    mocks.stats = { ...EMPTY_LESSONS_STATS, hasAnyProject: true, candidateClusters: 2, totalClusterReports: 2, topPriority: 'no_lessons' }
+    mocks.clusters = []
+    await render('/lessons?tab=lessons')
+    const status = host.querySelector('[data-testid="page-status"]')
+    expect([...(status?.querySelectorAll('dt') ?? [])].map((d) => d.textContent)).not.toContain('In patterns')
   })
 })

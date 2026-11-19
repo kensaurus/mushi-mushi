@@ -53,6 +53,7 @@ export function resolveQuickSettingsTab(
     case 'keys_expiring':
     case 'no_anthropic':
     case 'keys_unchecked':
+    case 'keys_tidy':
       return 'byok';
     case 'sdk_off':
     case 'healthy':

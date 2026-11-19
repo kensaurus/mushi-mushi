@@ -849,6 +849,7 @@ export function AuditPage() {
             children: (
               <AuditSnapshotStrip
                 stats={stats}
+                latestActor={logs[0] && logs[0].action === stats.latestAction ? auditActorLabel(logs[0]) : null}
                 statsFetchedAt={statsFetchedAt ?? lastFetchedAt}
                 statsValidating={statsValidating || isValidating}
               />

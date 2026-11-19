@@ -83,8 +83,6 @@ describe('McpOverviewPanel', () => {
           createElement(McpOverviewPanel, {
             stats: { ...EMPTY_MCP_STATS, activeKeyCount: 5, mcpReadKeyCount: 3, mcpWriteKeyCount: 1, reportOnlyKeyCount: 1 },
             keys,
-            lastFetchedAt: null,
-            isValidating: false,
             onOpenExamples: () => {},
             onOpenSetup: () => {},
             ...extra,
@@ -98,7 +96,8 @@ describe('McpOverviewPanel', () => {
     const editors = Array.from(host.querySelectorAll('[aria-label="Connected editors"] li')).map((li) => li.textContent)
     expect(editors[0]).toContain('Claude Code')
     expect(editors[0]).toContain('Last call')
-    expect(host.querySelectorAll('[aria-label="Example prompts"] li')).toHaveLength(5)
+    // Three on Summary; the Examples tab has them all (round-3 review 2026-11-19).
+    expect(host.querySelectorAll('[aria-label="Example prompts"] li')).toHaveLength(3)
     expect(host.querySelector('[data-testid="mcp-key-health"]')!.textContent).toContain('5 keys: 3 for editors')
   })
 

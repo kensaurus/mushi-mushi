@@ -56,7 +56,10 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
       </p>
     )
   }
+  // The package name stays on one line ("@mushi-/mushi/web" broke at its hyphen on a phone); a
+  // narrow screen scrolls the table inside its own box, never the page (round-3 review).
   return (
+    <div className="overflow-x-auto">
     <table className="w-full text-xs" aria-label="Installed and latest SDK versions">
       <thead>
         <tr className="text-left text-fg-muted">
@@ -69,7 +72,7 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
       <tbody>
         {view.packages.map((p) => (
           <tr key={p.package} className="border-t border-edge-subtle">
-            <td className="py-1.5 pr-3 font-mono">{p.package}</td>
+            <td className="py-1.5 pr-3 font-mono whitespace-nowrap">{p.package}</td>
             <td className="py-1.5 pr-3 font-mono">{p.installed ?? 'not checked yet'}</td>
             <td className="py-1.5 pr-3 font-mono">{p.latest ?? 'not checked yet'}</td>
             <td className="py-1.5">
@@ -83,6 +86,7 @@ function VersionTable({ view }: { view: UpdateCenterView }) {
         ))}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -216,32 +220,32 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
           <>
             {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.prUrl ? (
               <Btn
-                size="md"
+                size="sm"
                 variant={view.mode === 'pr_open' ? 'primary' : 'ghost'}
                 className="gap-2"
                 href={state.prUrl}
               >
-                <IconExternalLink className="h-4 w-4" aria-hidden />
+                <IconExternalLink className="h-3.5 w-3.5" aria-hidden />
                 View PR {prNumberFrom(state.prUrl) ?? ''}
               </Btn>
             ) : null}
             {view.mode === 'pr_open' && view.newerThanPr ? (
               <Tooltip content="Move the open PR to the newest release." side="top">
                 <Btn
-                  size="md"
+                  size="sm"
                   variant="ghost"
                   disabled={isInFlight}
                   onClick={() => void refreshUpgradePr()}
                   className="gap-2"
                 >
-                  <IconRefresh className="h-4 w-4" aria-hidden />
+                  <IconRefresh className="h-3.5 w-3.5" aria-hidden />
                   Update PR to {view.packages[0]?.latest}
                 </Btn>
               </Tooltip>
             ) : null}
             {(view.mode === 'pr_open' || view.mode === 'pr_merged') && state.jobId ? (
               <Btn
-                size="md"
+                size="sm"
                 variant="ghost"
                 disabled={isInFlight || state.syncing}
                 loading={state.syncing}
@@ -254,55 +258,57 @@ export function UpdateCenter({ project, preflight }: UpdateCenterProps) {
             ) : null}
             {view.upgradeLabel ? (
               <Btn
-                size="md"
+                size="sm"
                 variant="primary"
                 loading={isInFlight}
                 disabled={isInFlight}
                 onClick={() => void createUpgradePr()}
                 className="gap-2"
               >
-                <IconBolt className="h-4 w-4" aria-hidden />
+                <IconBolt className="h-3.5 w-3.5" aria-hidden />
                 {view.upgradeLabel}
               </Btn>
             ) : null}
             {view.mode === 'failed' ? (
               <Btn
-                size="md"
+                size="sm"
                 variant="primary"
                 onClick={() => void refreshUpgradePr()}
                 className="gap-2"
               >
-                <IconRefresh className="h-4 w-4" aria-hidden />
+                <IconRefresh className="h-3.5 w-3.5" aria-hidden />
                 Try the upgrade again
               </Btn>
             ) : null}
             {view.mode === 'not_checked' || view.mode === 'repo_current' || view.mode === 'up_to_date' ? (
               <Tooltip content="Scan your repo's package.json files for older @mushi-mushi/* versions." side="top">
                 <Btn
-                  size="md"
+                  size="sm"
                   variant="ghost"
                   loading={isInFlight}
                   disabled={isInFlight}
                   onClick={() => void createUpgradePr()}
                   className="gap-2"
                 >
-                  <IconRefresh className="h-4 w-4" aria-hidden />
+                  <IconRefresh className="h-3.5 w-3.5" aria-hidden />
                   {view.mode === 'not_checked' ? 'Check my repo' : 'Check again'}
                 </Btn>
               </Tooltip>
             ) : null}
           </>
         ) : (
-          <Btn to="/connect#connect-github" size="md" variant="ghost" className="gap-2">
-            <IconGit className="h-4 w-4" aria-hidden />
+          <Btn to="/connect#connect-github" size="sm" variant="ghost" className="gap-2">
+            <IconGit className="h-3.5 w-3.5" aria-hidden />
             Connect GitHub
-            <IconArrowRight className="h-4 w-4" aria-hidden />
+            <IconArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Btn>
         )}
 
-        <Tooltip content="Copy the mushi upgrade CLI command" side="top">
+        {/* A bare copy icon beside "Check again" named nothing (round-3 review, 2026-11-19). */}
+        <span className="inline-flex items-center gap-1 text-2xs text-fg-muted">
+          or run <code className="font-mono text-fg-secondary">mushi upgrade</code>
           <CopyButton value="mushi upgrade" label="Copy CLI command" copiedLabel="Copied" size="sm" />
-        </Tooltip>
+        </span>
 
         {view.mode === 'working' || view.mode === 'awaiting_lockfile' ? (
           <JobStatusPill status={state.status} prUrl={state.prUrl} error={state.error} />

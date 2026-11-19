@@ -103,7 +103,7 @@ describe('JudgeAgreementOverview', () => {
 })
 
 describe('JudgeAgreementOverview with one graded week', () => {
-  it('shows the one value instead of a flat chart', () => {
+  it('shows no chart and no "0% agreed" line: the status line already counts the disagreements', () => {
     mocks.evaluations = []
     act(() =>
       root.render(
@@ -115,10 +115,8 @@ describe('JudgeAgreementOverview with one graded week', () => {
       ),
     )
     expect(host.querySelector('[data-testid="metric-timeline"]')).toBeNull()
-    const single = host.querySelector('[data-testid="judge-agreement-single"]')!
-    expect(single.textContent).toContain('0%')
-    expect(single.textContent).toContain('week of Nov 9 (0 of 2 grades)')
-    expect(single.textContent).toContain('after 2 weeks')
+    expect(host.querySelector('[data-testid="judge-agreement-single"]')).toBeNull()
+    expect(host.textContent).not.toContain('agreed, week of')
   })
 })
 
@@ -150,7 +148,7 @@ describe('judgeStatusSentence', () => {
     expect(judgeStatusSentence({ ...base, recentWindowDays: 14, recentEvaluations: 2, recentDisagreements: 2 })).toBe(
       'In the last 14 days the grader would have diagnosed every report it graded differently. Read those before merging their fixes.',
     )
-    expect(judgeWeekMetricLabel({ latestWeekLabel: 'week of Nov 9' })).toBe('Average grade, week of Nov 9')
-    expect(judgeWeekMetricLabel({ latestWeekLabel: 'this week' })).toBe('Average grade, this week')
+    expect(judgeWeekMetricLabel({ latestWeekLabel: 'week of Nov 9' })).toBe('Avg grade · Nov 9')
+    expect(judgeWeekMetricLabel({ latestWeekLabel: 'this week' })).toBe('Avg grade · this week')
   })
 })

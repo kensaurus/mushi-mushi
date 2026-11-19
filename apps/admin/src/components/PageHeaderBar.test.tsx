@@ -51,7 +51,9 @@ describe('PageHeaderBar overview chip', () => {
     container.remove()
   })
 
-  function renderDashboardHeader() {
+  // A heading other than the chip's own word, so the chip renders (a chip that repeats the
+  // heading is hidden: see the last test).
+  function renderDashboardHeader(title = 'A long dashboard heading') {
     act(() => {
       root.render(
         createElement(
@@ -59,7 +61,7 @@ describe('PageHeaderBar overview chip', () => {
           { initialEntries: ['/dashboard'] },
           createElement(
             PageHeaderBar,
-            { title: 'Home', showCopyLink: false },
+            { title, showCopyLink: false },
             createElement('span', null, 'now'),
           ),
         ),
@@ -86,5 +88,10 @@ describe('PageHeaderBar overview chip', () => {
     const label = Array.from(chip!.querySelectorAll('span')).find((el) => el.textContent === 'Home')
     expect(label).toBeDefined()
     expect(label!.className).toContain('truncate')
+  })
+
+  it('hides the chip when it repeats the heading ("Home" over Home)', () => {
+    renderDashboardHeader('Home')
+    expect(container.querySelector('[aria-label^="Home:"]')).toBeNull()
   })
 })

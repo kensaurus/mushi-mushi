@@ -158,3 +158,15 @@ describe('deployLiveLabel', () => {
     expect(deployLiveLabel(live({ state: 'not_live', prod_commit: null }))).toBe('Fixed — not live yet')
   })
 })
+
+describe('header title and chips (round-3 sweep 2026-11-19)', () => {
+  it('titles a clipped summary with the summary, not the raw description, and drops severity and category chips', () => {
+    const raw = 'retention_sweep_failed (captured by Sentry) Where: scope=x Event extra: err: projects read failed'
+    render(report({ description: raw, summary: 'The retention sweep failed while reading projects…', severity: 'medium', category: 'bug' }))
+    const title = container.querySelector('[data-testid="report-detail-title"]')
+    expect(title?.textContent).toBe('The retention sweep failed while reading projects…')
+    expect(title?.getAttribute('title')).toBe(raw)
+    expect(container.textContent).not.toContain('Medium')
+    expect(container.textContent).not.toMatch(/\bBug\b/)
+  })
+})

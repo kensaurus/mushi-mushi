@@ -235,7 +235,7 @@ export function ChecksPage() {
   // Providers & AI routes: operators only (the route 403s for everyone else).
   const ops = usePageData<OpsReadResponse>(isOperator ? '/v1/admin/kensaurus/ops' : null, { scope: 'none' })
 
-  // Never an endless "Checking…": a read with no answer after 20 s reads as "could not read",
+  // Never an endless "Checking…": a read with no answer after 10 s reads as "could not read",
   // with one Retry (lib/ciReadTimeout.ts). An answer that lands later still renders.
   const navWaiting = nav.data == null && nav.error == null
   const recipeWaiting = !!projectId && recipe.data == null && recipe.error == null
@@ -385,11 +385,25 @@ export function ChecksPage() {
                 ({idle.length})
               </span>
             </h2>
-            <ul className="list-none divide-y divide-edge-subtle border-t border-edge-subtle p-0" aria-label="Checks not running yet">
-              {idle.map((card) => (
-                <FoldedCheck key={card.path} {...rowProps(card)} />
+            {/* Two groups named once, rows without a pill each: "Not set up" ×3 and "Not run yet" ×2
+                under one header said each state on every row (round 3). */}
+            {[
+              { id: 'not_set_up', word: 'Not set up', cards: idle.filter((c) => c.view!.state === 'not_set_up') },
+              { id: 'not_checked', word: 'Not run yet', cards: idle.filter((c) => c.view!.state !== 'not_set_up') },
+            ]
+              .filter((g) => g.cards.length > 0)
+              .map((g) => (
+                <div key={g.id} className="border-t border-edge-subtle" data-testid={`checks-idle-${g.id}`}>
+                  <p className="px-3 pt-1.5 text-2xs font-semibold text-fg-secondary">
+                    {g.word} <span className="font-mono tabular-nums">{g.cards.length}</span>
+                  </p>
+                  <ul className="list-none divide-y divide-edge-subtle p-0" aria-label={`Checks ${g.word.toLowerCase()}`}>
+                    {g.cards.map((card) => (
+                      <FoldedCheck key={card.path} {...rowProps(card)} hidePill />
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
           </section>
         )}
 
@@ -478,7 +492,7 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
 }
 
 /** A passing or watching check, one line inside the fold. */
-function FoldedCheck({ card, gated, change, now }: RowProps) {
+function FoldedCheck({ card, gated, change, now, hidePill = false }: RowProps & { hidePill?: boolean }) {
   const { path, item, view } = card
   const Icon = item.icon
   const link = useLinked([`check:${path}`], `check:${path}`)
@@ -501,7 +515,7 @@ function FoldedCheck({ card, gated, change, now }: RowProps) {
         {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
         <ChangeChip change={change} testId="checks-change" />
         {view?.lastRunAt ? <RunAge lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="hidden text-fg-secondary sm:inline">{view.detail}</span> : null}
-        {view && <StatusPill status={STATE_STATUS[view.state]} label={view.chip} />}
+        {view && !hidePill && <StatusPill status={STATE_STATUS[view.state]} label={view.chip} />}
         {view?.state === 'not_set_up' && view.setupTo ? (
           <Link
             to={view.setupTo}

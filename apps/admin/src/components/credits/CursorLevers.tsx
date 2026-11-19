@@ -13,7 +13,7 @@ import { StatusPill } from '../signal/StatusMark'
 import { spendDownSwitchLocked, spendDownUnused } from '../../lib/creditsView'
 import { apiFetch, type ApiResult } from '../../lib/supabase'
 import { describeByokError } from '../../lib/byokErrors'
-import { expiryLabel } from '../../lib/creditPlan'
+import { expiryLabel, shortKeyHint } from '../../lib/creditPlan'
 import { cursorModelLabel } from '../../lib/cursorModelLabel'
 import { spendDownLine, spendDownOutOfWork, type SpendDownKeyStatus, type SpendDownResponse } from '../settings/spendDown'
 import type { ReviewFollowupsResponse } from '../settings/reviewFollowups'
@@ -72,16 +72,22 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
           const expiry = expiryLabel(k.creditsExpireAt, now)
           const editable = canChangeSpendDown(k, canManageOrg)
           const unused = spendDownUnused(k)
+          // Expired credits can't be spent: no switch at all, not a dead one (2026-11-19).
+          const gone = spendDownSwitchLocked(k) && (k.state === 'expired' || expiry === 'expired')
+          // Off is a pill on the row; the sentence "Spend-down is off" was said 4 times a page.
+          const off = !gone && k.state === 'off'
           return (
             <li key={k.id} className="space-y-1 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm">
-                  <span className="text-fg-secondary">{k.keyHint ?? '…'}</span>
+                  <span className="text-fg-secondary">{k.keyHint ? shortKeyHint(k.keyHint) : '…'}</span>
                   {k.label && <span className="ml-2 text-fg-muted">{k.label}</span>}
                   {expiry && <span className="ml-2 text-xs text-fg-muted">· {expiry}</span>}
                   {/* On but no app sends bugs through it: a state, drawn as a pill (round-2 review). */}
                   {unused && <StatusPill status="waiting" label="Unused" className="ml-2 align-middle" />}
+                  {off && <StatusPill status="idle" label="Off" className="ml-2 align-middle" />}
                 </p>
+                {!gone && (
                 <Toggle
                   label="Fix open bugs before the credits expire"
                   checked={k.enabled}
@@ -95,9 +101,10 @@ export function CursorLevers({ spendDown, followups, now, onChanged }: Props) {
                     )
                   }
                 />
+                )}
               </div>
               <p className="text-xs text-fg-secondary">
-                {unused ? 'No app sends bugs through it: each app has its own Cursor key, auto-fix is off, or no repo is linked.' : line.text} Runs on {modelName}.{' '}
+                {unused ? 'No app sends bugs through it: each app has its own Cursor key, auto-fix is off, or no repo is linked. ' : off || gone ? '' : `${line.text} `}Runs on {modelName}.{' '}
                 <Link className="text-brand underline underline-offset-2" to="/settings?tab=byok">Change</Link>
               </p>
               {!k.enabled && !k.creditsExpireAt && (

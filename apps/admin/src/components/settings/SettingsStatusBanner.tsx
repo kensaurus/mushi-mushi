@@ -15,7 +15,7 @@
 import { Btn } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
-import type { KeySummary } from './keyStatus'
+import { keysNeedingAction, keysToTidy, type KeySummary } from './keyStatus'
 import type { SettingsStats, SettingsTabId } from './types'
 import { slackAlertsReady } from './slackAlertStatus'
 import type { ConnectionView } from '../../lib/integrationConnection'
@@ -51,6 +51,7 @@ type BannerPriority =
   | 'no_anthropic'
   | 'sdk_off'
   | 'keys_unchecked'
+  | 'keys_tidy'
   | 'routing_optional'
   | 'slack_incomplete'
   | 'healthy'
@@ -73,6 +74,7 @@ export function settingsBannerPriority(
   if (!hasAnthropicKey) return 'no_anthropic'
   if (!stats.sdkConfigEnabled) return 'sdk_off'
   if (unchecked > 0) return 'keys_unchecked'
+  if (keySummary && keysToTidy(keySummary) > 0) return 'keys_tidy'
   // slackConfigured is "any Slack field is saved". That includes a channel
   // id with no bot, which cannot send. slackCanPost is the send check.
   if (stats.slackConfigured && stats.slackCanPost === false) return 'slack_incomplete'
@@ -139,7 +141,17 @@ export function SettingsStatusBanner({
 
   switch (priority) {
     case 'keys_attention': {
-      const n = keySummary ? keySummary.attention : stats.byokKeysFailing
+      // The same count as the AI keys tab badge: every key whose row asks
+      // for something, tidy-up included (round-3 review 2026-11-19).
+      const n = keySummary ? keysNeedingAction(keySummary) : stats.byokKeysFailing
+      const broken = keySummary ? keySummary.attention : n
+      const tidy = keySummary ? keysToTidy(keySummary) : 0
+      const rest = n - broken - tidy
+      const parts = [
+        `${broken} not working`,
+        tidy > 0 ? `${tidy} to tidy up` : null,
+        rest > 0 ? `${rest} to check or replace` : null,
+      ].filter(Boolean)
       return (
         <StatusBannerShell
           tone="danger"
@@ -150,7 +162,9 @@ export function SettingsStatusBanner({
               ? `${plural(n, 'key')} and the fix branch pattern need your attention`
               : `${plural(n, 'key')} ${n === 1 ? 'needs' : 'need'} your attention`
           }
-          subtitle={withBranch('Rejected, out of quota, expired or replaced. Each one says what to do in AI keys.')}
+          subtitle={withBranch(
+            parts.length > 1 ? `${parts.join(', ')}. Each row in AI keys says what to do.` : 'Each row in AI keys says what to do.',
+          )}
           action={go('byok', actions.byok ?? 'Fix keys')}
         />
       )
@@ -192,6 +206,17 @@ export function SettingsStatusBanner({
           title={`${plural(n, 'key')} not checked yet`}
           subtitle="Mushi Mushi won't use a key until the provider accepts it. Press Test on each one."
           action={go('byok', actions.test ?? 'Test keys')}
+        />
+      )
+    }
+    case 'keys_tidy': {
+      const n = keySummary ? keysToTidy(keySummary) : 0
+      return (
+        <StatusBannerShell
+          tone="info"
+          title={`${plural(n, 'key')} to tidy up`}
+          subtitle="Replaced or saved twice. Nothing is broken; each row says which one to remove."
+          action={go('byok', 'Open AI keys')}
         />
       )
     }

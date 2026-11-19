@@ -286,6 +286,19 @@ export function ExperimentsPage() {
         )}
       </PageHeaderBar>
 
+      {/* Tabs sit under the heading on every tab, above the status: an empty state above them
+          moved the strip down on History/Experiments (2026-11-19). */}
+      {!ux.hideTabs && (
+      <SegmentedControl<ExperimentsTabId>
+        size="sm"
+        scrollable
+        ariaLabel="Experiments sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+      )}
+
       <PagePosture
         slots={[
           {
@@ -319,17 +332,6 @@ export function ExperimentsPage() {
           },
         ]}
       />
-
-      {!ux.hideTabs && (
-      <SegmentedControl<ExperimentsTabId>
-        size="sm"
-        scrollable
-        ariaLabel="Experiments sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
-      )}
 
       {activeTab === 'experiments' && (
         <ExperimentsTab

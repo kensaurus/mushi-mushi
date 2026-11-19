@@ -560,6 +560,9 @@ export function AntiGamingPage() {
         </Section>
       )}
 
+      {/* Empty is said once, by the status card: the device and event cards wait for data
+          (2026-11-19: three empty states, each with its own sentence). */}
+      {!(noDevicesYet && !loading && !error) && (
       <div id="anti-gaming-devices" className="scroll-mt-4">
       <Section
         title={
@@ -673,7 +676,9 @@ export function AntiGamingPage() {
         )}
       </Section>
       </div>
+      )}
 
+      {!(events.length === 0 && !eventFilter && noDevicesYet && !eventsQuery.loading) && (
       <div data-dav-anchor="anti-gaming:verify" id="anti-gaming-events" className="scroll-mt-4">
       <Section
         title={
@@ -797,6 +802,7 @@ export function AntiGamingPage() {
         ) : null}
       </Section>
       </div>
+      )}
 
       {unflagTarget && (
         <ConfirmDialog

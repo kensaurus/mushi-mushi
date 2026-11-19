@@ -52,6 +52,8 @@ export interface RoutesPanelProps {
   onDelete: (route: AiRoute) => void
   onSwitchModel: (route: AiRoute, model: string) => void
   onAdd: (app: string, feature: string, route: NewRoute) => void
+  /** The console's app name for an ops-registry app slug (makeAppNamer); the slug on hover. */
+  appName?: (app: string) => string
 }
 
 const ICON_BTN =
@@ -323,6 +325,7 @@ function Candidate({
 
 export function RoutesPanel(props: RoutesPanelProps) {
   const { routes, meta, prices, pending, onDelete, onAdd } = props
+  const appName = props.appName ?? ((a: string) => a)
   const [confirm, setConfirm] = useState<AiRoute | null>(null)
   const groups = groupRoutes(routes)
   // The first chain of each shape, in page order: later identical chains fold under it.
@@ -332,8 +335,11 @@ export function RoutesPanel(props: RoutesPanelProps) {
   return (
     <div className="flex flex-col gap-3" data-testid="providers-routes">
       {groups.map((g) => (
-        <section key={g.app} aria-label={`${g.app} routes`} className="rounded-md border border-edge">
-          <h3 className="border-b border-edge-subtle bg-surface-overlay px-2.5 py-1 text-xs font-bold text-fg">{g.app}</h3>
+        <section key={g.app} aria-label={`${appName(g.app)} routes`} className="rounded-md border border-edge">
+          {/* App names, as on every other page; the registry slug on hover (round 3). */}
+          <h3 className="border-b border-edge-subtle bg-surface-overlay px-2.5 py-1 text-xs font-bold text-fg" title={g.app}>
+            {appName(g.app)}
+          </h3>
           <div className="flex flex-col divide-y divide-edge-subtle">
             {g.features.map((chain) => {
               const same = firstWithShape.get(chainSignature(chain))
@@ -368,8 +374,9 @@ export function RoutesPanel(props: RoutesPanelProps) {
               )
               const title = (
                 <>
-                  <span className={`text-2xs font-bold ${chain.feature === '*' ? 'text-fg' : 'text-fg-secondary'}`}>{featureLabel(chain.feature)}</span>
-                  <span className="text-3xs text-fg-muted">{chain.routes.length} tried in order</span>
+                  {/* Never broken at its hyphen ("scan-/receipt" at 390, round 3). */}
+                  <span className={`text-2xs font-bold whitespace-nowrap ${chain.feature === '*' ? 'text-fg' : 'text-fg-secondary'}`}>{featureLabel(chain.feature)}</span>
+                  <span className="text-3xs whitespace-nowrap text-fg-muted">{chain.routes.length} tried in order</span>
                 </>
               )
               return (
@@ -385,7 +392,7 @@ export function RoutesPanel(props: RoutesPanelProps) {
                       <summary className="flex cursor-pointer items-center gap-1.5">
                         {title}
                         <span className="text-3xs whitespace-nowrap text-fg-secondary">
-                          same as {twin.app} › {featureLabel(twin.feature)}
+                          same as {appName(twin.app)} › {featureLabel(twin.feature)}
                         </span>
                       </summary>
                       <div className="pt-1.5">{body}</div>

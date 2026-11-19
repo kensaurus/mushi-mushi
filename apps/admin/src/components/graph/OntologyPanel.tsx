@@ -108,7 +108,8 @@ export function OntologyPanel() {
       ) : tags.length === 0 ? (
         <p className="text-2xs text-fg-muted">No tags yet. Examples: payment-flow, onboarding-step-3, dark-mode.</p>
       ) : (
-        <ul className="text-2xs space-y-1 max-h-72 overflow-y-auto pr-1">
+        // The page scrolls, not a box inside the card (round 3).
+        <ul className="text-2xs space-y-1">
           {roots.map((root) => (
             <li key={root.tag}>
               <div className="flex items-center justify-between gap-2">

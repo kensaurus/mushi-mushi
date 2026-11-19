@@ -89,3 +89,15 @@ export function healthBadgeLabel(card: Pick<OverviewCardCounts, 'critical_report
       return 'Healthy'
   }
 }
+
+/**
+ * Cards with sessions this week, and the ones without. Four full cards each
+ * saying "No sessions this week" left ~70 px of empty space apiece (round-3
+ * sweep 2026-11-19); the quiet ones now share one list, still in rank order.
+ */
+export function splitBySessions<T extends Pick<OverviewCardCounts, 'sessions_7d'>>(cards: readonly T[]): { active: T[]; idle: T[] } {
+  const active: T[] = []
+  const idle: T[] = []
+  for (const c of cards) (c.sessions_7d > 0 ? active : idle).push(c)
+  return { active, idle }
+}

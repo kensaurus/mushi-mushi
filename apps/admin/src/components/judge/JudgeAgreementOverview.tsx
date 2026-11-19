@@ -40,14 +40,6 @@ export function agreementPoints(weeks: readonly AgreementWeek[]): Array<{ ts: st
     .map((w) => ({ ts: `${w.weekStart}T00:00:00Z`, value: Math.round((w.agreed / w.graded) * 100) }))
 }
 
-/** "week of Nov 9 (2 grades)" for the one graded week. */
-function singleWeekWords(weeks: readonly AgreementWeek[]): string {
-  const w = weeks.find((x) => x.graded > 0)
-  if (!w) return ''
-  const day = new Date(`${w.weekStart}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-  return `week of ${day} (${w.agreed} of ${w.graded} grade${w.graded === 1 ? '' : 's'})`
-}
-
 function firstSentence(text: string | null): string | null {
   if (!text) return null
   const t = text.trim()
@@ -82,13 +74,10 @@ export function JudgeAgreementOverview({
 
   return (
     <div className={`grid min-w-0 gap-3 [&>*]:min-w-0 ${single ? '' : 'lg:grid-cols-2'}`} data-testid="judge-agreement-overview">
-      {single ? (
-        <p className="text-sm text-fg" data-testid="judge-agreement-single">
-          <span className="font-semibold tabular-nums">{points[0]!.value}%</span>{' '}
-          <span className="text-fg-secondary">agreed, {singleWeekWords(weeks)}.</span>{' '}
-          <span className="text-2xs text-fg-faint">The trend shows after 2 weeks of grades.</span>
-        </p>
-      ) : (
+      {/* One graded week is already the status line's "Disagreed" number: a third line saying
+          "0% agreed (0 of 2 grades)" repeated it (2026-11-19), so it shows nothing until the
+          trend has two weeks. */}
+      {single ? null : (
       <Section title="How often the grader agrees">
         {points.length > 0 ? (
           <>
@@ -110,7 +99,8 @@ export function JudgeAgreementOverview({
             {rows.map((r) => (
               <li key={r.id} className="min-w-0 rounded-sm border border-edge-subtle px-2.5 py-2">
                 <div className="flex min-w-0 items-baseline justify-between gap-2">
-                  <Link to={`/reports/${r.report_id}`} className={`min-w-0 truncate text-xs font-medium ${LINK_ACCENT}`}>
+                  {/* Wraps to two lines, then clamps: one truncated line cut titles mid-word. */}
+                  <Link to={`/reports/${r.report_id}`} className={`min-w-0 line-clamp-2 break-words text-xs font-medium ${LINK_ACCENT}`} title={r.report_summary ?? undefined}>
                     {r.report_summary ?? 'Untitled report'}
                   </Link>
                   {r.judge_score != null ? (

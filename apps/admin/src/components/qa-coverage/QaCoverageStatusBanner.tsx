@@ -61,13 +61,13 @@ export function QaCoverageStatusBanner({
         action={
           onCreateStory ? (
             <StatusBannerAction
-              label={actions.newStory ?? '+ New story'}
+              label={actions.newStory ?? '+ New test'}
               onClick={onCreateStory}
               tone="info"
             />
           ) : (
             <StatusBannerAction
-              label={actions.create ?? 'Create story'}
+              label={actions.create ?? 'Create test'}
               to={scopedHref('/qa-coverage?tab=overview', pid)}
               tone="info"
             />

@@ -274,7 +274,7 @@ export function ReleaseBatchTab({ projectId }: { projectId: string | null }) {
         tone={status.tone}
         ariaLabel="Release batch status"
         data-testid="batch-status"
-        freshness={{ at: page.data?.generatedAt ?? null, isValidating: page.isValidating }}
+        // No second "Updated": the page's strip above carries the one time (round 3).
         action={
           <HelpPopover label="How trains work" title="How release trains work" align="end">
             <p className="text-xs text-fg-secondary">

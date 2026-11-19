@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
+import { Badge, Btn, RelativeTime } from '../ui'
 import { useToast } from '../../lib/toast'
 import { describeApiError } from '../../lib/humanizeApiError'
 import { formatPct } from '../charts'
@@ -226,24 +226,25 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
   }
 
   return (
-    <Card elevated className="p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div>
+    // A section of the Advanced panel, not a card inside it (2026-11-19: panel > card > empty
+    // state was three levels of nesting).
+    <section data-testid="fine-tuning-jobs">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="min-w-0">
           <h3 className="text-xs font-semibold text-fg-secondary">Fine-tuning jobs</h3>
           <p className="text-2xs text-fg-faint">
             Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Submit → Check status → Validate → Promote</span>.
           </p>
         </div>
-        <Btn size="sm" onClick={() => { setAskingStage(true); setStageError(null) }} disabled={creating} loading={creating}>
+        <Btn size="sm" className="shrink-0 whitespace-nowrap" onClick={() => { setAskingStage(true); setStageError(null) }} disabled={creating} loading={creating}>
           New job
         </Btn>
       </div>
 
       {jobs.length === 0 ? (
-        <EmptyState
-          title="No fine-tuning jobs yet"
-          description="Hit “New job” when you have enough labelled reports and want to fine-tune a base model. Most projects never need this — Prompt Lab is the supported workflow."
-        />
+        <p className="text-xs text-fg-muted">
+          No fine-tuning jobs yet. Most projects never need one: testing prompt versions on this page is the supported workflow.
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-2xs">
@@ -503,7 +504,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
           onCancel={() => setDeleteTarget(null)}
         />
       )}
-    </Card>
+    </section>
   )
 }
 

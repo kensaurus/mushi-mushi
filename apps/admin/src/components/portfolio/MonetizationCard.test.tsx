@@ -143,7 +143,9 @@ describe('payments signals', () => {
     expect(appStatus({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }], findings: [] })).toEqual({ status: 'passed', label: 'Every check passed' })
     // Not fully checked is grey, never amber; products waiting in review are a warning (amber), not a failure.
     expect(appStatus({ rules: [{ ruleId: 'x', state: 'unknown', reason: '' }], findings: [] })).toEqual({ status: 'idle', label: 'Partly checked' })
-    expect(appStatus({ rules: [], findings: [unready('a'), unready('b'), unready('c')] })).toEqual({ status: 'waiting', label: '3 to fix' })
+    // Round 3: products only waiting on the store's review say so, not "to fix".
+    expect(appStatus({ rules: [], findings: [unready('a'), unready('b'), unready('c')] })).toEqual({ status: 'waiting', label: '3 in review' })
+    expect(appStatus({ rules: [], findings: [unready('a'), unready('b', 'MISSING_METADATA')] })).toEqual({ status: 'waiting', label: '2 to fix' })
     expect(appStatus({ rules: [], findings: [unready('a'), { ...unready('b'), severity: 'error' }] })).toEqual({ status: 'failed', label: '2 to fix' })
     expect(offeringPlatforms({ offerings: [], rcApps: [{ id: 'a', platform: 'Android', storeId: null }, { id: 'b', platform: 'iOS', storeId: null }] })).toEqual(['iOS', 'Android'])
   })

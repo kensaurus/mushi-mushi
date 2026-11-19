@@ -25,7 +25,6 @@ import { Section,
   SegmentedControl,
   FreshnessPill, } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
 import { IterateSnapshotStrip } from '../components/iterate/IterateSnapshotStrip'
 import { IterateReadout } from '../components/iterate/IterateReadout'
@@ -302,7 +301,6 @@ export function IteratePage() {
         title={copy?.title ?? 'Improvement runs'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        contextChip={<PdcaContextHint stage="act" />}
         helpTitle={copy?.help?.title ?? 'About improvement runs'}
         helpWhatIsIt={
           copy?.help?.whatIsIt ??

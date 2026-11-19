@@ -198,11 +198,9 @@ export function NotificationPrefsMatrix({ projectId, channelConnected = true, on
 
   return (
     <div className="space-y-3">
-      {!channelConnected && (
-        <p className="text-2xs leading-snug text-fg-secondary" data-testid="notification-prefs-no-channel">
-          Connect Slack, Discord or Teams above to change these. With no channel they have nowhere to go.
-        </p>
-      )}
+      {/* No channel: the top row of the page already says to connect one, so no second sentence
+          here, and the switches show unset (not a dimmed ON) until there is somewhere to send to
+          (2026-11-19). The saved prefs are kept and shown once a channel exists. */}
       {/* Rows only: the Alert events panel is the card (no bordered box inside it).
           Two columns on a wide screen, so a label and its switch sit close together. */}
       <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2" data-testid="notification-prefs-rows">
@@ -216,7 +214,7 @@ export function NotificationPrefsMatrix({ projectId, channelConnected = true, on
               {event.description ? <p className="mt-0.5 text-2xs leading-snug text-fg-muted">{event.description}</p> : null}
             </div>
             <Toggle
-              checked={prefs[event.key]}
+              checked={channelConnected ? prefs[event.key] : false}
               onChange={() => toggle(event.key)}
               ariaLabel={event.label}
               disabled={!channelConnected}

@@ -19,8 +19,9 @@ import { CiCostFixButton, costFixKey, useCostFixJobs } from './CiCostFixButton'
 import type { CiCostFixJob } from '../../lib/ciCostFix'
 
 /** Severity as a mark (high, medium, low as the triangle, diamond, square), not a text pill; the word stays for readers and on hover. */
+// Advice is not a failure: amber at most, never the red ▲ of a broken job (round 3, 2026-11-19).
 const SEVERITY: Record<CiAdvice['severity'], { tone: SignalTone; label: string }> = {
-  high: { tone: 'danger', label: 'High' },
+  high: { tone: 'warn', label: 'High' },
   medium: { tone: 'warn', label: 'Medium' },
   low: { tone: 'info', label: 'Low' },
 }
@@ -40,11 +41,12 @@ function AdviceCard({ group, jobs }: { group: CiAdviceGroup; jobs: Map<string, C
   const hiddenEvidence = group.evidence.length - evidence.length
   return (
     <div className="flex flex-col gap-2 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center" title={`${sev.label} impact`} data-testid="ci-advice-severity" data-severity={group.severity}>
+      {/* The mark stays on the title's first line: at 390 it sat alone above a long title (round 3). */}
+      <div className="flex items-start gap-2">
+        <span className="mt-1 inline-flex shrink-0 items-center" title={`${sev.label} impact`} data-testid="ci-advice-severity" data-severity={group.severity}>
           <StatusGlyph tone={sev.tone} label={`${sev.label} impact`} />
         </span>
-        <span className="text-sm font-medium text-fg">{group.title}</span>
+        <span className="min-w-0 text-sm font-medium text-fg">{group.title}</span>
         {group.count > 1 && <span className={`font-mono text-2xs font-bold whitespace-nowrap text-fg-secondary tabular-nums`}>{group.count} places</span>}
       </div>
       {group.targets.length > 0 && (
@@ -166,7 +168,12 @@ function DurationCell({ seconds, max, label }: { seconds: number | null; max: nu
   )
 }
 
-function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
+/** The repo's app name where the page knows it, else its short name. */
+function appOf(repo: string, repoNames?: ReadonlyMap<string, string>): string {
+  return repoNames?.get(repo.toLowerCase()) ?? repoShortName(repo)
+}
+
+function SlowJobsTable({ jobs, repoNames }: { jobs: CiJob[]; repoNames?: ReadonlyMap<string, string> }) {
   const max = Math.max(1, ...jobs.map((j) => j.durationSeconds ?? 0))
   return (
     <table className="w-full text-xs" data-testid="ci-slow-jobs">
@@ -178,8 +185,11 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
         </tr>
       </thead>
       <tbody className="divide-y divide-edge-subtle">
-        {jobs.map((j) => {
+        {jobs.map((j, i) => {
           const outcome = jobOutcome(j)
+          // Workflow and app once per run of rows that share them: "Deploy to AWS S3 and CloudFront" ×8 at 390 (round 3).
+          const prev = i > 0 ? jobs[i - 1] : null
+          const sameOrigin = prev != null && prev.workflowName === j.workflowName && prev.repo === j.repo && prev.prNumber === j.prNumber
           return (
             <tr key={j.id}>
               <DataTableCell>
@@ -191,15 +201,16 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
                 ) : (
                   <span className="block wrap-anywhere font-medium text-fg">{j.jobName}</span>
                 )}
-                {j.workflowName && <span className="block wrap-anywhere text-2xs text-fg-muted">{j.workflowName}</span>}
-                <span className="block text-2xs text-fg-faint" title={j.repo}>
-                  {repoShortName(j.repo)}
-                  {j.prNumber ? ` · PR #${j.prNumber}` : ''}
-                </span>
+                {!sameOrigin && j.workflowName && <span className="block wrap-anywhere text-2xs text-fg-muted">{j.workflowName}</span>}
+                {!sameOrigin && (
+                  <span className="block text-2xs text-fg-faint" title={j.repo}>
+                    {appOf(j.repo, repoNames)}
+                    {j.prNumber ? ` · PR #${j.prNumber}` : ''}
+                  </span>
+                )}
               </DataTableCell>
-              <DataTableCell>
-                <CiJobOutcomeChip outcome={outcome} />
-              </DataTableCell>
+              {/* A mark only where the job did not pass: "Passed" on every row said nothing (round 3). */}
+              <DataTableCell>{outcome === 'passed' ? null : <CiJobOutcomeChip outcome={outcome} />}</DataTableCell>
               <DataTableCell align="right">
                 <DurationCell seconds={j.durationSeconds} max={max} label={`${j.jobName} ran ${formatSeconds(j.durationSeconds)}`} />
               </DataTableCell>
@@ -211,7 +222,7 @@ function SlowJobsTable({ jobs }: { jobs: CiJob[] }) {
   )
 }
 
-function SlowStepsTable({ steps }: { steps: ReturnType<typeof groupSlowSteps> }) {
+function SlowStepsTable({ steps, repoNames }: { steps: ReturnType<typeof groupSlowSteps>; repoNames?: ReadonlyMap<string, string> }) {
   const max = Math.max(1, ...steps.map((s) => s.p50s))
   return (
     <table className="w-full text-xs" data-testid="ci-slow-steps">
@@ -229,7 +240,7 @@ function SlowStepsTable({ steps }: { steps: ReturnType<typeof groupSlowSteps> })
               <span className="block wrap-anywhere font-medium text-fg">{s.step}</span>
               <span className="block wrap-anywhere text-2xs text-fg-faint" title={`${s.repo} · ${s.job}`}>
                 {s.job}
-                {s.shards > 1 && <span className="font-mono font-bold text-fg-secondary"> ×{s.shards} shards</span>} · {repoShortName(s.repo)}
+                {s.shards > 1 && <span className="font-mono font-bold text-fg-secondary"> ×{s.shards} shards</span>} · {appOf(s.repo, repoNames)}
               </span>
             </DataTableCell>
             <DataTableCell align="right">
@@ -245,7 +256,16 @@ function SlowStepsTable({ steps }: { steps: ReturnType<typeof groupSlowSteps> })
   )
 }
 
-export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOverview['stats']['slowSteps'] }) {
+export function CiSlowJobs({
+  jobs,
+  slowSteps,
+  repoNames,
+}: {
+  jobs: CiJob[]
+  slowSteps: CiOverview['stats']['slowSteps']
+  /** Repo slug (lower case) → app name. */
+  repoNames?: ReadonlyMap<string, string>
+}) {
   const slow = slowestJobs(jobs, 8)
   // Matrix shards of one job ("Browser gates (1/4)" to "(4/4)") fold into one row.
   const steps = groupSlowSteps(slowSteps).slice(0, 8)
@@ -253,12 +273,12 @@ export function CiSlowJobs({ jobs, slowSteps }: { jobs: CiJob[]; slowSteps: CiOv
     <div className="grid gap-4 xl:grid-cols-2">
       <div className="@container min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest jobs</h3>
-        {slow.length === 0 ? <p className="text-xs text-fg-muted">No finished jobs in this window.</p> : <SlowJobsTable jobs={slow} />}
+        {slow.length === 0 ? <p className="text-xs text-fg-muted">No finished jobs in this window.</p> : <SlowJobsTable jobs={slow} repoNames={repoNames} />}
       </div>
       <div className="@container min-w-0 overflow-x-auto">
         <h3 className="mb-1.5 text-xs font-semibold text-fg">Slowest steps</h3>
         <p className="mb-1.5 text-2xs text-fg-muted">Typical time is the median over the runs Mushi Mushi holds.</p>
-        {steps.length === 0 ? <p className="text-xs text-fg-muted">No step timings yet.</p> : <SlowStepsTable steps={steps} />}
+        {steps.length === 0 ? <p className="text-xs text-fg-muted">No step timings yet.</p> : <SlowStepsTable steps={steps} repoNames={repoNames} />}
       </div>
     </div>
   )
@@ -299,11 +319,14 @@ export function CiInfraFailures({ jobs }: { jobs: CiJob[] }) {
       <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2">
         <p className="max-w-prose text-xs text-fg-secondary">
           The machine lost touch with GitHub before these jobs finished (it crashed, ran out of memory or lost its network), so the code was never
-          tested. They are not code failures: re-run them on GitHub.
+          tested. Re-run them on GitHub.
         </p>
         {runs.length > 1 && (
           <details className="text-2xs" data-testid="ci-infra-rerun-all">
-            <summary className="cursor-pointer font-medium whitespace-nowrap text-fg-secondary hover:text-fg">Re-run all ({runs.length} runs)</summary>
+            {/* Jobs and runs named apart: "7 stopped" on the tab beside "Re-run all (6 runs)" read as two counts of one thing (round 3). */}
+            <summary className="cursor-pointer font-medium whitespace-nowrap text-fg-secondary hover:text-fg">
+              Re-run these {list.length} {list.length === 1 ? 'job' : 'jobs'} ({runs.length} runs on GitHub)
+            </summary>
             <p className="mt-1 max-w-xs text-fg-muted">Each opens its run on GitHub; “Re-run failed jobs” there re-runs every stopped job in it.</p>
             <ul className="mt-1 flex flex-col gap-0.5">
               {runs.map((u) => (

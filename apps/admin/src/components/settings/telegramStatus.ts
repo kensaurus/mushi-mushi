@@ -15,7 +15,7 @@ export interface TelegramStatusData {
 }
 
 export function telegramRowStatus(tokenSaved: boolean, data: TelegramStatusData | null | undefined): RowStatusValue {
-  if (!tokenSaved) return { state: 'not_connected', detail: 'Save a bot token from @BotFather below.' }
+  if (!tokenSaved) return { state: 'not_connected' }
   if (data?.webhook_registered !== true) {
     return { state: 'attention', detail: 'Connect the webhook so Telegram can deliver voice notes to Mushi Mushi.' }
   }

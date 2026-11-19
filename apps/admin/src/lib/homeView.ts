@@ -30,12 +30,28 @@ export function dedupeHomeSections(data: ProjectHome): ProjectHome {
 
   const errorsLight = signals.find((s) => s.id === 'errors')
   const todayShown = !!errorsLight && errorsLight.status === 'ok'
-  const activity =
-    todayShown && data.activity.data
-      ? { ...data.activity, data: data.activity.data.filter((l: ActivityLine) => l.id !== 'reports_today') }
-      : data.activity
+  const kept = todayShown && data.activity.data ? withoutTodayReports(data.activity.data, data.week.status === 'ok' ? (data.week.data ?? []) : []) : null
+  const activity = kept && kept !== data.activity.data ? { ...data.activity, data: kept } : data.activity
 
   return sitemap === data.sitemap && activity === data.activity ? data : { ...data, sitemap, activity }
+}
+
+/**
+ * The activity list without "N bug reports came in today" (Bugs today shows
+ * that count). The server sends the week's reports only when none came in
+ * today, so dropping today's line left Recent activity saying "nothing
+ * reported" beside "Bug reports 4 this week" (round-3 sweep 2026-11-19). The
+ * week line is rebuilt from the This week row, so both cards read one count.
+ */
+function withoutTodayReports(lines: ActivityLine[], week: readonly WeekRow[]): ActivityLine[] {
+  const today = lines.findIndex((l) => l.id === 'reports_today')
+  if (today < 0) return lines
+  const out = lines.filter((l) => l.id !== 'reports_today')
+  const n = week.find((r) => r.id === 'reports')?.thisWeek ?? 0
+  if (n > 0 && !out.some((l) => l.id === 'reports_week')) {
+    out.splice(today, 0, { id: 'reports_week', text: `${n} bug ${n === 1 ? 'report' : 'reports'} came in this week`, to: '/reports?days=7' })
+  }
+  return out
 }
 
 const LIGHT_TONE: Record<HealthSignal['light'], SignalTone> = { good: 'ok', warn: 'warn', bad: 'danger', busy: 'info', off: 'off' }

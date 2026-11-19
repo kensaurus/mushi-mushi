@@ -174,6 +174,29 @@ export function runnerMessage(r: FreshEyesRunner | null | undefined, now: number
   }
 }
 
+/**
+ * Step 1's state as a mark, so "Finish step 1 first." points at something that says done or
+ * not done (2026-11-19: the step had no mark while Run now was greyed out for it).
+ */
+export function runnerMark(r: FreshEyesRunner | null | undefined): { status: 'passed' | 'running' | 'waiting' | 'idle'; label: string } {
+  const host = r?.hostname ? r.hostname : 'Your computer'
+  if (r == null) return { status: 'idle', label: 'Not checked' }
+  switch (r.state) {
+    case 'ready':
+      return { status: 'passed', label: `${host} online` }
+    case 'busy':
+      return { status: 'running', label: `${host} busy` }
+    case 'paused':
+      return { status: 'waiting', label: 'Lanes paused' }
+    case 'outdated':
+      return { status: 'waiting', label: 'Worker out of date' }
+    case 'offline':
+      return { status: 'waiting', label: `${host} offline` }
+    case 'none':
+      return { status: 'idle', label: 'No worker online' }
+  }
+}
+
 function agoText(iso: string, now: number): string {
   const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000))
   if (!Number.isFinite(min)) return 'a while ago'

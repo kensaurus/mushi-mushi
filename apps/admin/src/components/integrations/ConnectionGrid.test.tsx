@@ -110,7 +110,9 @@ describe('ConnectionGrid', () => {
     expect(host.textContent).not.toContain('Set it up below')
     // States are status marks: broken is failed, not set up is idle.
     expect(host.querySelector('[data-testid="integration-tile-github"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('failed')
-    expect(host.querySelector('[data-testid="integration-tile-slack"] [data-testid="status-mark"]')?.getAttribute('data-status')).toBe('idle')
+    expect(host.querySelector('[data-testid="integration-tile-slack"] [data-status]')?.getAttribute('data-status')).toBe('idle')
+    // 2026-11-19: no hollow ○ before a tool that is not set up (it read as a radio button); Connect says it.
+    expect(host.querySelector('[data-testid="integration-tile-slack"] [data-testid="status-mark"]')).toBeNull()
   })
 
   // Owner, 2026-11-18: a connected repo nobody had checked read "Not tested

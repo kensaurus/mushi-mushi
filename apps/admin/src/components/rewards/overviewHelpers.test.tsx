@@ -63,7 +63,7 @@ describe('RewardsOverviewHighlights', () => {
 
   it('shows top testers, payouts waiting and running quests', () => {
     pages.data = {
-      '/v1/admin/rewards/leaderboard?range=30d&limit=5&offset=0': {
+      '/v1/admin/rewards/leaderboard?range=30d&limit=25&offset=0': {
         data: [
           { end_user_id: 'u1', points_30d: 420, end_users: { external_user_id: 'x1', display_name: 'Aki' }, reward_tiers: { display_name: 'Champion' } },
           { end_user_id: 'u2', points_30d: 0, end_users: { external_user_id: 'x2', display_name: 'Idle' }, reward_tiers: null },
@@ -131,7 +131,9 @@ describe('rewards overview fresh-eyes fixes (2026-11-18)', () => {
 
   it('states the program without repeating the 30-day counters', () => {
     const off = rewardsSentence({ ...EMPTY_REWARDS_STATS, projectRewardsEnabled: false, activeContributors30d: 92, pointsAwarded30d: 1017 })
-    expect(off).toBe('Rewards are off for this app. New activity earns no points.')
+    expect(off).toBe('Rewards are off for this app, so its new activity earns no points. The counts cover all your apps.')
+    const named = rewardsSentence({ ...EMPTY_REWARDS_STATS, projectRewardsEnabled: false, projectName: 'kensaur.us' })
+    expect(named).toContain('Rewards are off for kensaur.us')
     const on = rewardsSentence({ ...EMPTY_REWARDS_STATS, projectRewardsEnabled: true, activeContributors30d: 92, pointsAwarded30d: 1017 })
     expect(on).not.toMatch(/92|1,017/)
   })

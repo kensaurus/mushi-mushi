@@ -40,6 +40,10 @@ describe('auditSentence', () => {
     expect(auditSentence(stats({ totalEvents: 4, latestAction: 'api_key.created' }))).toBe(
       'No changes in the last 24 hours. Latest: api_key.created by Mushi Mushi.',
     )
+    // The table's actor label wins, so the sentence and the row name the same person (2026-11-19).
+    expect(auditSentence(stats({ totalEvents: 4, latestAction: 'api_key.created' }), 'Test')).toBe(
+      'No changes in the last 24 hours. Latest: api_key.created by Test.',
+    )
     expect(auditSentence(stats({}))).toMatch(/^Nothing recorded yet/)
     expect(auditSentence(stats({ auditLogEntitlement: false, planDisplayName: 'Hobby' }))).toMatch(/isn't part of the Hobby plan/)
   })

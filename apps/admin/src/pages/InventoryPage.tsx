@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -44,6 +44,9 @@ import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
+
+/** The app-map checks: the only findings the Code checks tab lists (round 3). */
+const APP_MAP_GATES: ReadonlySet<string> = new Set(['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'])
 
 // One tab row: the page is already Advanced-only, so a second
 // "Primary / Advanced" toggle above it only hid half the tabs.
@@ -391,10 +394,15 @@ export function InventoryPage() {
   const gateCards = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'] as const
   const runs = findingsQuery.data?.runs ?? []
   const [showAllFindings, setShowAllFindings] = useState(false)
+  // Only the app-map checks (stories, routes, handlers) belong on User stories. The risk checks
+  // and Mushi Mushi's setup checks were a third verbatim copy of Full-stack audit and App
+  // blueprint here (round 3): they get one line pointing there instead.
+  const withGate = useMemo(() => findings.map((f) => ({ ...f, gate: runs.find((r) => r.id === f.gate_run_id)?.gate })), [findings, runs])
   const codeGroups = useMemo(
-    () => codeCheckGroups(findings.map((f) => ({ ...f, gate: runs.find((r) => r.id === f.gate_run_id)?.gate }))),
-    [findings, runs],
+    () => codeCheckGroups(withGate.filter((f) => f.gate != null && APP_MAP_GATES.has(f.gate))),
+    [withGate],
   )
+  const otherFindings = withGate.filter((f) => !(f.gate != null && APP_MAP_GATES.has(f.gate))).length
   const gateLine = gateStatusLine(
     gateCards,
     (g) => {
@@ -539,21 +547,6 @@ export function InventoryPage() {
           }
           data-testid="inventory-status"
         />
-      ) : tab === 'stories' && waitingDrafts > 0 ? (
-        <PageFirstStep
-          title={waitingDrafts === 1 ? 'Your user stories are drafted' : `${waitingDrafts} drafts of your user stories are waiting`}
-          sentence="Mushi Mushi drafted your user stories. Review the draft in Discovery and accept it to see them here."
-          action={{ label: 'Review the draft', to: '/inventory?tab=discovery' }}
-          data-testid="inventory-first-step"
-        />
-      ) : tab === 'stories' ? (
-        <PageFirstStep
-          title="No user stories yet"
-          sentence="Mushi Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
-          action={{ label: 'Map my live site', to: '/inventory?tab=discovery&map=1#map-live' }}
-          learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
-          data-testid="inventory-first-step"
-        />
       ) : null}
 
       {/* Seven empty tabs under the first step read as seven more things to
@@ -571,6 +564,25 @@ export function InventoryPage() {
         className="w-full sm:w-auto"
       />
       ) : null}
+
+      {/* The stories tab's first step comes after the tab bar, like every other tab's content:
+          above it, the layout jumped between tabs (round 3). */}
+      {!hasInventory && tab === 'stories' && (waitingDrafts > 0 ? (
+        <PageFirstStep
+          title={waitingDrafts === 1 ? 'Your user stories are drafted' : `${waitingDrafts} drafts of your user stories are waiting`}
+          sentence="Mushi Mushi drafted your user stories. Review the draft in Discovery and accept it to see them here."
+          action={{ label: 'Review the draft', to: '/inventory?tab=discovery' }}
+          data-testid="inventory-first-step"
+        />
+      ) : (
+        <PageFirstStep
+          title="No user stories yet"
+          sentence="Mushi Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
+          action={{ label: 'Map my live site', to: '/inventory?tab=discovery&map=1#map-live' }}
+          learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
+          data-testid="inventory-first-step"
+        />
+      ))}
 
       {tab === 'stories' && (
         hasInventory ? (
@@ -602,8 +614,16 @@ export function InventoryPage() {
           {/* The findings first, worst first, one group per check; the page scrolls, not a box
               (2026-11-18: five "Not run yet · 0 open findings" tiles sat above a list of findings
               from other checks, WARN before ERROR, in a 28rem inner scroll). */}
+          {otherFindings > 0 && (
+            <p className="text-xs text-fg-secondary" data-testid="inventory-other-findings">
+              {otherFindings} more {otherFindings === 1 ? 'finding' : 'findings'} from the risk and setup checks{' '}
+              <Link to="/fullstack-audit" className="font-medium text-brand hover:underline">
+                are on Full-stack audit →
+              </Link>
+            </p>
+          )}
           {codeGroups.length === 0 ? (
-            <p className="text-xs text-fg-muted">No open findings.</p>
+            <p className="text-xs text-fg-muted">No open findings from the user-story and route checks.</p>
           ) : (
             <div className="space-y-3" data-testid="inventory-code-groups">
               {codeGroups.map((g) => (
@@ -696,7 +716,7 @@ export function InventoryPage() {
                 {yamlDraft ?? snapshot?.raw_yaml}
               </pre>
             ) : (
-              <p className="text-xs text-fg-muted" data-testid="inventory-yaml-none">No map file saved yet. Drop an inventory.yaml above to preview and save it.</p>
+              <p className="text-xs text-fg-muted" data-testid="inventory-yaml-none">No map file saved yet.</p>
             )}
             {snapshot?.validation_errors && Array.isArray(snapshot.validation_errors) && snapshot.validation_errors.length > 0 && (
               <ErrorAlert message={JSON.stringify(snapshot.validation_errors)} />

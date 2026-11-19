@@ -23,6 +23,7 @@ import {
   Badge,
   SegmentedControl,
   FreshnessPill,
+  InfoHint,
   RecommendedAction,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -621,21 +622,22 @@ export function ProjectsPage() {
           'Use Your apps to switch context, mint keys, and read per-app health. The banner and KPI strip tell you which apps ingest and which keys have connected.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? CHIP_TONE.okSubtle
-              : bannerSeverity === 'warn'
+        {/* All good: the strip's "Ingesting 10" says it; the badge shows only a state to act on (round 3). */}
+        {bannerSeverity !== 'ok' && (
+          <Badge
+            className={
+              bannerSeverity === 'warn'
                 ? CHIP_TONE.warnSubtle
                 : bannerSeverity === 'brand'
                   ? 'bg-chrome text-fg-secondary'
                   : bannerSeverity === 'info'
                     ? CHIP_TONE.infoSubtle
                     : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {headerBadge}
-        </Badge>
+            }
+          >
+            {headerBadge}
+          </Badge>
+        )}
         <FreshnessPill at={fetchedAt} isValidating={validating} />
         <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
           Refresh
@@ -677,13 +679,17 @@ export function ProjectsPage() {
         ]}
       />
 
-      <SegmentedControl
-        value={activeTab}
-        onChange={setTab}
-        options={tabOptions}
-        ariaLabel="Manage apps sections"
-        size="sm"
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SegmentedControl
+          value={activeTab}
+          onChange={setTab}
+          options={tabOptions}
+          ariaLabel="Manage apps sections"
+          size="sm"
+        />
+        {/* Behind ⓘ, not a line of its own on Overview (round 3). */}
+        {activeTab === 'overview' && stats.projectCount > 0 && <InfoHint content="To rename or delete an app, or get its key, open Your apps." />}
+      </div>
 
       {activeTab === 'overview' && stats.activeProjectId ? (
         <ProjectsSetupReadout
@@ -714,18 +720,8 @@ export function ProjectsPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          {stats.projectCount === 0 ? (
-            <CliSetupGuide projectId={activeProjectId} />
-          ) : (
-            // Rename and delete live on the list; the default view never said so (audit 2026-11-11).
-            <p className="text-xs text-fg-muted" data-testid="projects-manage-hint">
-              To rename or delete an app, or get its key, open{' '}
-              <button type="button" className="text-brand underline underline-offset-2" onClick={() => setTab('list')}>
-                Your apps
-              </button>
-              .
-            </p>
-          )}
+          {/* Rename and delete live on the list: said behind the ⓘ beside the tabs (audit 2026-11-11, round 3). */}
+          {stats.projectCount === 0 && <CliSetupGuide projectId={activeProjectId} />}
           {/* Ingest is fine, but stuck reports still need you: warn, never a green "all good"
               above a table of 129 stuck (2026-11-18 round 2). Advanced mode's hero says the rest. */}
           {stuck.apps > 0 && stuck.worst ? (

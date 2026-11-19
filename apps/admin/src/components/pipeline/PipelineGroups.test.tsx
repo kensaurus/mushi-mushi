@@ -11,7 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PipelineGroup, PipelineItem } from '../../lib/pipeline'
-import { PipelineGroups, actionSections, groupSignalTone } from './PipelineGroups'
+import { PipelineGroups, actionSections, groupSignalTone, sectionBlocks } from './PipelineGroups'
 import { appBadgeName } from './TrainHistory'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -181,5 +181,30 @@ describe('Release train app badge', () => {
     expect(appBadgeName('kensaurus/help-her-take-photo', 'Help Her Take Photo')).toBeNull()
     expect(appBadgeName('kensaurus/solo-boss-cloud-documentation', 'solo-boss-cloud')).toBe('solo-boss-cloud')
     expect(appBadgeName('o/r', undefined)).toBeNull()
+  })
+})
+
+describe('PipelineGroups round-3 review (2026-11-19)', () => {
+  it('puts lone groups that follow an action section under their own "Other" heading', () => {
+    const groups = [g('lead', ['re_review'], 9), g('held_a', ['update_branch'], 5), g('held_b', ['update_branch'], 3), g('triage', [], 2), g('rejected', [], 1)]
+    expect(sectionBlocks(groups).map((b) => [b.kind, b.kind === 'other' ? b.headed : null, b.groups.map((x) => x.id)])).toEqual([
+      ['other', false, ['lead']],
+      ['action', null, ['held_a', 'held_b']],
+      ['other', true, ['triage', 'rejected']],
+    ])
+    const host = mount(groups)
+    const other = q(host, 'pipeline-other-section')!
+    expect(other.textContent).toContain('Other: 2 groups, 3 items')
+    expect(other.contains(q(host, 'pipeline-group-triage'))).toBe(true)
+    expect(q(host, 'pipeline-action-section-update_branch')!.contains(q(host, 'pipeline-group-triage'))).toBe(false)
+  })
+
+  it('the section heading counts what its button runs on', () => {
+    const a = g('held_a', ['update_branch'], 5)
+    a.items = [{ ...item('held_a-1'), blocked: { update_branch: 'Not a PR' } }, item('held_a-2')]
+    a.count = 2
+    const host = mount([a, g('held_b', ['update_branch'], 2)])
+    expect(q(host, 'pipeline-action-section-update_branch-run')!.textContent).toBe('Update branch (3)')
+    expect(q(host, 'pipeline-action-section-update_branch-head')!.textContent).toBe("Update branch: 2 groups, 3 items (1 more can't take it now)")
   })
 })

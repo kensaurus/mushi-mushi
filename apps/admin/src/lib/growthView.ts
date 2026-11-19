@@ -45,3 +45,20 @@ export function shortDateTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso
   return `${shortDay(iso)}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
 }
+
+/**
+ * Weeks with a non-zero count in a shown stage, and the all-zero ones. Empty
+ * weeks (Oct 19, Oct 12, Sep 28: 0 in every column) go behind "Show empty
+ * weeks" instead of filling the table (round-3 sweep 2026-11-19).
+ */
+export function splitEmptyWeeks<K extends string, W extends Partial<Record<K, number>>>(weeks: readonly W[], stages: readonly K[]): { filled: W[]; empty: W[] } {
+  const filled: W[] = []
+  const empty: W[] = []
+  for (const w of weeks) (stages.some((s) => (w[s] ?? 0) > 0) ? filled : empty).push(w)
+  return { filled, empty }
+}
+
+/** True when the four headline tiles would all read 0. */
+export function headlineAllZero(w: { signups?: number; projects?: number; activated?: number; paid?: number }): boolean {
+  return !w.signups && !w.projects && !w.activated && !w.paid
+}

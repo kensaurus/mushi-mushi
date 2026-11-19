@@ -87,8 +87,9 @@ export function McpStatusBanner({ stats, onTab, plainBanner = false, accountKey 
           </span>
         </p>
         {onTab ? (
+          // Not the copy's "Fix snippet": nothing is wrong with the snippet here (round-3 review 2026-11-19).
           <Btn size="sm" variant="ghost" className="shrink-0 whitespace-nowrap" onClick={() => onTab('setup')}>
-            {actions.setup ?? 'Paste snippet'}
+            Paste snippet
           </Btn>
         ) : null}
       </div>

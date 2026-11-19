@@ -286,7 +286,8 @@ describe('SdkHealthPanel', () => {
     expect(tally.querySelector('[data-tone="ok"]')).toBeNull()
     expect(tally.querySelector('[data-tone="off"]')).not.toBeNull()
     expect(text).not.toContain('No SDK problems found')
-    expect(text).toContain('Not checked')
+    // Said once, in the tally: no "Not checked" heading over the list (round-3 review).
+    expect(text).not.toContain('Not checked')
     expect(text).toContain('Site security policy: No live site address is known.')
     expect(button(/Fix all/)).toBeUndefined()
   })

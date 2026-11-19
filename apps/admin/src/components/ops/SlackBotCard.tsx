@@ -148,9 +148,10 @@ export function SlackBotCard({ id }: { id?: string }) {
             ] as const
           ).map(([label, url]) => (
             <div key={label} className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="w-48 shrink-0 text-fg-secondary">{label}</span>
-              {/* The whole URL wraps: truncated, a phone showed only "https://d…" to paste. */}
-              <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg" title={url}>
+              <span className="w-full shrink-0 text-fg-secondary sm:w-48">{label}</span>
+              {/* One line that scrolls in its own box: break-all wrapped it about 10 characters a line
+                  at 390 (round 3). The copy button beside it copies the whole URL. */}
+              <code className="min-w-0 flex-1 overflow-x-auto font-mono text-2xs whitespace-nowrap text-fg" title={url}>
                 {url}
               </code>
               <CopyButton value={url} size="sm" label={`Copy ${label}`} />

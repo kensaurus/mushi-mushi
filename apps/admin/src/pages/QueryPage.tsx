@@ -10,7 +10,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
 import { QuerySnapshotStrip } from '../components/query/QuerySnapshotStrip'
 import { QueryReadout } from '../components/query/QueryReadout'
-import { QUERY_TABS, defaultLibraryTab, resolveQueryTab, type QueryLibraryTab } from '../components/query/queryTabs'
+import { QUERY_TABS, collapseRepeats, defaultLibraryTab, resolveQueryTab, type QueryLibraryTab } from '../components/query/queryTabs'
 import { QueryCopyButton } from '../components/query/QueryCopyButton'
 import { QueryResultsTable } from '../components/query/QueryResultsTable'
 import { HistoryItem, TeamItem } from '../components/query/QueryHistoryPanel'
@@ -300,7 +300,7 @@ export function QueryPage() {
   }
 
   const saved = useMemo(() => history.filter((h) => h.is_saved), [history])
-  const recent = useMemo(() => history.filter((h) => !h.is_saved), [history])
+  const recent = useMemo(() => collapseRepeats(history.filter((h) => !h.is_saved)), [history])
   const sidebarTab: SidebarTab = sidebarChoice ?? defaultLibraryTab(saved.length, recent.length)
 
   usePublishPageContext({
@@ -615,7 +615,9 @@ export function QueryPage() {
       </>
       )}
 
-      <div className={`grid gap-3 ${activeTab === 'history' ? '' : 'md:grid-cols-[1fr_18rem]'}`}>
+      {/* The Library lives on History only: on Ask it was a second copy of the History tab beside an
+          empty page (round 3). */}
+      <div className="grid gap-3">
         {activeTab === 'ask' && (
         <div className="space-y-3 min-w-0">
           {/* Run results — live results push down, prompt library hides when runs exist */}
@@ -746,19 +748,22 @@ export function QueryPage() {
         </div>
         )}
 
-        <div className={`space-y-3 ${activeTab === 'history' ? '' : 'self-start'}`}>
+        {activeTab === 'history' && (
+        <div className="space-y-3">
           <Section title="Library">
+            {/* Only the lists that hold something, and the one open; packed left, not spread across 1440 (round 3). */}
             <SegmentedControl<SidebarTab>
               value={sidebarTab}
               onChange={setSidebarTab}
               ariaLabel="Switch between saved, recent, and team queries"
               size="sm"
-              options={[
-                { id: 'saved', label: 'Saved', count: saved.length },
-                { id: 'recent', label: 'Recent', count: recent.length },
-                { id: 'team', label: 'Team', count: team.length },
-              ]}
-              className="w-full justify-between"
+              options={(
+                [
+                  { id: 'saved', label: 'Saved', count: saved.length },
+                  { id: 'recent', label: 'Recent', count: recent.length },
+                  { id: 'team', label: 'Team', count: team.length },
+                ] as Array<{ id: SidebarTab; label: string; count: number }>
+              ).filter((o) => o.count > 0 || o.id === sidebarTab)}
             />
 
             <div className="mt-2">
@@ -805,8 +810,8 @@ export function QueryPage() {
                       hint="Ask a question — the prompt + row count land here."
                     />
                   ) : (
-                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
+                    // The page scrolls, not a box (round 3).
+                    <ul className="space-y-1.5" data-dav-anchor="query:verify">
                       {recent.map((h) => (
                         <HistoryItem key={h.id} row={h} onRerun={() => rerunFromLibrary(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}
@@ -833,8 +838,7 @@ export function QueryPage() {
                       hint="When a teammate pins a query in their console it shows up here."
                     />
                   ) : (
-                    // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
+                    <ul className="space-y-1.5">
                       {team.map((row) => (
                         <TeamItem key={row.id} row={row} onRerun={() => rerunFromLibrary(row.prompt, row.mode ?? 'nl')} />
                       ))}
@@ -845,6 +849,7 @@ export function QueryPage() {
             </div>
           </Section>
         </div>
+        )}
       </div>
       </>
       )}

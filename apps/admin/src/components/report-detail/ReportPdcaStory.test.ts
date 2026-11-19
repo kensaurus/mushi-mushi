@@ -37,7 +37,7 @@ describe('ReportPdcaStory plan stage', () => {
   })
 
   // Re-audit 2026-11-11: "precomputed", "0ms" and "No judge or CI signal yet" on a builder's sample report.
-  it('keeps the model, its latency and the judge wording for operator accounts', () => {
+  it('keeps the judge wording for operator accounts and never repeats the model on the story', () => {
     const r = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'precomputed', stage1_latency_ms: 0 })
     const outside = buildStoryNodes(r, idle)
     expect(outside.plan.details).toContain('Sample explanation (written in advance)')
@@ -46,7 +46,8 @@ describe('ReportPdcaStory plan stage', () => {
     const real = report({ status: 'classified', stage1_classification: { category: 'bug' }, stage1_model: 'claude-haiku-5-5', stage1_latency_ms: 812 })
     expect(buildStoryNodes(real, idle).plan.details?.join(' ')).not.toMatch(/claude-haiku|812ms/)
     const operator = buildStoryNodes(real, idle, true)
-    expect(operator.plan.details).toEqual(expect.arrayContaining(['claude-haiku-5-5', '812ms']))
+    // Round-3 sweep 2026-11-19: the model and latency are in the classification card only.
+    expect(operator.plan.details?.join(' ')).not.toMatch(/claude-haiku|812ms|severity|conf/)
     expect(operator.check.headline).toContain('No judge or CI signal yet')
   })
 

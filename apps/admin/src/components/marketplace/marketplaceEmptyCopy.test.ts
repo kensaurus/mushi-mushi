@@ -15,7 +15,9 @@ describe('marketplaceEmptyCopy', () => {
       { slug: 'sentry', name: 'Sentry Mirror' },
     ])
     expect(copy.title).toBe('Zapier Bridge is the only plugin not covered by Integrations')
-    expect(copy.description).toMatch(/^The other 3 are set up from Integrations\./)
+    // The link row under the cards names the covered ones; the intro does not repeat it (2026-11-19).
+    expect(copy.description).not.toMatch(/set up from Integrations/)
+    expect(copy.description).toMatch(/^A plugin sends Mushi Mushi events/)
   })
 
   it('lists several uncovered plugins', () => {

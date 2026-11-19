@@ -165,38 +165,6 @@ export function operationsTooltip(stats: CostStats): MetricTooltipData {
   }
 }
 
-export function modelsTooltip(stats: CostStats): MetricTooltipData {
-  const top = stats.topModel
-    ? `${stats.topModel} leads model spend at ${fmtUsd(stats.topModelUsd)} in this window.`
-    : 'Model names appear after the first successful LLM response is logged.'
-
-  const takeaway =
-    stats.modelsCount > 3
-      ? `${stats.modelsCount} model${stats.modelsCount === 1 ? '' : 's'} in use. ${top} Many models usually means different agents pick different defaults — check Breakdown if costs cluster on an expensive tier.`
-      : `${stats.modelsCount} model${stats.modelsCount === 1 ? '' : 's'} in use. ${top} Most projects start with one Haiku/Sonnet pair; compare models in Breakdown before changing agent defaults.`
-
-  return {
-    sections: [
-      {
-        label: 'Shows',
-        body: 'How many different LLM model IDs were billed in the last 30 days.',
-      },
-      {
-        label: 'Counted from',
-        body: 'Unique used_model values on llm_invocations rows (and model on legacy ledger rows) within the rolling 30-day window. Each provider model string counts once regardless of call volume.',
-      },
-      {
-        label: 'Takeaway',
-        body: takeaway,
-      },
-    ],
-  }
-}
-
-export function modelsDetail(stats: CostStats): string {
-  return stats.topModel ? `Top: ${stats.topModel}` : 'Models appear after first call'
-}
-
 export function keySourceTooltip(stats: CostStats): MetricTooltipData {
   const platform = stats.platformKeyCalls24h
   const byok = stats.byokCalls24h

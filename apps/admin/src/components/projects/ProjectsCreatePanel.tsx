@@ -58,17 +58,14 @@ export function ProjectsCreatePanel({
         <ProjectCreatedSuccessPanel project={createdProject} onDismiss={onDismissCreated} />
       ) : (
         <>
-          <ContainedBlock tone="muted" className="mb-3">
-            <p className="text-2xs leading-relaxed text-fg-muted">
-              One per app or environment — your API key and setup command appear on the next screen.
+          {/* No grey box beside the field's ⓘ (round 3): "one per app or environment" is in the ⓘ;
+              which team it lands in stays as one plain line. */}
+          {teamName && (
+            <p className="mb-2 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
+              It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
+              Switch team at the top to put it somewhere else.
             </p>
-            {teamName && (
-              <p className="mt-1 text-2xs leading-relaxed text-fg-muted" data-testid="create-project-team">
-                It goes into team <strong className="text-fg-secondary">{teamName}</strong>, so everyone in that team sees it.
-                Switch team at the top to put it somewhere else.
-              </p>
-            )}
-          </ContainedBlock>
+          )}
           {orgDataLoaded && !canManageProjects && (
             <ContainedBlock tone="warn" className="mb-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

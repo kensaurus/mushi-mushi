@@ -33,6 +33,26 @@ describe('Triage grading layout', () => {
     expect(src).not.toMatch(/<SignalChip tone="warn" className="ml-1 normal-case font-sans">\s*\{e\.report_severity\}/)
   })
 
+  it('keeps the dimension rows as grid rows: the tooltip wraps the name, not the row (2026-11-19)', () => {
+    // Tooltip renders an inline-flex span; around the row it set "Overall 67%Accuracy 95%…" side by side.
+    expect(src).toContain('{description ? <Tooltip content={description}>{name}</Tooltip> : name}')
+    expect(src).not.toContain('return <Tooltip content={description}>{row}</Tooltip>')
+    // 67% was said three times on Trend: the Overall row is gone.
+    expect(src).not.toContain('<ScoreBar label="Overall"')
+  })
+
+  it('uses one grade scale on the distribution and a neutral grader note', () => {
+    expect(src).toContain('xAxisCaption="Grade (%)"')
+    expect(src).not.toContain('Score (0–10)')
+    expect(src).not.toContain('0–100 scale, deciles')
+    expect(src).not.toContain('⚠ {disagreementReason}')
+  })
+
+  it('shows the verdict sentence on Overview only and stacks grades on a phone', () => {
+    expect(src).toContain("showSentence={activeTab === 'overview'}")
+    expect(src).toContain('<JudgeGradeRows evals={evals} />')
+  })
+
   it('prints grades in the sans font', () => {
     expect(src).not.toContain('`font-mono tabular-nums ${tone}`')
   })

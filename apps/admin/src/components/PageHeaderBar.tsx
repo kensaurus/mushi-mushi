@@ -47,11 +47,13 @@ import { PageHelpPopover } from './ui/help-popover'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
-function HeaderPdcaChip({ chip }: { chip: string }) {
+function HeaderPdcaChip({ chip, title }: { chip: string; title?: unknown }) {
   const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip as keyof typeof PDCA_STAGES]
   if (!meta) return null
   // Colours from the stage; words from the cycle step the sidebar shows (ADR 0027).
   const copy = stageChipCopy(chip as 'overview' | PdcaStageId)
+  // A tag that repeats the heading ("Home" over Home, "Bugs" over Bugs) says nothing (round 3, 2026-11-19).
+  if (typeof title === 'string' && title.trim().toLowerCase() === copy.label.trim().toLowerCase()) return null
   return (
     // The chip must be able to shrink: a long label is wider than the header
     // column at 390px, and a non-shrinking chip overflowed its row and sat
@@ -173,7 +175,7 @@ export function PageHeaderBar({
         <div className="flex min-w-0 flex-1 basis-48 flex-wrap items-center gap-x-2 gap-y-1">
           {/* PDCA chip */}
           {contextChip === undefined && chipKey ? (
-            <HeaderPdcaChip chip={chipKey} />
+            <HeaderPdcaChip chip={chipKey} title={title} />
           ) : contextChip ? (
             <span className="shrink-0">{contextChip}</span>
           ) : null}
@@ -196,7 +198,7 @@ export function PageHeaderBar({
             {showProjectScope && (
               <>
                 <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
-                <span className="font-mono text-xs text-fg-secondary">{projectScope}</span>
+                <span className="text-xs text-fg-secondary">{projectScope}</span>
               </>
             )}
           </h2>

@@ -608,8 +608,8 @@ const COPY: CopyRegistry = {
       },
       actionLabels: {
         setup: 'Go to Setup',
-        create: 'Create story',
-        newStory: '+ New story',
+        create: 'Create test',
+        newStory: '+ New test',
         failures: 'Review failures',
         stories: 'View stories',
         openStories: 'Open stories',
@@ -628,7 +628,7 @@ const COPY: CopyRegistry = {
           'Catch a broken flow before users report it',
           'See a screenshot of what the test saw when it failed',
         ],
-        howToUse: 'Click "New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
+        howToUse: 'Click "New test" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
       },
     },
     '/anti-gaming': {
@@ -897,8 +897,8 @@ const COPY: CopyRegistry = {
         day24h: 'Last 24 hours',
         month: 'This month',
         topDriver: 'Top driver',
-        operations: 'Operations',
-        models: 'Models',
+        // One cell holds both counts on AI spend (2026-11-19: steps and models share a cell).
+        operations: 'Steps · models',
         keySource: 'Key source · 24h',
       },
       actionLabels: {

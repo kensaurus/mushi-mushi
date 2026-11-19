@@ -43,7 +43,7 @@ import {
   SignalChip,
 } from '../components/report-detail/ReportSurface'
 import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
-import { digestBody, formatDigestWeek } from '../lib/intelligenceView'
+import { digestBody, formatDigestWeek, showInsightsSnapshot } from '../lib/intelligenceView'
 import {
   EMPTY_INTELLIGENCE_STATS,
   type IntelligenceStats,
@@ -490,7 +490,7 @@ export function IntelligencePage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideIntelligenceSnapshot,
+            show: !ux.hideIntelligenceSnapshot && showInsightsSnapshot(stats),
             children: (
               <IntelligenceSnapshotStrip
                 stats={stats}

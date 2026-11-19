@@ -51,11 +51,12 @@ describe('ReporterUpdateFunnel', () => {
   // Fresh-eyes 2026-11-18: "over your latest 500 updates" with 2 sent, and
   // "2 not opened" said by the banner, the status and the funnel.
   it('says what it counts over and leaves the not-opened count to the banner', () => {
-    expect(funnelScope(2)).toBe('over all 2 updates')
+    expect(funnelScope(2)).toBeNull()
     expect(funnelScope(800)).toBe('over your latest 500 updates')
     expect(funnelScope(undefined)).toBe('over your latest 500 updates')
     act(() => root.render(createElement(ReporterUpdateFunnel, { funnel: { told: 2, opened: 0, replied: 0 }, totalUpdates: 2, unopenedShownAbove: true })))
-    expect(host.textContent).toContain('over all 2 updates')
+    expect(host.textContent).toContain('Counted in bug reports.')
+    expect(host.textContent).not.toContain('over all 2 updates')
     expect(host.textContent).not.toContain('have not opened')
   })
 })

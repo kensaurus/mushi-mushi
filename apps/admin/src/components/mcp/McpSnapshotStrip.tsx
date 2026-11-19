@@ -41,12 +41,6 @@ export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statL
     hint: 'Editor keys you created that no editor has called with.',
     to: mcpLinks.activeKeys,
   }
-  const tools: PageStatusMetric = {
-    label: statLabels?.tools ?? 'Tools',
-    value: stats.toolCount,
-    hint: 'Things your editor’s agent can ask Mushi Mushi to do, like read a bug or start a fix.',
-    to: mcpLinks.tools,
-  }
   // At 0 the sentence already says no editor has called: no "0 Connected",
   // and no "0 Keys idle" tile either (round-2 review 2026-11-18).
   const connected: PageStatusMetric | null =
@@ -59,7 +53,8 @@ export function McpSnapshotStrip({ stats, statsFetchedAt, statsValidating, statL
           to: mcpLinks.connected,
         }
       : null
-  const metrics = mcpSnapshotMetrics(connected, stats.neverConnectedCount > 0 ? idle : null, tools)
+  // No "133 Tools" tile: the Catalog tab carries that count (round-3 review 2026-11-19).
+  const metrics = mcpSnapshotMetrics(connected, stats.neverConnectedCount > 0 ? idle : null)
   return (
     <PageStatus
       ariaLabel="Editor agents status"

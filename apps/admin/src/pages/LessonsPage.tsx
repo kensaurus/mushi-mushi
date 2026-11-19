@@ -200,8 +200,9 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       {!loading && lessons.length === 0 && (
         // No icon: the compact empty state keeps the page's sans heading
         // (round-2 sweep: the editorial variant set "No lessons yet" in serif).
+        // Named like its tab, "Rules in use" (2026-11-19: the tab's empty state said "No lessons yet").
         <EmptyState
-          title="No lessons yet"
+          title="No rules in use yet"
           description="A rule is made when 3 or more reports share one cause and read alike. More reports bring the first one."
         />
       )}
@@ -480,7 +481,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
 
 // ─── Query Simulator tab ──────────────────────────────────────
 
-function QuerySimTab() {
+function QuerySimTab({ lessonCount }: { lessonCount: number }) {
   const projectId = useActiveProjectId()
   const [diffText, setDiffText] = useState('')
   const [maxTokens, setMaxTokens] = useState(3000)
@@ -548,9 +549,15 @@ function QuerySimTab() {
             className="w-24 px-2 py-1 text-sm border border-edge rounded bg-surface-root text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           />
         </div>
-        <Btn loading={loading} onClick={handleQuery}>
+        {/* Nothing to match against with no lessons: off, with the reason beside it (2026-11-19). */}
+        <Btn loading={loading} onClick={handleQuery} disabled={lessonCount === 0} aria-describedby={lessonCount === 0 ? 'lessons-query-blocked' : undefined}>
           Query lessons
         </Btn>
+        {lessonCount === 0 && (
+          <span id="lessons-query-blocked" className="text-2xs text-fg-muted" data-testid="lessons-query-blocked">
+            No lessons to match yet.
+          </span>
+        )}
       </div>
 
       {error && <ErrorAlert message={error} />}
@@ -756,7 +763,7 @@ export function LessonsPage() {
 
       {activeTab === 'lessons' && <LessonsTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
       {activeTab === 'clusters' && <ClustersTab onChanged={onLessonsChanged} canEditProject={canEditProject} />}
-      {activeTab === 'query' && <QuerySimTab />}
+      {activeTab === 'query' && <QuerySimTab lessonCount={stats.activeLessons} />}
 
       <LessonsReadout stats={stats} fetchedAt={statsFetchedAt} isValidating={statsValidating} />
     </div>

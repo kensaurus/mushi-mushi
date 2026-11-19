@@ -87,7 +87,7 @@ export function ProvidersPage() {
   )
 
   const ops = useKensaurusOps()
-  // Never an endless "Loading providers…": 20 s, then "not checked" with Retry.
+  // Never an endless "Loading providers…": 10 s, then "not checked" with Retry.
   const firstRead = useReadTimedOut(ops.loading && !ops.data && !ops.error)
   // The ops registry names apps by repo slug; the console names them as every other page does.
   const setup = useSetupStatus(useActiveProjectId())
@@ -267,6 +267,7 @@ export function ProvidersPage() {
               onDelete={onDelete}
               onSwitchModel={onSwitchModel}
               onAdd={onAdd}
+              appName={appName}
             />
           )}
           {tab === 'history' && <HistoryPanel rows={history} now={now} />}

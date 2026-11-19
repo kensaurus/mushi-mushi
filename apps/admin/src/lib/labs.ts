@@ -30,7 +30,7 @@ export interface LabFeature {
 }
 
 export const LAB_FEATURES: readonly LabFeature[] = [
-  { id: 'to-do', label: 'To-do list', description: 'One card per decision waiting on you, across bugs, fixes and setup.', paths: ['/inbox'], group: 'bugs' },
+  { id: 'to-do', label: 'To-do', description: 'One card per decision waiting on you, across bugs, fixes and setup.', paths: ['/inbox'], group: 'bugs' },
   { id: 'bug-clusters', label: 'Bug clusters', description: 'Bugs grouped by shared cause, so one fix can close several reports.', paths: ['/graph'], group: 'bugs' },
   { id: 'voice-reports', label: 'Voice reports', description: 'File a bug or a fix request by talking, from your phone or the console.', paths: ['/voice'], group: 'bugs' },
   { id: 'spam-abuse', label: 'Spam & abuse', description: 'Devices and tokens that flood the queue or game tester rewards.', paths: ['/anti-gaming'], group: 'bugs' },

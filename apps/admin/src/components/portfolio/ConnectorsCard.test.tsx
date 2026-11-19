@@ -152,7 +152,10 @@ describe('ConnectorsCard', () => {
     // One mark per source: its state pill, with no second ✓ beside the bound apps.
     expect(row.querySelector('[data-testid="connector-bindings"] .sr-only')!.textContent).toBe('2 apps bound:')
     expect(row.querySelector('[data-testid="connector-bindings"] [data-testid="status-mark"]')).toBeNull()
-    expect([...row.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.textContent)).toEqual(['Connected'])
+    // Round 3: a connected row carries no pill (the card says "N connected" once); only a problem gets one.
+    expect(row.querySelectorAll('[data-testid="status-pill"]')).toHaveLength(0)
+    expect(row.querySelector('.sr-only')?.textContent).toBe('Connected')
+    expect(container.querySelector('[data-testid="connectors-count"]')?.textContent).toMatch(/^\d+ connected$/)
     // No loose buttons or dropdowns on the row: Check, Bind, the write actions and Remove are in More.
     expect([...row.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['More'])
     expect(row.querySelector('select')).toBeNull()

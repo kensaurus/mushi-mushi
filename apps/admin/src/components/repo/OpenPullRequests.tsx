@@ -16,7 +16,7 @@
  * drafts). Merge used to sit on every row, including Opus "hold" PRs.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout, Card, SelectField } from '../ui'
 import { IconExternalLink } from '../icons'
@@ -104,7 +104,16 @@ export function countMergeable(prs: ReadonlyArray<Pick<OpenPullRequest, 'checks'
   return prs.filter((pr) => openPrGroup(pr) === 'mergeable').length
 }
 
-export function OpenPullRequests({ projectId, onCounts }: { projectId: string; onCounts?: (c: { open: number; mergeable: number } | null) => void }) {
+export function OpenPullRequests({
+  projectId,
+  onCounts,
+  footer,
+}: {
+  projectId: string
+  onCounts?: (c: { open: number; mergeable: number } | null) => void
+  /** One last row inside the card (the page's "No fix branches yet", round 3). */
+  footer?: ReactNode
+}) {
   const list = usePageData<{ pullRequests: OpenPullRequest[]; repos: string[] }>(`/v1/admin/projects/${projectId}/pull-requests`)
   const prs = list.data?.pullRequests ?? []
   const multiRepo = (list.data?.repos.length ?? 0) > 1
@@ -143,9 +152,10 @@ export function OpenPullRequests({ projectId, onCounts }: { projectId: string; o
           if (mine.length === 0) return null
           return (
             <section key={g.id} aria-label={g.title} data-testid={`open-prs-${g.id}`}>
-              <h3 className="text-xs font-semibold text-fg">
+              {/* The page status line already says "N PRs ready to merge": that group's heading is for
+                  screen readers only (round 3: the strip and a "Ready to merge" heading one under the other). */}
+              <h3 className={`text-xs font-semibold text-fg ${g.id === 'mergeable' ? 'sr-only' : ''}`}>
                 {g.title}
-                {/* The page status line already leads with "N PRs ready to merge". */}
                 {g.id !== 'mergeable' ? <> <span className="font-normal tabular-nums text-fg-muted">{mine.length}</span></> : null}
               </h3>
               <p className="text-2xs text-fg-muted">{g.hint}</p>
@@ -157,6 +167,7 @@ export function OpenPullRequests({ projectId, onCounts }: { projectId: string; o
             </section>
           )
         })}
+      {footer}
     </Card>
   )
 }

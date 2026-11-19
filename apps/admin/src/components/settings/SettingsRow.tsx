@@ -29,16 +29,32 @@ export function SettingsList({
   id,
 }: {
   title: string
-  /** One sentence under the title: what this group is for. */
+  /**
+   * What this group is for. A plain string sits behind an (i) in the header:
+   * every section opened with an intro sentence, eight on General and five
+   * lines for Voice at 390 px, before the rows said it again (round-3 review
+   * 2026-11-19). A node (already one line + its own (i)) still renders inline.
+   */
   description?: ReactNode
   action?: ReactNode
   children: ReactNode
   id?: string
 }) {
+  const hint = typeof description === 'string' ? description : null
   return (
     <div id={id} className={id ? 'scroll-mt-6' : undefined}>
-      <Section title={title} action={action}>
-        {description ? <p className="-mt-1 mb-1 text-sm text-fg-muted">{description}</p> : null}
+      <Section
+        title={title}
+        action={
+          hint || action ? (
+            <>
+              {hint ? <InfoHint content={hint} /> : null}
+              {action}
+            </>
+          ) : undefined
+        }
+      >
+        {description && !hint ? <p className="-mt-1 mb-1 text-sm text-fg-muted">{description}</p> : null}
         <div className="divide-y divide-edge-subtle">{children}</div>
       </Section>
     </div>

@@ -23,6 +23,7 @@ import { usePageData } from '../../lib/usePageData'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { BarCell } from '../signal/BarCell'
+import { isPublicDemo } from '../../lib/publicDemo'
 
 interface ReleaseRow {
   projectId: string
@@ -103,7 +104,9 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
       <TimedLoading waiting={loading && !data && !error} text="Reading releases…" what="Releases" onRetry={reload} testId="portfolio-releases-not-checked" />
       {data && data.rows.length === 0 && <p className="text-sm text-fg-muted">No apps yet.</p>}
       {data && data.rows.length > 0 && (() => {
-        const cols = releaseColumns(data.rows)
+        // The public demo app ships nothing (round 3: "Mushi demo (sample data)" under Not checked).
+        const appRows = data.rows.filter((r) => !isPublicDemo({ name: r.name, slug: null }))
+        const cols = releaseColumns(appRows)
         const span = 3 + (cols.stage ? 1 : 0) + (cols.native ? 1 : 0)
         return (
         <div className="flex flex-col gap-2">
@@ -113,7 +116,37 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
               {data.batchSuggestion.note}
             </p>
           )}
-          <div className="relative min-w-0 overflow-x-auto">
+          {/* A phone gets stacked rows: the table scrolled sideways and hid OTA changes at 390 (round 3). */}
+          <ul className="flex flex-col divide-y divide-edge-subtle sm:hidden" data-testid="releases-stacked">
+            {groupReleaseRows(appRows).map(({ stage: id, rows }) => {
+              const stage = STAGE[id] ?? STAGE.unknown
+              const unknown = id === 'unknown'
+              return (
+                <li key={id} className="flex flex-col gap-1 py-1.5">
+                  <span className="flex items-center gap-2">
+                    <StatusPill status={stage.status} label={stage.label} />
+                    {rows.length > 1 && <span className="text-2xs font-semibold text-fg-secondary">{rows.length} apps</span>}
+                  </span>
+                  <ul className="flex flex-col gap-0.5 pl-2">
+                    {rows.map((r) => (
+                      <li key={r.projectId} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                        <span className="min-w-0 font-semibold wrap-break-word text-fg">{r.name}</span>
+                        {r.live && <span className="font-mono text-2xs text-fg-secondary">{r.live.version}</span>}
+                        {r.live?.rolloutPct != null && r.live.rolloutPct < 100 && <span className="text-2xs text-fg-secondary tabular-nums">{r.live.rolloutPct}%</span>}
+                        {!unknown && (
+                          <span className="ml-auto flex gap-2 text-2xs text-fg-secondary tabular-nums">
+                            {cols.native && <span title="Native changes since the live build">native {r.mergedNotBuilt}</span>}
+                            <span title="JS-only changes that can ship over the air">OTA {r.otaPending}</span>
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="relative hidden min-w-0 overflow-x-auto sm:block">
             <table className="w-full min-w-120 text-xs" data-testid="releases-table">
               <caption className="sr-only">Release state per app, apps with work waiting first</caption>
               <thead>
@@ -128,7 +161,7 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {groupReleaseRows(data.rows).flatMap(({ stage: id, rows }) => {
+                {groupReleaseRows(appRows).flatMap(({ stage: id, rows }) => {
                   const stage = STAGE[id] ?? STAGE.unknown
                   // Two or more apps in one stage share a group row instead of repeating the pill.
                   const grouped = rows.length > 1
@@ -155,17 +188,18 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
                               <BarCell value={r.live.rolloutPct} max={100} tone={r.live.rolloutPct >= 100 ? 'ok' : 'info'} text={`${r.live.rolloutPct}%`} widthClass="w-12" />
                             )}
                           </span>
-                        ) : (
+                        ) : unknown && grouped ? null : (
+                          // Under a "Not checked · N apps" header the rows say nothing more (round 3).
                           <span className="text-fg-faint">not checked</span>
                         )}
                       </td>
                       {cols.native && (
-                        <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
-                          <Count n={r.mergedNotBuilt} unknown={unknown} />
+                        <td className={`px-2 py-1 text-right ${unknown && !grouped ? 'ci-nodata' : ''}`}>
+                          {unknown && grouped ? null : <Count n={r.mergedNotBuilt} unknown={unknown} />}
                         </td>
                       )}
-                      <td className={`px-2 py-1 text-right ${unknown ? 'ci-nodata' : ''}`}>
-                        <Count n={r.otaPending} unknown={unknown} />
+                      <td className={`px-2 py-1 text-right ${unknown && !grouped ? 'ci-nodata' : ''}`}>
+                        {unknown && grouped ? null : <Count n={r.otaPending} unknown={unknown} />}
                       </td>
                     </tr>
                   ))
@@ -174,7 +208,7 @@ export function ReleasesCard({ orgId }: { orgId: string }) {
               </tbody>
             </table>
           </div>
-          {!cols.native && data.rows.some((r) => STAGE[r.stage] && r.stage !== 'unknown') && (
+          {!cols.native && appRows.some((r) => STAGE[r.stage] && r.stage !== 'unknown') && (
             <p className="text-2xs text-fg-secondary" data-testid="releases-no-native">
               No native changes waiting: nothing needs a store build.
             </p>

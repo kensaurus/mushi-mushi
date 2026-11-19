@@ -14,6 +14,8 @@ interface Props {
   stats: AuditStats
   statsFetchedAt: string | null
   statsValidating?: boolean
+  /** The newest log row's actor, as the table names it (auditActorLabel). */
+  latestActor?: string | null
 }
 
 /**
@@ -22,21 +24,24 @@ interface Props {
  * 2026-11-18): "2 changes in the last 24 hours. No failures." only repeated
  * the tiles, so it now names the latest change and who made it.
  */
-export function auditSentence(stats: AuditStats): string {
+export function auditSentence(stats: AuditStats, latestActor?: string | null): string {
   if (!stats.auditLogEntitlement) return `The audit log isn't part of the ${stats.planDisplayName} plan, so changes aren't being recorded.`
   if (stats.totalEvents === 0) return 'Nothing recorded yet. Every settings change, key rotation and fix shows up here.'
   if (stats.failCount24h > 0) return 'Failed actions in the last 24 hours need a look.'
-  const latest = stats.latestAction ? `Latest: ${stats.latestAction} by ${stats.latestActorEmail ?? 'Mushi Mushi'}.` : ''
+  // The same actor label as the table row (2026-11-19: "by Mushi Mushi" here, "Test" in the row):
+  // the row's name first, then the stats email, and "Mushi Mushi" only when neither knows anyone.
+  const who = latestActor ?? stats.latestActorEmail ?? 'Mushi Mushi'
+  const latest = stats.latestAction ? `Latest: ${stats.latestAction} by ${who}.` : ''
   if (stats.events24h === 0) return `No changes in the last 24 hours.${latest ? ` ${latest}` : ''}`
   return latest || 'Changes in the last 24 hours are below.'
 }
 
-export function AuditSnapshotStrip({ stats, statsFetchedAt, statsValidating }: Props) {
+export function AuditSnapshotStrip({ stats, statsFetchedAt, statsValidating, latestActor = null }: Props) {
   return (
     <PageStatus
       ariaLabel="Audit log status"
       tone={!stats.auditLogEntitlement ? 'warn' : stats.failCount24h > 0 ? 'danger' : stats.warnCount24h > 0 ? 'warn' : 'ok'}
-      sentence={auditSentence(stats)}
+      sentence={auditSentence(stats, latestActor)}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       // Two numbers: the all-time total is the Log tab's count, shown once.
       metrics={[

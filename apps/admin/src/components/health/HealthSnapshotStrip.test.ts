@@ -28,4 +28,12 @@ describe('healthTone', () => {
     expect(healthTone(stats({ cronHealthyCount: 2, cronErrorCount: 1 }))).toBe('danger')
     expect(healthTone(stats({ errorRatePct: 6 }))).toBe('danger')
   })
+
+  // Round 3: with the page's job rows, the strip reads their count (cronJobState), not the stats'.
+  it('reads the page rows when given: a failed row is danger, an overdue row is warn, all on time is ok', () => {
+    const lagging = stats({ cronHealthyCount: 2, cronStaleCount: 1 })
+    expect(healthTone(lagging, 0, { ok: 3, total: 3, failed: 0 })).toBe('ok')
+    expect(healthTone(lagging, 1, { ok: 2, total: 3, failed: 0 })).toBe('warn')
+    expect(healthTone(stats({}), 0, { ok: 2, total: 3, failed: 1 })).toBe('danger')
+  })
 })

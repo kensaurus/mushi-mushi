@@ -72,17 +72,28 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
   const weekJobs = Math.max(stats.windowJobs ?? counts.total, counts.total)
   const sampled = weekJobs > counts.total
 
+  // "769 jobs failed on the code. 34 more stopped because of the test machine" restated the legend
+  // just below ("Tests failed 769", "Test machine stopped 34"; round 3): that plain count is for
+  // screen readers only. A verdict that says something the bar does not (the machine, not your
+  // code; all passed) still shows.
+  const restatesLegend = verdict.tone === 'neutral'
   return (
     <div className="flex flex-col gap-3" data-testid="ci-summary">
-      <div className="flex items-start gap-2.5 border-b border-edge-subtle pb-2.5" role="status">
-        <tone.Icon size={16} className={`mt-0.5 shrink-0 ${tone.icon}`} />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-fg" data-testid="ci-verdict">
-            {verdict.headline}
-          </p>
-          {verdict.detail && <p className="text-xs text-fg-secondary">{verdict.detail}</p>}
+      {restatesLegend ? (
+        <p className="sr-only" role="status" data-testid="ci-verdict">
+          {verdict.headline}
+        </p>
+      ) : (
+        <div className="flex items-start gap-2.5 border-b border-edge-subtle pb-2.5" role="status">
+          <tone.Icon size={16} className={`mt-0.5 shrink-0 ${tone.icon}`} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-fg" data-testid="ci-verdict">
+              {verdict.headline}
+            </p>
+            {verdict.detail && <p className="text-xs text-fg-secondary">{verdict.detail}</p>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Waiting and running now are the status board's, right above: the week only. */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-edge-subtle pb-2.5">

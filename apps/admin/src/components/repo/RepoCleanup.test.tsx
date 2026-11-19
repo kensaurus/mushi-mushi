@@ -105,7 +105,8 @@ describe('RepoCleanup', () => {
     const text = host.textContent ?? ''
     expect(text).toContain('mushi/fix-1 at aaaaaaa')
     expect(text).toContain('Pull request #1 was merged on 2026-10-20')
-    expect(text).toContain('A push in that second could be lost')
+    // Round 3: behind the info mark.
+    expect(host.querySelector('[data-testid="repo-cleanup-how"] [aria-label*="A push in that second could be lost"]')).not.toBeNull()
     expect(text).toContain('Replaced by a newer fix')
     expect(text).toContain('Kept, and why')
     expect(text).toContain('Ask to turn it on')

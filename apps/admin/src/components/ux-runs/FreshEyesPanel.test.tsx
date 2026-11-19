@@ -180,6 +180,10 @@ describe('Run now', () => {
     expect(button('Run now')!.disabled).toBe(true)
     // The off button points at step 1 instead of repeating it.
     expect(host.querySelector('[data-testid="fresh-eyes-run-blocker"]')!.textContent).toBe('Finish step 1 first.')
+    // Step 1 carries its own state mark, so "Finish step 1" points at something marked not done (2026-11-19).
+    const mark = host.querySelector('[data-testid="fresh-eyes-setup-step"] [data-testid="status-pill"]')!
+    expect(mark.textContent).toContain('No worker online')
+    expect(mark.getAttribute('data-status')).toBe('idle')
   })
 
   it('draws setup as step 1 above the form, neutral when never set up (round-2 sweep)', () => {

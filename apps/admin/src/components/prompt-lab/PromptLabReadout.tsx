@@ -70,10 +70,10 @@ export function PromptLabReadout({ stats, fetchedAt, isValidating }: Props) {
   ]
 
   return (
-    <ReadoutPanel title="Prompt lab readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="AI prompts readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
-          <EndpointCodeRow label="Prompt lab stats API" url={statsApi} />
+          <EndpointCodeRow label="AI prompts stats API" url={statsApi} />
           <div className="mt-2">
             <EndpointCodeRow label="Admin API base" url={RESOLVED_EXTERNAL_API_URL} />
           </div>

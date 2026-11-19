@@ -203,12 +203,12 @@ export function RewardsPage() {
           id={`rewards-panel-${active}`}
           aria-labelledby={`rewards-tab-${active}`}
         >
-          {active === 'overview' && <OverviewTab />}
+          {active === 'overview' && <OverviewTab projectId={rewardsStats.projectId} />}
           {active === 'publishing' && <PublishingTab paused={paused} />}
           {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
           {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
           {active === 'contributors' && <ContributorsTab canEdit={canEdit} />}
-          {active === 'quests' && <QuestsTab canEdit={canEdit} paused={paused} />}
+          {active === 'quests' && <QuestsTab canEdit={canEdit} paused={paused} projectId={rewardsStats.projectId} />}
           {active === 'analytics' && <RetentionAnalyticsTab />}
           {active === 'sandbox' && <SandboxSimulatorTab />}
           {active === 'settings' && (

@@ -94,7 +94,9 @@ describe('ReportDiagnosisGraph', () => {
     render()
     expect(panelTitle()).toContain('Root cause: The coupon reducer returns undefined')
     expect(container.querySelector('[data-node-id="cause"]')?.getAttribute('aria-pressed')).toBe('true')
-    expect(container.querySelector('aside')?.textContent).toContain('from stage2_analysis.rootCause')
+    // Round-3 sweep 2026-11-19: the stored field is a tooltip on the title, not page text.
+    expect(container.querySelector('aside')?.textContent).not.toContain('stage2_analysis')
+    expect(container.querySelector('aside h4')?.getAttribute('title')).toBe('Read from stage2_analysis.rootCause')
   })
 
   it('outside operator accounts leaves out the stored field a claim was read from', () => {

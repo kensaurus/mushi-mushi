@@ -51,7 +51,6 @@ import {
   type AnomaliesTabId,
 } from '../components/anomalies/AnomaliesStatsTypes'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
 
@@ -275,7 +274,7 @@ export function AnomaliesPage() {
         title={copy?.title ?? 'Unusual spikes'}
         projectScope={stats.projectName ?? projectName ?? undefined}
 
-        contextChip={<PdcaContextHint stage="check" />}
+        // No unexplained "C Check" stage chip before the heading (round 3): the section bar names the place.
         helpTitle={copy?.help?.title ?? 'Anomaly detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Send any number your app tracks (error rate, latency, sign-ups) from the Metrics tab or the SDK. Mushi Mushi checks them every hour, draws each one with your releases on it, and opens a bug report when a spike starts right after a release.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -370,7 +369,10 @@ export function AnomaliesPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {/* No metrics yet: the "No metric data yet" state above is the one thing on the page. The
+          tabs come once a number arrives, or once you open Metrics from that state (round 3:
+          Summary / Spikes / Metrics and an explainer sat under the empty state). */}
+      {!ux.hideTabs && (stats.metricPointCount > 0 || activeTab !== 'overview') && (
       <SegmentedControl<AnomaliesTabId>
         size="sm"
         scrollable
@@ -385,14 +387,7 @@ export function AnomaliesPage() {
         <div className="space-y-4">
           {/* The metrics themselves, with releases and spikes on them: the
               status sentence above already says how many spikes wait. */}
-          {projectId && stats.metricPointCount > 0 ? (
-            <SpikesOverview projectId={projectId} onConfirm={confirm} onDismiss={dismiss} />
-          ) : (
-            // Without metrics this tab held only the readout's links (console sweep).
-            <p className="text-sm text-fg-muted" data-testid="anomalies-summary-empty">
-              Each number you send gets a chart here, with your releases and any spikes on it.
-            </p>
-          )}
+          {projectId && stats.metricPointCount > 0 && <SpikesOverview projectId={projectId} onConfirm={confirm} onDismiss={dismiss} />}
           <AnomaliesReadout
             stats={stats}
             fetchedAt={statsFetchedAt}

@@ -211,7 +211,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
   // delivering with its org slug and auth token, which live on Integrations.
   const sentryDsnSaved = Boolean(saved.sentry_dsn)
   const sentrySavedHint: RowStatusValue = !sentryDsnSaved
-    ? { state: 'not_connected', detail: 'Add your Sentry DSN to turn production errors into reports.' }
+    ? { state: 'not_connected' }
     : saved.sentry_webhook_secret_set !== true
       ? { state: 'attention', detail: "Add the webhook secret below, or Mushi Mushi can't accept Sentry's deliveries." }
       : { state: 'checking', detail: 'Saved. The Integrations page shows when Sentry sends its first error.' }
@@ -226,7 +226,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
     emptyDetail: 'Add a read-only token under AI keys → Supabase.',
   })
   const supabaseStatus: RowStatusValue = !supabaseRefSaved
-    ? { state: 'not_connected', detail: 'Save your project ref below, then add a read-only token under AI keys.' }
+    ? { state: 'not_connected' }
     : supabaseKeyView
 
   const branchExample = fixBranchExample(settings.fix_branch_template ?? DEFAULT_BRANCH_TEMPLATE)
@@ -268,7 +268,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           <p className="text-xs text-fg-muted">
             {slackInput.botSet || slackCanPost
               ? "In Slack, open the channel's details and copy the channel ID at the bottom. Then invite the Mushi Mushi bot to the channel."
-              : "Mushi Mushi's Slack bot isn't connected to this app, so a channel ID alone can't post. Connect it on Integrations, or use the webhook below."}
+              : 'Bug alerts need the Mushi Mushi Slack app on Integrations, or the webhook below. The team Slack bot further down posts payments, releases and ops alerts only.'}
           </p>
           <SettingsChangeHint current={settings.slack_channel_id ?? ''} saved={saved.slack_channel_id ?? ''} kind="text" />
           {slackTest && (
@@ -285,7 +285,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           status={
             saved.slack_webhook_url_set
               ? { state: 'checking', detail: 'Saved.' }
-              : { state: 'not_connected', detail: 'Not used.' }
+              : { state: 'not_connected' }
           }
           action={
             <Btn
@@ -565,7 +565,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
         title="Daily limits"
         description="Caps on automatic work each day. When one is reached, new runs wait until midnight UTC instead of running up a bill."
       >
-        <SettingsRow icon={<IconCost size={16} />} title="Web pages read per day" purpose="Pages Firecrawl may read across all crawls.">
+        <SettingsRow title="Web pages read per day" purpose="Pages Firecrawl may read across all crawls.">
           <RangeField
             label="Pages per day"
             min={10}
@@ -582,7 +582,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <SettingsChangeHint current={settings.crawl_max_pages_per_day ?? 150} saved={saved.crawl_max_pages_per_day ?? 150} kind="number" />
         </SettingsRow>
-        <SettingsRow icon={<IconCost size={16} />} title="Crawls per day" purpose="How many separate crawls of your app may start.">
+        <SettingsRow title="Crawls per day" purpose="How many separate crawls of your app may start.">
           <RangeField
             label="Crawls per day"
             min={1}
@@ -599,7 +599,7 @@ export function GeneralPanel({ slackCanPost }: { slackCanPost?: boolean }) {
           />
           <SettingsChangeHint current={settings.crawl_max_runs_per_day ?? 8} saved={saved.crawl_max_runs_per_day ?? 8} kind="number" />
         </SettingsRow>
-        <SettingsRow icon={<IconCost size={16} />} title="Tests written per day" purpose="How many browser tests Mushi Mushi may write from your user stories.">
+        <SettingsRow title="Tests written per day" purpose="How many browser tests Mushi Mushi may write from your user stories.">
           <RangeField
             label="Tests per day"
             min={1}

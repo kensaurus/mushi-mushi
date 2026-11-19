@@ -24,6 +24,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout, Card, CodeValue, EmptyState, Input, Loading, SegmentedControl, Sparkline, StatCard } from '../ui'
 import { formatRelative } from '../ui/metrics'
 import { PageLoadError } from '../PageLoadError'
+import { StatusPill } from '../signal/StatusMark'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { apiFetch } from '../../lib/supabase'
@@ -32,6 +33,7 @@ import {
   isStartUrl,
   RUN_STATUS_META,
   runHeadline,
+  runnerMark,
   runnerMessage,
   runNowBlocker,
   STALL_LABEL,
@@ -148,6 +150,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
   }, [defaults?.url, defaults?.goal])
 
   const status = runnerMessage(data.runner)
+  const mark = runnerMark(data.runner)
   const urlOk = isStartUrl(url)
   const goalOk = goal.trim().length > 0 && goal.trim().length <= 300
   const canRun = status.canRun && urlOk && goalOk && !busy
@@ -192,6 +195,7 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
         >
           <StepNumber n={1} />
           <div className="min-w-0 flex-1">
+            <StatusPill status={mark.status} label={mark.label} className="mb-1" />
             <p className="text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
             {status.setup === 'install' && (
               <div className="mt-2 flex flex-col gap-2">
@@ -209,7 +213,10 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
           </div>
         </div>
       ) : (
-        <p className="text-xs text-fg-secondary" data-testid="fresh-eyes-runner">{status.text}</p>
+        <p className="flex flex-wrap items-center gap-2 text-xs text-fg-secondary">
+          <StatusPill status={mark.status} label={mark.label} />
+          <span data-testid="fresh-eyes-runner">{status.text}</span>
+        </p>
       )}
 
       {!status.canRun && (

@@ -4,7 +4,7 @@ import { jobSpread, spreadScaleMax } from './CiJobTimes'
 describe('job times spread', () => {
   const t = (p50: number | null, p90: number | null, max: number | null) => ({ durationP50s: p50, durationP90s: p90, durationMaxS: max })
 
-  it('scales every row to the slowest p90 of any job, shown or not, not to one outlier run', () => {
+  it('scales the rows it is given to their slowest p90, not to one outlier run', () => {
     expect(spreadScaleMax([t(60, 120, 300), t(600, 900, 1200), t(null, null, null)])).toBe(900)
     // 2026-11-18: one 55-minute run squeezed every bar under 30%.
     expect(spreadScaleMax([t(300, 600, 3300), t(240, 480, 500)])).toBe(600)

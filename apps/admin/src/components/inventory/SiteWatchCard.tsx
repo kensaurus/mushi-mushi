@@ -16,6 +16,8 @@ import { apiFetch } from '../../lib/supabase'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
+import { useReadTimedOut } from '../../lib/ciReadTimeout'
+import { CiNotChecked } from '../ci/CiNotChecked'
 import { relativeTime } from '../../lib/setupGuideSteps'
 import { SITE_WATCH_ANCHOR } from '../../lib/homeConnectHref'
 
@@ -57,7 +59,9 @@ function creditRange(pages: number): string {
 }
 
 /** The chip for the watch's state. */
-function stateChip(watch: SiteWatch | null, loading: boolean): { label: string; tone: 'ok' | 'info' | 'warn' | 'danger' | 'neutral' } {
+function stateChip(watch: SiteWatch | null, loading: boolean, unread = false): { label: string; tone: 'ok' | 'info' | 'warn' | 'danger' | 'neutral' } {
+  // A read that failed or never answered is "not checked", never an endless "loading" (round 3).
+  if (unread) return { label: 'not checked', tone: 'neutral' }
   if (loading) return { label: 'loading', tone: 'neutral' }
   if (!watch) return { label: 'off', tone: 'info' }
   if (watch.status === 'error') return { label: 'needs attention', tone: 'danger' }
@@ -88,6 +92,9 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
 
   const data = state.data
   const watch = data?.watch ?? null
+  const waiting = state.loading && !data && !state.error
+  const wait = useReadTimedOut(waiting)
+  const unread = !data && (!!state.error || wait.timedOut)
   const pages = Number(pagesText)
   const pagesValid = Number.isInteger(pages) && pages >= 1 && pages <= 100
 
@@ -154,10 +161,22 @@ export function SiteWatchCard({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">Watch your live site</span>
-            <SignalChip tone={stateChip(watch, state.loading && !data).tone} className="text-3xs font-semibold">
-              {stateChip(watch, state.loading && !data).label}
+            <SignalChip tone={stateChip(watch, waiting, unread).tone} className="text-3xs font-semibold">
+              {stateChip(watch, waiting, unread).label}
             </SignalChip>
           </div>
+          {unread && (
+            <div className="mt-1.5">
+              <CiNotChecked
+                what="Site watch"
+                testId="site-watch-not-checked"
+                onRetry={() => {
+                  wait.restart()
+                  state.reload()
+                }}
+              />
+            </div>
+          )}
           <p className="text-2xs text-fg-muted mt-0.5">
             Firecrawl checks your live pages once a day. A page that errors, 404s, fails to load or turns blank becomes a
             bug report before a user finds it.

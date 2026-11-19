@@ -64,7 +64,11 @@ function lessonsMetrics(stats: LessonsStats, statLabels?: Record<string, string>
       hint: 'Reports that belong to a recurring pattern.',
       to: lessonsLinks.reportsClustered,
     },
-  ].filter((m) => m.value !== 0)
+  ]
+    .filter((m) => m.value !== 0)
+    // With one report per pattern, "2 in patterns" is the "2 patterns still growing" below said
+    // again (2026-11-19): the reports count shows only when it says more than the pattern count.
+    .filter((m) => m.label !== 'In patterns' || stats.totalClusterReports > stats.candidateClusters)
 }
 
 export function LessonsSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels }: Props) {

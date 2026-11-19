@@ -1,4 +1,5 @@
-import { Badge, SegmentedControl } from '../ui'
+import { useState } from 'react'
+import { Badge, Input, SegmentedControl } from '../ui'
 import { Card } from '../../components/ui'
 import { McpToolCard, scopeBadgeTone } from './McpToolCard'
 import { SignalChip } from '../report-detail/ReportSurface'
@@ -9,6 +10,20 @@ import {
 } from '../../lib/mcpCatalog'
 import { MCP_USE_CASE_GROUPS } from '../../lib/mcpPageHelpers'
 import type { CatalogTabId } from './types'
+
+/**
+ * @internal Exported for tests. Tools whose name, title or description has
+ * every word of the query. 133 cards stacked into a 7,000 px page with nothing
+ * to narrow them (round-3 review 2026-11-19).
+ */
+export function filterTools<T extends { name: string; title: string; description: string }>(tools: readonly T[], query: string): T[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return [...tools]
+  return tools.filter((t) => {
+    const hay = `${t.name} ${t.title} ${t.description}`.toLowerCase()
+    return words.every((w) => hay.includes(w))
+  })
+}
 
 export interface McpCatalogPanelProps {
   catalogTab: CatalogTabId
@@ -22,8 +37,11 @@ export function McpCatalogPanel({
   catalogOptions,
   onCatalogTab,
 }: McpCatalogPanelProps) {
-  const readTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:read')
-  const writeTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:write')
+  const [query, setQuery] = useState('')
+  const matches = filterTools(TOOL_CATALOG, query)
+  const searching = query.trim() !== ''
+  const readTools = matches.filter((t) => t.scope === 'mcp:read')
+  const writeTools = matches.filter((t) => t.scope === 'mcp:write')
 
   return (
     <div className="space-y-4" data-dav-anchor="mcp:verify">
@@ -36,6 +54,20 @@ export function McpCatalogPanel({
 
       {catalogTab === 'tools' && (
         <div className="space-y-6">
+          <div className="max-w-sm">
+            <Input
+              type="search"
+              aria-label="Search tools"
+              placeholder="Search tools, e.g. fix or lessons"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              data-testid="mcp-tool-search"
+            />
+          </div>
+          {searching && matches.length === 0 && (
+            <p className="text-sm text-fg-muted">No tool matches “{query.trim()}”.</p>
+          )}
+          {!searching && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <p className="text-xs font-semibold text-fg">By use-case</p>
@@ -63,7 +95,9 @@ export function McpCatalogPanel({
               )
             })}
           </div>
+          )}
 
+          {readTools.length > 0 && (
           <div>
             <SignalChip tone="info" className="mb-2 uppercase tracking-wider font-medium">
               Read — always safe to loop on ({readTools.length})
@@ -74,6 +108,8 @@ export function McpCatalogPanel({
               ))}
             </div>
           </div>
+          )}
+          {writeTools.length > 0 && (
           <div>
             <SignalChip tone="warn" className="mb-2 uppercase tracking-wider font-medium">
               Write — mutate project state ({writeTools.length})
@@ -84,6 +120,7 @@ export function McpCatalogPanel({
               ))}
             </div>
           </div>
+          )}
         </div>
       )}
 

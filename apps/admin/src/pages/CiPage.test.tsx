@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   projectId: 'p1' as string | null,
   paths: [] as Array<{ path: string | null; scope?: string }>,
   error: null as unknown,
+  loading: false,
+  reloads: 0,
   summary: '' as string,
   syncs: [] as Array<{ path: string; scope?: string }>,
 }))
@@ -46,7 +48,8 @@ vi.mock('../lib/usePageData', () => ({
           }
         : null
     const error = path?.startsWith('/v1/admin/ci/overview') ? state.error : null
-    return { data, loading: false, error, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    const loading = path?.startsWith('/v1/admin/ci/overview') ? state.loading : false
+    return { data, loading, error, isValidating: false, reload: () => { state.reloads += 1 }, lastFetchedAt: null }
   },
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
@@ -68,6 +71,7 @@ vi.mock('../components/ci/CiRunnerMap', async () => {
 })
 
 import { CiPage } from './CiPage'
+import { CI_READ_TIMEOUT_MS } from '../lib/ciReadTimeout'
 import { getStoredProjectScopeMode, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -86,6 +90,8 @@ beforeEach(() => {
   state.paths = []
   state.syncs = []
   state.error = null
+  state.loading = false
+  state.reloads = 0
   state.summary = ''
   window.localStorage.clear()
 })
@@ -519,6 +525,29 @@ describe('CiPage', () => {
     expect(params.get('apps')).toBeNull()
     expect(params.get('view')).toBe('settings')
     expect(getStoredProjectScopeMode()).toBe('project')
+  })
+
+  // Round 3 (2026-11-19): 390 All apps sat on "Reading your CI…" on a blank page while the
+  // overview hit its CPU limit. After the timeout it says "not checked" with one Retry.
+  it('turns an All apps read that never answers into "CI runners: not checked" with Retry', async () => {
+    vi.useRealTimers()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-21T12:00:00Z'))
+    state.projectId = null
+    state.overview = null
+    state.loading = true
+    await render()
+    expect(host.textContent).toContain('Reading your CI…')
+    expect(q('ci-not-checked')).toBeNull()
+    await act(async () => {
+      vi.advanceTimersByTime(CI_READ_TIMEOUT_MS)
+    })
+    const row = q('ci-not-checked')!
+    expect(row.textContent).toContain('CI runners: not checked')
+    expect(host.textContent).not.toContain('Reading your CI…')
+    await act(async () => Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!.click())
+    expect(state.reloads).toBeGreaterThan(0)
+    expect(host.textContent).toContain('Reading your CI…')
   })
 
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {

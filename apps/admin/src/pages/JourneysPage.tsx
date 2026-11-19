@@ -96,8 +96,10 @@ function JourneysBody({ projectId }: { projectId: string }) {
   return (
     <>
       {/* grid-cols-1 + min-w-0 cards: at 390 the one-line hints sized the
-          implicit column to their full width and the page scrolled sideways. */}
-      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+          implicit column to their full width and the page scrolled sideways.
+          items-start: the collapsed recording card kept its own height instead
+          of stretching to the scan card's (round-3 sweep 2026-11-19). */}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-2">
         <ScanBar data={data} projectId={projectId} onStarted={onScanStarted} fallbackUrl={sdk.origin} />
         <RecordingCard data={data} projectId={projectId} onChanged={reload} />
       </div>

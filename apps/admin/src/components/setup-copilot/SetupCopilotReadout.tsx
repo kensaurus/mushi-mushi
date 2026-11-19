@@ -56,7 +56,8 @@ export function SetupCopilotReadout({
   ]
 
   return (
-    <ReadoutPanel title="Copilot setup readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
+    // The same "Setup endpoints and raw signals" label as on the other Set up tabs (round-3 review).
+    <ReadoutPanel title="Setup readout" freshness={fetchedAt === undefined ? undefined : { at: fetchedAt, isValidating: validating }}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Canonical endpoints and refs for this project — paste the connect command in your repo, then
         verify heartbeat on the steps below.

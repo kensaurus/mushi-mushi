@@ -74,8 +74,12 @@ function GroupedRow({
           {projectIds.length}
           <span className="sr-only"> apps</span>
         </span>
-        <AppIconChips projectIds={projectIds} iconFor={iconFor} titleFor={titleFor} />
-        {action && <span className="ml-auto shrink-0">{action}</span>}
+        {/* Icons and the fix share one line that never splits: six icons pushed "Add probe" onto a
+            line of its own at 390 (round 3). Past five, the rest is "+N". */}
+        <span className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1" data-testid="fix-once-apps-line">
+          <AppIconChips projectIds={projectIds} iconFor={iconFor} titleFor={titleFor} max={5} />
+          {action && <span className="ml-auto shrink-0">{action}</span>}
+        </span>
       </div>
       {expandable && open && <p className="mt-0.5 pl-5 text-xs text-fg-secondary">{detail}</p>}
     </li>

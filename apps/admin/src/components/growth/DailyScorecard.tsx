@@ -58,6 +58,9 @@ export function DailyScorecard() {
   const days = data.days
   const totals = scorecardTotals(days)
   const sources = sortedSources(data.by_src)
+  // A column of 0 in both tables says nothing: Activated shows once it has a
+  // value (round-3 sweep 2026-11-19); the figure above still says 0.
+  const showActivated = totals.activated > 0 || sources.some((s) => s.activated > 0)
 
   return (
     <Section title={`Daily scorecard — last ${days.length} days (UTC)`}>
@@ -76,7 +79,7 @@ export function DailyScorecard() {
                 <th className="py-1.5 pr-3 font-medium">Day</th>
                 <th className="py-1.5 px-2 text-right font-medium">Page views</th>
                 <th className="py-1.5 px-2 text-right font-medium">Signups</th>
-                <th className="py-1.5 px-2 text-right font-medium">Activated</th>
+                {showActivated && <th className="py-1.5 px-2 text-right font-medium">Activated</th>}
               </tr>
             </thead>
             <tbody>
@@ -85,7 +88,7 @@ export function DailyScorecard() {
                   <td className="py-1.5 pr-3 text-fg-muted whitespace-nowrap">{shortDay(d.day)}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums text-fg">{d.page_views}</td>
                   <td className="py-1.5 px-2 text-right tabular-nums text-fg">{d.signups}</td>
-                  <td className="py-1.5 px-2 text-right tabular-nums text-fg">{d.activated}</td>
+                  {showActivated && <td className="py-1.5 px-2 text-right tabular-nums text-fg">{d.activated}</td>}
                 </tr>
               ))}
             </tbody>
@@ -102,7 +105,7 @@ export function DailyScorecard() {
                   <th className="py-1.5 pr-3 font-medium">Source (?src=)</th>
                   <th className="py-1.5 px-2 text-right font-medium">Page views</th>
                   <th className="py-1.5 px-2 text-right font-medium">Signups</th>
-                  <th className="py-1.5 px-2 text-right font-medium">Activated</th>
+                  {showActivated && <th className="py-1.5 px-2 text-right font-medium">Activated</th>}
                 </tr>
               </thead>
               <tbody>
@@ -111,7 +114,7 @@ export function DailyScorecard() {
                     <td className="py-1.5 pr-3 text-fg">{s.src}</td>
                     <td className="py-1.5 px-2 text-right tabular-nums text-fg">{s.page_views}</td>
                     <td className="py-1.5 px-2 text-right tabular-nums text-fg">{s.signups}</td>
-                    <td className="py-1.5 px-2 text-right tabular-nums text-fg">{s.activated}</td>
+                    {showActivated && <td className="py-1.5 px-2 text-right tabular-nums text-fg">{s.activated}</td>}
                   </tr>
                 ))}
               </tbody>

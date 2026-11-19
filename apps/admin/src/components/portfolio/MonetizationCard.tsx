@@ -205,9 +205,13 @@ function HubBlock({ hub, busy, onAsk, iconFor, planned }: { hub: MonetizationHub
 function CatalogLine({ catalog }: { catalog: MonetizationHubView['catalog'] }) {
   if (catalog.state === 'read') {
     return (
-      <p className="flex items-center gap-1.5 text-2xs text-fg-secondary">
+      // Label above the value: at 390 "Billing / catalog" wrapped beside a path cut as "kensaurus- / spine" (round 3).
+      <p className="flex min-w-0 items-start gap-1.5 text-2xs text-fg-secondary">
         <StatusMark status="passed" />
-        Billing catalog <code className="font-mono">{catalog.source}</code>
+        <span className="flex min-w-0 flex-col">
+          <span>Billing catalog</span>
+          <code className="font-mono wrap-break-word">{catalog.source}</code>
+        </span>
       </p>
     )
   }
@@ -318,9 +322,46 @@ function OfferingsGrid({ app }: { app: MonetizationAppView }) {
       {app.offerings.length === 0 ? (
         <p className="text-xs text-fg-muted">None tied to this app.</p>
       ) : (
-        // Long store product ids: the table scrolls in its own box, never the page. `relative` keeps
-        // its screen-reader-only text (absolutely placed) inside that box too.
-        <div className="relative min-w-0 overflow-x-auto" data-testid="offerings-scroll">
+        <>
+        {/* A phone stacks each package's platforms: the table scrolled and hid Android at 390 (round 3). */}
+        <ul className="mt-0.5 flex flex-col gap-1.5 sm:hidden" data-testid="offerings-stacked">
+          {app.offerings.map((o) => (
+            <li key={o.lookupKey} className="flex flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                <code className="font-mono font-semibold text-fg">{o.lookupKey}</code>
+                {o.isCurrent && <StatusPill status="running" label="current" />}
+                <StatusMark status={o.hasPaywall ? 'passed' : 'idle'} label={o.hasPaywall ? 'Paywall set' : 'No paywall'} />
+              </span>
+              {o.packages === null ? (
+                <span className="text-2xs text-fg-muted">Packages not read yet.</span>
+              ) : (
+                <ul className="flex flex-col divide-y divide-edge-subtle pl-2">
+                  {o.packages.map((k) => (
+                    <li key={k.id} className="flex flex-col gap-0.5 py-1">
+                      <code className="font-mono text-2xs text-fg-secondary">{k.lookupKey}</code>
+                      {platforms.map((pf) => {
+                        const here = k.products.filter((p) => p.platform === pf)
+                        return (
+                          <span key={pf} className="flex flex-wrap items-center gap-1 text-2xs" data-platform={pf}>
+                            <span className="w-14 shrink-0 text-fg-muted">{pf}</span>
+                            {here.length === 0 ? (
+                              <span className="text-fg-muted">none</span>
+                            ) : (
+                              here.map((p) => <ProductChip key={p.id} product={p} />)
+                            )}
+                          </span>
+                        )
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+        {/* Long store product ids: the table scrolls in its own box, never the page. `relative` keeps
+            its screen-reader-only text (absolutely placed) inside that box too. */}
+        <div className="relative hidden min-w-0 overflow-x-auto sm:block" data-testid="offerings-scroll">
         <table className="mt-0.5 w-full border-collapse text-xs" data-testid="offerings-grid">
           <caption className="sr-only">Offerings of {app.name}: products by platform</caption>
           <thead>
@@ -379,6 +420,7 @@ function OfferingsGrid({ app }: { app: MonetizationAppView }) {
           </tbody>
         </table>
         </div>
+        </>
       )}
     </div>
   )

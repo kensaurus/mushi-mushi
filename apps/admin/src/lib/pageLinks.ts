@@ -185,17 +185,17 @@ export const PAGE_FLOW_LINKS: Record<string, PageFlowLink[]> = {
     { to: '/releases', label: 'Releases', blurb: 'Tell reporters what shipped' },
     { to: '/reports', label: 'Bugs', blurb: 'The reports behind each update' },
   ],
-  marketplace: [
-    { to: '/integrations/config', label: 'Integrations', blurb: 'Built-in connections' },
-  ],
+  // No marketplace entry: its "Set up from Integrations:" row already links there (2026-11-19:
+  // "Related: Integrations" was the third link to the same page).
   queue: [
     { to: '/reports', label: 'Bugs', blurb: 'Reports being processed' },
     { to: '/health', label: 'Mushi Mushi health', blurb: 'Mushi Mushi’s scheduled jobs' },
   ],
+  // The sidebar's own names (round-3 review 2026-11-19: "Dashboard · Explore · SDK Setup").
   settings: [
-    { to: '/dashboard', label: 'Dashboard', blurb: 'See the effect of your config' },
-    { to: '/explore', label: 'Explore', blurb: 'Browse indexed codebase' },
-    { to: '/sdk', label: 'SDK Setup', blurb: 'Embed the capture widget' },
+    { to: '/dashboard', label: 'Home', blurb: 'See the effect of your config' },
+    { to: '/explore', label: 'Code map', blurb: 'Browse indexed codebase' },
+    { to: '/onboarding', label: 'Set up', blurb: 'Install the bug widget' },
   ],
   sdk: [
     { to: '/settings', label: 'Settings', blurb: 'API keys and project config' },

@@ -36,12 +36,17 @@ const STAT_VALUE = 'text-lg font-extrabold text-fg tabular-nums'
  */
 export function OpsTodayStrip({ data, needsLook }: { data: OpsCoverageResponse; needsLook: number | null }) {
   // null = the feed has not loaded: say nothing rather than a calm "nothing open".
+  // No app has ever sent a payment: the coverage note below says so once, so no "none yet" tile (round 3).
+  const neverPaid = paymentsToday(data.today.payments) === 'none yet' && !data.coverage.some((r) => r.category === 'payments' && r.last_at)
+  const tiles = 1 + (neverPaid ? 0 : 1) + (needsLook === 0 ? 1 : 0)
   return (
-    <dl className={`grid grid-cols-1 divide-y divide-edge-subtle sm:divide-x sm:divide-y-0 ${needsLook === 0 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`} data-testid="ops-today">
-      <div className={STAT}>
-        <dt className={STAT_LABEL}>💳 Payments today</dt>
-        <dd className={STAT_VALUE}>{paymentsToday(data.today.payments)}</dd>
-      </div>
+    <dl className={`grid grid-cols-1 divide-y divide-edge-subtle sm:divide-x sm:divide-y-0 ${tiles === 3 ? 'sm:grid-cols-3' : tiles === 2 ? 'sm:grid-cols-2' : ''}`} data-testid="ops-today">
+      {!neverPaid && (
+        <div className={STAT}>
+          <dt className={STAT_LABEL}>💳 Payments today</dt>
+          <dd className={STAT_VALUE}>{paymentsToday(data.today.payments)}</dd>
+        </div>
+      )}
       <div className={STAT}>
         <dt className={STAT_LABEL}>🚀 Releases today</dt>
         <dd className={STAT_VALUE}>{data.today.releases}</dd>
@@ -79,9 +84,11 @@ export function OpsCoverageMatrix({ data, now }: { data: OpsCoverageResponse; no
   return (
     <>
       {/* Phone: one card per app, each kind of event on its own labelled line (no 4-up grid of cut cells). */}
-      <ul className="space-y-1.5 sm:hidden" data-testid="ops-coverage-stacked">
+      {/* Flat rows under hairlines, not a bordered card per app inside the card; "×N" with the
+          window said once in the legend (round 3: "in 7d" on every chip). */}
+      <ul className="divide-y divide-edge-subtle sm:hidden" data-testid="ops-coverage-stacked">
         {rows.map((r) => (
-          <li key={r.app.id} className="rounded-md border border-edge-subtle px-2 py-1.5" data-testid={`ops-coverage-card-${r.app.id}`}>
+          <li key={r.app.id} className="py-1.5" data-testid={`ops-coverage-card-${r.app.id}`}>
             <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-semibold text-fg">
               <OpsAppIcon app={r.app} />
               <span className="min-w-0 break-words">{opsAppName(r.app)}</span>
@@ -105,14 +112,14 @@ export function OpsCoverageMatrix({ data, now }: { data: OpsCoverageResponse; no
                     title={`${opsAppName(r.app)} · ${cell.column}: ${cell.lastAt ? `last ${cell.fresh.label}, ${cell.count7d} in 7 days` : 'never reported'}`}
                   >
                     <span aria-hidden="true">{cell.fresh.glyph}</span> {cell.fresh.label}
-                    {cell.count7d > 0 && <span className="ml-1 font-bold">×{cell.count7d} in 7d</span>}
+                    {cell.count7d > 0 && <span className="ml-1 font-bold">×{cell.count7d}</span>}
                   </dd>
                 </div>
               ))}
             </dl>
           </li>
         ))}
-        <li className="list-none text-2xs text-fg-secondary">● last day · ◐ this week · ○ older · – never.</li>
+        <li className="list-none pt-1.5 text-2xs text-fg-secondary">● last day · ◐ this week · ○ older · – never. ×n = events in 7 days.</li>
       </ul>
       <div className="sm:hidden">{emptyNote}</div>
     <div className="hidden overflow-x-auto sm:block" data-testid="ops-coverage">

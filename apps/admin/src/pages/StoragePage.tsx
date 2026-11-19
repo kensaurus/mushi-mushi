@@ -452,12 +452,13 @@ export function StoragePage() {
               <span className="font-semibold">{pr.name}</span> bucket
               {pr.error ? <span className="text-fg-secondary"> — {pr.error}</span> : null}
               {pr.checkedAt ? (
-                <span className={`ml-1 whitespace-nowrap text-2xs ${isStaleCheck(pr.checkedAt) ? 'text-warn-foreground' : 'text-fg-muted'}`}>
+                // Wraps: a nowrap run here pushed under the Fix button at 390 (2026-11-19).
+                <span className={`ml-1 text-2xs ${isStaleCheck(pr.checkedAt) ? 'text-warn-foreground' : 'text-fg-muted'}`}>
                   · checked {relativeTime(pr.checkedAt) ?? new Date(pr.checkedAt).toLocaleDateString()}
                 </span>
               ) : null}
             </span>
-            <Btn size="sm" variant="primary" onClick={() => setOpenApp(pr.projectId, 'configure')}>
+            <Btn size="sm" variant="primary" className="shrink-0" onClick={() => setOpenApp(pr.projectId, 'configure')}>
               Fix
             </Btn>
           </li>
@@ -818,7 +819,10 @@ export function StoragePage() {
       >
         {/* Scoped to the active project in words: next to the team-wide
             "Healthy buckets" count, a bare "UNKNOWN" read as a contradiction. */}
-        <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
+        {/* Built-in storage is said by the status line; the chip only marks a configured bucket. */}
+        {storageVerdict(stats).action !== 'configure' && (
+          <Badge className={STORAGE_CHIP_TONE[storageVerdict(stats).tone]}>This app: {storageVerdict(stats).chip}</Badge>
+        )}
       </PageHeaderBar>
 
       {problemRows}

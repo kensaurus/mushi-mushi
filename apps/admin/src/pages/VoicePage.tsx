@@ -200,8 +200,9 @@ export function VoicePage() {
   }
 
   const statusBanner = settingsKnown && !intakeEnabled ? (
+    // An optional feature that is off is not a warning: a neutral ink mark, not amber (2026-11-19).
     <StatusBannerShell
-      tone="warn"
+      tone="brand"
       title="Voice intake is off"
       subtitle="Recordings are refused until the project turns it on."
       action={
@@ -224,10 +225,15 @@ export function VoicePage() {
         helpHowToUse={HELP.howToUse}
       >
         {awaitingCount > 0 && <Badge tone="warn">{awaitingCount} to confirm</Badge>}
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-        <Btn size="sm" variant="ghost" onClick={reload} title="Reload voice requests">
-          Refresh
-        </Btn>
+        {/* Nothing to refresh while intake is off: no "Updated now" and Refresh over an empty page. */}
+        {!(settingsKnown && !intakeEnabled) && (
+          <>
+            <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+            <Btn size="sm" variant="ghost" onClick={reload} title="Reload voice requests">
+              Refresh
+            </Btn>
+          </>
+        )}
       </PageHeaderBar>
 
       <PagePosture slots={[{ id: 'intake-off', priority: POSTURE_PRIORITY.status, show: statusBanner != null, children: statusBanner }]} />

@@ -16,8 +16,6 @@ export interface McpOverviewPanelProps {
   stats: McpStats
   /** The open app's keys; null while loading. */
   keys: McpKeyRow[] | null
-  lastFetchedAt: string | null
-  isValidating: boolean
   onOpenExamples: () => void
   onOpenSetup: () => void
   /** The page status above already says no editor has called: skip the empty card. */
@@ -26,14 +24,12 @@ export interface McpOverviewPanelProps {
   keyMixShown?: boolean
 }
 
-/** How many prompts to show before "See all". */
-const PROMPTS_SHOWN = 5
+/** How many prompts to show before "See all": 5 repeated most of the Examples tab (round-3 review 2026-11-19). */
+const PROMPTS_SHOWN = 3
 
 export function McpOverviewPanel({
   stats,
   keys,
-  lastFetchedAt,
-  isValidating,
   onOpenExamples,
   onOpenSetup,
   hideEmptyEditors = false,
@@ -79,19 +75,19 @@ export function McpOverviewPanel({
             </li>
           ))}
         </ul>
-        <Btn type="button" size="sm" variant="ghost" onClick={onOpenExamples} className="mt-2 !px-0 !py-0 text-2xs">
+        <Btn type="button" size="sm" variant="ghost" onClick={onOpenExamples} className="mt-2">
           See all {MCP_USE_CASES.length} examples →
         </Btn>
       </Card>
 
       <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-muted" data-testid="mcp-key-health">
         {keyMixShown ? null : <span>{keyHealthLine(stats)}</span>}
-        <Btn type="button" size="sm" variant="ghost" onClick={onOpenSetup} className="!px-0 !py-0 text-2xs">
+        <Btn type="button" size="sm" variant="ghost" onClick={onOpenSetup}>
           Manage keys →
         </Btn>
       </p>
 
-      <McpEndpointReadout stats={stats} fetchedAt={lastFetchedAt} validating={isValidating} />
+      <McpEndpointReadout stats={stats} />
     </div>
   )
 }

@@ -22,13 +22,10 @@
 import { roundLongDecimals } from '../../lib/format'
 import { summaryPlace } from './summaryPlace'
 import type { ReactNode } from 'react'
-import { Badge } from '../ui'
+import { InfoHint } from '../ui'
+import { Link } from 'react-router-dom'
 import { Card } from '../../components/ui'
 import { IconIntelligence } from '../icons'
-import {
-  CATEGORY_LABELS,
-} from '../../lib/tokens'
-import { confidenceChipTone } from './categoryTone'
 import { reportDiagnosisView, type Stage2Diagnosis } from '../../lib/reportDiagnosis'
 import { FixWithAgentPanel } from './FixWithAgentPanel'
 import { modelLine } from '../../lib/reportInternals'
@@ -49,11 +46,9 @@ export function DiagnosisFixHero({
   showInternals?: boolean
 }) {
   const conf = report.confidence
-  const confLabel = conf != null ? `${(conf * 100).toFixed(0)}%` : 'n/a'
   const reproHint = (report.stage1_classification as { reproductionHint?: string } | null)
     ?.reproductionHint
   const summary = report.summary ? roundLongDecimals(report.summary.trim()) : undefined
-  const categoryText = CATEGORY_LABELS[report.category] ?? report.category
 
   // Stage 2's root cause / fix / repro, when it ran (lib/reportDiagnosis.ts).
   const view = reportDiagnosisView(report)
@@ -84,18 +79,9 @@ export function DiagnosisFixHero({
               ? isConfident ? 'Diagnosis' : 'Diagnosis — low confidence'
               : isConfident ? 'Classification' : 'Low confidence — check these first'}
           </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-            {/* Severity shows once, in the page header (owner's walkthrough, 2026-11-17). */}
-            <Badge className="border border-edge-subtle bg-surface-overlay text-fg-secondary">
-              {categoryText}
-            </Badge>
-            <Badge
-              className={confidenceChipTone(conf)}
-              title={conf != null ? `Classifier confidence: ${(conf * 100).toFixed(1)}%` : 'No confidence score'}
-            >
-              {confLabel} sure
-            </Badge>
-          </div>
+          {/* No category or "97% sure" chips here: the LLM classification
+              card shows them, and they were on the page 5x and 4x (round-3
+              sweep 2026-11-19). */}
         </div>
 
         {stage2 ? (
@@ -231,27 +217,19 @@ function DiagnosisField({ label, children }: { label: string; children: ReactNod
 function Stage2AbsentNote({ view, stage1Model }: { view: ReturnType<typeof reportDiagnosisView>; stage1Model: string | null }) {
   if (view.kind === 'stage1_only') {
     const heuristic = stage1Model === 'heuristic'
+    // One line, the why behind ⓘ and one link (round-3 sweep 2026-11-19: it
+    // was a 3-line paragraph, and the diagnosis graph says the same).
+    const why = heuristic
+      ? 'The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause.'
+      : 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. For this bug, copy the fix prompt below: your editor\'s AI reads the evidence and works out the cause. For new bugs, set Quick check confidence to 100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).'
     return (
-      <div className="mt-1.5 space-y-1 text-2xs text-fg-faint" data-testid="stage2-absent">
-        <p>
-          {heuristic
-            ? 'Quick summary only. The AI that explains bugs was not available when this one arrived (its key was out of credits or rejected), so only a rule-based sort ran and the full diagnosis (why it broke and how to fix it) is missing.'
-            : 'Quick summary only. The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run.'}
-        </p>
-        <p>
-          For this bug: copy the fix prompt below; your editor&apos;s AI reads the evidence and works out the cause.{' '}
-          {heuristic ? (
-            <>
-              For new bugs: check the AI key under <strong className="font-medium">Settings → AI keys</strong>.
-            </>
-          ) : (
-            <>
-              For new bugs: set <strong className="font-medium">Settings → General → Quick check confidence</strong> to
-              100% and every bug gets the full diagnosis (each one uses a diagnosis from your plan).
-            </>
-          )}
-        </p>
-      </div>
+      <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted" data-testid="stage2-absent">
+        <span>{heuristic ? 'Quick summary only: the AI key was not available.' : 'Quick summary only.'}</span>
+        <InfoHint content={why} />
+        <Link to={heuristic ? '/settings?tab=byok' : '/settings?tab=general'} className="text-link hover:underline">
+          {heuristic ? 'Check AI keys' : 'Change threshold'}
+        </Link>
+      </p>
     )
   }
   if (view.kind === 'failed') {

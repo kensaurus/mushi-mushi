@@ -127,8 +127,9 @@ function deployGaps(repos: readonly RepoBatch[]): RepoBatch[] {
 /** How the batch stands across the shown repos, in one sentence; a deploy gap leads it. */
 export function batchSentence(repos: RepoBatch[]): { sentence: string; tone: Tone } {
   const gaps = deployGaps(repos).length
-  const why = 'so reporters are not told when their fix is live. '
-  const gap = gaps === 0 ? '' : repos.length === 1 ? `No deploy seen in 14 days, ${why}` : `${gaps} repo${gaps === 1 ? ' has' : 's have'} had no deploy seen in 14 days, ${why}`
+  // The count only: the amber row on the repo's card says why it matters ("so reporters are not
+  // told…"); the strip said the same sentence a second time (round 3).
+  const gap = gaps === 0 ? '' : `${gaps} ${gaps === 1 ? 'repo has' : 'repos have'} no deploy in 14 days. `
   const base = batchSentenceBody(repos)
   return gaps ? { sentence: `${gap}${base.sentence}`, tone: base.tone === 'danger' ? 'danger' : 'warn' } : base
 }

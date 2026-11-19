@@ -17,7 +17,9 @@ import { formatRelative } from '../ui'
 import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTypes'
 import { RecipeStateChip } from './RecipeStateChip'
 import { RecipeLinkList } from './RecipeLinks'
+import { StatusGlyph } from '../signal/StatusGlyph'
 import {
+  cardReason,
   cardStatusLines,
   describeLastChecked,
   ELEMENT_CHECKED_BY,
@@ -50,7 +52,8 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
   const notChecked = allFacts.filter(([, v]) => uncheckedFact(meta.state, v)).map(([k]) => factLabel(k))
   // Say the state once: the chip names it; these lines add only what it does not.
   const lines = cardStatusLines(meta.state, element.lastCheckedAt, element.findingsCount)
-  const reason = reasonAfterState(element.reason, meta.label)
+  const reason = cardReason(reasonAfterState(element.reason, meta.label), element.findingsCount)
+  const problemText = problemCountText(meta.state, element.findingsCount)
 
   return (
     <div
@@ -71,11 +74,23 @@ export function RecipeElementCard({ element, selected = false, onSelect, layout 
           <RecipeStateChip state={element.state} lastCheckedAt={element.lastCheckedAt} className="shrink-0" />
         </span>
         {/* Three lines on the canvas: two cut "Run the checks from…" mid-sentence (2026-11-18). */}
-        <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-3' : ''}`} title={canvas ? reason : undefined}>{reason}</span>
+        {reason && (
+          <span className={`text-xs leading-snug text-fg-secondary ${canvas ? 'line-clamp-3' : ''}`} title={canvas ? reason : undefined}>{reason}</span>
+        )}
         {(lines.checked || lines.problems) && (
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
             {lines.checked && <span title={checked.title}>{checked.text}</span>}
-            {lines.problems && <span>{problemCountText(meta.state, element.findingsCount)}</span>}
+            {lines.problems &&
+              (element.findingsCount > 0 ? (
+                // A mark and the number: the header's next step says it in words (round 3).
+                <span className="inline-flex items-center gap-1 font-semibold text-fg tabular-nums" title={problemText} data-testid="recipe-card-problems">
+                  <StatusGlyph tone={meta.state === 'error' ? 'danger' : 'warn'} />
+                  {element.findingsCount.toLocaleString()}
+                  <span className="sr-only"> {element.findingsCount === 1 ? 'problem' : 'problems'} to fix</span>
+                </span>
+              ) : (
+                <span>{problemText}</span>
+              ))}
           </span>
         )}
         {facts.length > 0 && (

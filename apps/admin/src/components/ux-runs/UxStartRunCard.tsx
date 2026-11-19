@@ -17,6 +17,7 @@
 import { useState, type ReactNode } from 'react'
 import { CodeValue, DisclosurePanel, SegmentedControl } from '../ui'
 import { UxCloudRunCard } from './UxCloudRunCard'
+import { StatusPill } from '../signal/StatusMark'
 
 const STUDIO_COMMAND = 'mushi ux ui'
 
@@ -44,7 +45,10 @@ function uxRunSteps(mode: UxRunWhere): WhereStep[] {
         what: (
           <>
             A Cursor Cloud agent works through your app signed out, one screen at a time. Your repo needs{' '}
-            <code className="whitespace-nowrap font-mono">.github/workflows/mushi-ux.yml</code>.
+            <code className="whitespace-nowrap font-mono">.github/workflows/mushi-ux.yml</code>.{' '}
+            {/* Mushi Mushi can't see the file before a run, so the requirement is marked not
+                checked rather than left unmarked or faked as found (2026-11-19). */}
+            <StatusPill status="idle" label="Not checked" className="align-middle" />
           </>
         ),
       },

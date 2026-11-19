@@ -374,8 +374,10 @@ export function ContentQualityPage() {
                 : history.data.total > 0 && history.data.items[0]
                   ? <>· {history.data.total.toLocaleString()} reported so far, the last <RelativeTime value={history.data.items[0].created_at} /></>
                   : '· none reported yet'}
+              {/* The separator ends this line's part, so a wrap never starts the next line with "·" (round 3, 390). */}
+              {history.data == null ? null : <span className="text-fg-faint"> ·</span>}
             </span>
-            <span className="text-fg-faint">· from the scores, flags and ratings your apps send</span>
+            <span className="text-fg-faint">{history.data == null ? '· ' : ''}from the scores, flags and ratings your apps send</span>
             {(history.data?.total ?? 0) > 0 && (
               <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => changeFilter(() => setStatus('all'))}>
                 Show past issues

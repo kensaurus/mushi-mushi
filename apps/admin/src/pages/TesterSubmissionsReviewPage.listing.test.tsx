@@ -49,20 +49,16 @@ async function render() {
   })
 }
 
-function clickTab(label: string) {
-  const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === label)
-  if (!btn) throw new Error(`no ${label} tab`)
-  return act(async () => btn.click())
-}
-
 describe('TesterSubmissionsReviewPage listing state', () => {
   it('says the listing is not published, once, and names the page like its button', async () => {
     mocks.listing = { visibility: 'draft' }
     await render()
     expect(host.querySelector('h1')?.textContent).toBe('Review submissions')
     expect(host.querySelector('[data-testid="tester-review-unpublished"]')?.textContent).toContain('not published')
-    await clickTab('Accepted')
-    expect(host.textContent).toContain('No accepted submissions yet')
+    // Unpublished and empty: said once, with no tabs, no "0 submissions" chip and no second line.
+    expect(host.textContent).not.toContain('once your listing is published')
+    expect(host.textContent).not.toContain('0 submissions')
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Accepted')).toBe(false)
     expect(host.textContent).not.toContain('Publish your app')
   })
 

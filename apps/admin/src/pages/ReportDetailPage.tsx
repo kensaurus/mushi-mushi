@@ -922,7 +922,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       {/* Identifiers live at the bottom: UUIDs are reference material for
           support threads, not triage information — leading with them pushed
           the plain-English diagnosis below the fold (UX-journeys audit F3). */}
-      <Section title="Identifiers" className="mb-3">
+      <Section title="Identifiers" className="mt-3 mb-3">
         <IdField label="Report ID" value={report.id} full tone="id" />
         <IdField label="Project ID" value={report.project_id} full tone="id" />
         {report.session_id ? (
@@ -938,7 +938,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             />
           ) : (
             // "sentry-webhook" is the intake that filed it, not a hash (sweep 2026-11-18).
-            <IdField label="Filed by" value={report.reporter_token_hash} tooltip="The intake that filed this report. No person's key." />
+            // Whole name, with its copy button: "sentry-webho…" was cut at 12 characters (round-3 sweep 2026-11-19).
+            <IdField label="Filed by" value={report.reporter_token_hash} prefixLength={64} tooltip="The intake that filed this report. No person's key." />
           )
         ) : null}
       </Section>

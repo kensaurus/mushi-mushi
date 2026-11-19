@@ -4,17 +4,16 @@ import { planGraphSnapshot } from './graphSnapshot'
 const base = { reportNodes: 0, edgeCount: 0, fragileComponents: 0, inventoryNodes: 0 }
 
 describe('planGraphSnapshot', () => {
-  it('collapses an all-zero snapshot into one line and never calls hotspots 0 without links', () => {
-    expect(planGraphSnapshot(base)).toEqual({
-      tiles: [],
-      zeroLine: 'No clusters · no links · hotspots: not enough links to tell · no inventory items',
-    })
+  // Round 3: the status line names the groups and links; the zero line says only what it does not.
+  it('collapses an all-zero snapshot into one line without restating the status line', () => {
+    expect(planGraphSnapshot(base)).toEqual({ tiles: [], zeroLine: 'No inventory items' })
   })
 
-  it('draws tiles only for counts above zero', () => {
+  it('draws tiles only for counts above zero, and never calls hotspots 0 without links', () => {
     const plan = planGraphSnapshot({ ...base, reportNodes: 2 })
     expect(plan.tiles).toEqual(['clusters'])
-    expect(plan.zeroLine).toContain('hotspots: not enough links to tell')
+    expect(plan.zeroLine).toBe('No inventory items')
+    expect(plan.zeroLine).not.toContain('hotspots')
   })
 
   it('says "no hotspots" once links exist to judge, and drops the line when nothing is zero', () => {

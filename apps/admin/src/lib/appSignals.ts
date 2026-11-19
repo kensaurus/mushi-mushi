@@ -160,9 +160,11 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
     if (drift.length > 0) {
       reasons.push({
         id: 'fix',
-        short: drift.length === 1 ? `${drift[0].label} to fix` : `${drift.length} parts to fix`,
-        title: drift.length === 1 ? `${drift[0].label} to fix` : 'Parts to fix',
-        metric: { value: String(drift.length), unit: drift.length === 1 ? 'part to fix' : 'parts to fix' },
+        // Scoped by name (round 3): "2 parts to fix" beside the grid's "Risks 8" read as one count
+        // with two values. These are App blueprint parts, not risks.
+        short: drift.length === 1 ? `${drift[0].label} to fix` : `${drift.length} blueprint parts to fix`,
+        title: drift.length === 1 ? `${drift[0].label} to fix` : 'Blueprint parts to fix',
+        metric: { value: String(drift.length), unit: drift.length === 1 ? 'blueprint part' : 'blueprint parts' },
         to: urgency.level === 'fix' && urgency.next ? urgency.next.to : '/recipe',
         weight: 6 * drift.length,
       })
@@ -170,7 +172,9 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   }
 
   if (risks && risks.warn > 0) {
-    reasons.push({ id: 'watch', title: 'Risks to look at', short: plural(risks.warn, 'risk to look at', 'risks to look at'), metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
+    // "7 risks to look at" beside the grid's "Risks 9" (2 serious + 7): the total ties them (round 3).
+    const watchShort = risks.error > 0 ? `${risks.warn} of ${risks.error + risks.warn} risks to look at` : plural(risks.warn, 'risk to look at', 'risks to look at')
+    reasons.push({ id: 'watch', title: 'Risks to look at', short: watchShort, metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
   }
   if (freshness === 'stale' && seenAt) {
     reasons.push({ id: 'quiet', title: 'SDK gone quiet', short: `SDK quiet ${shortAge(seenAt, now)}`, metric: { value: shortAge(seenAt, now), unit: 'quiet' }, to: '/connect', weight: 2 })

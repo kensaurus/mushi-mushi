@@ -17,7 +17,6 @@ import { isQueueItemRetryable, parseQueueLaneParam } from '../components/dlq/que
 import {
   Btn,
   FilterSelect,
-  EmptyState,
   ErrorAlert,
   RecommendedAction,
 } from '../components/ui'
@@ -376,16 +375,10 @@ export function DLQPage() {
       ) : error ? (
         <ErrorAlert message="Failed to load queue items." onRetry={loadAll} />
       ) : items.length === 0 ? (
-        <div className="space-y-2">
-          <EmptyState
-            title={`No items in ${filter.replace(/_/g, ' ')} queue`}
-            description={
-              filter === 'completed'
-                ? 'Once jobs finish they move out of view; pick another status to see backlog.'
-                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes. Dead-letter is the only lane that needs you after retries run out.'
-            }
-          />
-        </div>
+        // One line: the quiet line above already says 0 dead letter; the 3-line card said it again (round 3).
+        <p className="text-xs text-fg-muted" data-testid="queue-empty-line">
+          Nothing in {filter.replace(/_/g, ' ')} right now.
+        </p>
       ) : (
         <>
           <div className="space-y-1.5">

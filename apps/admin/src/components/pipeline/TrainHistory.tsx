@@ -45,14 +45,24 @@ export function appBadgeName(repo: string, appName: string | undefined): string 
   return plainName(base) === plainName(appName) ? null : appName
 }
 
+/**
+ * Repos whose trains all merged (none failed, none on the way): with two or more they fold into one
+ * line, "4 repos green: …", instead of four rows of "✓ N merged ○ 0 failed" (round-3 review,
+ * 2026-11-19). A repo with a retry result stays a row. @internal Exported for tests.
+ */
+export function splitGreenTrains(trains: readonly TrainSummary[], results: ReadonlyMap<string, ActionOutcome>): { rows: TrainSummary[]; green: TrainSummary[] } {
+  const green = trains.filter((t) => t.merged > 0 && t.failed === 0 && t.active === 0 && !results.has(t.repo))
+  if (green.length < 2) return { rows: [...trains], green: [] }
+  return { rows: trains.filter((t) => !green.includes(t)), green }
+}
+
 export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId, results, onRetry }: Props) {
   const [picked, setPicked] = useState<string | null>(null)
   if (trains.length === 0) {
     return <p className="text-xs text-fg-muted" data-testid="pipeline-trains-empty">No release train in the last 7 days.</p>
   }
-  return (
-    <ul className="space-y-3" data-testid="pipeline-trains">
-      {trains.map((repo) => {
+  const { rows, green } = splitGreenTrains(trains, results)
+  const row = (repo: TrainSummary) => {
         const ordered = [...repo.trains].reverse()
         const chosen = repo.trains.find((t) => t.id === picked) ?? null
         const result = results.get(repo.repo)
@@ -141,7 +151,27 @@ export function TrainHistory({ trains, projectNames, showApp, now, busyProjectId
             )}
           </li>
         )
-      })}
+  }
+  return (
+    <ul className="space-y-3" data-testid="pipeline-trains">
+      {rows.map(row)}
+      {green.length > 0 && (
+        <li data-testid="pipeline-trains-green">
+          <details className="group">
+            <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-2 text-2xs text-fg-muted hover:text-fg">
+              <span className="inline-block transition-transform group-open:rotate-90" aria-hidden="true">▸</span>
+              <span className="inline-flex items-center gap-1 font-medium text-ok-foreground">
+                <StatusMark status="passed" size={10} />
+                {green.length} repos green
+              </span>
+              <span className="min-w-0 wrap-anywhere" title="Trains merged in the last 7 days; none failed">
+                {green.map((t) => `${t.repo.split('/').pop() ?? t.repo} ${t.merged}`).join(' · ')}
+              </span>
+            </summary>
+            <ul className="mt-2 space-y-3 pl-4">{green.map(row)}</ul>
+          </details>
+        </li>
+      )}
     </ul>
   )
 }

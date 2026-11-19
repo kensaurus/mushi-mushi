@@ -108,6 +108,9 @@ export function TesterSubmissionsReviewPage() {
   )
   const listing = listingQuery.loading ? 'unknown' : listingState(listingQuery.data, listingQuery.error)
   const empty = reviewEmptyCopy(status, listing)
+  // Unpublished and empty: the notice says it once; no filter tabs, "0 submissions" chip or
+  // second "once your listing is published" line (2026-11-19).
+  const quietUnpublished = listing === 'unpublished' && status === 'pending' && total === 0 && !loading && !error
 
   usePublishPageContext({
     route: '/rewards/tester-review',
@@ -150,8 +153,11 @@ export function TesterSubmissionsReviewPage() {
 
       {listing === 'unpublished' && (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-secondary" role="status" data-testid="tester-review-unpublished">
-          <span aria-hidden="true" className="text-fg-faint">○</span>
-          <span>Your listing is not published, so testers cannot send submissions yet.</span>
+          {/* The mark stays on the sentence's first line at 390. */}
+          <span>
+            <span aria-hidden="true" className="mr-1.5 text-fg-faint">○</span>
+            Your listing is not published, so testers cannot send submissions yet.
+          </span>
           <Link
             to="/rewards?tab=publishing"
             className="font-medium text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity"
@@ -161,6 +167,7 @@ export function TesterSubmissionsReviewPage() {
         </p>
       )}
 
+      {!quietUnpublished && (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           value={status}
@@ -178,11 +185,12 @@ export function TesterSubmissionsReviewPage() {
           {total} submission{total === 1 ? '' : 's'}
         </Badge>
       </div>
+      )}
 
       {loading && <TableSkeleton rows={4} />}
       {!loading && error && <ErrorAlert message={error} onRetry={load} />}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && items.length === 0 && !quietUnpublished && (
         <EmptyState title={empty.title} description={empty.description} />
       )}
 

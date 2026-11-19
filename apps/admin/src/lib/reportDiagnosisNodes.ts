@@ -8,7 +8,7 @@ import { reportDiagnosisView } from './reportDiagnosis'
 import { humanizeFixError } from './humanizeFixError'
 import { CLOSE_REASONS } from './closeReasons'
 import { verdictFromError } from './pdcaAct'
-import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, headline, type DiagnosisNode } from './reportDiagnosisModel'
+import { DIAGNOSIS_ANCHORS, NEEDS_LOOK_BELOW, STAGE1_ONLY_DETAIL, headline, type DiagnosisNode } from './reportDiagnosisModel'
 import type { ReportDetail, ReportFixAttempt } from '../components/report-detail/types'
 
 function text(value: unknown): string | null {
@@ -210,7 +210,9 @@ export function signalNodes(report: ReportDetail): DiagnosisNode[] {
       // which the page already shows at the top (sweep 2026-11-18). Its full
       // text stays in the panel's "why".
       title: stated || !text(report.summary) ? `Symptom: ${headline(symptom, 90)}` : 'Symptom: as in the summary',
-      detail: [text(s1.category) ?? report.category, text(s1.severity) ?? report.severity, modelName(report.stage1_model) ?? 'fast filter'].filter(Boolean).join(' · '),
+      // Category, severity and model are in the classification card; the node
+      // repeated them (round-3 sweep 2026-11-19). Say only who read it.
+      detail: 'first check',
       state: confidence != null && confidence < NEEDS_LOOK_BELOW ? 'weak' : 'ok',
       confidence,
       needsLook: confidence != null && confidence < NEEDS_LOOK_BELOW,
@@ -320,7 +322,7 @@ export function diagnosisNodes(report: ReportDetail): DiagnosisNode[] {
     // The report's confidence is the first check's certainty about the
     // category (the Symptom node shows it); there is no diagnosis to be sure
     // of, so no % here: "no full diagnosis 97%" read as a 97% diagnosis.
-    return [{ ...base, confidence: null, title: 'Quick summary only; no full diagnosis', detail: 'first check only', state: 'ok', needsLook: false, why: 'The first check was sure what kind of bug this is, so the full diagnosis (why it broke and how to fix it) did not run. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
+    return [{ ...base, confidence: null, title: 'Quick summary only; no full diagnosis', detail: STAGE1_ONLY_DETAIL, state: 'ok', needsLook: false, why: 'Only the category was decided, so there is no root cause to show here. The fix prompt still gives your agent everything Mushi Mushi knows.' }]
   }
   return [{ ...base, title: 'Diagnosis in progress', detail: 'usually under a minute', state: 'pending', needsLook: false, why: 'Mushi Mushi is still reading this report.' }]
 }

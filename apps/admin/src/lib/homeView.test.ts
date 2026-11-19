@@ -53,6 +53,12 @@ describe('dedupeHomeSections (round-2 sweep 2026-11-18)', () => {
     expect(dedupeHomeSections(home()).activity.data!.map((l) => l.id)).toEqual(['merged_today'])
   })
 
+  it('swaps the dropped today line for the week count from This week (round-3 sweep)', () => {
+    const week = ok<WeekRow[]>([{ id: 'reports', label: 'Bug reports', thisWeek: 4, lastWeek: 0, moreIsBetter: false, href: '/reports' }])
+    const h = home({ week, activity: ok([{ id: 'reports_today', text: '1 bug report came in today', to: '/reports?days=1' }]) })
+    expect(dedupeHomeSections(h).activity.data).toEqual([{ id: 'reports_week', text: '4 bug reports came in this week', to: '/reports?days=7' }])
+  })
+
   it('keeps the activity line when the Bugs today light could not read', () => {
     const h = home({ health: ok([light({ id: 'errors', status: 'error', headline: 'Could not read' })]) })
     expect(dedupeHomeSections(h).activity.data!.map((l) => l.id)).toEqual(['reports_today', 'merged_today'])

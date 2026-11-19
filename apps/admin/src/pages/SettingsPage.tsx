@@ -47,7 +47,7 @@ import { SettingsSectionJump } from '../components/settings/SettingsSectionJump'
 import { savedFixBranchInvalid } from '../components/settings/fixBranchField';
 import { DeveloperDetails } from '../components/settings/SettingsRow';
 import { ByokPoolProvider, useByokPool } from '../components/settings/ByokPoolContext';
-import { hasWorkingPoolKey, summarizeKeys, type KeySummary } from '../components/settings/keyStatus';
+import { hasWorkingPoolKey, keysNeedingAction, summarizeKeys, type KeySummary } from '../components/settings/keyStatus';
 import {
   EMPTY_SETTINGS_STATS,
   SETTINGS_TAB_IDS,
@@ -246,7 +246,8 @@ function SettingsPageBody({
     setActive,
   ]);
 
-  const keyProblems = keySummary ? keySummary.attention + keySummary.expiring + keySummary.checking : 0;
+  // Same count as the banner title (keysNeedingAction): every key row that asks for something.
+  const keyProblems = keySummary ? keysNeedingAction(keySummary) : 0;
   const criticalCount =
     (keySummary ? keySummary.attention + keySummary.expiring : stats.byokKeysFailing) +
     (!hasAnthropicKey ? 1 : 0) +

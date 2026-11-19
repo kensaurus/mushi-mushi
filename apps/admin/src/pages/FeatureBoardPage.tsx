@@ -538,7 +538,7 @@ export function FeatureBoardPage() {
         // feedback" sat in the header and here. Plain sans steps, one link.
         <EmptyState
           title="No feature requests yet"
-          description="Requests your users send from the widget or My feedback show here, ranked by votes."
+          description="Requests your users send from the widget show here, ranked by votes."
           action={
             <div className="space-y-3">
               <ul className="list-disc space-y-0.5 pl-4 text-xs text-fg-muted" data-testid="feature-board-empty-tips">

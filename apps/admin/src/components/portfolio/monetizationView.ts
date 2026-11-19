@@ -82,6 +82,12 @@ export function appSummary(app: Pick<MonetizationAppView, 'rules' | 'findings'>,
   // (amber "3 to fix"); one serious (error) finding makes the whole count red.
   const errors = app.findings.filter((f) => f.severity === 'error').length
   const serious = errors + app.findings.filter((f) => f.severity === 'warn').length
+  // Round 3 (2026-11-19): "3 to fix" sat over rows that said "in review". Products only waiting on
+  // the store's review are named as that; anything else to do keeps "to fix".
+  const inReview = (f: MonetizationFinding) => f.ruleId === 'monetization_store_product_unready' && /\bis (IN_REVIEW|WAITING_FOR_REVIEW)\b/.test(f.message)
+  if (serious > 0 && errors === 0 && app.findings.filter((f) => f.severity === 'warn').every(inReview)) {
+    return { text: `${serious} in review`, tone: 'warnSubtle' }
+  }
   if (serious > 0) return { text: `${serious} to fix`, tone: errors > 0 ? 'dangerSubtle' : 'warnSubtle' }
   if (app.rules.some((r) => r.state === 'error')) return { text: 'Could not check', tone: 'dangerSubtle' }
   if (app.rules.length === 0 || app.rules.some((r) => r.state === 'unknown')) return { text: app.findings.length ? `${app.findings.length} notes, partly checked` : 'Partly checked', tone: 'neutral' }

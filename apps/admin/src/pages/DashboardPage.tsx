@@ -114,8 +114,10 @@ export function DashboardPage() {
 
   const needsRow =
     data && activeProjectId ? (
-      // Cards sized to their content: a one-line Needs you stretched to the Release card's height was ~70% empty.
-      <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-needs-row">
+      // Needs you takes the full width; beside the taller Release card a
+      // one-line Needs you left ~100 px of empty card (round-3 sweep
+      // 2026-11-19). Release moved into the stacked columns below.
+      <div data-testid="home-needs-row">
         <NeedsYouCard
           section={data.needsYou}
           fixFirst={data.fixFirst}
@@ -124,7 +126,6 @@ export function DashboardPage() {
           // One "do this next" on the page: the setup step wins while it is open.
           primaryElsewhere={Boolean(openStep && project)}
         />
-        <ReleaseCard section={data.release} projectId={activeProjectId} />
       </div>
     ) : null
 
@@ -202,14 +203,19 @@ export function DashboardPage() {
 
           {!homeNeedsFirst(data) && needsRow}
 
-          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <SitemapCard section={(shown ?? data).sitemap} />
-            <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
-          </div>
-
-          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-            <WeekCard section={data.week} />
-            <ActivityCard section={(shown ?? data).activity} />
+          {/* Two stacked columns, not rows of pairs: a short card beside a
+              tall one (Pages beside Access) left 100-200 px of empty space
+              (round-3 sweep 2026-11-19). */}
+          <div className="grid items-start gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="home-columns">
+            <div className="flex flex-col gap-3">
+              <ReleaseCard section={data.release} projectId={activeProjectId} />
+              <SitemapCard section={(shown ?? data).sitemap} />
+              <WeekCard section={data.week} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <AccessCard section={data.access} auditLog={ent.has('audit_log')} />
+              <ActivityCard section={(shown ?? data).activity} />
+            </div>
           </div>
 
           <HowThisWorks defaultOpen={!!project && project.report_count === 0} />

@@ -209,10 +209,11 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
         </div>
       )}
 
+      {/* The tally above already says "1 not checked": the list follows it with no heading of
+          its own ("not checked" three times, round-3 review 2026-11-19). */}
       {notes.length > 0 && (
         <div className="space-y-1">
-          <p className="text-3xs font-semibold text-fg-secondary">Not checked</p>
-          <ul className="space-y-0.5 text-2xs text-fg-muted">
+          <ul className="space-y-0.5 text-2xs text-fg-muted" aria-label="Checks that did not run">
             {notes.map((n) => (
               <li key={n.check}>
                 <span className="font-medium text-fg-secondary">{NOTE_LABEL[n.check]}:</span> {n.detail}

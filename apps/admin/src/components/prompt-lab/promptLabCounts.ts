@@ -142,3 +142,18 @@ export function reconcilePromptLabStats(stats: PromptLabStats, prompts: readonly
   }
   return next
 }
+
+/**
+ * The test state as one status line, said once (2026-11-19: a "Test running, waiting for its
+ * first grades" banner over "Fast filter: test not started" and a second card saying "No version
+ * has a grade yet"). Null when no step has a test.
+ */
+export function promptTestSummary(prompts: readonly PromptVersion[]): { text: string; testing: number } | null {
+  const c = promptTestCounts(prompts)
+  if (c.stepsWithTest === 0) return null
+  const testing = c.stepsWithTest - c.notStarted
+  const parts: string[] = []
+  if (testing > 0) parts.push(`${testing} test${testing === 1 ? '' : 's'} running`)
+  if (c.notStarted > 0) parts.push(`${c.notStarted} not started`)
+  return { text: parts.join(' · '), testing }
+}

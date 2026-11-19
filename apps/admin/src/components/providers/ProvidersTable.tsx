@@ -8,7 +8,7 @@
  */
 
 import type { ProviderAccount } from '../../lib/kensaurusOpsTypes'
-import { ageLabel, dependentApps, PROVIDER_STATUS, providerColumns, providerGauge, providerState, type Gauge } from '../../lib/providersView'
+import { accountLabel, ageLabel, allSharedAccounts, dependentApps, PROVIDER_STATUS, providerColumns, providerGauge, providerState, type Gauge } from '../../lib/providersView'
 import { Btn, Toggle } from '../ui'
 import { IconSliders } from '../icons'
 import { Chip } from '../signal/Chip'
@@ -56,6 +56,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
   if (providers.length === 0) return <p className="text-xs text-fg-muted">No provider accounts yet.</p>
   // Balance and Incidents draw only once some row has a value; the note says it once otherwise.
   const cols = providerColumns(providers, incidents)
+  const sharedAll = allSharedAccounts(providers)
   return (
     <div className="flex flex-col gap-1.5">
     <ul className="list-none divide-y divide-edge-subtle overflow-hidden rounded-md border border-edge p-0" aria-label="Provider accounts, worst first" data-testid="providers-rows">
@@ -66,7 +67,8 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         data-testid="providers-head"
       >
         <span className={COL.state}>State</span>
-        <span className={COL.account}>Account</span>
+        {/* "(shared key)" on every row said once, here (round 3). */}
+        <span className={COL.account}>{sharedAll ? 'Shared account' : 'Account'}</span>
         {cols.balance && <span className={COL.balance}>Balance</span>}
         <span className={COL.probed}>Probed</span>
         {cols.incidents && <span className={COL.incidents}>Incidents</span>}
@@ -75,6 +77,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
       </li>
       {providers.map((p) => {
         const state = providerState(p)
+        const shown = accountLabel(p, sharedAll)
         const inc = incidents.get(p.id)
         const busy = pending.has(providerPendingKey(p.id))
         const apps = dependentApps(p)
@@ -87,13 +90,19 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
             data-state={state}
           >
             <span className={COL.state}>
-              <StatusPill status={PROVIDER_STATUS[state]} label={[state, ageLabel(p.status?.state_since, now)].filter(Boolean).join(' · ')} />
+              {/* "ok for 12h": a bare "ok · 12h" beside "Probed 8m" read as two ages of one thing (round 3). */}
+              <StatusPill
+                status={PROVIDER_STATUS[state]}
+                label={ageLabel(p.status?.state_since, now) ? `${state} for ${ageLabel(p.status?.state_since, now)}` : state}
+                title={ageLabel(p.status?.state_since, now) ? `In this state for ${ageLabel(p.status?.state_since, now)}` : undefined}
+              />
             </span>
             <span className={`flex min-w-0 items-center gap-1.5 ${COL.account}`}>
-              <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? undefined}>
-                {p.label}
+              <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? p.label}>
+                {shown.text}
               </span>
-              <Chip>{p.provider}</Chip>
+              {/* The provider chip only when the name does not already say it ("Anthropic" + "anthropic", round 3). */}
+              {shown.showProvider && <Chip>{p.provider}</Chip>}
               {p.is_test && <Chip>test</Chip>}
             </span>
             {cols.balance && (

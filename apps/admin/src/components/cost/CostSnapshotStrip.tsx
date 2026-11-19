@@ -13,8 +13,6 @@ import {
   spendMonthTooltip,
   topDriverTooltip,
   operationsTooltip,
-  modelsDetail,
-  modelsTooltip,
   keySourceTooltip,
 } from '../../lib/costStatTooltips'
 import { costLinks } from '../../lib/statCardLinks'
@@ -45,8 +43,10 @@ export function CostSnapshotStrip({
   return (
     <Section title={sectionTitle} freshness={{ at: fetchedAt, isValidating }}>
       {hint ? <SnapshotSectionHint text={hint} /> : null}
-      <div className="space-y-2">
-        <MetricStrip cols={4} ariaLabel="Spend snapshot primary">
+      {/* One flat row inside the card: seven bordered tiles sat in the bordered Summary card,
+          the seventh alone on its row at 390 (2026-11-19). `panel--metrics` strips the tile
+          chrome to hairline dividers; steps and models share one cell, so six cells pair up. */}
+      <MetricStrip cols={6} ariaLabel="Spend snapshot" className="panel--metrics">
           <StatCard
             label={statLabels?.total ?? 'Total logged'}
             value={fmtSpend(stats.totalSpendUsd)}
@@ -77,21 +77,12 @@ export function CostSnapshotStrip({
             detail={details.topDriver}
             to={costLinks.topDriver}
           />
-        </MetricStrip>
-        <MetricStrip cols={3} ariaLabel="Spend snapshot secondary">
           <StatCard
-            label={statLabels?.operations ?? 'Operations'}
-            value={stats.operationsCount}
+            label={statLabels?.operations ?? 'Steps · models'}
+            value={`${stats.operationsCount} · ${stats.modelsCount}`}
             tooltip={operationsTooltip(stats)}
             detail={details.operations}
             to={costLinks.operations}
-          />
-          <StatCard
-            label={statLabels?.models ?? 'Models'}
-            value={stats.modelsCount}
-            tooltip={modelsTooltip(stats)}
-            detail={modelsDetail(stats)}
-            to={costLinks.models}
           />
           <StatCard
             label={statLabels?.keySource ?? 'Key source · 24h'}
@@ -101,8 +92,7 @@ export function CostSnapshotStrip({
             detail={keySource.detail}
             to={costLinks.keySource}
           />
-        </MetricStrip>
-      </div>
+      </MetricStrip>
     </Section>
   )
 }

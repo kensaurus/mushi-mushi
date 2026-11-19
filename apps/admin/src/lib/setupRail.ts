@@ -171,13 +171,17 @@ export function buildSetupRail(input: {
   }
 }
 
-/** One plain line about when the app last checked in: when, which key, from where. "Heartbeat" was jargon (2026-10-28). */
-export function heartbeatSentence(heartbeat: SdkHeartbeatView | null): string {
+/**
+ * One plain line about how the app checks in: which key, from where. "Heartbeat" was jargon
+ * (2026-10-28). The when is the "App connected · Last heard 37m ago" step right above it, so the
+ * sentence no longer says it again (round-3 review, 2026-11-19). Null when there is nothing to add.
+ */
+export function heartbeatSentence(heartbeat: SdkHeartbeatView | null): string | null {
   if (!heartbeat) return 'Mushi Mushi has not heard from your app yet. It does within a minute of the SDK loading in a browser or on a device.'
-  const parts = [`Your app last checked in ${heartbeat.ago ?? 'recently'}`]
-  if (heartbeat.keyLabel) parts.push(`key “${heartbeat.keyLabel}”`)
+  const parts: string[] = []
+  if (heartbeat.keyLabel) parts.push(`with key “${heartbeat.keyLabel}”`)
   if (heartbeat.origin) parts.push(`from ${heartbeat.origin}`)
-  return `${parts.join(' · ')}.`
+  return parts.length > 0 ? `Checks in ${parts.join(' ')}.` : null
 }
 
 /** Format a millisecond interval as a short human string ("1m 48s", "42s", "14 d"). */

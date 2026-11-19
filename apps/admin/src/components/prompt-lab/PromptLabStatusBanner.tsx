@@ -21,7 +21,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
     return (
       <StatusBannerShell
         tone="info"
-        title="No projects — prompt lab idle"
+        title="No projects yet: AI prompts are idle"
         subtitle="Create a project before authoring prompt candidates."
         action={
           <Btn to="/onboarding" size="sm" variant="ghost">Go to Setup</Btn>
@@ -132,7 +132,7 @@ export function PromptLabStatusBanner({ stats, onTab, onRefresh, refreshing }: P
   return (
     <StatusBannerShell
       tone="ok"
-      title={`Prompt lab healthy on ${projectLabel}`}
+      title={`AI prompts healthy on ${projectLabel}`}
       subtitle={stats.topPriorityLabel}
       action={
         onRefresh ? (

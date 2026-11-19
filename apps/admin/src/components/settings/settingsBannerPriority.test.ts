@@ -19,6 +19,7 @@ const summary = (over: Partial<KeySummary> = {}): KeySummary => ({
   expiring: 0,
   checking: 0,
   off: 0,
+  duplicate: 0,
   total: 1,
   ...over,
 })
@@ -49,6 +50,13 @@ describe('settingsBannerPriority', () => {
     expect(
       settingsBannerPriority(stats({ slackConfigured: false, sentryConfigured: false }), summary(), true),
     ).toBe('routing_optional')
+  })
+
+  it('replaced keys and second copies ask to tidy up after real problems', () => {
+    expect(settingsBannerPriority(stats(), summary({ replaced: 1 }), true)).toBe('keys_tidy')
+    expect(settingsBannerPriority(stats(), summary({ duplicate: 1 }), true)).toBe('keys_tidy')
+    expect(settingsBannerPriority(stats(), summary({ duplicate: 1, attention: 1 }), true)).toBe('keys_attention')
+    expect(settingsBannerPriority(stats(), summary({ duplicate: 1, checking: 1 }), true)).toBe('keys_unchecked')
   })
 
   it('does not treat a saved Slack setting that cannot post as ready', () => {

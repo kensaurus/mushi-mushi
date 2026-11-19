@@ -34,7 +34,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
-import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip } from '../components/ui'
+import { Card, SurfacePanel, HelpBanner, SegmentedControl, FreshnessPill, Btn, FilterChip, Input } from '../components/ui'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -75,6 +75,7 @@ import {
   pipelineCancelBody,
   resolveSkillsTab,
   skillSourcesEmptyLine,
+  skillsIdle,
   type PipelineCancelResult,
   type SkillsTab,
 } from '../lib/skillPipelines'
@@ -259,7 +260,7 @@ export function SkillPipelinesPage() {
         helpHowToUse="Pick Catalog to browse skills, Pipelines to watch runs, or Sources to sync repos. Start a handoff run from a skill card with a report ID."
       >
         {/* The snapshot strip carries the freshness; only show it here when the strip is hidden (fresh-eyes 2026-11-18: "now" twice). */}
-        {projectId && ux.hideSkillsSnapshot ? (
+        {projectId && (ux.hideSkillsSnapshot || skillsIdle(skillsStats)) ? (
           <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
         ) : null}
       </PageHeaderBar>
@@ -275,7 +276,9 @@ export function SkillPipelinesPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: Boolean(projectId) && !ux.hideSkillsSnapshot,
+            // Idle it said only "173 skills to choose from", a count the All chip
+            // already gives (round-3 review 2026-11-19): shown once work is going.
+            show: Boolean(projectId) && !ux.hideSkillsSnapshot && !skillsIdle(skillsStats),
             children: (
               <SkillsSnapshotStrip
                 stats={skillsStats}
@@ -289,7 +292,11 @@ export function SkillPipelinesPage() {
 
       {/* First: what is running on this app, and the one way to start more. */}
       {projectId ? (
-        <SkillsRunningNow projectId={projectId} onRunOnBug={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })} />
+        <SkillsRunningNow
+          projectId={projectId}
+          hideWhenEmpty={tab === 'pipelines'}
+          onRunOnBug={() => setTab('catalog', { skill: 'workflow-fix-and-ship' })}
+        />
       ) : null}
 
       {!ux.hideTabs && (
@@ -648,21 +655,22 @@ function CatalogTab({
   // no-match query with nothing to edit (console QA 22).
   const searchBar = (
     <div className="flex gap-2 items-center">
-      <input
-        type="search"
-        placeholder="Search by name, slug, or category…"
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        className="input flex-1 max-w-sm"
-        aria-label="Search skills"
-      />
+      <div className="min-w-0 max-w-sm flex-1">
+        <Input
+          type="search"
+          placeholder="Search skills"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          aria-label="Search skills"
+        />
+      </div>
       <span className="text-xs text-fg-muted" aria-live="polite">
         {searching
           ? 'Searching…'
           : !data
             ? null
             : skills.length === catalogTotal
-            ? `${catalogTotal} skills`
+            ? null
             : `${skills.length} of ${catalogTotal} skills`}
       </span>
     </div>
@@ -741,7 +749,8 @@ function CatalogTab({
                   onClick={() => setOpenOverrides((prev) => ({ ...prev, [cat]: !open }))}
                   className="flex w-full items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                 >
-                  <SkillCategoryHeader meta={meta} count={catSkills.length} />
+                  {/* The count sits on the filter chip above; the header repeated it. */}
+                  <SkillCategoryHeader meta={meta} count={allCategories.length > 1 ? null : catSkills.length} />
                   <span className="shrink-0 text-2xs font-normal text-fg-muted">{open ? 'Hide' : 'Show'}</span>
                 </button>
               </h3>
@@ -1526,23 +1535,27 @@ function SourcesTab({
         <p className="text-xs text-fg-muted">Any GitHub repo containing <code className="font-mono">skills/*/SKILL.md</code> (skills.sh-compatible).</p>
         {/* Wraps at 390: the button spilled out of the card and the page scrolled sideways. */}
         <div className="flex min-w-0 flex-wrap gap-2">
-          <input
-            type="text"
-            aria-label="GitHub repo (owner/repo)"
-            placeholder="owner/repo (e.g. kensaurus/skills)"
-            value={repoSlug}
-            onChange={(e) => setRepoSlug(e.target.value)}
-            className="input min-w-0 flex-1 basis-48 text-sm"
-          />
-          <input
-            type="text"
-            placeholder="main"
-            title="Git branch or tag (default: main)"
-            aria-label="Git branch or tag"
-            value={ref}
-            onChange={(e) => setRef(e.target.value)}
-            className="input w-24 shrink-0 text-sm"
-          />
+          {/* Bordered fields with a placeholder short enough for 390 px
+              ("kensaurus/ski" was cut, round-3 review 2026-11-19). */}
+          <div className="min-w-0 flex-1 basis-48">
+            <Input
+              type="text"
+              aria-label="GitHub repo (owner/repo)"
+              placeholder="owner/repo"
+              value={repoSlug}
+              onChange={(e) => setRepoSlug(e.target.value)}
+            />
+          </div>
+          <div className="w-24 shrink-0">
+            <Input
+              type="text"
+              placeholder="main"
+              title="Git branch or tag (default: main)"
+              aria-label="Git branch or tag"
+              value={ref}
+              onChange={(e) => setRef(e.target.value)}
+            />
+          </div>
           <Btn type="button" variant="primary" size="md" className="shrink-0 whitespace-nowrap" onClick={addSource} disabled={adding || !repoSlug}>
             {adding ? 'Adding…' : 'Add source'}
           </Btn>
@@ -1631,7 +1644,7 @@ function SkillCategoryHeader({
   count,
 }: {
   meta: ReturnType<typeof getSkillCategoryMeta>
-  count: number
+  count: number | null
 }) {
   return (
     // One line: icon, name, count, then the hint (truncated) — a compact row, not a card header.
@@ -1640,7 +1653,7 @@ function SkillCategoryHeader({
         <meta.Icon size={13} />
       </span>
       <span className="shrink-0 whitespace-nowrap text-sm font-semibold text-fg">{meta.label}</span>
-      <span className="shrink-0 font-mono text-2xs text-fg-muted tabular-nums">{count}</span>
+      {count !== null ? <span className="shrink-0 font-mono text-2xs text-fg-muted tabular-nums">{count}</span> : null}
       <span className="min-w-0 truncate text-2xs font-normal text-fg-muted" title={meta.hint}>
         {meta.hint}
       </span>

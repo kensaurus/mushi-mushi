@@ -139,7 +139,8 @@ export function ProjectNextStepsPanel({ projects }: { projects: Project[] }) {
                   <span className="min-w-0 font-medium wrap-break-word text-fg" title={project.name}>
                     {project.name}
                   </span>
-                  {status.tone === 'sample' && <Chip className="shrink-0 whitespace-nowrap">sample data</Chip>}
+                  {/* The demo app's name already says "(sample data)": no chip saying it again (round 3). */}
+                  {status.tone === 'sample' && !/\(sample data\)\s*$/i.test(project.name) && <Chip className="shrink-0 whitespace-nowrap">sample data</Chip>}
                 </span>
                 <span role="cell" className="min-w-0">
                   {status.tone === 'sample' ? (

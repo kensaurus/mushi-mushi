@@ -180,9 +180,19 @@ function CountdownCard({ card }: { card: CreditCountdown }) {
         <p className="min-w-0 text-sm font-medium text-fg [overflow-wrap:anywhere]" title={card.name}>
           {card.name}
         </p>
+        {/* Under two days it counts hours, as the worker flag above it does. */}
         <p className="shrink-0 text-right leading-none">
-          <span className={`text-2xl font-semibold tabular-nums ${DAYS_TONE[tone]}`} data-tone={tone}>{card.daysLeft}</span>
-          <span className="ml-1 text-2xs text-fg-muted">{card.daysLeft === 1 ? 'day' : 'days'}</span>
+          {card.hoursLeft != null && card.hoursLeft < 48 && card.daysLeft > 0 ? (
+            <>
+              <span className={`text-2xl font-semibold tabular-nums ${DAYS_TONE[tone]}`} data-tone={tone}>{card.hoursLeft}</span>
+              <span className="ml-1 text-2xs text-fg-muted">h</span>
+            </>
+          ) : (
+            <>
+              <span className={`text-2xl font-semibold tabular-nums ${DAYS_TONE[tone]}`} data-tone={tone}>{card.daysLeft}</span>
+              <span className="ml-1 text-2xs text-fg-muted">{card.daysLeft === 1 ? 'day' : 'days'}</span>
+            </>
+          )}
         </p>
       </div>
       <p className="mt-0.5 text-2xs text-fg-muted">
@@ -190,7 +200,7 @@ function CountdownCard({ card }: { card: CreditCountdown }) {
       </p>
       <div
         role="meter"
-        aria-label={card.usedLine}
+        aria-label={card.meterLabel ?? card.usedLine}
         aria-valuemin={0}
         aria-valuemax={card.of ?? 0}
         aria-valuenow={card.used}
@@ -199,7 +209,7 @@ function CountdownCard({ card }: { card: CreditCountdown }) {
         <div className={`h-full rounded-full ${BAR_TONE[tone]}`} style={{ width: `${pct}%` }} />
       </div>
       <p className="mt-1.5 text-xs text-fg-secondary">{card.usedLine}</p>
-      <p className={`mt-0.5 text-xs ${card.idle ? 'text-warn' : 'text-fg-muted'}`}>{card.leftLine}</p>
+      {card.leftLine ? <p className="mt-0.5 text-xs text-fg-muted">{card.leftLine}</p> : null}
     </Card>
   )
 }

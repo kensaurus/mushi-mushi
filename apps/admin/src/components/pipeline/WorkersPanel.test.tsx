@@ -39,7 +39,8 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { WorkersPanel } from './WorkersPanel'
-import { commonLaneSettings, groupRecentRuns, queueDuplicates } from './WorkerLaneCard'
+import { commonLaneSettings, groupRecentRuns, queueDuplicates, recentGroupText } from './WorkerLaneCard'
+import { isWorkersTabLink } from './WorkerFlags'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import { runPipelineAction } from '../../lib/pipeline'
 
@@ -512,5 +513,103 @@ describe('lane helpers', () => {
     const q = data.lanes[0]!.queue
     data.lanes.push({ ...data.lanes[0]!, id: 'l2', queue: [q[0]!] })
     expect(workersSummary(data, NOW).queued).toBe(q.length)
+  })
+})
+
+describe('Workers round-3 review (2026-11-19)', () => {
+  function offlineMachine(): WorkLanesData {
+    const data = fixture()
+    // Last heartbeat 35 h ago; the machine's last word still says it was working.
+    data.hosts[0] = {
+      ...data.hosts[0]!,
+      online: false,
+      lastHeartbeatAt: new Date(NOW - 35 * 3600_000).toISOString(),
+      status: {
+        state: 'working',
+        agents: 2,
+        checks: { cursor: { result: 'expected', ageSec: 1020, detail: '', account: 's***@g***.com' }, gh: { result: 'signed_in', ageSec: 60, detail: '' } },
+        slots: [{ lane: 'glot', runId: 'c9', kind: 'fix', ageSec: 180, stage: 'agent', stageSec: 30 }],
+      },
+    }
+    data.lanes[0]!.status = { state: 'working', inflight: [{ runId: 'c9', kind: 'fix', reportId: 'r9', ageSec: 180, stage: 'agent', stageSec: 30, model: null, log: [] }] }
+    return data
+  }
+  const pills = (el: Element) => [...el.querySelectorAll('[data-testid="status-pill"]')].map((p) => p.getAttribute('data-status'))
+
+  it('an offline machine shows its last word as the past: no "working", no agents in use, no running pill', async () => {
+    state.data = offlineMachine()
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const heartbeat = q('worker-host-h1-heartbeat')!.textContent!
+    expect(heartbeat).toContain('35 h ago')
+    expect(heartbeat).not.toContain('working')
+    expect(heartbeat).not.toContain('agents')
+    expect(q('worker-host-h1-slots')!.textContent).toContain('At its last heartbeat')
+    expect(q('worker-host-h1-slots')!.textContent).not.toContain('in use')
+    expect(q('worker-host-h1-slots')!.textContent).not.toContain('coding agent at work')
+    // The account check's age counts from now, not from the last heartbeat.
+    expect(q('worker-host-h1-checks')!.textContent).toContain('checked 35 h ago')
+    expect(pills(q('worker-host-h1-checks')!)).toEqual(['idle', 'idle'])
+    // The lane: its last heartbeat, never "Working on now" with a pulsing pill.
+    expect(q('worker-lane-l1-now-heading')!.textContent).toContain('At its last heartbeat')
+    const detail = q('worker-lane-l1-run-c9-detail')!
+    expect(pills(detail)).toEqual(['idle'])
+    expect(detail.textContent).not.toContain('under a minute')
+    expect(q('worker-lane-l1')!.querySelector('[data-status="running"]')).toBeNull()
+    // The machine's offline state is said on the machine; the lane's is grey, not a red cross.
+    expect(q('worker-lane-l1')!.querySelector('[data-testid="status-pill"]')!.getAttribute('data-status')).toBe('idle')
+  })
+
+  it('a quiet lane (empty queue, nothing running) is one line until opened', async () => {
+    const data = fixture()
+    data.lanes[0]!.queue = []
+    data.lanes[0]!.active = []
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const lane = q('worker-lane-l1')!
+    expect(lane.getAttribute('data-quiet')).toBe('true')
+    expect(lane.textContent).toContain('4 runs, 1 PRs')
+    expect(q('worker-lane-l1-add')).toBeNull()
+    expect(lane.textContent).not.toContain('Drain')
+    await click(q('worker-lane-l1-expand'))
+    expect(q('worker-lane-l1-add')).not.toBeNull()
+    expect(q('worker-lane-l1')!.textContent).toContain('Drain')
+  })
+
+  it('lanes are divider rows in one card, not cards in a card', async () => {
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('workers-lanes-list')!.className).toContain('divide-y')
+    expect(q('worker-lane-l1')!.className).not.toMatch(/(^|\s)border(\s|$)/)
+    expect(q('worker-lane-l1-queue')!.className).not.toContain('rounded')
+  })
+
+  it('no worker yet is one solid line with its action, not a dashed box', async () => {
+    state.data = { ...fixture(), hosts: [], lanes: [], flags: [] }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('workers-first-step')!.tagName).toBe('P')
+    expect(q('workers-first-step')!.className).not.toContain('dashed')
+    expect(q('workers-create-key')!.textContent).toBe('Create a worker key')
+  })
+
+  it('a link back to the Workers tab is dropped from a card on the Workers tab', async () => {
+    state.data = {
+      ...fixture(),
+      flags: [{ id: 'credits_idle:x', kind: 'credits_idle', severity: 'danger', hostId: 'h1', hostname: 'alienware', laneId: null, laneName: null, projectId: 'p1', title: 'Cursor credits idle for 34 h', cause: '', sinceSec: 60, actions: [{ kind: 'open_page', label: 'Open Workers', to: '/pipeline?tab=workers' }, { kind: 'open_page', label: 'Spend credits', to: '/credits' }] }],
+    }
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    const card = q('worker-flag-credits_idle')!
+    expect(card.textContent).not.toContain('Open Workers')
+    expect(card.textContent).toContain('Spend credits')
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline?scope=all&tab=workers' })).toBe(true)
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline?tab=workers#workers-lanes' })).toBe(true)
+    expect(isWorkersTabLink({ kind: 'open_page', label: 'x', to: '/pipeline' })).toBe(false)
+  })
+
+  it('groups successes by outcome and says what went right', () => {
+    const run = (id: string, outcome: string, detail: string | null) => ({ claimId: id, reportId: `r-${id}`, title: id, outcome, failureKind: null, prUrl: null, detail, claimedAt: '2026-11-17T00:00:00Z', finishedAt: null, autoRequeued: false })
+    const groups = groupRecentRuns([run('a', 'gone', 'fix already on origin/main at abc'), run('b', 'gone', 'fix already on origin/main at def'), run('c', 'pr_opened', 'pull request opened'), run('d', 'pr_opened', 'pull request opened')])
+    expect(groups.map((g) => g.runs.map((r) => r.claimId))).toEqual([['a', 'b'], ['c', 'd']])
+    expect(recentGroupText(groups[1]!.runs)).toBe('2 runs opened a PR')
+    expect(recentGroupText(groups[0]!.runs)).toBe('2 runs were already fixed')
+    expect(recentGroupText([run('x', 'failed', 'e'), run('y', 'failed', 'e')])).toBe('2 runs ended with the same error')
   })
 })

@@ -89,10 +89,10 @@ export function RepoCleanup({ projectId }: { projectId: string }) {
           <span className="text-xs" data-testid="repo-cleanup-blocker">{b.message}</span>
         </Callout>
       ))}
-      {/* How it works sits behind the info mark; the one-line race note stays visible. */}
-      <div className="flex items-start gap-1.5 text-2xs text-fg-muted">
-        <InfoHint content={howCleanupWorks(data.limits)} />
-        <p>{data.raceNote}</p>
+      {/* How it works and the race note sit behind the info mark (round 3: three lines inline). */}
+      <div className="flex items-center gap-1.5 text-2xs text-fg-muted" data-testid="repo-cleanup-how">
+        <InfoHint content={`${howCleanupWorks(data.limits)} ${data.raceNote}`} />
+        <span>How clean-up works</span>
       </div>
       {data.migrationPending && (
         <Callout tone="warn">

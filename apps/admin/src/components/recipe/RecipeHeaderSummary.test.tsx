@@ -105,3 +105,33 @@ describe('box edges', () => {
     expect(elementStateMeta('unknown').cardEdge).not.toContain('border-ok')
   })
 })
+
+// Round 3 (2026-11-19): Overall read amber "Needs attention" above a red risk-check "Error".
+describe('RecipeHeaderSummary overall with risk checks', () => {
+  const draw = (risk: { tone: 'danger' | 'warn'; label: string } | null) => {
+    const elements = [el('gates', 'drift', { label: 'Automated checks' }), el('ci', 'ok')]
+    act(() => root.render(createElement(MemoryRouter, null, createElement(RecipeHeaderSummary, { recipe: recipe(elements), elements, risk }))))
+  }
+
+  it('takes the red of a risk check over an amber box, and names Risk checks', () => {
+    draw({ tone: 'danger', label: 'Error' })
+    const mark = host.querySelector('[data-testid="recipe-overall-risk"]')!
+    expect(mark.textContent).toBe('Error')
+    expect(mark.className).toContain('text-danger-foreground')
+    expect(host.textContent).toContain('Risk checks')
+    expect(host.textContent).not.toContain('Needs attention')
+  })
+
+  it('keeps the box chip when the risk checks are no worse, and names both', () => {
+    draw({ tone: 'warn', label: 'Warning' })
+    expect(host.querySelector('[data-testid="recipe-overall-risk"]')).toBeNull()
+    expect(host.textContent).toContain('Needs attention')
+    expect(host.textContent).toContain('Risk checks, Automated checks')
+  })
+
+  it('reads the boxes alone without risk findings', () => {
+    draw(null)
+    expect(host.textContent).not.toContain('Risk checks')
+    expect(host.textContent).toContain('Automated checks')
+  })
+})

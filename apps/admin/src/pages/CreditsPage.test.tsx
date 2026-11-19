@@ -232,6 +232,10 @@ describe('CreditsPage', () => {
     expect(host.textContent).toContain('1 Cursor key has an expiry date but spend-down is off.')
     expect(host.textContent).toContain('expires Oct 28 (6 days)')
     expect(host.textContent).toContain("Runs on each app's Cursor model")
+    // 2026-11-19: off is an "Off" pill on the key row, not a fourth "Spend-down is off" sentence.
+    const keyRow = [...host.querySelectorAll('li')].find((li) => li.textContent?.includes('crsr_…c203') && li.textContent?.includes('Runs on'))!
+    expect(keyRow.querySelector('[data-testid="status-pill"]')?.textContent).toContain('Off')
+    expect(keyRow.textContent).not.toContain('Spend-down is off')
     expect(host.textContent).toContain('Rounds run on Grok 4.7 (Extra high); the last round on Claude Opus 5.5.')
     await act(async () => toggle('Fix open bugs before the credits expire').click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })
@@ -307,8 +311,9 @@ describe('expiry countdown on /credits', () => {
       expect.stringContaining('Firecrawl'),
     ])
     expect(cards[0].textContent).toContain('Expires Oct 28')
-    expect(cards[0].textContent).toContain('Spend-down is off, so nothing is spending these credits.')
+    expect(cards[0].textContent).not.toContain('Spend-down is off')
     expect(cards[1].textContent).toContain('64,175 credits left until the reset.')
+    expect(cards[1].textContent).not.toContain('credits used')
     const turnOn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Turn on spend-down')!
     await act(async () => turnOn.click())
     expect(state.calls).toContainEqual({ path: '/v1/admin/byok/keys/k1/spend-down', method: 'PATCH', body: { enabled: true } })

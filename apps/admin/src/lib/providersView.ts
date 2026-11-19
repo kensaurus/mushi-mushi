@@ -160,6 +160,23 @@ export function makeAppNamer(projects: ReadonlyArray<{ project_name: string; pro
   return (app: string) => by.get(normName(app)) ?? app
 }
 
+const SHARED_SUFFIX = /\s*\(shared (?:key|account)\)\s*$/i
+
+/** Every account is a shared one: the table says "Shared account" once instead of on each row (round 3). */
+export function allSharedAccounts(providers: ReadonlyArray<{ label: string }>): boolean {
+  return providers.length > 1 && providers.every((p) => SHARED_SUFFIX.test(p.label))
+}
+
+/**
+ * An account's name for its row: without "(shared key)" when the column says it, and whether the
+ * provider chip adds anything ("Anthropic" beside an "anthropic" chip did not; round 3).
+ */
+export function accountLabel(p: { label: string; provider: string }, sharedAll: boolean): { text: string; showProvider: boolean } {
+  const text = sharedAll ? p.label.replace(SHARED_SUFFIX, '') : p.label
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return { text, showProvider: !norm(text).includes(norm(p.provider)) }
+}
+
 /**
  * Columns the Providers table draws: Balance only once some account has a reading, Incidents
  * only once some account has one open. "not checked" on all five rows and "—" ×5 said nothing

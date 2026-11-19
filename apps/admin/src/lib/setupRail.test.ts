@@ -83,7 +83,8 @@ describe('buildSetupRail', () => {
       now: NOW,
     })
     expect(rail.steps[2]).toMatchObject({ state: 'done', detail: 'Last heard 2m ago' })
-    expect(heartbeatSentence(rail.heartbeat)).toBe('Your app last checked in 2m ago · key “web-prod” · from https://app.example.com.')
+    // The step says when; the sentence says how, without repeating "2m ago" (round-3 review).
+    expect(heartbeatSentence(rail.heartbeat)).toBe('Checks in with key “web-prod” from https://app.example.com.')
     expect(rail.next?.id).toBe('report')
   })
 

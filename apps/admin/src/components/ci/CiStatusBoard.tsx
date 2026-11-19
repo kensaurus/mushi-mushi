@@ -212,18 +212,38 @@ function FixLink({ job, fixLinks }: { job: RunningNow['job']; fixLinks?: CiFixLi
   )
 }
 
-/** One running job; pointing at it lights its app, job and runner across the page. */
-function RunningRow({ r, fixLinks }: { r: RunningNow; fixLinks?: CiFixLinks }) {
+/**
+ * The app and PR every live job shares, said once in the "Running now" header (round 3,
+ * 2026-11-19: "glot.it" and "#1081" on all five rows). Null when they differ.
+ *
+ * @internal Exported for tests.
+ */
+export function sharedLiveOrigin(jobs: ReadonlyArray<{ app: string; job: { prNumber: number | null } }>): { app: string; prNumber: number | null } | null {
+  if (jobs.length < 2) return null
+  const { app, job } = jobs[0]
+  return jobs.every((j) => j.app === app && j.job.prNumber === job.prNumber) ? { app, prNumber: job.prNumber } : null
+}
+
+/**
+ * One running job; pointing at it lights its app, job and runner across the page. The machine is
+ * its tile's business (the tile above lists the jobs on it), so a row names it only on hover.
+ */
+function RunningRow({ r, fixLinks, hideOrigin = false }: { r: RunningNow; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
   const link = useCiLink(ciJobKeys(r.job), ciJobKey(r.job.repo, r.job.jobName))
   const status: RunStatus = r.slow ? 'slow' : 'running'
   return (
-    <li {...link} className={`${link.className} grid grid-cols-1 items-center gap-x-3 gap-y-1 px-2.5 py-1.5 @xl:grid-cols-2`} data-testid={`ci-running-${r.job.id}`} data-status={status}>
+    <li
+      {...link}
+      className={`${link.className} grid grid-cols-1 items-center gap-x-3 gap-y-1 px-2.5 py-1.5 @xl:grid-cols-2`}
+      data-testid={`ci-running-${r.job.id}`}
+      data-status={status}
+      title={r.machine ? `On ${r.machine.name}` : undefined}
+    >
       <span className="flex min-w-0 flex-wrap items-center gap-1.5">
         <StatusMark status={status} label={r.slow ? 'Running slower than usual' : 'Running'} />
         <JobName name={r.job.jobName} url={r.job.htmlUrl} />
-        <span className={CHIP}>{r.app}</span>
-        {r.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{r.job.prNumber}</span>}
-        {r.machine && <span className={`${CHIP} font-normal text-fg-secondary`}>{r.machine.name}</span>}
+        {!hideOrigin && <span className={CHIP}>{r.app}</span>}
+        {!hideOrigin && r.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{r.job.prNumber}</span>}
         <FixLink job={r.job} fixLinks={fixLinks} />
       </span>
       {r.elapsedS != null && <RunBar elapsedS={r.elapsedS} usualS={r.usualS} label={runLabel(r)} />}
@@ -232,14 +252,14 @@ function RunningRow({ r, fixLinks }: { r: RunningNow; fixLinks?: CiFixLinks }) {
 }
 
 /** One job waiting for a machine, under its group's header: mark, job, app, PR, wait. */
-function WaitingRow({ w, fixLinks }: { w: WaitingNow; fixLinks?: CiFixLinks }) {
+function WaitingRow({ w, fixLinks, hideOrigin = false }: { w: WaitingNow; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
   const link = useCiLink([...ciJobKeys(w.job), ...w.needs.map(labelKey)], ciJobKey(w.job.repo, w.job.jobName))
   return (
     <li {...link} className={`${link.className} flex min-w-0 flex-wrap items-center gap-1.5 py-1.5 pr-2.5 pl-6`} data-testid={`ci-waiting-${w.job.id}`} data-status="waiting">
       <StatusMark status="waiting" label="Waiting for a machine" />
       <JobName name={w.job.jobName} url={w.job.htmlUrl} />
-      <span className={CHIP}>{w.app}</span>
-      {w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
+      {!hideOrigin && <span className={CHIP}>{w.app}</span>}
+      {!hideOrigin && w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
       <FixLink job={w.job} fixLinks={fixLinks} />
       <span className="ml-auto font-mono text-2xs font-bold text-st-waiting-ink tabular-nums">{durationWords(w.waitS)}</span>
     </li>
@@ -261,14 +281,16 @@ function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
       <span className="text-xs font-bold text-st-waiting-ink tabular-nums">
         {n} waiting for{g.needs.length === 0 ? ' a machine' : ''}
       </span>{' '}
+      {/* The label in the waiting colour: the red "missing <label>" under the machines already
+          says no idle machine has it, so a second red cross here said it twice (round 3). */}
       {g.needs.map((l) => (
         <span
           key={l}
-          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${g.mismatch ? STATUS_SOFT.failed + ' text-st-failed-ink' : STATUS_SOFT.waiting + ' text-st-waiting-ink'}`}
+          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${STATUS_SOFT.waiting} text-st-waiting-ink`}
           title={g.mismatch ? `Needs “${l}”: an idle machine is not set up for it` : `Needs a “${l}” machine`}
           data-testid="ci-waiting-label"
+          data-mismatch={g.mismatch || undefined}
         >
-          {g.mismatch && <StatusMark status="failed" size={9} />}
           {l}
         </span>
       ))}
@@ -279,7 +301,7 @@ function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
 /** Waiting jobs shown under their headers before "+N more"; every group's header always shows. */
 const WAITING_ROWS = 8
 
-function WaitingGroups({ groups, total, fixLinks }: { groups: WaitingGroup[]; total: number; fixLinks?: CiFixLinks }) {
+function WaitingGroups({ groups, total, fixLinks, hideOrigin = false }: { groups: WaitingGroup[]; total: number; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
   // The rest on request, here: the queue below no longer lists live jobs a second time.
   const [all, setAll] = useState(false)
   let left = all ? total : WAITING_ROWS
@@ -295,7 +317,7 @@ function WaitingGroups({ groups, total, fixLinks }: { groups: WaitingGroup[]; to
         <Fragment key={g.key}>
           <WaitingGroupHeader g={g} />
           {jobs.map((w) => (
-            <WaitingRow key={w.job.id} w={w} fixLinks={fixLinks} />
+            <WaitingRow key={w.job.id} w={w} fixLinks={fixLinks} hideOrigin={hideOrigin} />
           ))}
         </Fragment>
       ))}
@@ -447,7 +469,11 @@ function AppTimeRow({ a, maxWait, maxRun, column, showDelay }: { a: CiStatus['ap
   const pass = passOf(a)
   return (
     <tr {...link} className={link.className}>
-      <DataTableCell className="font-semibold">{a.app}</DataTableCell>
+      <DataTableCell className="font-semibold">
+        {a.app}
+        {/* Most apps share one delay (the header names it): the few that differ say so beside the name, not in a column of blanks (round 3). */}
+        {!column && showDelay && <StatusPill status={d.status} label={d.word} className="ml-1.5" />}
+      </DataTableCell>
       <DataTableCell>
         <WaitBar a={a} maxWait={maxWait} />
       </DataTableCell>
@@ -504,7 +530,9 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
   const common = commonDelay(status.apps)
   // A row keeps its delay pill only where it differs from the one the header names.
   const showDelayOf = (a: CiStatus['apps'][number]) => !common || (a.delay ?? 'none') !== common.delay
-  const delayColumn = !common?.every
+  // A column only when there is no shared delay to name: with one, the rows that differ say so beside their name.
+  const delayColumn = !common
+  const origin = sharedLiveOrigin([...status.running, ...status.waitingJobs])
 
   return (
     // The wrapper is the container: a container query never matches the container element itself.
@@ -541,8 +569,15 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
         <section aria-labelledby="ci-running-now" className="min-w-0">
           <h3 id="ci-running-now" className={H3}>
             Running now
-            <StatusPill status="running" label={String(status.running.length)} />
+            {/* Nothing live: the line below says so; a "0" pill beside it said it twice (round 3). */}
+            {(status.running.length > 0 || status.waitingJobs.length > 0) && <StatusPill status="running" label={String(status.running.length)} />}
             {status.waitingJobs.length > 0 && <StatusPill status="waiting" label={`${status.waitingJobs.length} waiting`} />}
+            {origin && (
+              <span className="inline-flex items-center gap-1 font-normal" data-testid="ci-running-origin">
+                <span className={CHIP}>{origin.app}</span>
+                {origin.prNumber != null && <span className={`${CHIP} font-mono`}>#{origin.prNumber}</span>}
+              </span>
+            )}
           </h3>
           {status.running.length === 0 && status.waitingJobs.length === 0 ? (
             <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
@@ -551,9 +586,9 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
           ) : (
             <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid="ci-running-now">
               {status.running.map((r) => (
-                <RunningRow key={r.job.id} r={r} fixLinks={fixLinks} />
+                <RunningRow key={r.job.id} r={r} fixLinks={fixLinks} hideOrigin={origin != null} />
               ))}
-              <WaitingGroups groups={status.waitingGroups} total={status.waitingJobs.length} fixLinks={fixLinks} />
+              <WaitingGroups groups={status.waitingGroups} total={status.waitingJobs.length} fixLinks={fixLinks} hideOrigin={origin != null} />
             </ul>
           )}
         </section>
@@ -625,7 +660,7 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
                     <span title="Half the jobs finish within this">Usual run</span>
                   </DataTableHead>
                   <DataTableHead>Pass</DataTableHead>
-                  {delayColumn && <DataTableHead>{common ? 'Differs' : 'Main delay'}</DataTableHead>}
+                  {delayColumn && <DataTableHead>Main delay</DataTableHead>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge-subtle">

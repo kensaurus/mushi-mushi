@@ -184,6 +184,8 @@ describe('ChecksPage', () => {
     const rows = [...list.querySelectorAll('li[data-testid^="checks-card-"]')]
     expect(rows.length).toBeGreaterThan(0)
     for (const row of rows) expect(['not_checked', 'not_set_up']).toContain(row.getAttribute('data-state'))
+    // Round 3: each state is named once as a group, not as a pill on every row.
+    expect(list.querySelectorAll('[data-testid="status-pill"]')).toHaveLength(0)
     // No card in the grid is idle any more; the idle ones live in the list only.
     const grid = container.querySelector('ul[aria-label="Checks, failing first"]')
     for (const li of grid?.querySelectorAll('li') ?? []) expect(['not_checked', 'not_set_up']).not.toContain(li.getAttribute('data-state'))

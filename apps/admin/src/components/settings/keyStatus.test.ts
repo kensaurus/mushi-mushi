@@ -5,6 +5,7 @@ import {
   providerStatusView,
   isReplacedKeyView,
   duplicateKeyCopies,
+  keysNeedingAction,
   summarizeKeys,
   type LegacyKey,
 } from './keyStatus'
@@ -172,8 +173,25 @@ describe('summarizeKeys', () => {
       expiring: 1,
       checking: 1,
       off: 1,
+      duplicate: 0,
       total: 6,
     })
+  })
+
+  it('counts a working second copy, so the badge matches every row that asks for something', () => {
+    // The round-3 page: a replaced Anthropic key, a used-up Cursor key and the
+    // same Firecrawl key saved twice. Three rows carry an action; the badge said 1.
+    const keys = [
+      pool({ id: 'a1' }),
+      pool({ id: 'a2', key_hint: 'sk-ant-…0002', status: 'auth_failed', test_status: 'error_auth' }),
+      pool({ id: 'c1', provider_slug: 'cursor', key_hint: 'crsr…01' }),
+      pool({ id: 'c2', provider_slug: 'cursor', key_hint: 'crsr…02', exhausted_until: iso(24 * H) }),
+      pool({ id: 'f1', provider_slug: 'firecrawl', key_hint: 'fc-e1…7270', created_at: iso(-72 * H) }),
+      pool({ id: 'f2', provider_slug: 'firecrawl', key_hint: 'fc-e1…7270', created_at: iso(-24 * H) }),
+    ]
+    const s = summarizeKeys(keys, [], NOW)
+    expect(s).toMatchObject({ attention: 1, replaced: 1, duplicate: 1, working: 3 })
+    expect(keysNeedingAction(s)).toBe(3)
   })
 
   it('a rejected key with nothing to replace it still needs attention', () => {
@@ -236,6 +254,17 @@ describe('providerStatusView', () => {
   it('the only key failing makes the provider need attention with that key’s reason', () => {
     const v = providerStatusView('anthropic', [pool({ status: 'auth_failed', test_status: 'error_auth' })], [], opts)
     expect(v).toMatchObject({ state: 'attention', detail: 'The provider rejected this key — replace it.' })
+  })
+})
+
+describe('usedHere', () => {
+  it('scopes "last used" to another app when this app made no call on the key', () => {
+    const k = pool({ last_used_at: iso(-12 * H) })
+    expect(keyStatusView(k, { pool: [k], now: NOW, usedHere: false }).detail).toBe(
+      'Verified 2h ago · last used 12h ago by another app',
+    )
+    expect(keyStatusView(k, { pool: [k], now: NOW, usedHere: true }).detail).toBe('Verified 2h ago · last used 12h ago')
+    expect(keyStatusView(k, { pool: [k], now: NOW }).detail).toBe('Verified 2h ago · last used 12h ago')
   })
 })
 

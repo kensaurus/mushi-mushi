@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAllZero, orderWeeksAscending, shortDay, stagesWithData } from './growthView'
+import { headlineAllZero, isAllZero, orderWeeksAscending, shortDay, splitEmptyWeeks, stagesWithData } from './growthView'
 
 describe('growthView (round-2 sweep 2026-11-18)', () => {
   it('puts weeks oldest → newest whatever order the server sends', () => {
@@ -17,5 +17,19 @@ describe('growthView (round-2 sweep 2026-11-18)', () => {
 
   it('formats a bare UTC day in the short form', () => {
     expect(shortDay('2026-11-18')).toBe(new Date(Date.UTC(2026, 10, 18)).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }))
+  })
+})
+
+describe('growthView (round-3 sweep 2026-11-19)', () => {
+  it('splits weeks that are 0 in every shown stage from the rest', () => {
+    const weeks = [{ week_start: 'a', visits: 3, signups: 0 }, { week_start: 'b', visits: 0, signups: 0 }]
+    const { filled, empty } = splitEmptyWeeks(weeks, ['visits', 'signups'] as const)
+    expect(filled.map((w) => w.week_start)).toEqual(['a'])
+    expect(empty.map((w) => w.week_start)).toEqual(['b'])
+  })
+
+  it('spots a week whose four headline tiles would all be 0', () => {
+    expect(headlineAllZero({ signups: 0, projects: 0, activated: 0, paid: 0 })).toBe(true)
+    expect(headlineAllZero({ signups: 1, projects: 0, activated: 0, paid: 0 })).toBe(false)
   })
 })

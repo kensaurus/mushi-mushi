@@ -13,7 +13,7 @@
  *       POST /v1/admin/projects/:id/radar/run (202; 1 per 10 min)
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn, Callout, CopyButton, Loading, Section, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
@@ -21,13 +21,25 @@ import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import type { RadarView } from '../../lib/radarTypes'
-import { groupRadarDetectors, radarBadge, radarErrorSentence, radarTitle } from './portfolioView'
+import { groupRadarDetectors, radarBadge, radarErrorSentence, radarOverall, radarTitle } from './portfolioView'
 
 type Detector = RadarView['detectors'][number]
 
-export function RadarPanel({ projectId }: { projectId: string }) {
+export function RadarPanel({
+  projectId,
+  onOverall,
+}: {
+  projectId: string
+  /** The worst check, for the page's Overall (radarOverall); null when none found anything. */
+  onOverall?: (overall: ReturnType<typeof radarOverall>) => void
+}) {
   const path = `/v1/admin/projects/${projectId}/radar`
   const { data, loading, error, reload } = usePageData<RadarView>(path)
+  const overallTone = data ? radarOverall(data.detectors)?.tone ?? null : null
+  useEffect(() => {
+    if (!onOverall) return
+    onOverall(overallTone === 'danger' ? { tone: 'danger', label: 'Error' } : overallTone === 'warn' ? { tone: 'warn', label: 'Warning' } : null)
+  }, [overallTone, onOverall])
   const [running, setRunning] = useState(false)
   const [notice, setNotice] = useState<{ tone: 'info' | 'danger'; text: string } | null>(null)
 
@@ -130,9 +142,14 @@ function DetectorList({ detectors, plainTitles = false }: { detectors: Detector[
             {d.findings.length > 0 && (
               <ul className="flex flex-col gap-0.5 border-l-2 border-edge-subtle pl-2.5" data-testid="radar-findings">
                 {d.findings.map((f) => (
-                  <li key={f.id} className="flex flex-col gap-1 text-xs sm:flex-row sm:items-start sm:justify-between">
+                  // The copy icon stays on the finding's line at 390 too: it sat alone under each one (round 3).
+                  <li key={f.id} className="flex items-start justify-between gap-2 text-xs">
                     <span className="min-w-0 text-fg">{f.message}</span>
-                    {f.fix && <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />}
+                    {f.fix && (
+                      <span className="shrink-0">
+                        <CopyButton value={`${f.message}\n\nFix: ${f.fix}`} label="Copy fix prompt" />
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -604,7 +604,7 @@ const PROJECTS: ConfigDoc[] = [
   {
     id: 'projects.create_project',
     label: 'Project name',
-    summary: 'Names a new project — the bucket every report, key, and integration is scoped to.',
+    summary: 'Names a new app: one per app or environment, the bucket every report, key, and integration is scoped to. Your API key and setup command appear on the next screen.',
     howItWorks:
       'Project names appear in the switcher, on every report, and in webhook payloads — keep them recognisable to humans. Slugs are auto-derived from the name (lowercased, hyphenated) and used in URLs / API keys, so very short or generic names produce ambiguous slugs across orgs. After you click Create, the success panel shows the Project UUID to paste into the CLI (`MUSHI_PROJECT_ID`).',
     default: { value: 'unset (you must pick a name)' },

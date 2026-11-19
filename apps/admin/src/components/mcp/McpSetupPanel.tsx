@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Card, CopyButton, SegmentedControl } from '../ui'
+import { Badge, Btn, Card, CopyButton, InfoHint, SegmentedControl } from '../ui'
 import { IconIntegrations, IconArrowRight } from '../icons'
 import { ConfigHelp } from '../ConfigHelp'
 import { detectFromPackageJson } from '../../lib/frameworkDetect'
@@ -22,6 +22,7 @@ import { McpAccountKeysList } from './McpAccountKeysList'
 import { StatusPill } from '../signal/StatusMark'
 import { buildSdkInitSnippet, buildSdkInstallSnippet } from '../../lib/mcpPageHelpers'
 import type { validateMcpJsonSyntax } from '../../lib/mcpPageHelpers'
+import { mcpKeyStep } from '../../lib/mcpSetupView'
 import { CHIP_TONE, LINK_ACCENT } from '../../lib/chipTone'
 import type { McpProjectRow, McpStats } from './types'
 import { CURSOR_CLIENT, VSCODE_CLIENT } from './mcp-clients'
@@ -34,6 +35,8 @@ export interface McpSetupPanelProps {
   projects: McpProjectRow[] | undefined
   hasReadKey: boolean
   hasWriteKey: boolean
+  /** The account key that reaches this app (null when none), so step 1 can name it. */
+  accountKeyLabel?: string | null
   step1Tone: McpQuickstartStepProps['tone']
   step2Tone: McpQuickstartStepProps['tone']
   step3Tone: McpQuickstartStepProps['tone']
@@ -74,6 +77,7 @@ export function McpSetupPanel({
   projects,
   hasReadKey,
   hasWriteKey,
+  accountKeyLabel = null,
   step1Tone,
   step2Tone,
   step3Tone,
@@ -132,10 +136,8 @@ export function McpSetupPanel({
             title="Generate an API key"
             body={
               hasReadKey ? (
-                <span>
-                  <span className="text-ok">{stats.mcpReadKeyCount} MCP key{stats.mcpReadKeyCount === 1 ? '' : 's'}</span>{' '}
-                  on <span className="font-mono text-fg-secondary">{displayName}</span>.
-                </span>
+                // Neutral text: the tick already says done (round-3 review 2026-11-19).
+                <span>{mcpKeyStep(stats.mcpReadKeyCount, accountKeyLabel).text}</span>
               ) : (
                 <span>
                   Pick <span className="text-fg">MCP read</span> to browse or{' '}
@@ -160,7 +162,7 @@ export function McpSetupPanel({
             title="Ask the agent"
             body={
               <>
-                Type <span className="font-mono text-fg-secondary">"list mushi tools"</span> — expect {stats.toolCount} tools.
+                Type <span className="font-mono text-fg-secondary">"list mushi tools"</span> and check the list comes back.
               </>
             }
           />
@@ -182,7 +184,7 @@ export function McpSetupPanel({
             </Link>{' '}
             mints a key and installs it in your editor in one click.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             {activeProjectId ? (
               <>
                 {/* One Cursor button: read + write by default, with a
@@ -207,6 +209,9 @@ export function McpSetupPanel({
                   variant="ghost"
                   size="sm"
                 />
+                <span className="self-center">
+                  <InfoHint content="Add to Cursor creates one key for this page visit and opens your editor's install dialog, with no copy-paste. Clicking again reuses that key. It is in the install link and is not shown here." />
+                </span>
               </>
             ) : (
               <Btn size="sm" variant="primary" disabled>
@@ -214,12 +219,6 @@ export function McpSetupPanel({
               </Btn>
             )}
           </div>
-          <ContainedBlock tone="muted">
-            <p className="text-2xs text-fg-muted">
-              <strong>"Add to Cursor"</strong> creates one key for this page visit and opens your IDE's install dialog — no
-              copy-paste needed. Clicking again reuses that key. It is embedded in the deeplink and is not shown here.
-            </p>
-          </ContainedBlock>
           {revealedMcpKey && activeProjectId ? (
             <RevealedKeyCard
               projectId={activeProjectId}
@@ -257,7 +256,7 @@ export function McpSetupPanel({
           >
             <span className="font-medium text-fg">Detect monorepo / workspace (optional)</span>
             <SignalChip tone="neutral" className="text-2xs" aria-hidden>
-              {detectOpen ? '▲ hide' : '▼ paste package.json'}
+              {detectOpen ? '▲ Hide' : '▼ Show'}
             </SignalChip>
           </Btn>
           {detectOpen && (
@@ -402,13 +401,22 @@ export function McpSetupPanel({
 
         <div>
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-fg-secondary">
               {snippetMode === 'cursor'
-                ? 'Stdio — drop into IDE settings (recommended — shows Mushi Mushi icon in Cursor)'
+                ? 'Paste into your editor settings (recommended)'
                 : snippetMode === 'http'
-                  ? 'Hosted HTTP — no subprocess (URL host may show Supabase icon in Cursor; use stdio for branding)'
-                  : 'Drop into your repo root'}
-            </SignalChip>
+                  ? 'Hosted HTTP, no subprocess'
+                  : 'Paste into your repo root'}
+              {snippetMode !== 'env' && (
+                <InfoHint
+                  content={
+                    snippetMode === 'cursor'
+                      ? 'Stdio runs the MCP server on your machine and shows the Mushi Mushi icon in Cursor.'
+                      : 'Cursor may show the Supabase icon for this URL; use the stdio block for the Mushi Mushi icon.'
+                  }
+                />
+              )}
+            </span>
             <CopyButton
               onCopy={() =>
                 onCopySnippet(
@@ -562,19 +570,13 @@ export function McpSetupPanel({
 
       <Card className="p-5 space-y-4" data-testid="mcp-account-key">
         <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-fg">Account key (all projects, one server)</h3>
-            <Badge className={`${CHIP_TONE.infoSubtle} text-2xs`}>org-scoped</Badge>
-          </div>
-          <ContainedBlock tone="muted" className="mt-2">
-            <p className="text-xs text-fg-muted leading-relaxed">
-              Alternative to per-project keys — one org-scoped key with no{' '}
-              <span className="font-mono text-fg-secondary">MUSHI_PROJECT_ID</span> covers all your projects.
-              The agent calls <span className="font-mono text-fg-secondary">get_account_overview</span> to
-              discover accessible projects and auto-selects when you only have one.
-              Use this when you want a single MCP server entry across your entire account.
-            </p>
-          </ContainedBlock>
+          {/* Said once: a heading, a callout and an inner card each explained the
+              account key (round-3 review 2026-11-19). */}
+          <h3 className="text-sm font-semibold text-fg">Account key</h3>
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-fg-muted">
+            <span>One server entry for every project you can open.</span>
+            <InfoHint content="An account key has no MUSHI_PROJECT_ID, so it covers all your projects instead of one. The agent calls get_account_overview to list the projects it can reach, and picks the only one when you have just one." />
+          </p>
         </div>
         <McpAccountKeyCard compact />
         <div className="space-y-2" data-testid="mcp-account-keys-section">

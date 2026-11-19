@@ -65,9 +65,12 @@ export function fixesMeter(stats: Pick<BillingStats, 'fixesSucceeded' | 'fixesAt
     value: merged.toLocaleString(),
     pct: null,
     tone: 'neutral',
+    // Same period as Diagnoses (usage_events since the period start), but from any agent: editor
+    // and local-lane fixes need no server diagnosis, so 191 merged beside 24 diagnoses is real.
+    // The detail says the scope first, so the two don't read as a contradiction (2026-11-19).
     detail:
       byServer > 0
-        ? `${byServer.toLocaleString()} started by Mushi Mushi's server agent this period`
+        ? `This period, from any agent · ${byServer.toLocaleString()} by the server agent`
         : 'Fix PRs from Mushi Mushi merged this period, from any agent',
     to: '/fixes',
   }

@@ -19,25 +19,35 @@ interface Props {
   statLabels?: Record<string, string>
   /** Jobs the page counts as overdue (the same count as its overdue card). */
   lateJobs?: number
+  /** The page's own job count from its rows (cronJobState), so "on time" matches them (round 3). */
+  jobs?: { ok: number; total: number; failed: number }
 }
 
-/** A late job (stale or warn in the stats, or overdue by the page's count) is not healthy. */
-function jobsLate(stats: HealthStats, lateJobs = 0): boolean {
+type JobCount = NonNullable<Props['jobs']>
+
+/** A late job is not healthy. With the page's rows, their count alone decides (the stats route
+ *  counts a never-run job as stale); without them, stale or warn in the stats does too. */
+function jobsLate(stats: HealthStats, lateJobs = 0, jobs?: JobCount): boolean {
+  if (jobs) return lateJobs > 0
   return stats.cronStaleCount + stats.cronWarnCount > 0 || lateJobs > 0
 }
 
+function jobsFailed(stats: HealthStats, jobs?: JobCount): number {
+  return jobs ? jobs.failed : stats.cronErrorCount
+}
+
 /** @internal Exported for tests. */
-export function healthTone(stats: HealthStats, lateJobs = 0): PageStatusTone {
-  if (stats.cronErrorCount > 0 || stats.errorRatePct > 5) return 'danger'
-  if (stats.errorRatePct > 0 || stats.fallbackRatePct > 0 || jobsLate(stats, lateJobs)) return 'warn'
+export function healthTone(stats: HealthStats, lateJobs = 0, jobs?: JobCount): PageStatusTone {
+  if (jobsFailed(stats, jobs) > 0 || stats.errorRatePct > 5) return 'danger'
+  if (stats.errorRatePct > 0 || stats.fallbackRatePct > 0 || jobsLate(stats, lateJobs, jobs)) return 'warn'
   return 'ok'
 }
 
-export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, lateJobs = 0 }: Props) {
+export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, lateJobs = 0, jobs }: Props) {
   return (
     <PageStatus
       ariaLabel="Mushi Mushi health status"
-      tone={healthTone(stats, lateJobs)}
+      tone={healthTone(stats, lateJobs, jobs)}
       sentence={
         <span className="text-fg-muted">
           Mushi Mushi’s own AI calls and jobs. Your app’s uptime and errors are on{' '}
@@ -64,8 +74,9 @@ export function HealthSnapshotStrip({ stats, statsFetchedAt, statsValidating, st
         },
         {
           label: statLabels?.cron ?? 'Background jobs on time',
-          value: `${stats.cronHealthyCount}/${stats.cronJobCount}`,
-          tone: stats.cronErrorCount > 0 ? 'danger' : jobsLate(stats, lateJobs) ? 'warn' : 'ok',
+          value: jobs ? `${jobs.ok}/${jobs.total}` : `${stats.cronHealthyCount}/${stats.cronJobCount}`,
+          // A job that never ran is neither late nor fine: "2/3" in green beside it read as all OK (round 3).
+          tone: jobsFailed(stats, jobs) > 0 ? 'danger' : jobsLate(stats, lateJobs, jobs) ? 'warn' : jobs && jobs.ok < jobs.total ? 'neutral' : 'ok',
           hint: 'Mushi Mushi’s scheduled jobs (grading, clean-up, reports) whose last run succeeded on schedule.',
           to: healthLinks.cron,
         },

@@ -82,8 +82,15 @@ function EventRow({
 }) {
   const sev = SEVERITY_META[e.severity]
   const slack = slackState(e)
-  const body = splitBodyCta(e.body, e.url)
-  const facts = [amountFact(e), ...e.facts.map((f) => `${f.label}: ${f.value}`)].filter((f): f is string => Boolean(f))
+  const rawBody = splitBodyCta(e.body, e.url)
+  // A bare "in /" (the error's location when it is the site root) says nothing (round 3).
+  const body = /^\s*in\s*\/?\s*$/i.test(rawBody.text ?? '') ? { ...rawBody, text: '' } : rawBody
+  // Under a "1 warning" heading a "Level: error" fact classified the row a second, different way
+  // (round 3): the heading's severity is the one shown; the source's level stays on hover.
+  const levelFact = e.facts.find((f) => /^level$/i.test(f.label))
+  const facts = [amountFact(e), ...e.facts.filter((f) => !(severityHeaded && f === levelFact)).map((f) => `${f.label}: ${f.value}`)].filter(
+    (f): f is string => Boolean(f),
+  )
   return (
     <div
       className={`flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2 ${reply ? 'border-l-2 border-edge-subtle pl-4' : ''} ${focused ? 'outline-2 outline-accent -outline-offset-2' : ''}`}
@@ -97,8 +104,10 @@ function EventRow({
       )}
       {/* Phone: the title takes the full row and the chips wrap under it (never one word per line). */}
       <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
-        <p className="text-sm font-bold text-pretty break-words text-fg">
-          <span aria-hidden="true">{eventEmoji(e)}</span> {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{e.title}</a> : e.title}
+        <p className="text-sm font-bold text-pretty break-words text-fg" title={severityHeaded && levelFact ? `${levelFact.label}: ${levelFact.value}` : undefined}>
+          {/* Under a severity heading the heading's mark is the one mark: no second red/amber emoji (round 3). */}
+          {!severityHeaded && <span aria-hidden="true">{eventEmoji(e)} </span>}
+          {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">{e.title}</a> : e.title}
           {copies > 1 && (
             <span className="ml-1 text-2xs font-semibold text-fg-secondary tabular-nums" title={`Sent ${copies} times`} data-testid={`ops-copies-${e.id}`}>
               ×{copies}

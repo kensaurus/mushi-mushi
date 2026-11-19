@@ -52,19 +52,19 @@ const DIGEST: DigestPreviewResponse = {
   preview: { title: 'Mushi daily digest for A', lines: ['This week, glot.it: 40 did signed_up, 9 reached activated (22.5%).'], text: '', hasContent: true },
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' }, ledger: { value: null as unknown } }))
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' }, ledger: { value: null as unknown }, spendLoading: { value: false } }))
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
     data: path?.endsWith('/spend')
-      ? mocks.ledger.value ?? LEDGER
+      ? mocks.spendLoading.value ? null : mocks.ledger.value ?? LEDGER
       : path?.endsWith('/digest')
         ? DIGEST
         : path === '/v1/org'
           ? { organizations: [{ id: ORG, slug: 'a', name: 'A', plan_id: 'free', role: mocks.role.value }] }
           : null,
-    loading: false,
+    loading: path?.endsWith('/spend') ? mocks.spendLoading.value : false,
     error: null,
     reload: mocks.reload,
   }),
@@ -72,6 +72,7 @@ vi.mock('../../lib/usePageData', () => ({
 
 import { SpendLedgerCard } from './SpendLedgerCard'
 import { DigestCard, sendNowBlocker } from './DigestCard'
+import { CI_READ_TIMEOUT_MS } from '../../lib/ciReadTimeout'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
@@ -324,5 +325,37 @@ describe('portfolio cards for a member (QA 177)', () => {
     await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     expect(container.querySelector('fieldset')?.disabled).toBe(true)
     expect(Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())).not.toContain('Send now')
+  })
+})
+
+// Round 3 (2026-11-19): Spend sat on "Adding up what each app costs…". A read that never
+// answers turns into "not checked" with one Retry after the timeout.
+describe('SpendLedgerCard read that never answers', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.spendLoading.value = true
+    mocks.reload.mockClear()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    mocks.spendLoading.value = false
+    vi.useRealTimers()
+  })
+
+  it('shows the loading line, then "Spend per app: not checked" with Retry', () => {
+    act(() => root.render(createElement(MemoryRouter, null, createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))))
+    expect(container.textContent).toContain('Adding up what each app costs…')
+    act(() => vi.advanceTimersByTime(CI_READ_TIMEOUT_MS))
+    const row = container.querySelector('[data-testid="portfolio-spend-not-checked"]')!
+    expect(row.textContent).toContain('Spend per app: not checked')
+    expect(container.textContent).not.toContain('Adding up what each app costs…')
+    act(() => Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!.click())
+    expect(mocks.reload).toHaveBeenCalled()
   })
 })

@@ -14,7 +14,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { inboxBannerRepeatsCards, isInboxStatusBannerCritical } from './InboxStatusBanner'
+import { InboxStatusBanner, inboxBannerRepeatsCards, isInboxStatusBannerCritical, reconcileInboxStats } from './InboxStatusBanner'
 import { MetaChip } from '../report-detail/ReportSurface'
 import { EMPTY_INBOX_STATS } from './types'
 
@@ -40,6 +40,27 @@ describe('inbox banner', () => {
     expect(inboxBannerRepeatsCards({ ...actions, openActions: 3 }, 3)).toBe(false)
     // Setup and no-project banners say something no card does.
     expect(inboxBannerRepeatsCards({ ...actions, topPriority: 'setup' }, 1)).toBe(false)
+  })
+
+  it('counts the cards on the page, not /inbox/stats (round-3 review, 2026-11-19)', () => {
+    const counts = { open: 3, settled: 2, total: 6 }
+    const r = reconcileInboxStats(actions, counts)
+    expect(r.openActions).toBe(3)
+    expect(r.topPriority).toBe('actions')
+    // Server said clear but cards are open: the banner shows the open work.
+    expect(reconcileInboxStats({ ...actions, topPriority: 'clear', openActions: 0 }, counts).topPriority).toBe('actions')
+    expect(reconcileInboxStats(actions, { open: 0, settled: 5, total: 6 }).topPriority).toBe('clear')
+    // Setup stays the server's call.
+    expect(reconcileInboxStats({ ...actions, topPriority: 'setup' }, counts).topPriority).toBe('setup')
+  })
+
+  it('is only the count, amber, when the cards are on screen', () => {
+    const stats = { ...actions, openActions: 3, topPriorityLabel: 'Read each diagnosis, then dispatch a fix.', topPriorityTo: '/reports' }
+    act(() => root.render(createElement(MemoryRouter, null, createElement(InboxStatusBanner, { stats, plainBanner: true, cardsShown: true, onTab: () => {} }))))
+    expect(container.textContent).toContain('3 things need you')
+    expect(container.textContent).not.toContain('Read each diagnosis')
+    expect(container.querySelector('a, button')).toBeNull()
+    expect(container.innerHTML).not.toMatch(/danger/)
   })
 })
 

@@ -271,6 +271,8 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Pr
   const [expanded, setExpanded] = useState<Record<Column, boolean>>({ waiting: false, running: false, finished: false })
   // Passes fold into one row under the problems; "Passed" in the filter shows them as cards.
   const [showPassed, setShowPassed] = useState(false)
+  // Cancelled and skipped jobs fold the same way: "Skipped" cards sat in the failures-first grid (round 3).
+  const [showSkipped, setShowSkipped] = useState(false)
   // An empty column is not drawn ("Waiting 0", "Running 0" boxes said nothing, 2026-11-18). Three
   // columns from lg up: at 768 each was about 230 px and every title cut off.
   const columns = (showLive ? (['waiting', 'running', 'finished'] as const) : (['finished'] as const)).filter((col) => queue[col].length > 0)
@@ -283,8 +285,8 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Pr
       {queue.finished.length > 0 && (
         // Above the columns, not inside Finished: a third of the board is too narrow for the four
         // outcomes, which wrapped to two rows as chips at 1280 (owner, 2026-11-14).
+        // The window is named once, in the column header; "All N" is the count (round 3: "2 hours" ×3, "42" ×2).
         <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end">
-          <span className="text-2xs text-fg-muted">Finished in the last 2 hours</span>
           <SegmentedControl<FinishedFilter>
             value={filter}
             options={FILTERS.map((f) => ({ id: f.id, label: f.label, count: finishedCounts[f.id] }))}
@@ -305,12 +307,13 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Pr
           const all = queue[col]
           const sorted = col === 'finished' ? finishedWorstFirst(all) : all
           const passed = col === 'finished' && filter === 'all' ? sorted.filter((j) => jobOutcome(j) === 'passed') : []
+          const skipped = col === 'finished' && filter === 'all' ? sorted.filter((j) => filterOf(j) === 'cancelled') : []
+          const foldPassed = passed.length > 0 && !showPassed && !passed.some((j) => j.id === focusJobId)
+          const foldSkipped = skipped.length > 0 && !showSkipped && !skipped.some((j) => j.id === focusJobId)
           const list =
             col === 'finished' && filter !== 'all'
               ? sorted.filter((j) => filterOf(j) === filter)
-              : passed.length > 0 && !showPassed && !passed.some((j) => j.id === focusJobId)
-                ? sorted.filter((j) => jobOutcome(j) !== 'passed')
-                : sorted
+              : sorted.filter((j) => !(foldPassed && jobOutcome(j) === 'passed') && !(foldSkipped && filterOf(j) === 'cancelled'))
           // The page scrolls, not the column: an inner scrollbar sat on the cards' right edge
           // (owner, 2026-11-14). A `?job=` deep link past the cap opens the column in full.
           const focusAt = focusJobId ? list.findIndex((j) => j.id === focusJobId) : -1
@@ -325,13 +328,17 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Pr
                 <h3 id={`ci-queue-${col}`} className="text-xs font-semibold text-fg">
                   {meta.title}
                 </h3>
-                <span className="rounded-full bg-surface-raised px-1.5 text-3xs font-medium tabular-nums text-fg-secondary" data-testid={`ci-queue-count-${col}`}>
+                {/* The filter's "All N" shows the finished count; here it stays for screen readers only. */}
+                <span
+                  className={`rounded-full bg-surface-raised px-1.5 text-3xs font-medium tabular-nums text-fg-secondary ${col === 'finished' ? 'sr-only' : ''}`}
+                  data-testid={`ci-queue-count-${col}`}
+                >
                   {all.length}
                 </span>
                 {all.length > 0 && <span className="min-w-0 truncate text-3xs text-fg-muted">{meta.hint}</span>}
               </div>
               {list.length === 0 ? (
-                passed.length > 0 ? null : <p className="px-0.5 text-2xs text-fg-muted">{all.length === 0 ? meta.empty : 'No finished jobs with this outcome.'}</p>
+                passed.length > 0 || skipped.length > 0 ? null : <p className="px-0.5 text-2xs text-fg-muted">{all.length === 0 ? meta.empty : 'No finished jobs with this outcome.'}</p>
               ) : (
                 <ul className={`relative ${single ? 'grid gap-1.5 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col gap-1.5'}`} data-testid={`ci-queue-list-${col}`}>
                   {/* `relative` makes this list the containing block of the cards' sr-only (absolute) labels.
@@ -365,17 +372,33 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Pr
                   Show {hidden} more
                 </Btn>
               )}
-              {passed.length > 0 && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 self-start rounded-sm px-0.5 text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                  aria-expanded={showPassed}
-                  onClick={() => setShowPassed((v) => !v)}
-                  data-testid="ci-queue-passed-toggle"
-                >
-                  <StatusPill status="passed" label={`${passed.length} passed`} />
-                  {showPassed ? 'Hide' : 'Show'}
-                </button>
+              {(passed.length > 0 || skipped.length > 0) && (
+                <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  {skipped.length > 0 && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 self-start rounded-sm px-0.5 text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                      aria-expanded={showSkipped}
+                      onClick={() => setShowSkipped((v) => !v)}
+                      data-testid="ci-queue-skipped-toggle"
+                    >
+                      <StatusPill status="cancelled" label={`${skipped.length} cancelled or skipped`} />
+                      {showSkipped ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                  {passed.length > 0 && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 self-start rounded-sm px-0.5 text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                      aria-expanded={showPassed}
+                      onClick={() => setShowPassed((v) => !v)}
+                      data-testid="ci-queue-passed-toggle"
+                    >
+                      <StatusPill status="passed" label={`${passed.length} passed`} />
+                      {showPassed ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                </span>
               )}
             </section>
           )

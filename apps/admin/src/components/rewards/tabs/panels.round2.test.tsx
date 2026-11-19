@@ -74,6 +74,11 @@ describe('Retention tab', () => {
     expect(text).toContain('Not enough data')
     expect(text).not.toContain('strong')
     expect(container.querySelector('.bg-ok-muted\\/50')).toBeNull()
+    // 0d beside "Not enough data" reads as a measured zero: the unusable median is a dash, in a flat row.
+    const stats = container.querySelector('[data-testid="rewards-retention-stats"]')!
+    expect(stats.textContent).toContain('Others median—')
+    expect(stats.textContent).toContain('Champion median8d')
+    expect(text).not.toContain('0d')
   })
 
   it('does not crash when the server has no tiers to compare', async () => {
@@ -109,15 +114,53 @@ describe('Contributors tab', () => {
   it('names its scope, marks the stale 30-day total and shows flags as warnings', async () => {
     await render(createElement(ContributorsTab, { canEdit: false }))
     const text = container.textContent ?? ''
-    expect(text).toContain('839 testers with points · all time')
+    // The title follows the selected 30-day range, not "839 · all time" (2026-11-19).
+    expect(text).toContain('Testers · last 30 days · all apps')
+    expect(text).not.toContain('839 testers with points · all time')
     expect(container.querySelector('[data-testid="rewards-contributors-scope"]')?.textContent).toContain('last 30 days')
-    expect(container.querySelectorAll('[data-testid="rewards-points-stale"]')).toHaveLength(1)
+    // Stale: "—" plus one legend, not "Not recounted" on every row.
+    const stale = container.querySelectorAll('[data-testid="rewards-points-stale"]')
+    expect(stale).toHaveLength(1)
+    expect(stale[0]!.textContent).toBe('—')
+    expect(text).not.toContain('Not recounted')
+    expect(container.querySelectorAll('[data-testid="rewards-stale-legend"]')).toHaveLength(1)
     expect(text).not.toContain('9,777')
     expect(text).toContain('2,830')
     expect(text).toContain('Tester #23ba')
-    expect(text).toContain('velocity anomaly')
+    // One small "Held" mark naming the flag in its label; one filter chip with the count; no row tint.
+    const hold = container.querySelector('[data-testid="rewards-payout-hold"]')
+    expect(hold?.getAttribute('title')).toBe('Payouts held: velocity anomaly')
+    expect(container.querySelector('[data-testid="rewards-held-filter"]')?.textContent).toContain('1 held on this page')
+    expect(container.innerHTML).not.toContain('bg-warn-muted/30')
     expect(container.innerHTML).not.toContain('text-danger-foreground')
     expect(container.innerHTML).not.toContain('bg-danger')
+  })
+})
+
+describe('Contributors held filter', () => {
+  beforeEach(() => {
+    mocks.pages['/v1/admin/rewards/leaderboard'] = {
+      data: [
+        { end_user_id: 'u1', total_points: 900, points_30d: 900, end_users: { external_user_id: 'a', display_name: 'Ana', anti_fraud_flags: [], last_seen_at: new Date().toISOString() }, reward_tiers: null },
+        { end_user_id: 'u2', total_points: 800, points_30d: 800, end_users: { external_user_id: 'b', display_name: 'Ben', anti_fraud_flags: ['velocity_anomaly'], last_seen_at: new Date().toISOString() }, reward_tiers: null },
+      ],
+      meta: { range: '30d', limit: 25, offset: 0, total: 60 },
+    }
+  })
+
+  it('keeps real ranks while filtered and clears itself on a new page', async () => {
+    await render(createElement(ContributorsTab, { canEdit: false }))
+    const chip = container.querySelector('[data-testid="rewards-held-filter"]') as HTMLButtonElement
+    await act(async () => { chip.click() })
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    const rows = [...container.querySelectorAll('tbody tr')]
+    expect(rows).toHaveLength(1)
+    // Ben is second on the page, so he keeps rank 2 under the filter.
+    expect(rows[0]!.querySelector('td')!.textContent).toBe('2')
+    const next = container.querySelector('button[aria-label="Next page"]') as HTMLButtonElement
+    await act(async () => { next.click() })
+    expect(container.querySelector('[data-testid="rewards-held-filter"]')?.getAttribute('aria-pressed')).toBe('false')
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
   })
 })
 
@@ -153,6 +196,8 @@ describe('Activity rules with no rule rows', () => {
     await render(createElement(ActivityRulesTab, { canEdit: true }))
     const text = container.textContent ?? ''
     expect(text).toContain('Built-in point values in use')
+    const rows = [...container.querySelectorAll('[data-testid="rewards-builtin-values"] tbody tr')].map((r) => r.textContent)
+    expect(rows).toEqual(['report.submitted10', 'report.triaged50', 'session_minute1'])
     expect(text).not.toContain('No custom rules yet')
     expect(text).not.toContain('4-tier')
     expect(text).not.toContain('Save rules')

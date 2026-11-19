@@ -55,7 +55,7 @@ afterEach(async () => {
 })
 
 describe('QaCoveragePage with no scheduled tests', () => {
-  it('says so once, with one "+ New story" and no snapshot of zeros', async () => {
+  it('says so once, with one "+ New test" and no snapshot of zeros', async () => {
     mocks.coverage = []
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(QaCoveragePage))))
@@ -64,9 +64,9 @@ describe('QaCoveragePage with no scheduled tests', () => {
     expect(text).toContain('No scheduled tests yet')
     expect(text).not.toContain('No scheduled tests on Shop')
     expect(text).not.toContain('Summary')
-    const newStory = [...host.querySelectorAll('button')].filter((b) => b.textContent?.includes('New story'))
+    const newStory = [...host.querySelectorAll('button')].filter((b) => b.textContent?.includes('New test'))
     expect(newStory).toHaveLength(1)
-    expect(host.querySelector('[data-testid="header"]')!.textContent).not.toContain('New story')
+    expect(host.querySelector('[data-testid="header"]')!.textContent).not.toContain('New test')
   })
 
   it('puts the CTA before a collapsed, neutral runner guide with real code (round-2 sweep)', async () => {
@@ -79,7 +79,7 @@ describe('QaCoveragePage with no scheduled tests', () => {
     expect(details).not.toBeNull()
     expect(details.open).toBe(false)
     // "+ New story" comes before the guide in document order.
-    const newStory = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('New story'))!
+    const newStory = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('New test'))!
     expect(newStory.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(text).not.toContain('No stories')
     expect(text).not.toContain('`')

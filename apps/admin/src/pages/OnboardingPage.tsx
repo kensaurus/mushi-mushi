@@ -136,8 +136,6 @@ export function OnboardingPage() {
     loading: legacyStatsLoading,
     error: legacyStatsError,
     reload: legacyReloadStats,
-    lastFetchedAt: legacyStatsFetchedAt,
-    isValidating: legacyStatsValidating,
   } = usePageData<OnboardingStats>(
     activationEnabled ? null : '/v1/admin/onboarding/stats',
   )
@@ -145,8 +143,6 @@ export function OnboardingPage() {
   const statsData = activationEnabled ? activation.stats : legacyStatsData
   const statsLoading = activationEnabled ? activation.loading : legacyStatsLoading
   const statsError = activationEnabled ? activation.error : legacyStatsError
-  const statsFetchedAt = activationEnabled ? activation.lastFetchedAt : legacyStatsFetchedAt
-  const statsValidating = activationEnabled ? activation.isValidating : legacyStatsValidating
   const reloadStats = activationEnabled ? activation.reload : legacyReloadStats
   // Required counts and "ready" follow GET /v1/admin/setup (see withSetupRequiredCounts).
   const stats = withSetupRequiredCounts(statsData ?? EMPTY_ONBOARDING_STATS, legacySetup.activeProject)
@@ -664,15 +660,20 @@ export function OnboardingPage() {
           options={tabOptions}
           ariaLabel="Setup sections"
           size="sm"
+          // Its own width, like the tabs on To-do and Settings, not a full-width bordered strip.
+          className="self-start"
         />
       ) : null}
 
-      {/* One field-guide line for the open tab: what this step is for. */}
-      <Mascot
-        {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: wiredUp })}
-        size="sm"
-        data-testid="onboarding-tab-guide"
-      />
+      {/* One field-guide line for the open tab: what this step is for. On a wired-up Overview the
+          rail's heading already says "Your app is wired up" (round-3 review, 2026-11-19). */}
+      {effectiveTab === 'overview' && wiredUp ? null : (
+        <Mascot
+          {...onboardingTabGuide(effectiveTab, { hasProject: stats.hasAnyProject, complete: wiredUp })}
+          size="sm"
+          data-testid="onboarding-tab-guide"
+        />
+      )}
 
       {effectiveTab === 'overview' && (
         <>
@@ -1030,7 +1031,10 @@ export function OnboardingPage() {
           )}
           {/* A "Go to Dashboard" button sat here over the footer's "Skip setup —
               go to dashboard": one way out, at the foot. */}
-          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus />
+          {/* The backend-reachable check only helps before the app has checked in. Once Setup gaps
+              says "All 6 checks pass", "Not checked yet · Run check" under it was a contradiction
+              (round-3 review, 2026-11-19). */}
+          <SdkInstallCard projectId={project.project_id} projectSlug={project.project_slug} apiKey={createdProject?.apiKey ?? apiKey?.key} showConnectionStatus={!wiredUp} />
         </div>
       )}
         </>
@@ -1042,7 +1046,7 @@ export function OnboardingPage() {
           problem carries its own readout (endpoints, project ref, signals):
           two "Developer details" bars stacked there. */}
       {!firstRun && effectiveTab !== 'diagnose' ? (
-        <OnboardingSetupReadout stats={stats} statsFetchedAt={statsFetchedAt} statsValidating={statsValidating} />
+        <OnboardingSetupReadout stats={stats} />
       ) : null}
 
       {!ux.hideFooterLinks ? (
@@ -1090,16 +1094,18 @@ function TimeToFirstDiagnosisCard({ hasApiKey, onOpenSdk }: { hasApiKey: boolean
   if (ms != null) {
     const underTarget = ms <= TARGET_MS
     return (
-      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : 'border border-warn/30 bg-warn/5'}`} data-testid="ttfd-measured">
+      // Once the first report has arrived this is history, and nothing can change it: a slow first
+      // install stays neutral, never an amber warning (round-3 review, 2026-11-19).
+      <Card className={`p-5 ${underTarget ? 'border border-ok/30 bg-ok/5' : ''}`} data-testid="ttfd-measured">
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <p className="text-3xs font-semibold text-fg-secondary">First report in your queue</p>
-            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-warn-foreground'}`}>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${underTarget ? 'text-ok' : 'text-fg'}`}>
               {formatDiagnosisDuration(ms)}
             </p>
           </div>
-          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-warn-foreground'}`}>
-            {underTarget ? 'Under the 2-minute target ✓' : 'Over the 2-minute target'}
+          <span className={`text-2xs font-medium ${underTarget ? 'text-ok' : 'text-fg-muted'}`}>
+            {underTarget ? 'Under the 2-minute target ✓' : 'Target: under 2 minutes'}
           </span>
         </div>
         <p className="mt-2 text-xs text-fg-muted leading-relaxed">

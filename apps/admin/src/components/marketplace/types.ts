@@ -180,7 +180,9 @@ export function marketplaceEmptyCopy(catalog: ReadonlyArray<{ slug: string; name
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
   return {
     title: `${list} ${own.length === 1 ? 'is the only plugin' : 'are the only plugins'} not covered by Integrations`,
-    description: `The other ${covered} are set up from Integrations. ${PURPOSE}`,
+    // The "Set up from Integrations:" link row under the cards names the others; the intro said
+    // it a second time (2026-11-19).
+    description: PURPOSE,
   }
 }
 

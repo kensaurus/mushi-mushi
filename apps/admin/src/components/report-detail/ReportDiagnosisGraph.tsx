@@ -54,7 +54,9 @@ function stateChip(node: DiagnosisNode): { label: string; tone: string } | null 
   if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.dangerSubtle }
   if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warnSubtle }
   if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.infoSubtle }
-  if (node.state === 'unchecked') return { label: 'not checked', tone: CHIP_TONE.neutral }
+  // Unchecked: the title says it ("Not graded yet"); a "not checked" chip
+  // under it said it twice (round-3 sweep 2026-11-19).
+  if (node.state === 'unchecked') return null
   if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.infoSubtle }
   if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.okSubtle }
   if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.okSubtle }
@@ -140,7 +142,8 @@ function NodeButton({
       className={[
         'relative z-10 flex w-full flex-col gap-1 rounded-md border border-l-4 bg-surface-raised px-2.5 py-2 text-left',
         'motion-safe:transition-[box-shadow,border-color] hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
-        LANE_STRIPE[node.lane],
+        // Nothing checked yet is grey, not the Checks lane's green.
+        node.state === 'unchecked' ? 'border-l-edge' : LANE_STRIPE[node.lane],
         selected ? 'border-brand ring-2 ring-brand/40' : onPath ? 'border-info/40' : 'border-edge-subtle',
       ].join(' ')}
     >
@@ -236,7 +239,9 @@ function NodePanel({
         <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[node.lane]}`} />
         {lane?.label}
       </div>
-      <h4 className="text-sm font-semibold leading-snug text-fg">{node.title}</h4>
+      {/* The stored field a claim was read from is an operator tooltip, not
+          page text ("from stage2_analysis", round-3 sweep 2026-11-19). */}
+      <h4 className="text-sm font-semibold leading-snug text-fg" title={showInternals ? `Read from ${node.source}` : undefined}>{node.title}</h4>
       <div className="flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
         <StateChip node={node} />
         <span className="font-mono"><VitalText text={node.detail} /></span>
@@ -258,8 +263,6 @@ function NodePanel({
           </a>
         )}
       </div>
-      {/* The stored field a claim was read from: for operator accounts. */}
-      {showInternals && <p className="font-mono text-3xs text-fg-faint">from {node.source}</p>}
     </div>
   )
 }
@@ -322,11 +325,14 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
             )}
             {DIAGNOSIS_LANES.map((lane) => {
               const laneNodes = graph.nodes.filter((n) => n.lane === lane.id)
+              // A green Checks dot over a lane where nothing was checked read
+              // as "passed" (round-3 sweep 2026-11-19).
+              const idle = laneNodes.length > 0 && laneNodes.every((n) => n.state === 'unchecked')
               return (
                 <section key={lane.id} aria-label={`${lane.label}: ${lane.hint}`} className="relative flex min-w-0 flex-col gap-2">
                   <header className="relative z-10 flex flex-col gap-0.5 border-b border-edge-subtle pb-1" title={lane.hint}>
                     <span className="flex items-center gap-1.5">
-                      <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[lane.id]}`} />
+                      <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${idle ? LANE_DOT.evidence : LANE_DOT[lane.id]}`} data-testid={`diagnosis-lane-dot-${lane.id}`} />
                       <span className="text-2xs font-semibold text-fg-secondary">{lane.label}</span>
                     </span>
                     <span className="text-3xs text-fg-faint">{lane.hint}</span>

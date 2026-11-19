@@ -30,7 +30,6 @@ import { ConfigHelp } from '../ConfigHelp'
 import { SdkVersionBadge } from '../SdkVersionBadge'
 import { SdkUpgradeCTA } from '../SdkUpgradeCTA'
 import { VerifySetupPanel } from '../VerifySetupPanel'
-import { CodeInline } from '../CodePanel'
 import { ProjectFavicon } from '../ProjectFavicon'
 import { sdkOriginFromApiKeys } from '../../lib/resolveProjectDomain'
 import { bottleneckDeepLink, bottleneckHumanHeadline } from '../../lib/pdcaBottleneck'
@@ -178,7 +177,9 @@ export function ProjectsListPanel({
       const revealed = revealedKeys[project.id]
       return (
         <Card key={project.id} className="overflow-hidden rounded-none border-0 p-0 shadow-none lg:min-h-full">
-          <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between">
+          {/* The name on its own row, the actions under it: beside the toolbar it wrapped mid-word
+              ("kensaur / .us") at 1440 (round 3). */}
+          <div className="flex flex-col gap-2 border-b border-edge-subtle bg-surface-raised px-3 py-2.5">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 {renamingId === project.id ? (
@@ -280,7 +281,7 @@ export function ProjectsListPanel({
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-1 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-1">
               {canDeleteProject(project) && renamingId !== project.id && (
                 <Btn
                   variant="ghost"
@@ -623,7 +624,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
     <div className="-mx-3 overflow-hidden border-b border-edge-subtle">
       <div
         className={`grid grid-cols-2 gap-px bg-edge-subtle sm:grid-cols-3 ${
-          hasSdk ? 'lg:grid-cols-6' : 'lg:grid-cols-5'
+          hasSdk ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
         }`}
       >
         <MetricTile
@@ -632,13 +633,7 @@ function ProjectMetricsRail({ project }: { project: Project }) {
           label="Reports"
           value={project.report_count.toLocaleString()}
         />
-        <MetricTile
-          tone="keys"
-          icon={<IconKey className="h-3.5 w-3.5" />}
-          label="Keys"
-          value={String(project.active_key_count)}
-          hint="Active API keys"
-        />
+        {/* No Keys tile: the keys are listed once, under "Keys (N)" below (round 3). */}
         <MetricTile
           tone="members"
           icon={<IconUser className="h-3.5 w-3.5" />}
@@ -1008,9 +1003,10 @@ function ProjectIdCopy({ projectId }: { projectId: string }) {
       data-testid={`project-id-chip-${projectId}`}
       aria-label={`Copy project ID: ${projectId}`}
     >
-      <CodeInline className="min-w-0 max-w-full cursor-pointer break-all group-hover:border-edge">
+      {/* Neutral, not the black ink pill: that read as a button (round 3). */}
+      <code className="min-w-0 max-w-full cursor-pointer rounded-sm border border-edge-subtle bg-surface-root px-1.5 py-0.5 font-mono text-2xs break-all text-fg group-hover:border-edge">
         <span className="tabular-nums">{projectId}</span>
-      </CodeInline>
+      </code>
       <span className="shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
         {copied
           ? <IconCheck className="h-2.5 w-2.5 text-ok" />

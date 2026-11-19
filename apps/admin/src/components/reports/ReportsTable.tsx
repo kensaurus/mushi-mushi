@@ -113,7 +113,8 @@ export function ReportsTable({
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised">
       <div className="px-3 py-1.5 border-b border-edge-subtle bg-surface-raised">
         <span className="block text-2xs text-fg-muted min-w-0 truncate">
-          {total.toLocaleString('en-US')} report{total === 1 ? '' : 's'} — click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
+          {/* The count is on the Open chip and in the pager (round-3 sweep 2026-11-19). */}
+          Click a row to triage<span className="hidden sm:inline">; scroll for status & actions</span>
         </span>
       </div>
       {/* Phone: stacked rows with status and severity inline; the table

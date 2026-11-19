@@ -15,6 +15,8 @@ interface Props {
   statLabels?: Record<string, string>
   /** Opens the disagreements list: the page's one action while any exist. */
   onSeeDisagreements?: () => void
+  /** The verdict sentence shows on Overview only; other tabs keep the numbers (2026-11-19). */
+  showSentence?: boolean
 }
 
 function scoreTone(score: number | null): PageStatusTone {
@@ -38,9 +40,14 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1)
 }
 
-/** @internal Exported for tests only. Label of the latest-week number: what it is and which week. */
+/**
+ * @internal Exported for tests only. Label of the latest-week number: what it is and which week,
+ * short enough not to wrap to three lines at 390 (2026-11-19: "Average / grade, week / of Nov 9").
+ */
 export function judgeWeekMetricLabel(stats: Pick<JudgeStats, 'latestWeekLabel'>): string {
-  return `Average grade, ${lowerFirst(judgeWeekTitle(stats.latestWeekLabel))}`
+  const week = lowerFirst(judgeWeekTitle(stats.latestWeekLabel))
+  const m = /^week of (.+)$/.exec(week)
+  return `Avg grade · ${m ? m[1] : week}`
 }
 
 /**
@@ -65,10 +72,10 @@ export function judgeStatusSentence(stats: JudgeStats): string {
   return `${when} the grader would have diagnosed ${which} differently. Read those before merging their fixes.`
 }
 
-export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements }: Props) {
+export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onSeeDisagreements, showSentence = true }: Props) {
   const w = disagreementWindow(stats)
   const disagreements: PageStatusMetric = {
-    label: w.recent ? `Disagreed, last ${stats.recentWindowDays ?? 14} days` : (statLabels?.disagree ?? 'Disagreements, all time'),
+    label: w.recent ? `Disagreed · ${stats.recentWindowDays ?? 14}d` : (statLabels?.disagree ?? 'Disagreements, all time'),
     value: w.disagreed,
     tone: w.disagreed > 0 ? 'warn' : 'neutral',
     hint: 'Grades where the second model disagreed with the diagnosis. Read these before merging their fixes.',
@@ -78,7 +85,8 @@ export function JudgeSnapshotStrip({ stats, statsFetchedAt, statsValidating, sta
     <PageStatus
       ariaLabel="Triage grading status"
       tone={scoreTone(stats.latestWeekScore)}
-      sentence={judgeStatusSentence(stats)}
+      marked={!showSentence}
+      sentence={showSentence ? judgeStatusSentence(stats) : null}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       action={
         onSeeDisagreements && w.disagreed > 0 ? (

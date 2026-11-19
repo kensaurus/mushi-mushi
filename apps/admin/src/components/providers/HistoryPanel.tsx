@@ -11,17 +11,16 @@ import type { HistoryRow } from '../../lib/providersView'
 import { ageLabel, groupHistory, plainChanges } from '../../lib/providersView'
 import { Chip } from '../signal/Chip'
 
-const OP_TONE: Record<HistoryRow['op'], string> = {
-  INSERT: 'border-ok/50 bg-ok-muted text-ok-foreground',
-  UPDATE: 'border-info/50 bg-info-muted text-info-foreground',
-  DELETE: 'border-danger/50 bg-danger-muted text-danger-foreground',
-}
+
 const OP_WORD: Record<HistoryRow['op'], string> = { INSERT: 'added', UPDATE: 'changed', DELETE: 'deleted' }
 
-/** Added and deleted carry a badge; a change is the default and says itself in its words (2026-11-18: "CHANGED" ×6). */
+/**
+ * Added and deleted say so as a plain verb; a change is the default and says itself in its words
+ * (2026-11-18: "CHANGED" ×6; round 3: one uppercase "ADDED" pill on one row read as an alarm).
+ */
 function OpBadge({ op }: { op: HistoryRow['op'] }) {
   if (op === 'UPDATE') return null
-  return <span className={`rounded-xs border px-1 text-3xs leading-4 font-bold whitespace-nowrap uppercase ${OP_TONE[op]}`}>{OP_WORD[op]}</span>
+  return <span className="whitespace-nowrap text-fg-secondary" data-op={op}>{OP_WORD[op]}</span>
 }
 
 function When({ at, now }: { at: string; now: number }) {

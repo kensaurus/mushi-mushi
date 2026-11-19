@@ -102,8 +102,12 @@ export function PipelinePage() {
   const path = scope === 'project' && projectId ? `/v1/admin/pipeline?projectId=${encodeURIComponent(projectId)}` : '/v1/admin/pipeline'
   const page = usePageData<PipelineData>(tab === 'pipeline' ? path : null, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const { data, reload } = page
-  // Your own worker lanes, for "Send to my local worker" on report groups.
-  const lanesPage = usePageData<WorkLanesData>(tab === 'pipeline' ? LANES_PATH : null, { scope: 'enumeration' })
+  // Your own worker lanes, for "Send to my local worker" on report groups, and the Workers tab's
+  // problem count on both tabs. The same path the Workers tab body reads (This app: that app's),
+  // so the tab's count and the body come from one response: the tab said "Workers (2 problems)"
+  // over an empty This-app body (round-3 review, 2026-11-19).
+  const lanesPath = scope === 'project' && projectId ? `${LANES_PATH}?projectId=${encodeURIComponent(projectId)}` : LANES_PATH
+  const lanesPage = usePageData<WorkLanesData>(lanesPath, { scope: scope === 'project' ? 'project' : 'enumeration' })
   const workerLanes = useMemo(() => {
     const d = lanesPage.data
     if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
@@ -160,6 +164,7 @@ export function PipelinePage() {
   const pace = useMemo(() => (data ? pipelinePaceFigures(data.stages, data.dispatchers) : null), [data])
   // How long the stuck work has waited; "Need you" adds up to the status line's count.
   const ages = useMemo(() => needYouAges(stuckAges(stages, now)), [stages, now])
+  const stuckGroupCount = useMemo(() => stages.reduce((n, s) => n + s.groups.filter((g) => g.tone === 'stuck').length, 0), [stages])
   // "Nothing is stuck" was false while no agent could open a fix (audit
   // 2026-11-11: next to "Who opens fixes: nobody" and "credits idle").
   const agentCredits = useAgentCredits()
@@ -180,7 +185,7 @@ export function PipelinePage() {
   const statusMetrics = [
     { label: 'Need you', value: needYou, tone: counted.failing > 0 ? 'danger' : needYou > 0 ? 'warn' : 'neutral', hint: `${COUNT_HINTS.stuck} Includes bugs triaged over 3 days ago with no fix started, as Home counts them.` },
     ...(nobodyApps > 0
-      ? [{ label: 'Apps no one fixes, 24 h', value: nobodyApps, tone: 'warn', hint: 'Apps where neither the cloud agent nor your local worker started a fix in the last 24 hours, while bugs wait for one.' }]
+      ? [{ label: 'Apps no one fixes, 24 h', value: nobodyApps, tone: 'warn', to: '#pipeline-openers', hint: 'Apps where neither the cloud agent nor your local worker started a fix in the last 24 hours, while bugs wait for one. Who opens fixes, below, has each app.' }]
       : []),
     ...(rejectedTotal > 0
       ? [{ label: 'Rejected at intake, 7 d', value: rejectedTotal, tone: 'danger', hint: 'Reports your app sent that the API refused (HTTP 400): they never reached the queue.' }]
@@ -328,7 +333,8 @@ export function PipelinePage() {
             tone={counted.failing > 0 || nothingOpens || rejectedTotal > 0 ? 'danger' : needYou > 0 || waitingForFix > 0 ? 'warn' : 'ok'}
             sentence={
               top
-                ? <>Start with the biggest: <span className="font-medium">{top.group.label}</span>.</>
+                ? // "Start here", not "the biggest": failed work leads, so a 42-report group led a 773-report backlog (round-3 review, 2026-11-19).
+                  <>Start here: <span className="font-medium">{top.group.label}</span>.</>
                 : nothingOpens
                   ? agentCredits.state?.out
                     ? `${agentCreditsTitle(agentCredits.state)}, so nothing opens fixes. Nothing already open is stuck.`
@@ -370,12 +376,15 @@ export function PipelinePage() {
             }
             data-testid="pipeline-status"
           />
-          {pace && <PaceRow pace={pace} />}
+          {/* Who opens fixes is said once: while the "Apps no one fixes" tile shows, the pace row,
+              the Fix PR box and the card below don't repeat it (round-3 review, 2026-11-19). */}
+          {pace && <PaceRow pace={pace} openersInTile={nobodyApps > 0} />}
 
           <section className="space-y-2" aria-label="Stages">
-            <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
-            <FunnelLegend />
-            <StuckAgeBar ages={ages} />
+            <PipelineFunnel stages={stages} openers={nobodyApps > 0 ? null : openers} selected={stage} onSelect={setStage} now={now} />
+            <FunnelLegend stages={stages} selected={stage} />
+            {/* One stuck group already shows its count and oldest age: the bar would say the same number again. */}
+            {stuckGroupCount > 1 && <StuckAgeBar ages={ages} />}
           </section>
 
           {!data.ciReadable && (
@@ -385,7 +394,8 @@ export function PipelinePage() {
           )}
 
           <Section
-            title={stage ? `${stages.find((s) => s.id === stage)?.label ?? 'Stage'}: every group` : stuckTotal > 0 ? `Stuck: ${stuckTotal}` : 'Stuck'}
+            // The count is the status line's "Need you"; the heading does not say it a third time (round-3 review, 2026-11-19).
+            title={stage ? `${stages.find((s) => s.id === stage)?.label ?? 'Stage'}: every group` : 'Stuck groups'}
             id="pipeline-stuck"
             icon={<IconAlertTriangle />}
             action={
@@ -453,7 +463,8 @@ export function PipelinePage() {
                 Who opens fixes
                 {openers && (
                   <span className="font-normal text-fg-muted">
-                    server {openers.server} · local {openers.local} · nobody {openers.nobody}
+                    server {openers.server} · local {openers.local}
+                    {nobodyApps > 0 ? '' : ` · nobody ${openers.nobody}`}
                     {data.dispatchers.some((d) => d.problem) ? ' · auto-fix cannot dispatch on some apps' : ''}
                   </span>
                 )}
@@ -560,15 +571,20 @@ function PaceFigure({ label, value, note, testId }: { label: string; value: stri
   )
 }
 
-/** The pace as a short row of labelled figures, not a paragraph (2026-11-18). */
-function PaceRow({ pace }: { pace: PaceFigures }) {
-  const quiet = pace.quietApps
+/**
+ * The pace as a short row of labelled figures, not a paragraph (2026-11-18). `openersInTile`: the
+ * status's "Apps no one fixes" tile counts the apps with no fix, so the row drops its "none for …"
+ * list and a "Fixes started 0" that only restates it (round-3 review, 2026-11-19).
+ */
+function PaceRow({ pace, openersInTile = false }: { pace: PaceFigures; openersInTile?: boolean }) {
+  const quiet = openersInTile ? [] : pace.quietApps
+  const started = pace.started24h != null && !(openersInTile && pace.started24h === 0)
   return (
     <p className="-mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1 text-xs" data-testid="pipeline-pace">
       <span className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Pace</span>
       <PaceFigure label="Merged, 7 d" value={pace.merged7} note={pace.rate} testId="pipeline-pace-merged" />
       {pace.clears && <PaceFigure label="Backlog clears in" value={`~${pace.clears}`} testId="pipeline-pace-clears" />}
-      {pace.started24h != null && <PaceFigure label="Fixes started, 24 h" value={pace.started24h} note={pace.startedBy} testId="pipeline-pace-started" />}
+      {started && <PaceFigure label="Fixes started, 24 h" value={pace.started24h!} note={pace.startedBy} testId="pipeline-pace-started" />}
       {quiet.length > 0 && (
         <span className="text-fg-muted" title={quiet.join(', ')} data-testid="pipeline-pace-quiet">
           none for {quiet.length > 3 ? `${quiet.slice(0, 3).join(', ')} +${quiet.length - 3}` : quiet.join(', ')}

@@ -89,3 +89,14 @@ export function sentRowTitle(n: Pick<ReporterNotification, 'message' | 'notifica
   if (msg) return msg
   return TYPE_TITLE[n.notification_type] ?? n.notification_type.replace(/_/g, ' ')
 }
+
+/**
+ * Who a sent update went to, as a short label: a hashed key shows its first 8 characters; a
+ * named source ("cloudwatch-alarm-…") shows its first word whole, so it never reads as a word cut
+ * mid-way ("reporter cloudwat", 2026-11-19).
+ */
+export function reporterLabel(tokenHash: string): string {
+  const key = tokenHash.replace(/^rk\d+_/, '')
+  if (/^[0-9a-f]+$/i.test(key)) return key.slice(0, 8)
+  return key.split(/[-_:.\s]/)[0] || key.slice(0, 8)
+}

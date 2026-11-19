@@ -89,7 +89,7 @@ const BOUNTY_ACTIONS = [
 function statusBadge(visibility: PublishedApp['visibility']) {
   if (visibility === 'public')  return <Badge tone="okSubtle">Live</Badge>
   if (visibility === 'paused')  return <Badge tone="warnSubtle">Paused</Badge>
-  return <Badge className="bg-surface-overlay text-fg-muted">Not published</Badge>
+  return <Badge className="bg-surface-overlay text-fg-muted whitespace-nowrap">Not published</Badge>
 }
 
 // ─── Main component ──────────────────────────────────────────
@@ -393,10 +393,12 @@ export function PublishingTab({ paused = false }: { paused?: boolean }) {
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold">Marketplace listing</h2>
+      {/* Phone: title, chip and text take the full width and the buttons get their own row
+          (2026-11-19: "Marketplace / listing" squeezed into a narrow column, Publish clipped). */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-semibold whitespace-nowrap">Marketplace listing</h2>
             {/* Always said, so the tab never implies a live listing (2026-11-18). */}
             {statusBadge(visibility)}
           </div>
@@ -414,7 +416,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean }) {
             </a>
           )}
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2 sm:shrink-0">
           <Link
             to="/rewards/tester-review"
             className="inline-flex items-center rounded-md border border-edge-subtle px-3 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:border-fg-muted transition-opacity"
@@ -437,7 +439,7 @@ export function PublishingTab({ paused = false }: { paused?: boolean }) {
       </div>
       {!isLive && publishBlocked && (
         // Why Publish is grey, said once beside it (2026-11-18: disabled with no reason).
-        <p id="rewards-publish-blocked" className="-mt-4 text-right text-2xs text-fg-muted" data-testid="rewards-publish-blocked">
+        <p id="rewards-publish-blocked" className="-mt-4 text-2xs text-fg-muted sm:text-right" data-testid="rewards-publish-blocked">
           {publishBlocked}
         </p>
       )}

@@ -4,7 +4,7 @@
  * open-bug count was painted amber like a warning.
  */
 import { describe, expect, it } from 'vitest'
-import { HEALTH_BADGE_TONE, healthBadgeLabel, healthToneFor } from './overviewView'
+import { HEALTH_BADGE_TONE, healthBadgeLabel, healthToneFor, splitBySessions } from './overviewView'
 
 const RECENT = new Date().toISOString()
 const card = (over: Partial<Parameters<typeof healthToneFor>[0]> = {}) => ({
@@ -34,5 +34,14 @@ describe('Overview card states', () => {
     expect(healthBadgeLabel(busy, 'warn')).toBe('49 open')
     expect(HEALTH_BADGE_TONE.warn).toBe('neutral')
     expect(HEALTH_BADGE_TONE.critical).toBe('dangerSubtle')
+  })
+})
+
+describe('splitBySessions (round-3 sweep)', () => {
+  it('moves apps with no sessions this week to one list and keeps the order', () => {
+    const cards = [card({ sessions_7d: 0, critical_reports: 2 }), card({ sessions_7d: 5 }), card({ sessions_7d: 0 })]
+    const { active, idle } = splitBySessions(cards)
+    expect(active).toEqual([cards[1]])
+    expect(idle).toEqual([cards[0], cards[2]])
   })
 })

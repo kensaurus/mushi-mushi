@@ -285,6 +285,17 @@ export function cardStatusLines(state: ElementState, lastCheckedAt: string | nul
 }
 
 /**
+ * A card's reason when its problems are counted (round 3, 2026-11-19): "2 problems to fix: Mushi
+ * Mushi setup check (2). They and their fixes are under Risk checks…" sat on the card, under the
+ * header's "Next step … 2 problems to fix" and over the card's own "2 problems to fix". The header
+ * says it in words and the card shows a mark and the number, so a reason that only counts the
+ * problems is dropped from the card (the side panel keeps it).
+ */
+export function cardReason(reason: string, findings: number): string {
+  return findings > 0 && /^\s*[\d,]+ problems? to fix\b/i.test(reason) ? '' : reason
+}
+
+/**
  * The server's reason without a leading restatement of the chip ("Not set up. Add deploy
  * targets…" beside a "Not set up" chip reads the state twice).
  */

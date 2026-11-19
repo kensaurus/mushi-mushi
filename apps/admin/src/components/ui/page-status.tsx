@@ -51,7 +51,8 @@ export function toMetrics(list: readonly PageStatusMetric[]): PageStatusMetrics 
 
 export interface PageStatusProps {
   /** How things stand, in one plain sentence. */
-  sentence: ReactNode
+  /** Null on a tab that only shows its tiles (the page's first tab already said how things stand). */
+  sentence: ReactNode | null
   /** The sentence is already a row of status marks (▲ 1 failed): skip the tone dot so the
    *  strip does not read "● ▲ 1 failed" (round-2 review 2026-11-18). */
   marked?: boolean
@@ -115,10 +116,12 @@ export function PageStatus({
       className="w-full min-w-0 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <p className="flex min-w-0 flex-1 basis-64 items-start gap-2 text-sm leading-snug text-fg">
-          {marked ? null : <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[tone]}`} />}
-          <span className="min-w-0 text-pretty">{sentence}</span>
-        </p>
+        {sentence == null ? null : (
+          <p className="flex min-w-0 flex-1 basis-64 items-start gap-2 text-sm leading-snug text-fg">
+            {marked ? null : <span aria-hidden="true" className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[tone]}`} />}
+            <span className="min-w-0 text-pretty">{sentence}</span>
+          </p>
+        )}
         {freshness || action || handedAction ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {freshness ? <FreshnessPill {...freshness} /> : null}

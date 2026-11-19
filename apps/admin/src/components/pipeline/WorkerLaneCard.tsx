@@ -14,7 +14,7 @@
 import { useState } from 'react'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { Link } from 'react-router-dom'
-import { Badge, Btn, Card, Input, SelectField, Toggle } from '../ui'
+import { Badge, Btn, Input, SelectField, Toggle } from '../ui'
 import { IconChevronDown, IconChevronUp, IconClose, IconExternalLink } from '../icons'
 import { StatusPill } from '../signal/StatusMark'
 import { VitalText } from '../signal/VitalText'
@@ -95,18 +95,38 @@ export function queueDuplicates(queue: ReadonlyArray<{ reportId: string; title: 
 
 type RecentRun = WorkerLane['recent'][number]
 
+/** Outcomes that are a success: their runs group by the outcome alone, whatever each detail says. */
+const SUCCESS_OUTCOMES = new Set(['pr_opened', 'pushed', 'filed', 'gone'])
+
+/** "6 runs opened a PR": a success group says what went right, never "the same error" (round-3 review, 2026-11-19). */
+const SUCCESS_GROUP_TEXT: Record<string, string> = {
+  pr_opened: 'opened a PR',
+  pushed: 'merged the base in',
+  filed: 'filed findings',
+  gone: 'were already fixed',
+}
+
 /**
  * Last runs with the same outcome and the same error, grouped: ten "Failed · machine: git fetch
- * failed: bad object …" rows were one problem (round-2 review, 2026-11-18). A run without a
- * detail stands alone. Order is the newest run of each group. @internal Exported for tests.
+ * failed: bad object …" rows were one problem (round-2 review, 2026-11-18). Successes group by
+ * outcome alone: four "Already fixed" rows differed only in the commit their detail named
+ * (round-3 review, 2026-11-19). Any other run without a detail stands alone. Order is the newest
+ * run of each group. @internal Exported for tests.
  */
 export function groupRecentRuns(recent: readonly RecentRun[]): Array<{ key: string; runs: RecentRun[] }> {
   const groups = new Map<string, RecentRun[]>()
   for (const r of recent) {
-    const key = r.detail ? `${r.outcome ?? ''}|${r.failureKind ?? ''}|${r.detail}` : `run:${r.claimId}`
+    const key = r.outcome && SUCCESS_OUTCOMES.has(r.outcome) ? `ok:${r.outcome}` : r.detail ? `${r.outcome ?? ''}|${r.failureKind ?? ''}|${r.detail}` : `run:${r.claimId}`
     groups.set(key, [...(groups.get(key) ?? []), r])
   }
   return [...groups].map(([key, runs]) => ({ key, runs }))
+}
+
+/** What a group of runs says in its summary: "6 runs opened a PR", or "10 runs ended with the same error". @internal Exported for tests. */
+export function recentGroupText(runs: readonly Pick<RecentRun, 'outcome'>[]): string {
+  const outcome = runs[0]?.outcome ?? ''
+  const ok = SUCCESS_GROUP_TEXT[outcome]
+  return ok ? `${runs.length} runs ${ok}` : `${runs.length} runs ended with the same error`
 }
 
 /** Queued reports shown before "Show all": 117 rows were 4,000 px of one lane (2026-11-18). */
@@ -131,16 +151,21 @@ interface Props {
 /** A run that holds an agent space this long is a problem (the server's RUN_STUCK_MS). */
 const STUCK_SEC = 45 * 60
 
-/** Where a run is and what it last said; nothing from a CLI that does not report it. */
-function RunDetail({ run, testId }: { run: RunTelemetry | undefined; testId: string }) {
+/**
+ * Where a run is and what it last said; nothing from a CLI that does not report it. `stale`: the
+ * machine is offline, so this is its last word, drawn grey with no running pulse or live
+ * durations ("coding agent at work for under a minute" 35 h after the last heartbeat, round-3
+ * review 2026-11-19).
+ */
+function RunDetail({ run, testId, stale = false }: { run: RunTelemetry | undefined; testId: string; stale?: boolean }) {
   if (!run) return null
-  const stuck = run.ageSec >= STUCK_SEC
+  const stuck = !stale && run.ageSec >= STUCK_SEC
   return (
     <div className="ml-2 space-y-0.5" data-testid={`${testId}-detail`}>
       <p className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted">
-        <StatusPill status={stuck ? 'failed' : 'running'} label={STAGE_LABEL[run.stage] ?? run.stage} title={stuck ? 'Stuck: this run has held its agent space too long' : undefined} />
+        <StatusPill status={stale ? 'idle' : stuck ? 'failed' : 'running'} label={STAGE_LABEL[run.stage] ?? run.stage} title={stuck ? 'Stuck: this run has held its agent space too long' : undefined} />
         <span>
-          for {durationLabel(run.stageSec)} · run {durationLabel(run.ageSec)}
+          {stale ? 'last reported' : `for ${durationLabel(run.stageSec)} · run ${durationLabel(run.ageSec)}`}
           {run.model ? ` · ${run.model}` : ''}
         </span>
       </p>
@@ -228,6 +253,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
   const stopped = !!c.stop_at && Date.parse(c.stop_at) <= now
   const state = offline ? 'offline' : c.paused ? 'paused' : stopped ? 'stopped' : c.drain ? 'draining' : String(lane.status.state ?? 'starting')
   const [showAllQueue, setShowAllQueue] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const dupes = queueDuplicates(lane.queue)
   const dupeCount = dupes.filter((d) => d != null).length
   const queueShown = showAllQueue ? lane.queue : lane.queue.slice(0, QUEUE_SHOWN)
@@ -241,6 +267,14 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
   const testId = `worker-lane-${lane.id}`
   const runs = laneRuns(lane)
   const followups = runs.filter((r) => r.kind === 'followup')
+  // A lane with nothing queued, nothing running and nothing to warn about is one line until
+  // opened: 15 idle lanes each repeated the toggles, an empty queue and an "Add reports" field
+  // (round-3 review, 2026-11-19).
+  const quiet = lane.queue.length === 0 && lane.active.length === 0 && followups.length === 0 && !stopped
+  const open = !quiet || expanded
+  // The machine's offline state is said once, on the machine and its problem card: a lane on it
+  // reads a grey "offline", not 20 red ✕ chips.
+  const pillStatus = offline ? 'idle' : laneRunStatus(state)
 
   const save = async (key: string, patch: LaneSettings) => {
     setBusy(key)
@@ -264,17 +298,30 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
   const takesQueue = c.mode === 'fix' || c.mode === 'followups' || c.mode === 'skill'
 
   return (
-    <li data-testid={testId}>
-      <Card className="space-y-3 p-3">
+    <li data-testid={testId} data-quiet={quiet ? 'true' : undefined} className={open ? 'space-y-3 py-3' : 'py-1.5'}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        {quiet && (
+          <button
+            type="button"
+            className="text-2xs text-fg-secondary hover:text-fg"
+            aria-expanded={expanded}
+            aria-label={expanded ? `Fold ${lane.name}` : `Open ${lane.name}`}
+            onClick={() => setExpanded((v) => !v)}
+            data-testid={`${testId}-expand`}
+          >
+            <span className={`inline-block transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true">▸</span>
+          </button>
+        )}
         <span className="font-mono text-xs font-semibold text-fg">{lane.name}</span>
         {showApp && <Badge tone="neutral">{lane.projectName}</Badge>}
-        <StatusPill status={laneRunStatus(state)} label={state} />
+        <StatusPill status={pillStatus} label={state} />
         <span className="text-2xs text-fg-muted">
-          on {host?.hostname ?? 'a machine'}
-          {lane.repo ? ` (${lane.repo})` : ''} · {laneCountsLine(lane)}
+          {open && `on ${host?.hostname ?? 'a machine'}${lane.repo ? ` (${lane.repo})` : ''} · `}
+          {laneCountsLine(lane)}
         </span>
       </div>
+      {open && (
+      <>
 
       {stopped && (
         <p className="text-2xs font-medium text-warn-foreground" data-testid={`${testId}-stopped`}>
@@ -414,7 +461,9 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
 
       {(lane.active.length > 0 || followups.length > 0) && (
         <div className="space-y-1">
-          <p className="text-2xs font-medium text-fg-secondary">Working on now</p>
+          <p className="text-2xs font-medium text-fg-secondary" data-testid={`${testId}-now-heading`}>
+            {offline ? `At its last heartbeat, ${sinceLabel(host?.lastHeartbeatAt ?? null, now)}` : 'Working on now'}
+          </p>
           <ul className="space-y-1.5 text-xs">
             {lane.active.map((a) => (
               <li key={a.claimId} data-testid={`${testId}-run-${a.claimId}`}>
@@ -423,13 +472,13 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
                   <span className="text-2xs text-fg-muted">since {sinceLabel(a.since, now)}</span>
                   <StopRun claimId={a.claimId} onChanged={onChanged} testId={`${testId}-run-${a.claimId}`} />
                 </div>
-                <RunDetail run={runs.find((r) => r.runId === a.claimId)} testId={`${testId}-run-${a.claimId}`} />
+                <RunDetail run={runs.find((r) => r.runId === a.claimId)} testId={`${testId}-run-${a.claimId}`} stale={offline} />
               </li>
             ))}
             {followups.map((r) => (
               <li key={r.runId} data-testid={`${testId}-run-${r.runId}`}>
                 <span className="text-fg">A review follow-up</span>
-                <RunDetail run={r} testId={`${testId}-run-${r.runId}`} />
+                <RunDetail run={r} testId={`${testId}-run-${r.runId}`} stale={offline} />
               </li>
             ))}
           </ul>
@@ -451,7 +500,7 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
               : 'Empty: the lane takes the worst open reports first. Send reports here from a report or a pipeline group.'}
           </p>
         ) : (
-          <ol className="divide-y divide-edge-subtle rounded-sm border border-edge-subtle" data-testid={`${testId}-queue`}>
+          <ol className="divide-y divide-edge-subtle border-y border-edge-subtle" data-testid={`${testId}-queue`}>
             {queueShown.map((q, i) => (
               <li key={q.reportId} className="flex items-center gap-2 px-2 py-1" data-testid={`${testId}-queue-${q.reportId}`}>
                 <span className="w-6 shrink-0 text-right text-2xs tabular-nums text-fg-faint">{i + 1}</span>
@@ -546,11 +595,16 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
                       <td className="max-w-xs py-1 pr-2 align-top">
                         {runs.length > 1 ? (
                           <details className="group">
-                            <summary className="cursor-pointer list-none truncate text-fg hover:underline">{runs.length} runs ended with the same error</summary>
+                            <summary className="cursor-pointer list-none truncate text-fg hover:underline" data-testid={`${testId}-recent-group-text`}>{recentGroupText(runs)}</summary>
                             <ul className="mt-0.5 space-y-0.5">
                               {runs.map((x) => (
-                                <li key={x.claimId}>
-                                  <RunTitle reportId={x.reportId} title={x.title} className="block truncate text-fg-secondary" />
+                                <li key={x.claimId} className="flex items-baseline gap-1.5">
+                                  <RunTitle reportId={x.reportId} title={x.title} className="min-w-0 truncate text-fg-secondary" />
+                                  {x.prUrl && (
+                                    <a href={x.prUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-0.5 text-brand hover:underline">
+                                      PR <IconExternalLink size={10} />
+                                    </a>
+                                  )}
                                 </li>
                               ))}
                             </ul>
@@ -558,14 +612,15 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
                         ) : (
                           <RunTitle reportId={r.reportId} title={r.title} className="block truncate text-fg" />
                         )}
-                        {r.detail && (
+                        {/* A group's detail only when every run says the same ("pull request opened" under "6 runs opened a PR" restated it). */}
+                        {r.detail && (runs.length === 1 || (!SUCCESS_GROUP_TEXT[r.outcome ?? ''] && runs.every((x) => x.detail === r.detail))) && (
                           <span className="block truncate text-fg-muted" title={r.detail}>
                             <VitalText text={r.detail} />
                           </span>
                         )}
                       </td>
                       <td className="py-1 pr-2 align-top">
-                        {r.prUrl && (
+                        {runs.length === 1 && r.prUrl && (
                           <a href={r.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-brand hover:underline">
                             PR <IconExternalLink size={10} />
                           </a>
@@ -582,7 +637,8 @@ export function WorkerLaneCard({ lane, host, now, showApp, common = null, onPatc
           </div>
         </div>
       )}
-      </Card>
+      </>
+      )}
     </li>
   )
 }

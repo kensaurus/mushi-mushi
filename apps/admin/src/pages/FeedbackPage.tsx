@@ -357,7 +357,7 @@ export function FeedbackPage() {
       {nothingSent && (
         <EmptyState
           title="Nothing sent yet"
-          description="Send the Mushi Mushi team a bug or an idea. Replies and shipped requests show here. Bugs from your own app's users go to Reports."
+          description="Send the Mushi Mushi team a bug or an idea. Replies and shipped requests show here. Bugs from your own app's users go to Bugs."
           action={
             <div className="flex flex-wrap gap-2" data-testid="feedback-empty-actions">
               <Btn size="sm" className="whitespace-nowrap" onClick={() => openFeedback('bug')}>

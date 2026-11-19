@@ -106,7 +106,7 @@ export function ReportComments({
   }
 
   return (
-    <Section title={`Triage thread (${comments.length})`} icon={<IconChat />}>
+    <Section title={comments.length > 0 ? `Triage thread (${comments.length})` : 'Triage thread'} icon={<IconChat />}>
       {/* Scrolls once the thread grows; focusable so keyboard users can
           scroll it too (axe scrollable-region-focusable, REPORT A14). */}
       <div

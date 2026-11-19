@@ -211,7 +211,7 @@ describe('OpsPage', () => {
     }
     render()
     const group = host.querySelector('[data-testid="ops-group-p1|releases"]')!
-    expect(group.textContent).toContain('glot.it · 3 releases')
+    expect(group.textContent).toContain('Glot.it · 3 releases')
     // Collapsed: the repeated Info / In Slack / Acknowledge row is not drawn per event, nor the
     // group's own Info chip and bulk button.
     expect(group.querySelector('[data-testid="ops-event-d1"]')).toBeNull()
@@ -222,7 +222,7 @@ describe('OpsPage', () => {
     expect(group.querySelector('[data-testid="ops-event-d3"]')).toBeNull()
     expect(group.querySelector('[data-testid="ops-copies-d2"]')!.textContent).toBe('×2')
     await act(async () => {
-      ;(host.querySelector('[aria-label="Acknowledge all: glot.it · 3 releases"]') as HTMLButtonElement).click()
+      ;(host.querySelector('[aria-label="Acknowledge all: Glot.it · 3 releases"]') as HTMLButtonElement).click()
     })
     expect([...state.mutations].sort()).toEqual(['/v1/admin/ops/events/d1/ack', '/v1/admin/ops/events/d2/ack', '/v1/admin/ops/events/d3/ack'])
   })

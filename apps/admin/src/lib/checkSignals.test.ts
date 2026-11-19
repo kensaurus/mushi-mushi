@@ -86,7 +86,7 @@ describe('checkAlerts', () => {
       NOW,
     )
     expect(alerts.map((a) => a.id)).toEqual(['red', 'five', 'two', 'older', 'stale'])
-    expect(alerts[0]).toMatchObject({ severity: 'critical', title: 'RED failed', action: { to: '/red' } })
+    expect(alerts[0]).toMatchObject({ severity: 'critical', label: 'Failed', title: 'RED', action: { to: '/red' } })
     expect(alerts[1]).toMatchObject({ severity: 'serious', label: 'Getting worse', metric: { value: '5', unit: 'findings · ▲ +3' } })
     expect(alerts[2]?.metric).toEqual({ value: '2', unit: 'findings' })
     expect(alerts[3]).toMatchObject({ label: 'Stale 20d', metric: { value: '20d', unit: 'since last run' } })

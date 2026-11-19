@@ -748,7 +748,9 @@ export function ReleasesPage() {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             // With no releases the snapshot is the drafts/published lists' one first step; it is
             // not drawn above the Batch, App stores or draft-form tabs, which have their own content.
-            show: !ux.hideReleasesSnapshot && !(emptyFirstStep && !releasesListTab(activeTab)),
+            // The empty first step renders under the tab bar (below), so Drafts and Published start with the
+            // tabs like every other tab (round 3: the layout jumped between tabs).
+            show: !ux.hideReleasesSnapshot && !emptyFirstStep,
             children: (
               <ReleasesSnapshotStrip
                 stats={stats}
@@ -781,6 +783,16 @@ export function ReleasesPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
+
+      {!ux.hideReleasesSnapshot && emptyFirstStep && releasesListTab(activeTab) && (
+        <ReleasesSnapshotStrip
+          stats={stats}
+          statsFetchedAt={statsFetchedAt}
+          statsValidating={statsValidating}
+          statLabels={copy?.statLabels}
+          onDraft={() => setActiveTab('draft')}
+        />
       )}
 
       {activeTab === 'draft' && (

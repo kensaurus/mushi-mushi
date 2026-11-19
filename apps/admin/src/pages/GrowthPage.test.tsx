@@ -99,6 +99,27 @@ describe('GrowthPage', () => {
     expect(text).toContain('Signups (3 wk)')
   })
 
+  // Round-3 sweep 2026-11-19: four 0 tiles, and empty weeks filling the table.
+  it('folds an all-zero week into one line and hides empty weeks behind a toggle', async () => {
+    data.byPath = {
+      '/v1/admin/growth/funnel': {
+        data: {
+          weeks: [week('2026-11-16', { visits: 19 }), week('2026-11-09', { visits: 88, signups: 2 }), week('2026-10-19')],
+          by_source: [],
+          generated_at: '2026-11-18T13:27:15Z',
+        },
+      },
+      '/v1/admin/growth/daily': { data: { days: [], by_src: [] } },
+    }
+    await render()
+    expect(container.querySelector('[data-testid="growth-week-empty"]')!.textContent).toContain('2 signups in the last 3 weeks')
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="growth-empty-weeks-toggle"]')!
+    expect(toggle.textContent).toBe('Show 1 empty week')
+    await act(async () => toggle.click())
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3)
+  })
+
   it('says the daily scorecard was not checked when its read timed out', async () => {
     data.byPath = {
       '/v1/admin/growth/funnel': { data: { weeks: [], by_source: [], generated_at: '2026-11-18T13:27:15Z' } },

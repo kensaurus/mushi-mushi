@@ -265,7 +265,8 @@ export function McpPage() {
 
   const catalogOptions = useMemo(
     () => [
-      { id: 'tools' as const, label: 'Tools', count: stats.toolCount },
+      // No count here: the Catalog tab already carries it (round-3 review 2026-11-19).
+      { id: 'tools' as const, label: 'Tools' },
       { id: 'resources' as const, label: 'Resources', count: stats.resourceCount },
       { id: 'prompts' as const, label: 'Prompts', count: stats.promptCount },
     ],
@@ -432,8 +433,6 @@ export function McpPage() {
         <McpOverviewPanel
           stats={stats}
           keys={projectsQuery.data ? (activeProject?.api_keys ?? []) : null}
-          lastFetchedAt={lastFetchedAt}
-          isValidating={isValidating}
           onOpenExamples={() => setTab('examples')}
           onOpenSetup={() => setTab('setup')}
           hideEmptyEditors={!ux.hideMcpSnapshot}
@@ -458,6 +457,7 @@ export function McpPage() {
             projects={projectsQuery.data?.projects}
             hasReadKey={hasReadKey}
             hasWriteKey={hasWriteKey}
+            accountKeyLabel={accountKey ? (accountKey.label ?? '') : null}
             step1Tone={step1Tone}
             step2Tone={step2Tone}
             step3Tone={step3Tone}

@@ -62,7 +62,7 @@ export function costTileDetails(stats: CostStats): {
         ? 'No calls in 24h'
         : `${calls.toLocaleString()} call${calls === 1 ? '' : 's'} · avg ${formatSpendUsd(stats.avgCostPerCall24h)}`,
     month: `Last 7 days ${formatSpendUsd(stats.spend7dUsd)}`,
-    operations: 'Steps · last 30 days',
+    operations: 'Last 30 days',
     topDriver: stats.topOperation
       ? `${formatSpendUsd(stats.topOperationUsd)} · ${stats.topModel ?? 'no model'}`
       : 'Run classify or fix first',

@@ -17,7 +17,7 @@ import { useState } from 'react'
 import { Btn, Callout, DisclosurePanel, Input, Section, SelectField, Textarea } from '../ui'
 import { TimedLoading } from './TimedLoading'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
-import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { StatusMark, StatusPill, type RunStatus } from '../signal/StatusMark'
 import { AppIconChips, type IconFor } from './AppIconChips'
 import { usePageData } from '../../lib/usePageData'
 import { ActionsCard } from './ActionsCard'
@@ -186,6 +186,15 @@ export function ConnectorsCard({
           {data.instances.length === 0 ? (
             <p className="text-sm text-fg-muted">Nothing connected beyond each app's own GitHub, Supabase and Sentry settings.</p>
           ) : (
+            <>
+            {/* "6 connected" once; a row carries a pill only when it is not connected (round 3: a green
+                "Connected" on all six rows). */}
+            {data.instances.some((i) => i.status === 'connected') && (
+              <p className="flex items-center gap-1.5 text-2xs font-semibold text-fg-secondary" data-testid="connectors-count">
+                <StatusMark status="passed" />
+                {data.instances.filter((i) => i.status === 'connected').length} connected
+              </p>
+            )}
             <ul className="flex flex-col divide-y divide-edge-subtle">
               {groupConnectors(data.instances, (k) => data.available.find((a) => a.kind === k)?.title ?? k).flatMap((g) => {
                 const one = (i: Instance, shownName: string, nested: boolean) => {
@@ -203,7 +212,7 @@ export function ConnectorsCard({
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                       {!nested && <BrandIcon brand={connectorBrand(i)} size={14} decorative />}
                       <span className="min-w-0 truncate text-xs font-semibold text-fg" title={i.display_name}>{shownName}</span>
-                      <StatusPill status={st.status} label={st.label} />
+                      {i.status === 'connected' ? <span className="sr-only">Connected</span> : <StatusPill status={st.status} label={st.label} />}
                       {bound.size > 0 && (
                         <span className="inline-flex min-w-0 items-center gap-1" data-testid="connector-bindings">
                           <span className="sr-only">{`${bound.size} ${bound.size === 1 ? 'app' : 'apps'} bound:`}</span>
@@ -278,6 +287,7 @@ export function ConnectorsCard({
                 ]
               })}
             </ul>
+            </>
           )}
           <ActionsCard
             orgId={orgId}

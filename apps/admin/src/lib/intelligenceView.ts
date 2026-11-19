@@ -58,3 +58,12 @@ export function insightsTone(
   if (stale || stats.pendingFindings > 0) return 'warn'
   return stats.reportCount > 0 ? 'ok' : 'neutral'
 }
+
+/**
+ * The status card under the banner. A stale summary is said once, by the
+ * amber banner; the card repeated it ("covers the week of Nov 2"), with 0
+ * tiles and an "Updated now" pill on a 9-day-old summary (round-3 sweep 2026-11-19).
+ */
+export function showInsightsSnapshot(stats: Pick<IntelligenceStats, 'topPriority'>): boolean {
+  return stats.topPriority !== 'stale_digest'
+}

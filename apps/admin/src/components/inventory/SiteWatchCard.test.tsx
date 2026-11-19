@@ -14,15 +14,18 @@ const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   reload: vi.fn(),
   data: null as unknown,
+  loading: false,
+  error: null as string | null,
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => mocks.toast }))
 vi.mock('../../lib/usePageData', () => ({
-  usePageData: () => ({ data: mocks.data, loading: false, error: null, reload: mocks.reload }),
+  usePageData: () => ({ data: mocks.data, loading: mocks.loading, error: mocks.error, reload: mocks.reload }),
 }))
 
 import { SiteWatchCard } from './SiteWatchCard'
+import { CI_READ_TIMEOUT_MS } from '../../lib/ciReadTimeout'
 
 const WATCH = {
   id: 'w1',
@@ -48,6 +51,8 @@ describe('SiteWatchCard', () => {
   beforeEach(() => {
     mocks.apiFetch.mockReset().mockResolvedValue({ ok: true, data: {} })
     mocks.reload.mockReset()
+    mocks.loading = false
+    mocks.error = null
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -55,6 +60,36 @@ describe('SiteWatchCard', () => {
   afterEach(() => {
     act(() => root.unmount())
     container.remove()
+  })
+
+  // Round 3 (2026-11-19): "loading" never resolved on Discovery. A read that never answers, or
+  // fails, says "not checked" with one Retry.
+  it('turns a read that never answers into "not checked" with Retry', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.data = null
+      mocks.loading = true
+      await render()
+      expect(container.textContent).toContain('loading')
+      await act(async () => {
+        vi.advanceTimersByTime(CI_READ_TIMEOUT_MS)
+      })
+      expect(container.textContent).not.toContain('loading')
+      const row = container.querySelector('[data-testid="site-watch-not-checked"]')!
+      expect(row.textContent).toContain('Site watch: not checked')
+      await act(async () => row.querySelector('button')!.click())
+      expect(mocks.reload).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says "not checked", not "loading", when the read failed', async () => {
+    mocks.data = null
+    mocks.error = 'HTTP 500'
+    await render()
+    expect(container.querySelector('[data-testid="site-watch-not-checked"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('loading')
   })
 
   it('asks for a Firecrawl key when the app has none', async () => {

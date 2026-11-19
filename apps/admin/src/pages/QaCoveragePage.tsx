@@ -1006,11 +1006,11 @@ export function QaCoveragePage() {
           'Run a test on demand after a deploy to verify the fix landed',
           'Use Browserbase for CI-like confidence without managing infrastructure',
         ]}
-        helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
+        helpHowToUse="Click + New test to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
         {!noStories && (
         <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-          + New story
+          + New test
         </Btn>
         )}
       </PageHeaderBar>
@@ -1111,7 +1111,7 @@ export function QaCoveragePage() {
           description="A scheduled test walks through one user flow on a timer and sends screenshots when it fails. Start with a Firecrawl story: no setup needed."
           action={
             <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-              + New story
+              + New test
             </Btn>
           }
         />

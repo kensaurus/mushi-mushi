@@ -27,6 +27,8 @@ import { Badge,
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -279,6 +281,9 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
   const { data: statsData, reload: reloadStats } = usePageData<MembersStats>(statsPath)
   const stats = statsData ?? EMPTY_MEMBERS_STATS
+  // Never an endless skeleton (2026-11-19: Members sat on it at 390): after 20 s the read says
+  // "not checked" with one Retry.
+  const membersWait = useReadTimedOut(loading && !data)
 
   const reloadAll = useCallback(() => {
     reload()
@@ -647,6 +652,18 @@ export function OrganizationSettingsPage() {
       </div>
     )
   }
+  if (loading && !data && membersWait.timedOut) {
+    return (
+      <CiNotChecked
+        what="Team members"
+        testId="members-not-checked"
+        onRetry={() => {
+          membersWait.restart()
+          reloadAll()
+        }}
+      />
+    )
+  }
   if (loading) return <PanelSkeleton rows={5} label="Loading members" />
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
@@ -665,9 +682,10 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        {/* The plan name is not a status: neutral unless teams are locked. */}
+        {/* The plan name is not a status: neutral unless teams are locked. Labelled, so a bare
+            "Studio" chip doesn't sit unexplained beside the help button (2026-11-19). */}
         <Badge className={teamsEnabled ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle}>
-          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
+          Plan: {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeaderBar>
 
@@ -1267,6 +1285,12 @@ export function OrganizationSettingsPage() {
                       >
                         <IconTrash />
                       </Btn>
+                    ) : isSelf ? (
+                      // Your own row: the reason in words, not a dead trash button whose reason
+                      // only showed on hover (2026-11-19).
+                      <span className="text-2xs text-fg-muted" title={perms.removeLockedReason ?? undefined} data-testid="members-self-locked">
+                        {perms.removeLockedReason ? 'Only owner' : null}
+                      </span>
                     ) : (
                       <Tooltip content={perms.removeLockedReason ?? 'You cannot remove this person.'}>
                         <span className="inline-flex">

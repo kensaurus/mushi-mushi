@@ -384,6 +384,8 @@ export function BillingPage() {
         options={tabOptions}
         ariaLabel="Billing sections"
         size="sm"
+        // The page stack is a flex column, which stretched the strip full width (2026-11-19).
+        className="self-start"
       />
       )}
 

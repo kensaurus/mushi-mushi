@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountKeyForProject, mcpJsonDraftCheck } from './mcpSetupView'
+import { accountKeyForProject, mcpJsonDraftCheck, mcpKeyStep } from './mcpSetupView'
 
 // Round-2 review (2026-11-18), Editor agents page.
 describe('mcpJsonDraftCheck', () => {
@@ -42,5 +42,20 @@ describe('mcpSnapshotMetrics', () => {
     const tools = { label: 'Tools', value: 133 }
     expect(mcpSnapshotMetrics(null, null, tools)).toEqual([tools])
     expect(mcpSnapshotMetrics(null, { label: 'Keys idle', value: 2 }, tools)).toHaveLength(2)
+  })
+})
+
+// Round-3 review (2026-11-19): a green tick over "0 MCP keys on kensaur.us".
+describe('mcpKeyStep', () => {
+  it('names the account key when the app has no key of its own', () => {
+    expect(mcpKeyStep(0, 'cursor-mcp-org')).toEqual({ done: true, text: 'Your account key cursor-mcp-org reaches this app.' })
+  })
+
+  it('counts the app keys when there are some', () => {
+    expect(mcpKeyStep(2, 'cursor-mcp-org')).toEqual({ done: true, text: '2 MCP keys on this app.' })
+  })
+
+  it('stays open with no key at all', () => {
+    expect(mcpKeyStep(0, null)).toEqual({ done: false, text: null })
   })
 })
