@@ -612,10 +612,6 @@ export function buildComposeEnv(
 
 function runSelfhostSecrets(opts: { out: string; force?: boolean; publicUrl?: string }): void {
   const out = resolve(opts.out)
-  if (existsSync(out) && !opts.force) {
-    process.stderr.write(`✗ ${out} already exists. Pass --force to replace it (this rotates every secret).\n`)
-    process.exit(1)
-  }
   if (opts.publicUrl && !isPlainHttpUrl(opts.publicUrl)) {
     process.stderr.write(`✗ --public-url must be a plain http(s) URL (got: ${opts.publicUrl}).\n`)
     process.exit(1)
@@ -629,7 +625,17 @@ function runSelfhostSecrets(opts: { out: string; force?: boolean; publicUrl?: st
     Math.floor(Date.now() / 1000),
     opts.publicUrl?.replace(/\/+$/, ''),
   )
-  writeFileSync(out, body, { mode: 0o600 })
+  // Exclusive create unless --force: no window between a check and the write (CodeQL
+  // js/file-system-race), and an existing file is never overwritten by accident.
+  try {
+    writeFileSync(out, body, { mode: 0o600, flag: opts.force ? 'w' : 'wx' })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      process.stderr.write(`✗ ${out} already exists. Pass --force to replace it (this rotates every secret).\n`)
+      process.exit(1)
+    }
+    throw err
+  }
   console.log(`✓ Wrote ${out} (mode 600).`)
   console.log('  Generated: POSTGRES_PASSWORD, JWT_SECRET, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,')
   console.log('             MUSHI_INTERNAL_CALLER_SECRET')

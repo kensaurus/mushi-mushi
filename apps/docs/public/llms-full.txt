@@ -853,7 +853,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/bolt-mcp
 
 ---
 title: Ask Bolt why it broke
-description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what your users reported. Bolt reads the plain-English diagnosis and fixes the bug.
+description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what users reported. Bolt reads the plain-English diagnosis and fixes the bug.
 ---
 
 # Ask Bolt why it broke
@@ -2328,7 +2328,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/replit
 
 ---
 title: Mushi Mushi in Replit
-description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Mushi Mushi to Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
+description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
 ---
 
 # Mushi Mushi in Replit
@@ -3512,7 +3512,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing beside Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi

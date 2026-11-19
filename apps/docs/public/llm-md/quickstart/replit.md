@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/replit
 
 ---
 title: Mushi Mushi in Replit
-description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Mushi Mushi to Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
+description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
 ---
 
 # Mushi Mushi in Replit

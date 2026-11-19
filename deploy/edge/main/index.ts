@@ -73,6 +73,8 @@ Deno.serve(async (incoming: Request) => {
     return await worker.fetch(req)
   } catch (err) {
     console.error(`main: worker for ${name} failed`, err)
-    return json(500, { ok: false, error: { code: 'WORKER_FAILED', message: String(err) } })
+    // The worker error can carry a stack trace: it stays in the log above; the caller gets a
+    // fixed message (CodeQL js/stack-trace-exposure).
+    return json(500, { ok: false, error: { code: 'WORKER_FAILED', message: `The ${name} function failed to start. See the edge-functions logs.` } })
   }
 })

@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/quickstart/bolt-mcp
 
 ---
 title: Ask Bolt why it broke
-description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what your users reported. Bolt reads the plain-English diagnosis and fixes the bug.
+description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what users reported. Bolt reads the plain-English diagnosis and fixes the bug.
 ---
 
 # Ask Bolt why it broke

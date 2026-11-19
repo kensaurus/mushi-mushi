@@ -796,7 +796,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "compare/sentry-vs-mushi.md",
     keywords: ["compare", "sentry-vs-mushi", "sentry"],
     headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]", "Pick Sentry if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
-    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.",
+    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing beside Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.",
   },
   {
     title: "Concepts",
@@ -1516,7 +1516,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/bolt-mcp.md",
     keywords: ["quickstart", "bolt-mcp", "bolt", "mcp", "ask", "broke"],
     headings: ["Open your connectors", "Add Mushi Mushi as a custom MCP server", "Sign in and approve", "Turn it on in your project", "Ask Bolt", "Which tools Bolt gets", "If it does not connect"],
-    excerpt: "Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what your users reported. Bolt reads the plain-English diagnosis and fixes the bug.",
+    excerpt: "Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what users reported. Bolt reads the plain-English diagnosis and fixes the bug.",
   },
   {
     title: "Bug report widget for Capacitor and Ionic",
@@ -1633,7 +1633,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "quickstart/replit.md",
     keywords: ["quickstart", "replit"],
     headings: ["Add the report button", "Connect Replit Agent", "Add the server", "Sign in and approve", "Ask Agent", "If it does not connect"],
-    excerpt: "Add the Mushi Mushi report button to a Replit app with one prompt, then connect Mushi Mushi to Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.",
+    excerpt: "Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.",
   },
   {
     title: "Bug report widget for Svelte and SvelteKit",
