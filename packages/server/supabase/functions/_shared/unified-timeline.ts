@@ -4,7 +4,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { plainTriageError, queueJobTimelineTitle, screenDetail, TRAIL_QUEUE_COLUMNS, type TrailQueueRow } from './report-pipeline-trail.ts'
+import { plainTriageError, queueJobTimelineTitle, screenDetail, TRAIL_QUEUE_COLUMNS, type TrailQueueRow } from './triage-queue-text.ts'
 
 export type UnifiedTimelineLane =
   | 'report'

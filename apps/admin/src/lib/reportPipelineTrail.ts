@@ -13,8 +13,8 @@
 import { apiFetch } from './supabase'
 import type { RunStatus } from '../components/signal/StatusMark'
 
-export type TrailStageId = 'received' | 'triage' | 'diagnosis' | 'fix' | 'pr' | 'ci' | 'merge' | 'deploy'
-export type TrailRetryKind = 'triage' | 'dispatch' | 'ci_repair'
+type TrailStageId = 'received' | 'triage' | 'diagnosis' | 'fix' | 'pr' | 'ci' | 'merge' | 'deploy'
+type TrailRetryKind = 'triage' | 'dispatch' | 'ci_repair'
 
 export interface TrailStage {
   id: TrailStageId
@@ -33,7 +33,7 @@ export interface TrailStage {
   note: string | null
 }
 
-export interface TrailJob {
+interface TrailJob {
   id: string
   stage: string
   status: string
@@ -140,7 +140,7 @@ export interface TriageRetryResult {
 }
 
 export async function retryReportTriage(reportId: string, stage: 'triage' | 'diagnosis'): Promise<TriageRetryResult> {
-  const res = await apiFetch<{ outcome: 'queued' | 'already'; message: string }>(`${reportTrailPath(reportId)}/retry`, {
+  const res = await apiFetch<{ outcome: 'queued' | 'already'; message: string }>(`/v1/admin/reports/${reportId}/pipeline/retry`, {
     method: 'POST',
     body: JSON.stringify({ stage }),
   })

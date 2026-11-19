@@ -33,7 +33,6 @@ import {
 import { StatusMark, StatusPill } from '../signal/StatusMark'
 import { Btn, ErrorAlert, Loading, Section } from '../ui'
 
-export type { DoctorCheck }
 /** @internal Exported for tests (the order now lives in lib/doctorView). */
 export { orderDoctorChecks }
 

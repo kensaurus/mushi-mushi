@@ -73,7 +73,7 @@ export interface ServerInstance {
   deployedAt: string | null
 }
 
-/** Parses the /health body; anything unexpected becomes null fields, never a throw. */
+/** Parses the /health body; anything unexpected becomes null fields, never a throw. @internal Exported for tests. */
 export function parseHealth(body: unknown): ServerInstance | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>

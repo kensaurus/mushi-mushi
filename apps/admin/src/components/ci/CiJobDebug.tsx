@@ -256,7 +256,11 @@ function Actions({ state, dispatch, onChanged }: { state: CiPanelState; dispatch
       else dispatch({ type: 'actionFailed', action, error: { text: r?.message ?? res.error?.message ?? 'Could not send it to CI repair.', fix: null } })
       return
     }
-    const res = await apiFetchMutate<CiRunActionResult>(`/v1/admin/ci/jobs/${encodeURIComponent(d.job.id)}/${action}`, { method: 'POST', body: '{}', scope: 'enumeration' })
+    const res = await apiFetchMutate<CiRunActionResult>(
+      // Each path written out so the surface-parity check can follow it.
+      action === 'rerun' ? `/v1/admin/ci/jobs/${encodeURIComponent(d.job.id)}/rerun` : `/v1/admin/ci/jobs/${encodeURIComponent(d.job.id)}/cancel`,
+      { method: 'POST', body: '{}', scope: 'enumeration' },
+    )
     if (res.ok) {
       dispatch({ type: 'actionDone', action, message: ACTION_DONE[action] })
       onChanged?.()

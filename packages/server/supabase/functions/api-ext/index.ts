@@ -42,6 +42,7 @@ import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { requestLoggingMiddleware } from '../_shared/request-logging.ts'
 import { stdioMcpUsage } from '../_shared/mcp-stdio-usage.ts'
 import { registerCiRoutes } from '../api/routes/ci.ts'
+import { registerReportPipelineRoutes } from '../api/routes/report-pipeline.ts'
 import { registerCiPlacementRoutes } from '../api/routes/ci-placement.ts'
 import { registerCiBillRoutes } from '../api/routes/ci-bill.ts'
 import { registerCiCostFixRoutes } from '../api/routes/ci-cost-fix.ts'
@@ -101,6 +102,8 @@ app.use('/v1/*', stdioMcpUsage())
 registerAskMushiRoutes(app)
 registerInventoryRoutes(app)
 registerCiRoutes(app)
+// One report's pipeline trail + stage retry (console UX overhaul 2026-11-19); api forwards it.
+registerReportPipelineRoutes(app)
 registerCiPlacementRoutes(app)
 registerCiBillRoutes(app)
 registerCiCostFixRoutes(app)

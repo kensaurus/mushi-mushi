@@ -15,7 +15,6 @@ import { radarOverall } from '../portfolio/portfolioView'
 
 export const DEPENDENCY_RULE = 'known_vulnerable_dependency'
 
-/** @internal Exported for tests only. */
 export interface VerdictDetector {
   ruleId: string
   title: string

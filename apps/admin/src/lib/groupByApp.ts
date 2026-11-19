@@ -78,7 +78,7 @@ export function groupByApp<T>(items: readonly T[], appOf: (item: T) => AppRef, o
   })
 }
 
-/** Counts per key inside one group, e.g. { failed: 2, passed: 5 }, for the header's chips. */
+/** Counts per key inside one group, e.g. { failed: 2, passed: 5 }, for the header's chips. @internal Exported for tests. */
 export function countBy<T, K extends string>(items: readonly T[], keyOf: (item: T) => K | null | undefined): Partial<Record<K, number>> {
   const out: Partial<Record<K, number>> = {}
   for (const it of items) {

@@ -40,7 +40,7 @@ export const DOCTOR_RUN_STATUS: Record<DoctorStatus, RunStatus> = {
 
 const RANK: Record<DoctorStatus, number> = { fail: 0, warn: 1, info: 2, pass: 3 }
 
-/** The check's id without a per-app suffix (`codebase_index:<uuid>` → `codebase_index`). */
+/** The check's id without a per-app suffix (`codebase_index:<uuid>` → `codebase_index`). @internal Exported for tests. */
 export function doctorCheckId(name: string): string {
   const i = name.indexOf(':')
   return i === -1 ? name : name.slice(0, i)

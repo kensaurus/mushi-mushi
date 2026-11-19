@@ -22,7 +22,12 @@
  */
 
 import type { getServiceClient } from '../_shared/db.ts'
-import type { TrailQueueRow, TrailReportRow } from '../_shared/report-pipeline-trail.ts'
+// From the small module, not report-pipeline-trail.ts: queue.ts and health.ts (in `api`) import
+// this file, and the upload counts type-only imports too (api upload budget, 2026-11-19).
+import type { TrailQueueRow } from '../_shared/triage-queue-text.ts'
+
+/** The two report fields a retry needs (report-pipeline-trail.ts TrailReportRow). */
+type RetryReport = { id: string; status: string | null }
 
 type Db = ReturnType<typeof getServiceClient>
 
@@ -72,7 +77,7 @@ export type TriageRetryOutcome =
  */
 export async function applyTriageRetry(
   db: Db,
-  input: { report: Pick<TrailReportRow, 'id' | 'status'>; projectId: string; job: TrailQueueRow | null },
+  input: { report: RetryReport; projectId: string; job: TrailQueueRow | null },
   trigger: TriggerClassification,
   now: Date,
 ): Promise<TriageRetryOutcome> {

@@ -34,7 +34,7 @@ export interface HoleRow {
   where: string[]
 }
 
-/** @internal Exported for tests only. Structured group from /vulnerabilities (the subset this table needs). */
+/** Structured group from /vulnerabilities (the subset this table needs). */
 export interface HoleGroupInput {
   groupKey: string
   kind: 'package' | 'runtime'

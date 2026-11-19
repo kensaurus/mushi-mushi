@@ -19,11 +19,11 @@ import { StatusMark, type RunStatus } from '../signal/StatusMark'
 import type { SignalTone } from '../signal/StatusGlyph'
 
 /** Jobs the console can run on demand (POST /v1/admin/health/cron/:job/trigger). */
-export const RUNNABLE_JOBS = ['judge-batch', 'intelligence-report'] as const
-export type RunnableJob = (typeof RUNNABLE_JOBS)[number]
+const RUNNABLE_JOBS = ['judge-batch', 'intelligence-report'] as const
+type RunnableJob = (typeof RUNNABLE_JOBS)[number]
 
 /** Scheduled jobs by what they do, not their function name. */
-export const JOB_LABEL: Record<string, string> = {
+const JOB_LABEL: Record<string, string> = {
   'judge-batch': 'Triage grading',
   'intelligence-report': 'Weekly summary',
   'data-retention': 'Data clean-up',
@@ -36,7 +36,7 @@ const isRunnable = (job: string): job is RunnableJob => (RUNNABLE_JOBS as readon
 /** Failed AI calls over this share turn the line red. */
 const ERROR_CRIT_PCT = 5
 
-export type HealthLeadAction = { kind: 'run'; job: RunnableJob; label: string } | { kind: 'tab'; tab: HealthTabId; label: string } | null
+type HealthLeadAction = { kind: 'run'; job: RunnableJob; label: string } | { kind: 'tab'; tab: HealthTabId; label: string } | null
 
 export interface HealthLead {
   sentence: string | null

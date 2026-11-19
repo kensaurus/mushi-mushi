@@ -26,7 +26,7 @@ const CLOSED = new Set(['fixed', 'verified', 'resolved', 'completed', 'dismissed
 const UNTRIAGED = new Set(['new', 'queued', 'submitted', 'pending', 'reopened'])
 const FIXING = new Set(['fixing', 'dispatched'])
 
-/** Lower is more urgent: open critical, open high, untriaged, other open, fixing, closed. */
+/** Lower is more urgent: open critical, open high, untriaged, other open, fixing, closed. @internal Exported for tests. */
 export function reportUrgencyRank(r: Pick<ReportForGrouping, 'status' | 'severity'>): number {
   const status = (r.status ?? '').toLowerCase()
   if (CLOSED.has(status)) return 5
@@ -38,7 +38,7 @@ export function reportUrgencyRank(r: Pick<ReportForGrouping, 'status' | 'severit
   return 3
 }
 
-/** A report's state for the app header's chips. */
+/** A report's state for the app header's chips. @internal Exported for tests. */
 export function reportRunStatus(r: Pick<ReportForGrouping, 'status' | 'severity'>): RunStatus {
   const rank = reportUrgencyRank(r)
   const status = (r.status ?? '').toLowerCase()

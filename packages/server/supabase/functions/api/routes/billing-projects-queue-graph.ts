@@ -28,7 +28,6 @@ import { registerProjectCiSecretsRoutes } from './project-ci-secrets.ts';
 import { registerProjectIntegrationsRoutes } from './project-integrations.ts';
 import { registerProjectCodebaseRoutes } from './project-codebase.ts';
 import { registerQueueRoutes } from './queue.ts';
-import { registerReportPipelineRoutes } from './report-pipeline.ts';
 import { registerGraphQueryRoutes } from './graph-query.ts';
 
 export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: Variables }>): void {
@@ -40,6 +39,5 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono<{ Variables: V
   registerProjectIntegrationsRoutes(app);
   registerProjectCodebaseRoutes(app);
   registerQueueRoutes(app);
-  registerReportPipelineRoutes(app);
   registerGraphQueryRoutes(app);
 }

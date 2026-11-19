@@ -865,6 +865,9 @@ registerReportFileRoutes(app);
 // forwarded: a forward costs a second edge invocation (2026-11-11 audit).
 registerRunnerIngestRoute(app);
 forwardToApiExt(['/v1/admin/ci/*', '/v1/admin/fixes/:id/ci/rerun', '/v1/admin/projects/:id/runner-key']);
+// A report's pipeline trail and its stage retry (report-pipeline.ts): served by api-ext so api
+// stays under its upload budget (scripts/deploy-edge-function.test.mjs, 2026-11-19).
+forwardToApiExt(['/v1/admin/reports/:id/pipeline', '/v1/admin/reports/:id/pipeline/retry']);
 // Verified fixes (Plan 024, ADR 0035): settings, gates, re-check, the verify workflow.
 forwardToApiExt([
   '/v1/admin/projects/:id/verify-settings',

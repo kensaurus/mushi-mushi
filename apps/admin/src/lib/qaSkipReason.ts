@@ -33,7 +33,7 @@ export interface QaCoverageRow {
   pass_rate_pct: number | null
 }
 
-export type SkipKind = 'local' | 'browserbase' | 'busy'
+type SkipKind = 'local' | 'browserbase' | 'busy'
 
 export interface SkipReason {
   kind: SkipKind
@@ -44,7 +44,7 @@ export interface SkipReason {
 }
 
 /** Plain words for the runner a story uses. */
-export const PROVIDER_WORDS: Record<string, string> = {
+const PROVIDER_WORDS: Record<string, string> = {
   local: 'On your computer',
   firecrawl_actions: 'Cloud · Firecrawl',
   browserbase: 'Cloud · Browserbase',
@@ -131,7 +131,7 @@ export interface StripDayCounts {
   skipped?: number
 }
 
-/** One day of the 7-day strip as a state: any failure ✕, passes ✓, only skips ⊘, nothing ○. */
+/** One day of the 7-day strip as a state (a failure ✕, passes ✓, only skips ⊘, nothing ○). */
 export function stripDayStatus(d: StripDayCounts): 'failed' | 'passed' | 'cancelled' | 'idle' {
   if (d.failed > 0) return 'failed'
   if (d.passed > 0) return 'passed'
@@ -139,7 +139,7 @@ export function stripDayStatus(d: StripDayCounts): 'failed' | 'passed' | 'cancel
   return 'idle'
 }
 
-export type QaLeadAction =
+type QaLeadAction =
   | { kind: 'open_failing'; storyId: string; name: string }
   | { kind: 'run_in_cloud'; storyIds: string[] }
   | { kind: 'copy_cli'; storyId: string }

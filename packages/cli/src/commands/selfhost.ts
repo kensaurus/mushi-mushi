@@ -348,7 +348,7 @@ export function selfhostConfigPatch(
 
 // ─── deploy stamp ────────────────────────────────────────────────────────────
 
-/** The file every function bundles; GET /health reads its `sha` (relative to the repo root). */
+/** The file every function bundles; GET /health reads its `sha` (relative to the repo root). @internal Exported for tests. */
 export const DEPLOY_INFO_PATH = join('packages', 'server', 'supabase', 'functions', '_shared', 'deploy-info.ts')
 
 /** @internal Exported for tests only. What scripts/deploy-edge-function.mjs exports for stamping. */

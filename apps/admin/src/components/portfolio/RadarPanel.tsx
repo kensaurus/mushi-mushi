@@ -52,7 +52,7 @@ export function useRadarRun(projectId: string): { run: () => Promise<void>; runn
   return { run, running, notice }
 }
 
-/** A check's fix prompt: every finding with its own fix, then the rule. @internal Exported for tests. */
+/** A check's fix prompt: every finding with its own fix, then the rule. */
 export function checkFixPrompt(d: Pick<Detector, 'title' | 'reason' | 'findings'>): string {
   const lines = d.findings.map((f) => `- ${f.message.trim()}${f.filePath ? ` (${f.filePath}${f.line != null ? `:${f.line}` : ''})` : ''}${f.fix ? `\n  Fix: ${f.fix.trim()}` : ''}`)
   return [

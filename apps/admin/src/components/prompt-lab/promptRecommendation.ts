@@ -20,11 +20,12 @@ import { stepTest } from './promptLabCounts'
 import { STAGE_LABELS, type PromptVersion } from './types'
 import { trafficWords } from './VersionStateMark'
 
+/** @internal Exported for tests. */
 export const MIN_GRADES_TO_SWITCH = 30
-/** Relative lift over the one in use before a switch is suggested (MIN_SCORE_LIFT_PERCENT). */
+/** Relative lift over the one in use before a switch is suggested (MIN_SCORE_LIFT_PERCENT). @internal Exported for tests. */
 export const MIN_LIFT_PCT = 5
 /** The share a "Start" button gives a test that gets no reports: small, as the page help advises. */
-export const START_TEST_PCT = 10
+const START_TEST_PCT = 10
 
 export type PromptRecommendationAction =
   | { kind: 'switch'; version: PromptVersion }

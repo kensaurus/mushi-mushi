@@ -48,7 +48,7 @@ interface FreshEyesFindingSummary {
   sessions: number[]
 }
 
-export type FreshEyesRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'stopped'
+type FreshEyesRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'stopped'
 
 export interface FreshEyesRunListItem {
   local_run_id: string
@@ -140,14 +140,6 @@ export function runHeadline(r: Pick<FreshEyesRunListItem, 'reached' | 'counts' |
 /** Time-to-first-value points, oldest first, for the trend line. */
 export function ttfvTrend(points: readonly FreshEyesTrendPoint[]): number[] {
   return points.filter((p) => p.metric_name === 'fresh_eyes.ttfv_seconds').map((p) => p.value)
-}
-
-export const RUN_STATUS_META: Record<FreshEyesRunStatus, { label: string; tone: 'infoSubtle' | 'okSubtle' | 'dangerSubtle' | 'warnSubtle' | 'neutral' }> = {
-  queued: { label: 'Waiting', tone: 'warnSubtle' },
-  running: { label: 'Running', tone: 'infoSubtle' },
-  done: { label: 'Done', tone: 'okSubtle' },
-  failed: { label: 'Failed', tone: 'dangerSubtle' },
-  stopped: { label: 'Stopped', tone: 'neutral' },
 }
 
 /**
