@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cliRunCommand, providerWords, qaPageStatus, skipReason, storyRunStatus, stripDayStatus, type QaCoverageRow } from './qaSkipReason'
+import { cliRunCommand, cloudCanRunScript, providerWords, qaPageStatus, skipReason, storyRunStatus, stripDayStatus, type QaCoverageRow } from './qaSkipReason'
 
 const row = (over: Partial<QaCoverageRow> = {}): QaCoverageRow => ({
   story_id: 's1',
@@ -109,5 +109,16 @@ describe('qaPageStatus', () => {
     expect(qaPageStatus([row({ enabled: false })]).sentence).toMatch(/turned off/)
     expect(qaPageStatus([row()], { pendingRuns: 2 }).tone).toBe('info')
     expect(qaPageStatus([row({ runs_24h: 0, pass_rate_pct: null, passed_24h: 0, last_run_status: null })], { pendingRuns: 1 }).sentence).toBe('1 run in progress.')
+  })
+})
+
+describe('cloudCanRunScript', () => {
+  it('lets the cloud runner take prompts, URLs and JSON specs, never a Playwright script', () => {
+    expect(cloudCanRunScript(null)).toBe(true)
+    expect(cloudCanRunScript('')).toBe(true)
+    expect(cloudCanRunScript('https://app.example.com/pricing')).toBe(true)
+    expect(cloudCanRunScript('[{"type":"click","selector":"#buy"}]')).toBe(true)
+    expect(cloudCanRunScript('{"assertContains":["Pricing"],"htmlOnly":true}')).toBe(true)
+    expect(cloudCanRunScript("import { test, expect } from '@playwright/test'\ntest('buys', async ({ page }) => {})")).toBe(false)
   })
 })

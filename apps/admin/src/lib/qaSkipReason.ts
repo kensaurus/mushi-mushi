@@ -59,6 +59,24 @@ export function cliRunCommand(storyId: string): string {
   return `mushi qa run ${storyId}`
 }
 
+/**
+ * Whether the cloud runner (Firecrawl) can run this story as written: no script (a prompt), a
+ * URL, or a JSON actions spec (qa-story-runner runFirecrawl). A Playwright script, which
+ * test-gen-from-report writes on `local` stories, would be ignored there: the page would load
+ * with default actions and could "pass" without the test ever running. Such a story stays on
+ * your computer (2026-11-19).
+ */
+export function cloudCanRunScript(script: string | null | undefined): boolean {
+  const s = script?.trim() ?? ''
+  if (!s || s.startsWith('http')) return true
+  try {
+    const parsed = JSON.parse(s) as unknown
+    return Array.isArray(parsed) || (parsed != null && typeof parsed === 'object')
+  } catch {
+    return false
+  }
+}
+
 /** Nothing finished (passed, failed or errored) in the last 24 hours. */
 function nothingFinished(r: QaCoverageRow): boolean {
   return r.passed_24h + r.failed_24h + r.error_24h === 0

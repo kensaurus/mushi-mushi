@@ -31,7 +31,7 @@ import { groupRadarDetectors, radarBadge, radarErrorSentence } from './portfolio
 
 type Detector = RadarView['detectors'][number]
 
-export type RadarNotice = { tone: 'info' | 'danger'; text: string } | null
+type RadarNotice = { tone: 'info' | 'danger'; text: string } | null
 
 /** "Run checks" (POST …/radar/run): shared by the panel's header and the page's lead. */
 export function useRadarRun(projectId: string): { run: () => Promise<void>; running: boolean; notice: RadarNotice } {

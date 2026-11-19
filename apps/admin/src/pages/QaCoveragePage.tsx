@@ -42,7 +42,7 @@ import {
 } from '../components/ui'
 import { PageStatus, toMetrics } from '../components/ui/page-status'
 import { StatusMark, StatusPill } from '../components/signal/StatusMark'
-import { cliRunCommand, providerWords, qaPageStatus, skipReason, storyRunStatus } from '../lib/qaSkipReason'
+import { cliRunCommand, cloudCanRunScript, providerWords, qaPageStatus, skipReason, storyRunStatus } from '../lib/qaSkipReason'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { url as urlValidator } from '../lib/validators'
 import {
@@ -687,7 +687,7 @@ function StoryDrawer({
                   Runs: <span className="font-bold text-fg">{providerWords(story.browser_provider)}</span>
                   {story.browser_provider === 'local' ? ' (the schedule skips it; run it with the command below)' : ''}
                 </p>
-                {story.browser_provider !== 'firecrawl_actions' ? (
+                {story.browser_provider !== 'firecrawl_actions' && cloudCanRunScript(story.script) ? (
                   <Btn
                     size="sm"
                     variant="primary"
@@ -973,8 +973,16 @@ export function QaCoveragePage() {
   const handleRunInCloud = useCallback(async (storyIds: readonly string[]) => {
     if (storyIds.length === 0) return
     setSwitchingIds((prev) => new Set([...prev, ...storyIds]))
+    // Read each story first: one holding a Playwright script stays on your computer, because the
+    // cloud runner would ignore the script and could pass without running the test.
+    const stories = await Promise.all(
+      storyIds.map((sid) => apiFetch<QaStoryFull>(`/v1/admin/projects/${projectId}/qa-stories/${sid}`)),
+    )
+    const switchable = storyIds.filter((_, i) => stories[i]!.ok && cloudCanRunScript(stories[i]!.data?.script))
+    const scripted = storyIds.filter((_, i) => stories[i]!.ok && !cloudCanRunScript(stories[i]!.data?.script))
+    const unread = storyIds.length - switchable.length - scripted.length
     const results = await Promise.all(
-      storyIds.map((sid) =>
+      switchable.map((sid) =>
         apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${sid}`, {
           method: 'PATCH',
           body: JSON.stringify({ browser_provider: 'firecrawl_actions' }),
@@ -983,10 +991,17 @@ export function QaCoveragePage() {
     )
     setSwitchingIds((prev) => { const n = new Set(prev); for (const sid of storyIds) n.delete(sid); return n })
     const failed = results.filter((r) => !r.ok)
-    if (failed.length === 0) {
-      toastSuccess(storyIds.length === 1 ? 'It now runs in the cloud on its schedule' : `${storyIds.length} tests now run in the cloud on their schedule`)
-    } else {
-      toastError(failed[0]!.error?.message ?? `${failed.length} of ${storyIds.length} could not be switched. Try again.`)
+    const moved = switchable.length - failed.length
+    if (moved > 0) toastSuccess(moved === 1 ? 'It now runs in the cloud on its schedule' : `${moved} tests now run in the cloud on their schedule`)
+    if (scripted.length > 0) {
+      toastError(
+        scripted.length === 1 && storyIds.length === 1
+          ? 'This test is a Playwright script, which only runs on your computer. Copy its command and run it there.'
+          : `${scripted.length} of these are Playwright scripts, which only run on your computer. Copy each one's command from its card.`,
+      )
+    }
+    if (failed.length > 0 || unread > 0) {
+      toastError(failed[0]?.error?.message ?? `${failed.length + unread} of ${storyIds.length} could not be switched. Try again.`)
     }
     reloadAll()
   }, [projectId, reloadAll, toastSuccess, toastError])

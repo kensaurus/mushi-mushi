@@ -95,6 +95,12 @@ The main grid shows one card per story with:
   | Cloud · Browserbase | Browserbase opens the session, but the test still needs the CLI runner | **Run in the cloud** (Firecrawl), or copy the command |
   | Cloud · Firecrawl | Too many tests ran at once for this app; the next tick runs it | none needed |
 
+  **Run in the cloud** reads each test first. A test that holds a Playwright
+  script (the kind **Generate test from report** writes) stays on your
+  computer: the cloud runner would ignore the script and could pass without
+  running the test. The page says so and points you at its `mushi qa run <id>`
+  command; the story drawer shows only the command for it.
+
 - **24h pass rate** over finished runs — bar and percentage; "nothing checked"
   when every run was skipped
 - **7 days** — one heat cell per UTC day with a glyph: ✕ red when a run failed
