@@ -36,6 +36,10 @@
  *        (POST /actions/runs/{id}/rerun-failed-jobs). 409 CI_RUNNING while
  *        its CI still runs; 403 GITHUB_ACTIONS_WRITE_MISSING when the token
  *        cannot write Actions. Records a "Re-ran tests" fix event.
+ *   GET  /v1/admin/ci/jobs/:id/debug, POST …/explain, …/rerun, …/cancel
+ *        Debug one job from the console (ci-job-debug.ts): the screened log excerpt, the
+ *        failing step, annotations, a cached plain-English explanation, and run actions keyed
+ *        by the job's row, not by a fix.
  */
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
@@ -61,6 +65,7 @@ import { buildCiOverview, loadCiOverviewRows } from '../../_shared/ci-overview.t
 import { ciGithub, listRunsForHeadSha, rerunFailedJobs, RERUN_REFUSED_DEDUPE_PREFIX, type CiGithub } from '../../_shared/ci-jobs.ts'
 import { callerCanAccessProject, callerProjectIds, jsonError } from '../shared.ts'
 import { registerRunnerIngestRoute } from './ci-runner-ingest.ts'
+import { defaultCiJobDebugDeps, registerCiJobDebugRoutes, type CiJobDebugDeps } from './ci-job-debug.ts'
 import { denyViewerWrite } from '../viewer-gate.ts'
 import type { Variables } from '../types.ts'
 
@@ -97,6 +102,8 @@ export interface CiRouteDeps {
   logOrgAudit: typeof logOrgAudit
   fetchImpl?: CiGithub['fetchImpl']
   now: () => Date
+  /** The job debug panel's GitHub token, model call and usage log (ci-job-debug.ts); defaults when unset. */
+  debug?: Partial<CiJobDebugDeps>
 }
 
 export const defaultCiRouteDeps: CiRouteDeps = {
@@ -131,6 +138,7 @@ export function registerCiRoutes(app: Hono<{ Variables: Variables }>, deps: CiRo
   app.get('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => getCostSettings(c, deps))
   app.put('/v1/admin/ci/cost-settings', deps.jwtAuth, (c) => putCostSettings(c, deps))
   app.post('/v1/admin/fixes/:id/ci/rerun', deps.adminOrApiKeyWrite, (c) => rerunFixCi(c, deps))
+  registerCiJobDebugRoutes(app, { ...deps, ...defaultCiJobDebugDeps, ...deps.debug })
 }
 
 async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {

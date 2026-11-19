@@ -8,7 +8,9 @@
  *          and Re-run tests for a job the machine stopped. Finished jobs
  *          filter by outcome. A card moves Waiting → Running → Finished with
  *          a shared-layout animation (instant under prefers-reduced-motion);
- *          times tick every second while anything is live.
+ *          times tick every second while anything is live. A failed or stopped
+ *          card has "Why?" (the debug drawer, CiJobDebug.tsx, 2026-11-19);
+ *          GitHub is the secondary link.
  */
 
 import { ciJobKey, ciJobKeys, useCiLink } from '../../lib/ciHighlight'
@@ -36,6 +38,7 @@ import { Btn, RelativeTime, SegmentedControl } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { CI_OUTCOME_STYLE } from './ciOutcome'
 import { StatusPill } from '../signal/StatusMark'
+import { CiWhyButton } from './CiJobDebug'
 
 interface Props {
   jobs: CiJob[]
@@ -178,6 +181,8 @@ function JobCard({ job, column, now, fixLinks, focused, grouped = false }: { job
   const outcome: CiJobOutcome = column === 'finished' ? jobOutcome(job) : column
   const s = CI_OUTCOME_STYLE[outcome]
   const runner = runnerDisplayName(job)
+  // A finished job that did not pass, or a live one (Inspect / Cancel), opens the debug drawer.
+  const debuggable = column !== 'finished' || outcome === 'code_failure' || outcome === 'infra'
   const RunnerIcon = job.runnerKind === 'github_hosted' ? IconCloud : IconServer
   const link = useCiLink(ciJobKeys(job), ciJobKey(job.repo, job.jobName))
 
@@ -240,8 +245,9 @@ function JobCard({ job, column, now, fixLinks, focused, grouped = false }: { job
         )}
       </p>
       {hint && <p className={CARD_META}>{hint}</p>}
-      {(job.htmlUrl || fix) && (
+      {(job.htmlUrl || fix || debuggable) && (
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs">
+          {debuggable && <CiWhyButton jobId={job.id} />}
           {column === 'finished' && outcome === 'infra' && fix?.fixId && <RerunButton fixId={fix.fixId} />}
           {fix && (
             <Link to={`/reports/${fix.reportId}`} className={`inline-flex items-center gap-1 ${LINK_ACCENT}`}>
@@ -251,7 +257,7 @@ function JobCard({ job, column, now, fixLinks, focused, grouped = false }: { job
           )}
           {job.htmlUrl && (
             <a href={job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`inline-flex items-center gap-1 ${LINK_ACCENT}`}>
-              {outcome === 'code_failure' ? 'Read the failing logs' : 'View on GitHub'}
+              {outcome === 'code_failure' ? 'Open on GitHub' : 'View on GitHub'}
               <IconExternalLink size={11} />
             </a>
           )}

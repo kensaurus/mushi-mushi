@@ -7,7 +7,8 @@
  *          actions: open the GitHub log, and jump to the evidence.
  *
  *          The cards themselves are the shared signal kit's AlertCards (2026-11-18); this file
- *          ranks the CI problems and names the pinned key.
+ *          ranks the CI problems and names the pinned key. A card with a failing job behind it has
+ *          "Why it failed", which opens the debug drawer (CiJobDebug.tsx, 2026-11-19).
  */
 
 import { useMemo } from 'react'
@@ -19,6 +20,7 @@ import { repoShortName } from '../../lib/ciView'
 import { AlertCards, type SignalAlert } from '../signal/AlertCards'
 import { barPct } from '../signal/BarCell'
 import { StatusPill } from '../signal/StatusMark'
+import { useCiDebug } from './CiJobDebug'
 
 /** One app's bar in a grouped card; pointing at it lights that app across the page. */
 function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
@@ -114,25 +116,46 @@ function keyLabel(overview: Pick<CiOverview, 'repos'>, key: CiKey): string {
   return rest
 }
 
-export function CiAlertStrip({ overview, status, now }: { overview: CiOverview; status: CiStatus; now: number }) {
+interface CiAlertStripProps {
+  overview: CiOverview
+  status: CiStatus
+  now: number
+  /** Already ranked cards (the page ranks once and files them by app); ranked here when absent. */
+  alerts?: readonly CiAlert[]
+  /** Shown when there is nothing to flag; null renders nothing (an app's group). */
+  emptyText?: string | null
+  /** `<prefix>-alerts`, `<prefix>-alert-<id>`: one strip per app needs its own. */
+  testIdPrefix?: string
+  /** Cards on a wide screen before "Show more" (6 on the page strip, 3 inside an app's group). */
+  maxShown?: number
+  columns?: 3 | 6
+}
+
+export function CiAlertStrip({ overview, status, now, alerts: given, emptyText = 'Nothing needs you', testIdPrefix = 'ci', maxShown = ALERTS_SHOWN, columns = 6 }: CiAlertStripProps) {
+  const debug = useCiDebug()
   const alerts = useMemo<SignalAlert[]>(
     () =>
-      rankCiAlerts(overview, status, now).map((a) => ({
+      (given ?? rankCiAlerts(overview, status, now)).map((a) => ({
         ...a,
         detail: <AlertDetail alert={a} />,
         hrefLabel: 'Open the log on GitHub',
         jumpLabel: 'Show the evidence',
+        // "Why it failed" opens the newest job behind the card in the debug drawer (2026-11-19):
+        // the log and the cause in place, GitHub only as the secondary icon link.
+        ...(debug && a.debugJobId
+          ? { action: { label: a.label === 'Running long' ? 'Inspect' : 'Why it failed', onClick: () => debug.open(a.debugJobId!) } }
+          : {}),
       })),
-    [overview, status, now],
+    [given, overview, status, now, debug],
   )
   return (
     <AlertCards
       alerts={alerts}
       // A mark and a short label, not a sentence restating the empty strip (round 3, 390).
-      emptyText="Nothing needs you"
-      maxShown={ALERTS_SHOWN}
-      columns={6}
-      testIdPrefix="ci"
+      emptyText={emptyText}
+      maxShown={maxShown}
+      columns={columns}
+      testIdPrefix={testIdPrefix}
       pinWithoutKeys
       keyLabel={(key) => keyLabel(overview, key)}
     />
