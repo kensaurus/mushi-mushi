@@ -16607,7 +16607,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting
 
 ---
 title: Self-hosting quickstart
-description: Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command, npx mushi-mushi selfhost up. Every feature on, no usage limits.
+description: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits."
 ---
 
 # Self-hosting quickstart
@@ -16708,7 +16708,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa
 
 ---
 title: Host the console
-description: Serve the Mushi Mushi admin console yourself, as a static build, a Docker image or in Compose. Vite bakes the backend address in at build time; a console built without it asks on first open.
+description: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open."
 ---
 
 # Host the console
@@ -17544,7 +17544,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/supabase
 
 ---
 title: Supabase by hand
-description: Set up a Supabase project for self-hosted Mushi Mushi step by step, without selfhost up. Link, push the migrations, set the secrets, point cron at your project, deploy the functions.
+description: "Set up Supabase for self-hosted Mushi Mushi by hand: link, push migrations, set secrets, point cron at your project, deploy the functions."
 ---
 
 # Supabase by hand

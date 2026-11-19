@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/supabase
 
 ---
 title: Supabase by hand
-description: Set up a Supabase project for self-hosted Mushi Mushi step by step, without selfhost up. Link, push the migrations, set the secrets, point cron at your project, deploy the functions.
+description: "Set up Supabase for self-hosted Mushi Mushi by hand: link, push migrations, set secrets, point cron at your project, deploy the functions."
 ---
 
 # Supabase by hand

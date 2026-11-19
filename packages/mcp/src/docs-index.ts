@@ -2056,7 +2056,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "self-hosting/index.md",
     keywords: ["self-hosting", "self", "hosting", "quickstart"],
     headings: ["Before you start", "Clone the repo", "Deploy the server", "Serve the console", "Sign up", "Sign the CLI in and run the doctor", "Get your first diagnosis", "Next"],
-    excerpt: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command, npx mushi-mushi selfhost up. Every feature on, no usage limits.",
+    excerpt: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits.",
   },
   {
     title: "Host the console",
@@ -2065,7 +2065,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "self-hosting/admin-spa.md",
     keywords: ["self-hosting", "self", "hosting", "admin-spa", "admin", "spa", "host", "console"],
     headings: ["Pick how you serve it", "Static build", "Docker image", "After it is up"],
-    excerpt: "Serve the Mushi Mushi admin console yourself, as a static build, a Docker image or in Compose. Vite bakes the backend address in at build time; a console built without it asks on…",
+    excerpt: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open.",
   },
   {
     title: "Docker Compose",
@@ -2119,7 +2119,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "self-hosting/supabase.md",
     keywords: ["self-hosting", "self", "hosting", "supabase", "hand"],
     headings: ["1. Link and push the migrations", "2. Set the function secrets", "3. Point cron at your project", "4. Deploy the functions", "5. Check it", "Row-level security"],
-    excerpt: "Set up a Supabase project for self-hosted Mushi Mushi step by step, without selfhost up. Link, push the migrations, set the secrets, point cron at your project, deploy the…",
+    excerpt: "Set up Supabase for self-hosted Mushi Mushi by hand: link, push migrations, set secrets, point cron at your project, deploy the functions.",
   },
   {
     title: "Use cases & comparisons",

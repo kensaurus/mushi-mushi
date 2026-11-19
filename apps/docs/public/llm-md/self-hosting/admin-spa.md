@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting/admin-spa
 
 ---
 title: Host the console
-description: Serve the Mushi Mushi admin console yourself, as a static build, a Docker image or in Compose. Vite bakes the backend address in at build time; a console built without it asks on first open.
+description: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open."
 ---
 
 # Host the console

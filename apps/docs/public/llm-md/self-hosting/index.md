@@ -4,7 +4,7 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting
 
 ---
 title: Self-hosting quickstart
-description: Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command, npx mushi-mushi selfhost up. Every feature on, no usage limits.
+description: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits."
 ---
 
 # Self-hosting quickstart
