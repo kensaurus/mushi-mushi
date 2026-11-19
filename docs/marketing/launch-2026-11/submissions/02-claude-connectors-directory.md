@@ -82,7 +82,7 @@ With this connector, Claude can:
 
 Sign-in uses OAuth. You choose which apps Claude may see, and you can revoke access at any time in the Mushi Mushi console. Tools that change anything ask first.
 
-Free for one app. Open source: https://github.com/kensaurus/mushi-mushi
+Free for three apps. Open source: https://github.com/kensaurus/mushi-mushi
 ```
 
 ## Reviewer test account (owner, about 10 minutes)

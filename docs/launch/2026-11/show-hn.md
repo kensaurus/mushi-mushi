@@ -43,7 +43,7 @@ What it is:
 What it isn't: an error tracker. It starts from what your users feel, not
 from what your code throws, and works with no Sentry at all.
 
-Free: 1 app. Builder is $29/mo for 3 apps. If you have a live app, there's a
+Free: 3 apps, 300 diagnoses a month. Builder is $29/mo for 1,000. If you have a live app, there's a
 free production check that reads your public pages and tells you what's
 broken right now, no sign-up needed.
 

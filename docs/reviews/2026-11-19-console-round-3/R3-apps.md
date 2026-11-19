@@ -1,0 +1,150 @@
+# Round 3 strict findings: apps group
+Scope: portfolio, projects, checks, ci, health, providers, fullstack_audit, recipe, inventory, design, content, releases, ops, repo, explore, graph, query, queue. I read every in-scope shot at 1440 and 390; tall shots were tiled into `scratchpad\psweep\r3tiles\`. Out of scope as briefed: the /ci Settings 546 error, and the cyan single-app banner. An endless spinner counts as the "not checked + Retry" fallback failing, so all spinners are rated high.
+
+## Still open from round 2
+- [high] ci > All apps @390 — "Reading your CI…" spinner on an otherwise blank page (390-ci--All_apps.jpg) → timeout → "not checked" + Retry.
+- [high] projects > Your apps @390 — a page-width horizontal scrollbar still shows at the page bottom (390-projects--Your_apps10.jpg tile 3) → remove the page overflow.
+- [high] portfolio > Releases @1440+390 — the CI runners card is still on "Reading CI…" (1440/390-portfolio--Releases.jpg) → timeout → "not checked" + Retry.
+- [high] portfolio > Spend @1440+390 — "Spend per app (30 days)" is still on "Adding up what each app costs…" (1440/390-portfolio--Spend.jpg) → timeout → "not checked" + Retry.
+- [high] ci > Speed and cost @1440 — the single loader "Working out what CI costs and reading your GitHub bill…" is still spinning (1440-ci--Speed_and_cost6.jpg tile 3) → timeout → "not checked" + Retry.
+- [high] recipe @1440+390 — next step is said 3×: the header line "Next step, Automated checks: 2 problems to fix: Mushi Mushi setup check (2).", the card text "2 problems to fix: Mushi Mushi setup check (2). They and their fixes are under Risk checks…", and the card footer "2 problems to fix" (1440/390-recipe.jpg) → keep the header line; the card shows a mark + "2" only.
+- [med] ci > Now @1440 — the "glot.it" + "#1081" chips repeat on all 5 running/waiting rows, and "overseas-ci" on 3 (1440-ci.jpg) → one group header "glot.it #1081", and drop the per-row machine chip.
+- [med] ci > Now/Machines @1440 — "missing kensaurus-local" (red pill) is repeated as "2 waiting for ✕ kensaurus-local"; "Not code failures" is on the Now card and again in the Machines intro (1440-ci.jpg, 1440-ci--Machines7_stopped.jpg) → say each once.
+- [med] ci > Machines + Settings @1440+390 — the amber "GitHub access" banner is on both tabs; on Settings it says "Machines that report in show below" but no machines follow (1440/390-ci--Settings.jpg) → show it once on Machines, neutral colour.
+- [med] health > Unusual spikes @1440+390 — tabs are still stacked: the Summary/Spikes/Metrics bar plus "Each number you send gets a chart here…" sit under the "No metric data yet" empty state (1440/390-health--Unusual_spikes.jpg) → hide the sub-tabs and the sentence until metrics exist.
+- [med] providers > Providers/Routes @1440+390 — still shows repo slugs: "Used by: how-to-talk-to-girls", "bento", and the Routes header "how-to-talk-to-girls" (1440-providers.jpg, 1440-providers--Routes.jpg) → use app names (lets-talk…).
+- [med] projects > Your apps @1440+390 — keys are still listed twice (in the green panel, plus the "Keys (4)" expander and the Keys 4 tile); "Never used" appears ×2, each with the same sentence "This key has never been used by your app — add SDK env vars and rebuild." (1440/390-projects--Your_apps10.jpg) → list keys once, with one line "2 keys never used".
+- [med] portfolio > Digest vs Apps @1440 — still three words for one idea: "serious holes" (digest), "Risks" (table), "parts to fix" / "risks to look at" (CRITICAL cards) (1440-portfolio--Digest.jpg, 1440-portfolio.jpg) → one word everywhere.
+- [low] ci > Settings @390 — the shot is viewport-only with a scrollbar, and the card is cut at "Another label" (390-ci--Settings.jpg); the rest of the card can't be reviewed → let the card grow with the page, no inner scroll.
+- [low] repo > Clean up @1440+390 — the top strip still says "1 PR ready to merge." while this tab's blocker is "No GitHub token is stored" (1440/390-repo--Clean_up.jpg) → put the missing token in the tab status; the blocker box itself is now first.
+- [low] repo > Clean up @1440+390 — the 3-line explainer "Mushi asks GitHub to delete a branch only if it still points at the commit shown…" is still inline → move it behind ⓘ.
+- [low] repo > Pull requests @1440+390 — "1 PR ready to merge." in the strip, then a "Ready to merge" heading right below (1440/390-repo.jpg) → drop the heading.
+- [low] product name shortened — "Mushi daily digest for kenji" (portfolio Digest), "Mushi proposes the batch" (portfolio Releases), "Mushi skips it" (fullstack_audit, inventory Code checks), "Mushi's Anthropic calls" / "Mushi cannot cap" (recipe, inventory Code checks), "Mushi asks GitHub" / "Mushi reads the branch" (repo Clean up), "Mushi release trains" (390 ci Speed) → "Mushi Mushi".
+- [low] ci > Now @1440 — Job times "Spread 0 – 55 min" scale with every visible bar ≤ 45% (1440-ci.jpg tile 4) → scale to the visible rows.
+
+### Fixed / not visible
+- FIXED, portfolio:
+  - Fix-once rotated names
+  - four cards merged into one list
+  - release-age hatching (one line)
+  - Stage/Native columns
+  - 390 stacked rows
+  - 390 Digest tab and ~580px of chrome
+  - Payments red → amber
+  - glot.it "8 of 9 checked"
+  - ragged channel selects
+  - 453/49/228 chip counts
+- FIXED, projects:
+  - green "All projects ingesting"
+  - Open inbox / Update ×8
+  - slug chips
+  - cut "Auto-fix…" text and "+2 7d"
+  - empty rows
+  - one noun
+  - Stale banner
+  - collapsed install guide
+  - labelled toolbar
+- FIXED, checks: double counts; five cards → one list.
+- FIXED, ci:
+  - 769/769 window
+  - filters sum to 42
+  - Queue folded into Running now
+  - "waits" ×9
+  - "7 stopped" badge and Re-run all
+  - grouped GitHub messages
+  - one loader (still spinning, see above)
+  - mushi-mushi ×12 chips
+  - charged vs list price
+  - ink "Open fix PR"
+  - "not run" for Never picked up
+  - one machine status across the 390 tabs
+- FIXED, health: tab routing; Code size greys; red dependency row at top; one empty state on Spikes; flat tabs on Code size/Schema.
+- FIXED, providers: Balance/Incidents columns; Spend tiles; History diffs.
+- FIXED, fullstack_audit: counts reconcile (2 err / 5 warn); rows merged; no title repeats or boxes.
+- FIXED, recipe: lanes fit; Risk checks at top; red "Error"; NOT MET grouping; diagram text.
+- FIXED, inventory: Code checks tiles/order/scroll; Out of sync "None"; Discovery zero state and snippet; Map file black box; 390 tabs.
+- FIXED, design and content: design header button; content green "No content issues".
+- FIXED, releases: per-tab empty state; Batch problem first; Pull now reason.
+- FIXED, ops: Needs a look first with matching count; 390 layout; Payments column; Acknowledge/Info grouping; run link.
+- FIXED, repo: Updated ×3; "all 1 required checks"; "0 events"; blocker box first.
+- FIXED, explore: 52/777 ×3; Backend "None found"; names wrap.
+- FIXED, graph:
+  - canvas size
+  - 390 sideways scroll
+  - legend
+  - "current" ×2 and green status
+  - Hide-isolated checkbox
+  - backend mode ×4
+  - amber "Not installed"
+  - "×211"
+- FIXED, query: Schema overprint; Overview tab; opens on Recent.
+- FIXED, queue: duplicate charts; backlog 0; "All stages".
+- NOT VISIBLE: recipe "Pages known 2 vs 0 routes" (now "Graph nodes 2"); inventory "No inventory rows — ingest yaml first."; graph "Snapshot drift" control.
+
+## New in round 3
+- [high] health > Scheduled jobs @1440+390 — intelligence-report has a green "success" pill while Overview says "1 scheduled job is overdue" and its row says "warn (13523m since last run)"; all 3 jobs read "0 runs · 100% success · avg 0ms"; the strip "Jobs OK 2/3" sits beside 3 green "success" (1440/390-health--Scheduled_jobs.jpg) → amber "overdue 9d" on that job; "no runs in window" instead of "100%" when runs = 0.
+- [med] portfolio > Apps @1440 — one app gets three counts with different labels and nothing tying them together: glot.it card "2 parts to fix" vs table Risks 8; mushi-mushi "4 parts to fix" vs 10; solo-boss-cloud "7 risks to look at" vs 9 (1440-portfolio.jpg) → one label, or label each scope.
+- [med] portfolio > Digest @1440+390 — the preview counts are labelled differently from the Apps tab with no link between them (yen-yen "3 serious holes" vs Risks 10; glot.it "2 serious holes … 6 things to look at" vs 8), and "things to look at" repeats on all 9 lines (1440-portfolio--Digest.jpg) → same label as the table, label stated once.
+- [med] portfolio > Releases @390 — the table scrolls sideways inside its card; the OTA changes column is hidden (390-portfolio--Releases.jpg) → stacked rows on phone.
+- [med] portfolio > Payments @390 — the Offerings table scrolls sideways; the Android column is hidden (390-portfolio--Payments.jpg) → stack iOS/Android per package.
+- [med] portfolio > Spend @1440+390 — "✓ Connected" green pill on all 6 Connected-sources rows (1440-portfolio--Spend.jpg) → mark only rows that are not connected; "6 connected" in the header.
+- [med] projects > Your apps @1440 — the app title wraps mid-word "kensaur / .us" beside the toolbar (1440-projects--Your_apps10.jpg) → title on its own row, or actions in a menu.
+- [med] projects > Your apps @1440 — amber "Auto-fix stopped on N reports" on 8 of 10 list rows (1440-projects--Your_apps10.jpg) → one grouped line "Auto-fix stopped on 8 apps" + an amber dot per row.
+- [med] ci > Now @1440 — job name shows the raw expression "Publish OTA (${{ (((inputs.track == 'beta') && 'beta') || 'production') }})" (1440-ci.jpg tile 3) → render the resolved name, or strip `${{ }}`.
+- [med] ci > Now @1440 — Timeline labels can't be told apart: "aw-the-wanting-mi…" ×2, "aw-help-her-take-p…" (1440-ci.jpg tile 3) → wider label column, or keep the numeric suffix when truncating.
+- [med] ci > Now @1440 — the sentence "769 jobs failed on the code in 7 days. 34 more in 7 days stopped because of the test machine…" restates the bar legend just below ("Tests failed 769", "Test machine stopped 34") (1440-ci.jpg tile 2) → drop the sentence.
+- [med] ci > Now (This app) @390 — the empty Timeline still shows its legend, 2h/6h/24h and "Point at or tab to a bar"; Finished has an intro over "Nothing finished in the last 2 hours."; "Running now 0" + "Nothing running or waiting." (390-ci.jpg) → one line per empty card, no legend or controls.
+- [med] ci > Speed and cost @390 — "(measured)"/"(estimated)" on every row label of every machine card (390-ci--Speed_and_cost1.jpg tiles 3–4) → two column groups, or one legend.
+- [med] ci > Speed and cost @390 — "Your real bill $200.80 charged" and "kensaurus · GitHub free $0.00 a month, estimated" on the same tab, no scope label (390-ci--Speed_and_cost1.jpg tiles 2–3) → label each: account bill vs this app's repo.
+- [med] ci > Speed and cost @390 — 5 nuc12-oneoff rows each "not listed by GitHub now · $0.00 a month · 150 W extra under load" (390-ci--Speed_and_cost1.jpg tile 4) → one row "5 one-off runners, not listed, $0".
+- [med] ci > Speed and cost @390 — Cost advice uses a red ▲ for "has no DEPLOY_RUNNER variable" (advice, not a failure); ▲/■ marks sit alone on their own line above the titles (390-ci--Speed_and_cost1.jpg tiles 4–5) → amber mark, inline with the title.
+- [med] ci > Speed and cost @390 — nested 3 deep: Cost and speed › bordered "Your real bill" › grey "Mushi Mushi agent pull requests" box, plus a grey "Example figures" box (390-ci--Speed_and_cost1.jpg tiles 2–3) → flat sections with dividers.
+- [med] ci > Settings @390 — the owner-decision text "Owner decision 2026-10-31: no company infra sponsorship…" appears twice: in the cyan "Your CI agreement" box and under the GitHub-hosted radio (390-ci--Settings.jpg) → once.
+- [med] health > AI calls @1440+390 — "8" shown 4× (strip, Total calls, per-function, per-model); error rate as 0% and 0.0%; "Updated" ×2; KPI tiles bordered inside the card (1440/390-health--AI_calls.jpg) → drop the Total-calls and Error-rate tiles, one timestamp, flatten.
+- [med] health > Recent traces @1440 — Recent LLM calls has no column headers; function cut "webhooks-github-in…" on all 8 rows with ~500px free; bare "tok –"; identical rows not grouped; filter reads "All Show" (1440-health--Recent_traces.jpg) → headers, full name, group by function, drop the dash.
+- [med] health > Code size @1440+390 — "Bundle size and god files explained" is open by default with 3 nested boxes; its amber "CI ingest key · Not wired" restates the empty state above ("No code size data yet … Mint ingest key") (1440/390-health--Code_size.jpg) → collapsed explainer, no amber row, one CTA.
+- [med] recipe @1440+390 — Overall shows amber "⚠ Needs attention" while Risk checks has a red "Error" (1440/390-recipe.jpg) → Overall takes the worst state (red).
+- [med] inventory > Code checks @1440+390 — a third verbatim copy of the Full-stack audit / App blueprint findings on a User stories page; the "test" key rejection appears twice ("A connected key was rejected", "An AI key was rejected"); "Provider limit unset" ×2 and "Known vulnerable dependency" ×3 are ungrouped (1440/390-inventory--Code_checks.jpg) → story/route checks only, link to Full-stack audit, group repeats.
+- [med] inventory > Discovery @1440 — "Watch your live site" shows a grey "loading" pill that does not resolve (1440-inventory--Discovery.jpg) → timeout → "not checked" + Retry, or the real state.
+- [med] ops @1440+390 — the "1 warning" group holds "⚠ Error: Word not found … Level: error" (1440/390-ops.jpg) → classify one way (failure, or a warning title and level).
+- [med] releases > App stores @1440+390 — on an app with no store source, the checkbox and "Only reviews of 1–2 stars" come first; the blocker "No App Store Connect or Google Play source is bound…" is at the bottom; it links "Portfolio → Connected sources", but the page is now Apps (1440/390-releases--App_stores.jpg) → blocker first, hide controls until bound, fix the link name.
+- [med] releases > Batch @1440+390 — "No deploy seen in 14 days, so reporters are not told when their fix is live." written in the strip and again in the amber repo row; "Updated" ×2 (1440/390-releases--Batch.jpg) → keep the amber row; strip = mark + count.
+- [med] explore > Map @390 — lanes scroll sideways in the card; only UI is visible, Library cut at "check-spine.mj" (390-explore--Map.jpg) → stack lanes on phone.
+- [med] explore > Map @1440+390 — three stacked tab bars (Summary/Understand/Map/Search › Layers/Graph/Diagram › Files/Symbols) before content (1440-explore--Map.jpg) → merge levels 2 and 3 into one control row.
+- [med] graph > Map/Summary/Sync debug @1440+390 — the empty state is said 3–5×: "0 bug groups, no links between them yet", "No two bugs share a cause yet. Mushi Mushi groups reports…", "No clusters · no links · hotspots: not enough links to tell", "2 items · no links", "Hide isolated nodes · no links yet" (1440/390-graph*.jpg) → keep the header line only.
+- [low] ci > Now @1440 — QUEUE WAIT card name cut "the-wanting-mi…" with room to wrap (1440-ci.jpg tile 1) → wrap or widen.
+- [low] ci > Now @1440 — intro paragraphs restate headers/legends (Finished jobs, Timeline, Job times "Each job over the last 7 days, most failing first…") (1440-ci.jpg) → drop them, or move them behind ⓘ.
+- [low] ci > Now @1440 — "2 hours" ×3 and "42" ×2 in the Finished header + filter; Skipped cards (Publish OTA, iOS TestFlight) mixed into the failures-first grid; Differs column empty on 9 of 10 rows (1440-ci.jpg) → one count, skipped in their own group, hide empty column.
+- [low] ci > Machines @1440 — "7 stopped" badge vs "Re-run all (6 runs)" (1440-ci--Machines7_stopped.jpg) → state jobs vs runs, or one number.
+- [low] ci > Now @390 — green sentence banner "Nothing needs you: no failing jobs, nothing stuck, no machine down."; Pass rate cells wrap "▲ / 100%" onto 2 lines (390-ci.jpg) → mark + short label; narrower glyph/number.
+- [low] ci > Speed and cost @1440+390 — "Passed" pill on every Slowest-jobs row (6 / 8); "Deploy to AWS S3 and CloudFront" ×8 at 390; Net per day chart ~80px, no axis; 4-line text walls; "read through 2026-10-27" ×2; slugs help-her-take-photo / cooler-heads (1440-ci--Speed_and_cost6.jpg, 390-ci--Speed_and_cost1.jpg) → marks only on failures, group by workflow, app names.
+- [low] portfolio > Releases @1440 — "not checked" repeated on all 3 rows under the "Not checked 3 apps" header, plus hatched cells; "Mushi demo (sample data)" listed (1440-portfolio--Releases.jpg) → group header only, hide the demo app.
+- [low] portfolio > Payments @1440+390 — "3 to fix" pill over rows that say "in review" (1440-portfolio--Payments.jpg) → "3 in review".
+- [low] portfolio > Spend @1440+390 — native "Choose File No file chosen" + disabled "Import CSV" with no reason; filled "Add an account" / "Add a source" boxes in cards; "Google Play · the wanting mind" vs "the-wanting-mind" (1440-portfolio--Spend.jpg) → styled input with a disabled reason, flat rows, app names.
+- [low] portfolio > Apps @390 — Fix once "No version probe 6" icons push "Add probe" onto its own line (390-portfolio.jpg tile 2) → overflow icons as "+N".
+- [low] portfolio > Payments @390 — "Billing catalog" label wraps 2 lines; path breaks "kensaurus-/spine" (390-portfolio--Payments.jpg) → label above value.
+- [low] projects > Your apps @1440+390 — slugs cut mid-word ("kensaurus/help-her-tak…", "the-wanting-…", "solo-boss-cl…"); 390 "Auto-fix stopp…", "web: kensaur.us (GitHub Actions…"; Project ID black ink pill reads as a button; CLI boxes nested in Verify setup; "Connected" chip under the "…is connected" heading (1440/390-projects--Your_apps10.jpg) → wrap, neutral ID pill, flatten, drop the chip.
+- [low] projects > Overview @1440+390 — "INGESTING" badge + "Ingesting 10" tile; "Mushi demo (sample data)" + "sample data" chip; helper line "To rename or delete an app, or get its key, open Your apps." (1440/390-projects.jpg) → one each; helper behind ⓘ.
+- [low] projects > New app @1440+390 — grey 2-line info box inside the card next to an ⓘ (1440/390-projects--New_app.jpg) → fold into the ⓘ.
+- [low] checks @1440+390 — "Not running yet (5)" header plus row pills "Not run yet" ×2 / "Not set up" ×3; CRITICAL card "Full-stack audit failed" + "✕ failed" (1440/390-checks.jpg) → two groups without pills; one "failed".
+- [low] health (all tabs) @1440 — tab bar above the page heading; unexplained "C Check" chip before the Schema changes / Unusual spikes headings; "Developer details · Updated now" on never-scanned views (1440-health*.jpg) → heading first, drop the chip, no timestamp without data.
+- [low] health > Scheduled jobs @1440+390 — 3-deep nesting (card › job card › grey box); "Cron Jobs" vs tab "Scheduled jobs"; "13523m" (1440-health--Scheduled_jobs.jpg) → flat rows, one name, "9d".
+- [low] health > Recent traces @1440+390 — "not probed" ×2, each with the same sentence "Runs a 1-token round-trip…" (1440-health--Recent_traces.jpg) → sentence once in the header.
+- [low] health > Code size @390 — red banner ▲ alone on its own line (390-health--Code_size.jpg) → inline mark.
+- [low] providers @1440+390 — "ok · 12h" next to "Probed 8m" unlabeled; chips "anthropic" / "openai" / "together" repeat the account name; "(shared key)" on every row; History has an uppercase "ADDED" pill on one row only; 390 Routes "scan-/receipt" wraps (1440/390-providers*.jpg) → label 12h, drop the chips, "Shared keys" heading once, plain verb.
+- [low] fullstack_audit @1440+390 — amber caveat "Only the newest 50 runs were read…" for a non-warning; 390 GHSA line cut "denial of s…" (1440/390-fullstack_audit.jpg) → neutral text; wrap.
+- [low] recipe @1440+390 — 390: copy icon alone on its own line under each finding (8 lone icons); 1440: ~250px empty grid under the diagram (1440/390-recipe.jpg) → inline icon; size the canvas to its lanes.
+- [low] inventory > User stories, releases > Drafts/Published @1440+390 — on these tabs the empty state sits above the tab bar while other tabs start with tabs, so the layout jumps (1440-inventory.jpg, 1440-releases.jpg, 1440-releases--Published.jpg) → tab bar first on every tab.
+- [low] inventory > Map file @1440+390 — native "Choose File No file chosen" with an enabled "Clear" when nothing is chosen; "No map file saved yet. Drop an inventory.yaml above…" restates the dashed box; 3-line intro (1440/390-inventory--Map_file.jpg) → styled picker, Clear disabled, one sentence.
+- [low] inventory > Discovery @390 — viewport-only shot: the code block scrolls sideways (projectId/apiKey ends hidden) and the shot stops mid-card, so "Map from live app" / "Watch your live site" are not visible at 390 (390-inventory--Discovery.jpg) → wrap the code; re-shoot full-page.
+- [low] content @390 — second line starts with an orphan "· from the scores…" (390-content.jpg) → keep the separator on line 1.
+- [low] ops @1440+390 — "PAYMENTS TODAY none yet" tile + "No app has sent payments yet." line; lowercase "help her take photo" / "mushi demo (sample data)" vs app names; demo app gets a grid row; "in /" fragment under "Error: Word not found"; the failure carries 3 reds (▲, 🔴, red border); at 390, 10 bordered app cards inside the card with "in 7d" on every chip (1440/390-ops.jpg) → one payments line, real app names, hide the demo, drop the fragment, one red mark, flat rows, "7d" once.
+- [low] explore @1440+390 — Summary tiles bordered inside the card; "Updated 2 seconds ago" beside "Indexed 14 hours ago"; 390 tiles stack to ~400px; Map cards show the extension twice ("main.tsx" + ".tsx"); "17 Tests" filter looks disabled (1440/390-explore--Summary.jpg, 1440-explore--Map.jpg) → flat 2×2 stats, one timestamp, drop the extension chip.
+- [low] graph > Map @1440+390 — search box, Node and edge types, 4 quick views and Re-layout for 2 nodes; "Click any card/node … blast radius" said twice (Story strip + right panel); lone right panel box (1440/390-graph.jpg) → hide controls under N nodes, hint once.
+- [low] graph > Sync debug @1440 — Graph storage card ~350px tall for 2 rows, with a bordered table inside; ontology list scrolls in its own box (1440-graph--Sync_debug.jpg) → size to content, no inner scroll.
+- [low] query @1440+390 — Recent 25 appears both in the Ask tab's Library and in History 25; the same query listed twice in a row ("How many bug reports did glot.it get in the last 7 days?" ×2, "How many open reports are there?" ×2); inner-scroll Library over an empty page; Saved 0 / Team 0 tabs spread across the full width at 1440; 390 Prompt library tabs scroll (Quality hidden); Schema "Updated" ×2 (1440/390-query*.jpg) → Library on History only, dedupe, no inner scroll, hide zero tabs.
+- [low] queue @1440+390 — "dead letter" ×4 (select, strip, heading, paragraph); "2 completed" ×2; 3-line "Nothing here means the pipeline is healthy…" (1440/390-queue.jpg) → one empty line.
+- [low] repo > Pull requests @1440+390 — "No fix branches yet" + paragraph + black "Open Reports" float outside any card; "Reports" vs the sidebar's "Bugs" (1440/390-repo.jpg) → one empty row inside the PR card, "Open Bugs".
+
+## Clean
+providers > Spend (1440, 390) · inventory > All actions (1440, 390) · inventory > Live probes (1440, 390) · inventory > Out of sync (1440, 390) · design (1440, 390) · content (1440) · releases > New draft (1440, 390) · repo > Activity (1440, 390) · explore > Search (1440, 390)

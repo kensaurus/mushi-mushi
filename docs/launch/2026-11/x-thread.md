@@ -44,6 +44,6 @@ Mushi is built for exactly those two days.
 It's open source (MIT SDKs, AGPL server), works inside Cursor / Claude Code,
 and runs on your own keys.
 
-Free for 1 app. $29/mo for 3.
+Free for 3 apps and 300 diagnoses a month. $29/mo for 1,000.
 
 Free check for your live app (no sign-up): https://kensaur.us/mushi-mushi/docs/check?src=x

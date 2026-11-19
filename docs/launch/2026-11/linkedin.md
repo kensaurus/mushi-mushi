@@ -16,8 +16,8 @@ The 265 matter most. AI-written fixes often look right and aren't: they hide
 the symptom, delete the test, or change the wrong file. With a reviewer that
 can say no, I let it run on apps people pay for.
 
-I packaged it as Mushi: open source, runs on your own keys, works inside
-Cursor and Claude Code. Free for one app, $29 a month for three.
+I packaged it as Mushi Mushi: open source, runs on your own keys, works inside
+Cursor and Claude Code. Free for three apps, $29 a month for more diagnoses.
 
 If you run an app built with Lovable, Bolt, Cursor or Claude Code, there's a
 free production check for your live site: kensaur.us/mushi-mushi/docs/check?src=li
