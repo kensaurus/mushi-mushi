@@ -41,6 +41,18 @@ describe('lessonsLead', () => {
   it('has no button with no rules and nothing ready', () => {
     expect(lessonsLead(stats({ candidateClusters: 3 })).action).toBeNull()
   })
+
+  it('says "1 rule guides" in the singular', () => {
+    expect(lessonsLead(stats({ activeLessons: 1, readyToPromote: 1 })).sentence).toBe(
+      '1 rule guides every new diagnosis and fix. 1 recurring bug is ready to become a rule.',
+    )
+  })
+
+  it('with no rules yet, counts the growing patterns and leaves the 3-report rule to the empty state', () => {
+    const lead = lessonsLead(stats({ candidateClusters: 2 }))
+    expect(lead.sentence).toBe('No rules yet. 2 recurring patterns are still collecting reports.')
+    expect(lead.sentence).not.toMatch(/3 reports/)
+  })
 })
 
 describe('LessonRuleRows', () => {

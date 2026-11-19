@@ -31,7 +31,7 @@ export function lessonsLead(stats: LessonsStats): { sentence: string; action: Le
   if (stats.readyToPromote > 0) {
     const ready = stats.readyToPromote === 1 ? '1 recurring bug is ready to become a rule' : `${stats.readyToPromote} recurring bugs are ready to become rules`
     return {
-      sentence: `${stats.activeLessons > 0 ? `${rules} guide every new diagnosis and fix.` : 'Rules guide every new diagnosis and fix.'} ${ready}.`,
+      sentence: `${stats.activeLessons > 0 ? `${rules} guide${stats.activeLessons === 1 ? 's' : ''} every new diagnosis and fix.` : 'Rules guide every new diagnosis and fix.'} ${ready}.`,
       action: { label: `Promote ${stats.readyToPromote}`, tab: 'clusters' },
     }
   }
@@ -48,7 +48,10 @@ export function lessonsLead(stats: LessonsStats): { sentence: string; action: Le
     }
   }
   if (stats.candidateClusters > 0) {
-    return { sentence: 'No rules yet. A bug becomes a rule once 3 reports share its cause; none has yet.', action: null }
+    // The tab's empty state already says how a rule is made (3 reports, one cause); say only
+    // how things stand here, so the rule is never repeated on one screen.
+    const growing = stats.candidateClusters === 1 ? '1 recurring pattern is' : `${stats.candidateClusters} recurring patterns are`
+    return { sentence: `No rules yet. ${growing} still collecting reports.`, action: null }
   }
   return { sentence: 'No lessons yet. A bug pattern that keeps coming back across reports becomes one.', action: null }
 }
