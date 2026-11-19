@@ -41,6 +41,7 @@ import {
 } from './icons'
 import { headerDropdownPanelClass } from '../lib/appChrome'
 import { CHIP_TONE } from '../lib/chipTone'
+import { formatStamp } from '../lib/buildInfo'
 
 interface VersionBadgeProps {
   whatsNew: ReturnType<typeof useWhatsNew>
@@ -445,7 +446,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             </div>
             <div className="text-right shrink-0 space-y-1">
               <VersionPill version={__BUILD_SHA__} />
-              <p className="text-2xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
+              <p className="text-2xs text-fg-faint leading-none font-mono tabular-nums">{formatStamp(__BUILD_TIME__) ?? __BUILD_DATE__}</p>
               <a
                 href={REPO_URL}
                 target="_blank"

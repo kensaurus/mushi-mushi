@@ -30,7 +30,7 @@ import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { NAV_ITEM_BY_PATH, buildOperatorNav, type BuiltNavItem, type BuiltNavSection } from '../lib/buildNav'
 import { coreNavPathsFor } from '../lib/navRegistry'
 import { LAB_FEATURES, useLabs } from '../lib/labs'
-import { NAV_CHILDREN, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
+import { NAV_CHILDREN, NAV_CHILD_GROUPS, activeParent, isNavPathActive, morePages } from '../lib/sidebarTree'
 import { Tooltip, Btn, Badge } from './ui'
 import { RouteProgress } from './RouteProgress'
 import { PAGE_FOOT_SLOT_ID } from './readout/ReadoutPanel'
@@ -42,6 +42,7 @@ import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DisplayPreferences } from './DisplayPreferences'
 import { SidebarUserCard, SignOutAllDialog } from './SidebarUserCard'
+import { SidebarBuildStamp } from './SidebarBuildStamp'
 import { PrivacyPostureBadge } from './PrivacyPostureBadge'
 import { DemoProjectHint } from './DemoProjectHint'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -379,6 +380,17 @@ export function Layout({ children }: { children: ReactNode }) {
       .filter(visibleByRole)
       .filter(visibleByFeature)
   }, [openParent, isSuperAdmin, isOperator, has])
+  // Headed groups (Checks › Your app / Builds & tests (CI) / Mushi Mushi
+  // itself); a group the viewer can see nothing in is dropped.
+  const childGroups = useMemo(() => {
+    if (!openParent) return null
+    const groups = NAV_CHILD_GROUPS[openParent]
+    if (!groups) return null
+    const visible = new Map(childItems.map((i) => [i.path, i]))
+    return groups
+      .map((g) => ({ id: g.id, title: g.title, items: g.paths.map((p) => visible.get(p)).filter((i): i is NavItem => i != null) }))
+      .filter((g) => g.items.length > 0)
+  }, [openParent, childItems])
   const moreGroups = useMemo(
     () =>
       morePages({ isOperator, isSuperAdmin }, labs.enabled).map((g) => ({
@@ -568,7 +580,16 @@ export function Layout({ children }: { children: ReactNode }) {
                       {renderNavLink(item, compact)}
                       {!compact && item.path === openParent && childItems.length > 0 ? (
                         <div className="ml-3 space-y-0.5 border-l border-edge/40 pl-2" data-testid="nav-children">
-                          {childItems.map((child) => renderNavLink(child, false))}
+                          {childGroups
+                            ? childGroups.map((group) => (
+                                <div key={group.id} className="space-y-0.5" data-testid={`nav-child-group-${group.id}`}>
+                                  <p className="px-2 pt-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-secondary">
+                                    {group.title}
+                                  </p>
+                                  {group.items.map((child) => renderNavLink(child, false))}
+                                </div>
+                              ))
+                            : childItems.map((child) => renderNavLink(child, false))}
                         </div>
                       ) : null}
                       {/* The icon rail has no room for the list: it shows
@@ -669,6 +690,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         )}
         <PrivacyPostureBadge compact={compact} />
+        <SidebarBuildStamp compact={compact} />
         {compact && (
           <Tooltip
             side="right"

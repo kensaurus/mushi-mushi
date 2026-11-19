@@ -23,7 +23,7 @@ import { Card, SegmentedControl, Btn } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 
 // Same order as the sidebar: verify the app, then the AI that triaged it.
-const SUB_GROUP_ORDER: CheckSubGroupId[] = ['system-health', 'quality-gates']
+const SUB_GROUP_ORDER: CheckSubGroupId[] = ['system-health', 'ci', 'quality-gates']
 
 export function CheckVerificationHub() {
   const [activeGroup, setActiveGroup] = useState<CheckSubGroupId>('system-health')
@@ -48,15 +48,15 @@ export function CheckVerificationHub() {
     <div className="space-y-4" data-testid="mushi-check-verification-hub">
       <PageHeaderBar
         title="Verification hub"
-        description="Pick a lane — App checks or AI quality. Beginner mode shows Scheduled tests and Triage grading in the sidebar; everything else lives here."
+        description="Pick a lane — Your app, Builds & tests (CI) or Mushi Mushi itself. Beginner mode shows Scheduled tests and Triage grading in the sidebar; everything else lives here."
         helpTitle="About verification"
         helpWhatIsIt="A grouped index of the 4 · Verify tools, so you can prove a fix works before you ship it without scanning a long flat list."
         helpUseCases={[
-          'After a fix PR: run Scheduled tests and the Full-stack audit from App checks',
+          'After a fix PR: run Scheduled tests and the Full-stack audit from Your app',
           'Before release: open Mushi Mushi health for schema changes and unusual spikes',
-          'Weekly: check Triage grading and Lessons under AI quality',
+          'Weekly: check Triage grading and Lessons under Mushi Mushi itself',
         ]}
-        helpHowToUse="Choose a tab, then open the tool you need. For Mushi Mushi’s own AI calls and jobs, open App checks → Mushi Mushi health."
+        helpHowToUse="Choose a tab, then open the tool you need. For Mushi Mushi’s own AI calls and jobs, open Mushi Mushi itself → Mushi Mushi health."
       >
         <Btn to="/health" size="sm" variant="ghost">
             Open live health dashboard →
