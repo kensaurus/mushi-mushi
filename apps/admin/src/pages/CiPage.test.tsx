@@ -24,11 +24,18 @@ const state = vi.hoisted(() => ({
   reloads: 0,
   summary: '' as string,
   syncs: [] as Array<{ path: string; scope?: string }>,
+  debug: null as unknown,
+  debugPaths: [] as string[],
 }))
 
 vi.mock('../lib/supabase', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   apiFetch: async (path: string, opts: { scope?: string } = {}) => {
+    // The job debug drawer (2026-11-19) reads its own route, never the overview.
+    if (path.startsWith('/v1/admin/ci/jobs/')) {
+      state.debugPaths.push(path)
+      return { ok: true, data: state.debug }
+    }
     state.syncs.push({ path, scope: opts.scope })
     return { ok: true, data: null }
   },
@@ -93,6 +100,8 @@ beforeEach(() => {
   state.loading = false
   state.reloads = 0
   state.summary = ''
+  state.debug = null
+  state.debugPaths = []
   window.localStorage.clear()
 })
 
@@ -265,8 +274,71 @@ describe('CiPage', () => {
     const failed = q('ci-queue-job-j7')
     if (failed) {
       expect(Array.from(failed.querySelectorAll('button')).some((b) => b.textContent?.includes('Re-run'))).toBe(false)
-      expect(Array.from(failed.querySelectorAll('a')).some((a) => a.textContent?.includes('Read the failing logs'))).toBe(true)
+      // "Why?" opens the log and the cause here; GitHub is the secondary link (2026-11-19).
+      expect(failed.querySelector('[data-testid="ci-why"]')).not.toBeNull()
+      expect(Array.from(failed.querySelectorAll('a')).some((a) => a.textContent?.includes('Open on GitHub'))).toBe(true)
     }
+  })
+
+  it('opens a failed job in the debug drawer: the failing step, the screened log, the cause and the actions', async () => {
+    state.debug = {
+      job: {
+        id: 'j7', projectId: 'p1', repo: 'kensaurus/mushi-mushi', runId: 1000, runAttempt: 1, jobId: 7, jobName: 'test', workflowName: 'CI', prNumber: null,
+        headBranch: 'mushi/fix', status: 'completed', conclusion: 'failure', ciKind: 'code_failure', infra: false, infraDetail: null,
+        htmlUrl: 'https://github.com/kensaurus/mushi-mushi/actions/runs/1000/job/j7', runUrl: 'https://github.com/kensaurus/mushi-mushi/actions/runs/1000', completedAt: null, durationSeconds: 600,
+      },
+      steps: [{ name: 'Set up job', conclusion: 'success', seconds: 2 }, { name: 'Run unit tests', conclusion: 'failure', seconds: 40 }],
+      failedStep: 'Run unit tests',
+      log: { status: 'ok', excerpt: 'AssertionError: expected 2 to be 3', linesDropped: 1 },
+      annotations: ['cart.test.ts: expected 2 to be 3'],
+      explanation: null,
+      actions: { rerun: true, cancel: false, explain: true, ciRepair: { fixId: 'f9', reportId: 'r9' } },
+    }
+    await render()
+    const why = q('ci-broke-kensaurus/mushi-mushi|mushi/fix')?.querySelector('[data-testid="ci-why"]') ?? host.querySelector('[data-testid="ci-why"]')
+    expect(why).not.toBeNull()
+    await act(async () => (why as HTMLButtonElement).click())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(state.debugPaths).toEqual(['/v1/admin/ci/jobs/j7/debug'])
+    const panel = document.querySelector('[data-testid="ci-debug-panel"]') as HTMLElement
+    expect(panel).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-step"]')!.textContent).toContain('Failed at Run unit tests')
+    expect(panel.querySelector('pre')!.textContent).toBe('AssertionError: expected 2 to be 3')
+    expect(panel.textContent).toContain('1 line hidden')
+    expect(panel.querySelector('[data-testid="ci-debug-annotations"]')!.textContent).toContain('cart.test.ts')
+    expect(panel.querySelector('[data-testid="ci-debug-explain"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-rerun"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-repair"]')).not.toBeNull()
+    expect(panel.querySelector('[data-testid="ci-debug-cancel"]')).toBeNull()
+  })
+
+  it('groups the Now view by app with All apps and two apps: worst app first, healthy ones collapsed', async () => {
+    const base = ciOverviewFixture()
+    const P2 = 'p2'
+    state.overview = {
+      ...base,
+      repos: base.repos.map((r) => (r.repo === 'kensaurus/mushi-mushi' ? { ...r, projectId: P2 } : r)),
+      jobs: base.jobs.map((j) => (j.repo === 'kensaurus/mushi-mushi' ? { ...j, projectId: P2 } : j)),
+    }
+    await render('/ci?apps=all')
+    const byApp = q('ci-by-app')!
+    expect(byApp).not.toBeNull()
+    // "Running now" and "What broke" live inside each app's group now.
+    expect(hasHeading('Running now')).toBe(false)
+    expect(hasHeading('What broke in the last 2 hours')).toBe(false)
+    const groups = Array.from(byApp.querySelectorAll('[data-testid^="ci-app-group-"]'))
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual(['mushi-mushi', 'glot.it'])
+    // Each app's live jobs sit under it; the machine that stopped reporting stays in the strip on top.
+    expect(q('ci-app-live-p2')!.querySelector('[data-testid="ci-waiting-j4"]')).not.toBeNull()
+    expect(q('ci-alert-stale:h-aw')).not.toBeNull()
+    // Single-app mode stays flat.
+    act(() => root.unmount())
+    root = createRoot(host)
+    await render('/ci')
+    expect(q('ci-by-app')).toBeNull()
+    expect(hasHeading('Running now')).toBe(true)
   })
 
   it("opens the week with a plain verdict and the outcome bar, not the board's live queue again", async () => {

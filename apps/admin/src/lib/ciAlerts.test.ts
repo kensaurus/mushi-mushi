@@ -55,6 +55,35 @@ describe('rankCiAlerts', () => {
     expect(a.keys).toEqual(['job:kensaurus/mushi-mushi|test', 'repo:kensaurus/mushi-mushi'])
   })
 
+  it('merges one job that keeps failing in several apps into ONE card, a bar per app', () => {
+    const o = ciOverviewFixture()
+    o.repos = [...o.repos, { ...o.repos[0]!, projectId: 'p-yen', projectName: 'yen-yen', repo: 'kensaurus/yen-yen' }]
+    o.stats.byJob = [
+      jobType({ repo: 'kensaurus/mushi-mushi', job: 'Check Mushi SDK freshness', runs: 4, codeFailures: 3, failRate: 0.75 }),
+      jobType({ repo: 'kensaurus/yen-yen', job: 'Check Mushi SDK freshness', runs: 2, codeFailures: 2, failRate: 1 }),
+      jobType({ repo: 'kensaurus/mushi-mushi', job: 'test', runs: 4, codeFailures: 2, failRate: 0.5 }),
+    ]
+    const alerts = rank(o)
+    const merged = alerts.filter((a) => a.title === 'Check Mushi SDK freshness keeps failing')
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ id: 'fails-many:check mushi sdk freshness', app: '2 apps', projectId: null, metric: { value: '100', unit: '% fail' } })
+    expect(merged[0]!.bars!.map((b) => [b.label, b.display])).toEqual([
+      ['mushi-mushi', '75%'],
+      ['yen-yen', '100%'],
+    ])
+    // A job failing in one app keeps its own card, filed under that app, with the job to debug.
+    const own = alerts.find((a) => a.id.startsWith('fails:'))!
+    expect(own.title).toBe('test keeps failing')
+    expect(own.projectId).toBe(o.repos.find((r) => r.repo === 'kensaurus/mushi-mushi')!.projectId)
+    expect(own.debugJobId).toBe('j7')
+  })
+
+  it('points each card at the job "Why it failed" opens, and at its app when it is one app', () => {
+    const alerts = rank(ciOverviewFixture())
+    expect(alerts.find((a) => a.id === 'infra')!.debugJobId).toBe('j6')
+    expect(alerts.find((a) => a.id === 'stale:h-aw')).toMatchObject({ projectId: null, debugJobId: null })
+  })
+
   it('does not call a single failure "keeps failing"', () => {
     const o = ciOverviewFixture()
     o.stats.byJob = [jobType({ codeFailures: 1, failRate: 1, runs: 1 })]

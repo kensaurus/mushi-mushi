@@ -16,6 +16,10 @@
  *   - Settings: where CI runs (ADR 0037 placement).
  * Old `/ci#ci-…` links still work: the hash picks the view, then
  * useScrollToHash scrolls to the section.
+ * Debug in place (2026-11-19): every failed job (alert cards, What broke, the queue, the stopped
+ * jobs, the job drawer) opens one drawer with the failing step, the screened log, a plain-English
+ * cause (OpenAI, cached) and Re-run / Cancel / Send to CI repair (components/ci/CiJobDebug.tsx).
+ * All apps with two or more apps groups the Now view by app, worst first.
  * Scope follows the header switcher (lib/projectScope.ts): one app, or
  * "All apps" for every project the caller can see. The toggle here mirrors
  * that choice. The page paints from the stored jobs first, then asks the
@@ -56,6 +60,9 @@ import { CiNodeDrawer } from '../components/ci/CiNodeDrawer'
 import { CiAdviceList, CiInfraFailures, CiSlowJobs } from '../components/ci/CiSections'
 import { CiSummary } from '../components/ci/CiSummary'
 import { CiAlertStrip } from '../components/ci/CiAlertStrip'
+import { CiDebugProvider } from '../components/ci/CiJobDebug'
+import { rankCiAlerts } from '../lib/ciAlerts'
+import { ciAppCount } from '../lib/ciDebug'
 import { CiHighlightProvider } from '../lib/ciHighlight'
 import { CiCostSection } from '../components/ci/CiCostSection'
 import { CiCostFixRollout } from '../components/ci/CiCostFixRollout'
@@ -267,6 +274,11 @@ export function CiPage() {
   // The "What's wrong" strip ranks from the same status the board shows, refreshed with the clock.
   const now = useNow(30_000)
   const status = useMemo(() => (data ? buildCiStatus(data, now) : null), [data, now])
+  // Ranked once: the strip shows them, and with All apps each lands under its app.
+  const alerts = useMemo(() => (data && status ? rankCiAlerts(data, status, now) : []), [data, status, now])
+  // Grouping by app helps only with two or more apps (owner, 2026-11-19: "group the data of each app").
+  const byApp = scope === 'all' && !!data && ciAppCount(data) >= 2
+  const topAlerts = useMemo(() => (byApp ? alerts.filter((a) => a.projectId == null) : alerts), [byApp, alerts])
   const placementApps = useMemo(() => {
     const byId = new Map<string, string>()
     for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
@@ -310,6 +322,7 @@ export function CiPage() {
   })
 
   return (
+    <CiDebugProvider onChanged={() => void live.sync()}>
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-ci">
       <PageHeaderBar
         title="CI runners"
@@ -418,11 +431,20 @@ export function CiPage() {
         // query, not viewport: the sidebar can be open or closed. The container is the wrapper:
         // a container query never matches the container element itself.
         <CiHighlightProvider>
-        {status && <CiAlertStrip overview={data} status={status} now={now} />}
+        {status && (
+          <CiAlertStrip
+            overview={data}
+            status={status}
+            now={now}
+            alerts={topAlerts}
+            // With All apps the app cards sit in their app's group below: "Nothing needs you" over them would be wrong.
+            emptyText={byApp && alerts.length > 0 ? null : 'Nothing needs you'}
+          />
+        )}
         <div className="@container">
         <div className={`grid items-start gap-4 ${NOW_GRID}`} data-testid="ci-now-grid">
           <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={`ci-rise ${NOW_MAIN}`}>
-            <CiStatusBoard overview={data} fixLinks={fixLinks} />
+            <CiStatusBoard overview={data} fixLinks={fixLinks} groupByApp={byApp} alerts={alerts} onOpenApp={pickApp} />
           </Section>
 
           <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={`ci-rise ${NOW_SIDE}`}>
@@ -515,5 +537,6 @@ export function CiPage() {
 
       {data && !empty && <CiNodeDrawer overview={data} nodeId={selected} onClose={() => setSelected(null)} onSelect={setSelected} />}
     </div>
+    </CiDebugProvider>
   )
 }

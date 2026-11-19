@@ -73,3 +73,27 @@ own the VM.
 - **elkjs for the map.** 1.4 MB for a tree dagre lays out in 40 KB.
 - **Reading runner logs or `_diag` files.** They can contain secrets and
   need host access the API key path should not have.
+
+## Amendment 2026-11-19: debug a job from the console
+
+Every failed job on `/ci` opens one panel (`GET /v1/admin/ci/jobs/:id/debug`, keyed by the
+`ci_jobs` row, member-authorised for its project):
+
+- **GitHub job logs, not runner logs.** The log comes from GitHub's Actions API
+  (`/actions/jobs/{id}/logs`, the same read the ADR 0032 CI-repair amendment uses), read live on
+  open: its last 64 KB, screened by `extractCiLogExcerpt` (instruction-like and secret-naming lines
+  dropped, URLs replaced, at most 60 lines / 3,000 characters). Raw log text is never stored or
+  logged. The repo must still be bound to the project, and the platform token is never used. The
+  rejection of runner host logs and `_diag` files above stands.
+- **Explain** (`POST …/explain`, non-viewers): a machine stop or a cancel is answered from
+  `ci_kind`; a code failure sends the screened excerpt, fenced and scrubbed, to OpenAI's mini model
+  through the project's key pool (`withLlmFailover('openai')`: budget, wallet, rotation; logged in
+  `llm_invocations`), at most 30 new explanations an hour per app. The answer (cause, next step,
+  code / flaky / infra) is cached per job attempt in `ci_job_explanations`; only the model's
+  answer is stored.
+- **Run actions keyed by the job's run, not by a fix:** re-run failed jobs and cancel
+  (`POST …/rerun`, `…/cancel`, non-viewers, 20 an hour per app, audited). They need Actions write,
+  which the GitHub App does not request: a refused App token is retried once with the project's
+  stored token, and a 403 then becomes `GITHUB_ACTIONS_WRITE_MISSING` with the GitHub-connection
+  fix. "Send to CI repair" reuses the pipeline `ci_repair` action (ADR 0032).
+
