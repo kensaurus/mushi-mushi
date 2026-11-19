@@ -559,7 +559,7 @@ function AppGroupBody({ g, overview, status, now, fixLinks }: { g: CiAppGroup; o
   return (
     <div className="flex flex-col gap-2 pt-0.5">
       {g.alerts.length > 0 && (
-        <CiAlertStrip overview={overview} status={status} now={now} alerts={g.alerts} emptyText={null} testIdPrefix={`ci-app-${g.id}`} maxShown={3} columns={3} />
+        <CiAlertStrip overview={overview} status={status} now={now} alerts={g.alerts} emptyText={null} testIdPrefix={`ci-app-${g.id}`} maxShown={3} columns={3} showPinned={false} />
       )}
       {g.causes.length > 0 && (
         <ul className="flex flex-col gap-2" data-testid={`ci-app-causes-${g.id}`}>
@@ -638,7 +638,9 @@ function AppGroups({
       <div className="flex flex-col">
         {groups.apps.map((g) => (
           <AppGroupSection
-            key={g.id}
+            // Re-keyed when its health flips: AppGroupSection reads defaultOpen once, and an app that
+            // turns red on the next poll must open, not stay collapsed.
+            key={`${g.id}:${g.healthy}`}
             app={{ id: g.id, name: g.name }}
             counts={g.counts}
             countLabels={{ cancelled: 'stopped', slow: 'slow', waiting: 'waiting' }}

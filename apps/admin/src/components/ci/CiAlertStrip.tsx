@@ -129,9 +129,11 @@ interface CiAlertStripProps {
   /** Cards on a wide screen before "Show more" (6 on the page strip, 3 inside an app's group). */
   maxShown?: number
   columns?: 3 | 6
+  /** The "Pinned" trail: on for the page strip, off for each app's own strip (it would repeat per app). */
+  showPinned?: boolean
 }
 
-export function CiAlertStrip({ overview, status, now, alerts: given, emptyText = 'Nothing needs you', testIdPrefix = 'ci', maxShown = ALERTS_SHOWN, columns = 6 }: CiAlertStripProps) {
+export function CiAlertStrip({ overview, status, now, alerts: given, emptyText = 'Nothing needs you', testIdPrefix = 'ci', maxShown = ALERTS_SHOWN, columns = 6, showPinned = true }: CiAlertStripProps) {
   const debug = useCiDebug()
   const alerts = useMemo<SignalAlert[]>(
     () =>
@@ -157,6 +159,7 @@ export function CiAlertStrip({ overview, status, now, alerts: given, emptyText =
       columns={columns}
       testIdPrefix={testIdPrefix}
       pinWithoutKeys
+      showPinned={showPinned}
       keyLabel={(key) => keyLabel(overview, key)}
     />
   )

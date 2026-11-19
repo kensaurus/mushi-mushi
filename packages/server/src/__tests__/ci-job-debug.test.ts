@@ -127,7 +127,11 @@ interface Setup {
   role: { value: string | null }
   rate: { allowed: boolean }
   github: Record<string, { status: number; body: unknown; text?: string }>
-  token: { value: { token: string } | { error: 'not_bound' | 'no_token' } }
+  token: { value: { token: string; source: 'app' | 'stored' } | { error: 'not_bound' | 'no_token' } }
+  /** What `skipApp` resolves to: the project's stored token, or none. */
+  stored: { value: { token: string; source: 'stored' } | { error: 'not_bound' | 'no_token' } }
+  /** Per-token answers (by Authorization header) for the run actions. */
+  byToken: Record<string, number>
   model: { calls: number; error: unknown }
   llmLogs: Array<Record<string, unknown>>
   audits: unknown[][]
@@ -143,12 +147,16 @@ function setup(seedJobs = [jobRow({ id: JOB }), jobRow({ id: JOB_STOPPED, job_id
   const role = { value: 'member' as string | null }
   const rate = { allowed: true }
   const github: Setup['github'] = {}
-  const token: Setup['token'] = { value: { token: 'ghp_test' } }
+  const token: Setup['token'] = { value: { token: 'ghp_test', source: 'app' } }
+  const stored: Setup['stored'] = { value: { error: 'no_token' } }
+  const byToken: Setup['byToken'] = {}
   const model: Setup['model'] = { calls: 0, error: null }
   const llmLogs: Setup['llmLogs'] = []
   const audits: unknown[][] = []
   const fetchImpl = async (url: string, init: RequestInit) => {
     calls.push(`${init.method ?? 'GET'} ${url}`)
+    const auth = (init.headers as Record<string, string> | undefined)?.Authorization ?? ''
+    if (auth in byToken) return new Response(byToken[auth] === 204 ? null : '{}', { status: byToken[auth] })
     const hit = Object.entries(github).find(([k]) => url.includes(k))
     if (hit?.[1].text != null) return new Response(hit[1].text, { status: hit[1].status })
     const r = hit?.[1] ?? { status: 404, body: {} }
@@ -175,7 +183,7 @@ function setup(seedJobs = [jobRow({ id: JOB }), jobRow({ id: JOB_STOPPED, job_id
     fetchImpl,
     now: () => NOW,
     debug: {
-      resolveRepoToken: async () => token.value,
+      resolveRepoToken: async (_db, _p, _r, opts) => (opts?.skipApp ? stored.value : token.value),
       explainModel: async () => {
         model.calls++
         if (model.error) throw model.error
@@ -184,7 +192,7 @@ function setup(seedJobs = [jobRow({ id: JOB }), jobRow({ id: JOB_STOPPED, job_id
       logLlmInvocation: async (_db, rec) => { llmLogs.push(rec) },
     },
   })
-  return { db, app, calls, role, rate, github, token, model, llmLogs, audits }
+  return { db, app, calls, role, rate, github, token, stored, byToken, model, llmLogs, audits }
 }
 
 const withLog = (s: Setup) => {
@@ -282,7 +290,7 @@ describe('POST /v1/admin/ci/jobs/:id/explain', () => {
     expect(first.body.data.explanation).toMatchObject({ kind: 'code', source: 'ai', model: 'gpt-6-luna', nextStep: 'Fix addItem in cart.ts.' })
     expect(first.body.data.explanation.cause).not.toContain('x.example')
     expect(s.llmLogs).toHaveLength(1)
-    expect(s.llmLogs[0]).toMatchObject({ projectId: P1, stage: 'ci-job-explain', status: 'success', keySource: 'byok', inputTokens: 900 })
+    expect(s.llmLogs[0]).toMatchObject({ projectId: P1, functionName: 'ci-job-explain', stage: 'ci-job-explain', status: 'success', keySource: 'byok', inputTokens: 900 })
     expect(s.db.table('ci_job_explanations')).toHaveLength(1)
     expect(s.db.table('ci_job_explanations')[0]).toMatchObject({ ci_job_id: JOB, kind: 'code' })
 
@@ -352,6 +360,35 @@ describe('POST /v1/admin/ci/jobs/:id/rerun and /cancel', () => {
     expect(res.status).toBe(403)
     expect(res.body.error).toMatchObject({ code: 'GITHUB_ACTIONS_WRITE_MISSING', fix: `/integrations/config?project=${P1}#platform-card-github` })
     expect(res.body.error?.message).toContain('Actions: Read and write')
+    expect(res.body.error?.message).toContain('add a fine-grained token')
+  })
+
+  it('retries a run action the App token was refused with the stored token, which can write Actions', async () => {
+    const s = setup()
+    s.stored.value = { token: 'ghp_stored', source: 'stored' }
+    s.byToken['Bearer ghp_test'] = 403
+    s.byToken['Bearer ghp_stored'] = 201
+    const res = await rerun(s, JOB)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toEqual({ runId: 900, action: 'rerun' })
+    expect(s.calls).toHaveLength(2)
+  })
+
+  it('says the stored token itself lacks the permission when it is refused too', async () => {
+    const s = setup()
+    s.stored.value = { token: 'ghp_stored', source: 'stored' }
+    s.byToken['Bearer ghp_test'] = 403
+    s.byToken['Bearer ghp_stored'] = 403
+    const res = await rerun(s, JOB)
+    expect(res.status).toBe(403)
+    expect(res.body.error).toMatchObject({ code: 'GITHUB_ACTIONS_WRITE_MISSING', fix: `/integrations/config?project=${P1}#platform-card-github` })
+    expect(res.body.error?.message).toContain('token saved in the GitHub connection')
+    // A stored token refused first is never retried with itself.
+    const t = setup()
+    t.token.value = { token: 'ghp_stored', source: 'stored' }
+    t.byToken['Bearer ghp_stored'] = 403
+    expect((await cancel(t, JOB_LIVE)).body.error?.message).toContain('token saved in the GitHub connection')
+    expect(t.calls).toHaveLength(1)
   })
 
   it('refuses viewers, a passed job, a live job and a repo no longer connected', async () => {

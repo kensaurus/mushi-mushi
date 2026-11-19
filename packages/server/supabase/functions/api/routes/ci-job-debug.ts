@@ -22,7 +22,9 @@
  *
  * GitHub token: the repo must still be bound to the project (project_repos); its App
  * installation first, then the project's own token, never the platform token (the log is repo
- * content handed to the caller, the same rule as the digest and diagram routes).
+ * content handed to the caller, the same rule as the digest and diagram routes). The Mushi Mushi
+ * GitHub App reads Actions but cannot write them (2026-11), so a re-run or cancel the App token is
+ * refused retries once with the stored token, the one the "add a fine-grained token" fix adds.
  */
 
 import type { Context, Hono } from 'npm:hono@4'
@@ -83,21 +85,33 @@ export interface CiExplainModelResult {
   keySource: 'byok' | 'env'
 }
 
+export type CiRepoToken = { token: string; source: 'app' | 'stored' } | { error: 'not_bound' | 'no_token' }
+
 export interface CiJobDebugDeps {
-  /** The GitHub token for a repo bound to the project, or why there is none. */
-  resolveRepoToken: (db: Db, projectId: string, repo: string) => Promise<{ token: string } | { error: 'not_bound' | 'no_token' }>
+  /**
+   * The GitHub token for a repo bound to the project, and where it came from, or why there is none.
+   * `skipApp`: only the stored token (the project's, else its organization's), never the App's.
+   */
+  resolveRepoToken: (db: Db, projectId: string, repo: string, opts?: { skipApp?: boolean }) => Promise<CiRepoToken>
   /** One model call: the system and user turns in, the validated answer out. */
   explainModel: (db: Db, projectId: string, prompt: { system: string; user: string }) => Promise<CiExplainModelResult>
   logLlmInvocation: (db: Db, rec: Record<string, unknown>) => Promise<unknown>
 }
 
 export const defaultCiJobDebugDeps: CiJobDebugDeps = {
-  resolveRepoToken: async (db, projectId, repo) => {
+  resolveRepoToken: async (db, projectId, repo, opts = {}) => {
     const binding = (await boundRepos(db as never, [projectId])).find((b) => b.repo.toLowerCase() === repo.toLowerCase())
     if (!binding) return { error: 'not_bound' }
-    const { resolveProjectGithubToken } = await import('../../_shared/github.ts')
-    const token = await resolveProjectGithubToken(db as never, projectId, binding.installationId, { allowEnvFallback: false })
-    return token ? { token } : { error: 'no_token' }
+    const { mintInstallationToken, resolveProjectGithubToken } = await import('../../_shared/github.ts')
+    if (!opts.skipApp && binding.installationId) {
+      try {
+        return { token: await mintInstallationToken(binding.installationId), source: 'app' }
+      } catch {
+        // A failed mint falls through to the stored token, as resolveProjectGithubToken does.
+      }
+    }
+    const token = await resolveProjectGithubToken(db as never, projectId, null, { allowEnvFallback: false })
+    return token ? { token, source: 'stored' } : { error: 'no_token' }
   },
   explainModel: async (db, projectId, prompt) => {
     // Loaded on the first explain only: api-ext sits near the edge deploy size limit.
@@ -115,7 +129,8 @@ export const defaultCiJobDebugDeps: CiJobDebugDeps = {
         model: openai(OPENAI_MINI),
         system: prompt.system,
         prompt: prompt.user,
-        maxTokens: 600,
+        // Room for the model's reasoning before the short JSON answer (the answer itself is ~150 tokens).
+        maxTokens: 2000,
       })
     })
     const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage
@@ -287,9 +302,10 @@ async function explainJob(c: Context, deps: AllDeps): Promise<Response> {
   try {
     const out = await deps.explainModel(db, row.project_id, { system: CI_EXPLAIN_SYSTEM, user })
     explanation = normalizeExplanation(out.object, out.model, now)
-    void deps.logLlmInvocation(db, {
+    // Awaited (it never rejects): the spend row must not be lost when the isolate winds down.
+    await deps.logLlmInvocation(db, {
       projectId: row.project_id,
-      functionName: 'api',
+      functionName: 'ci-job-explain',
       stage: 'ci-job-explain',
       primaryModel: OPENAI_MINI,
       usedModel: out.model,
@@ -303,9 +319,9 @@ async function explainJob(c: Context, deps: AllDeps): Promise<Response> {
     })
   } catch (err) {
     const mapped = explainErrorResponse(err)
-    void deps.logLlmInvocation(db, {
+    await deps.logLlmInvocation(db, {
       projectId: row.project_id,
-      functionName: 'api',
+      functionName: 'ci-job-explain',
       stage: 'ci-job-explain',
       primaryModel: OPENAI_MINI,
       usedModel: OPENAI_MINI,
@@ -327,8 +343,12 @@ async function explainJob(c: Context, deps: AllDeps): Promise<Response> {
   return c.json({ ok: true, data: { explanation, cached: false } })
 }
 
+/** The App (or no stored token) refused: the stored token is the fix. */
 const WRITE_MISSING =
   "Mushi Mushi's GitHub access can read your CI but not re-run or cancel it. In the GitHub connection, add a fine-grained token with Actions: Read and write for this repository."
+/** The stored token was tried and refused too: that token is what needs the permission. */
+const STORED_WRITE_MISSING =
+  "The GitHub token saved in the GitHub connection can't re-run or cancel CI. Give it Actions: Read and write for this repository (fine-grained token), or replace it."
 
 async function runAction(c: Context, deps: AllDeps, action: 'rerun' | 'cancel'): Promise<Response> {
   const loaded = await loadRow(c, deps)
@@ -345,11 +365,25 @@ async function runAction(c: Context, deps: AllDeps, action: 'rerun' | 'cancel'):
 
   const token = await deps.resolveRepoToken(db, row.project_id, row.repo)
   if ('error' in token) return tokenRefusal(c, row.project_id, token.error)
-  const gh = ciGithub(token.token, 1, deps.fetchImpl)
-  const status = action === 'rerun' ? await rerunFailedJobs(gh, row.repo, row.run_id) : await cancelRun(gh, row.repo, row.run_id)
+  const call = (t: string) => {
+    const gh = ciGithub(t, 1, deps.fetchImpl)
+    return action === 'rerun' ? rerunFailedJobs(gh, row.repo, row.run_id) : cancelRun(gh, row.repo, row.run_id)
+  }
+  let status = await call(token.token)
+  let storedRefused = token.source === 'stored'
+  if (status === 403 && token.source === 'app') {
+    // The App reads Actions only: the stored token (if any) is the one that can write them.
+    const stored = await deps.resolveRepoToken(db, row.project_id, row.repo, { skipApp: true })
+    if (!('error' in stored)) {
+      status = await call(stored.token)
+      storedRefused = true
+    }
+  }
   const ok = action === 'rerun' ? status === 201 || status === 204 : status === 202 || status === 204
   if (!ok) {
-    if (status === 403) return jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', WRITE_MISSING, 403, { fix: CI_DEBUG_FIX.githubAccess(row.project_id) })
+    if (status === 403) {
+      return jsonError(c, 'GITHUB_ACTIONS_WRITE_MISSING', storedRefused ? STORED_WRITE_MISSING : WRITE_MISSING, 403, { fix: CI_DEBUG_FIX.githubAccess(row.project_id) })
+    }
     if (status === 409) {
       return action === 'rerun'
         ? jsonError(c, 'CI_RUNNING', 'GitHub is still running this workflow; re-run it when it finishes.', 409)
