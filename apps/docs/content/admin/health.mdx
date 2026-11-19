@@ -120,6 +120,17 @@ calls at all in the window), a recommended next step appears with a link.
 
 ---
 
+## Server doctor (operators only)
+
+Super-admins also see the **Server doctor** card: the same checks as
+`npx mushi-mushi selfhost doctor`. Problems come first, each with the app it belongs to,
+a one-line fix and a button where the console can fix it (**Re-index** for a stalled code
+index, **Fix** for a missing AI key). Optional extras that are not set up (Langfuse,
+Sentry, an AI key) and passing checks fold into "N optional" and "N checks OK". Server
+secrets are named as set or missing, never shown.
+
+---
+
 ## Related pages
 
 - [Settings](/admin/settings) — configure BYOK keys

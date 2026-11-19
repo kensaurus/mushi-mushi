@@ -52,6 +52,7 @@ export function SidebarBuildStamp({ compact = false }: { compact?: boolean }) {
           {serverDeployed ? ` · deployed ${serverDeployed}` : serverVersion === 'dev' ? ' · deploy not stamped' : ''}
         </p>
       ) : null}
+      {confirmed && mode === 'self-hosted' ? <p>Setup checklist: Settings → SDK &amp; connection.</p> : null}
     </div>
   )
 
