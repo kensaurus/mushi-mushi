@@ -286,12 +286,20 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 
 ## Self-host
 
+On your own Supabase project (the free tier works):
+
 ```bash
-cd deploy && cp .env.example .env   # add ANTHROPIC_API_KEY and your Supabase credentials
-docker compose up -d
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url https://mushi.example.com
 ```
 
-Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker Compose guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Or everything in Docker on one Linux or macOS server, no Supabase account:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com
+```
+
+The installer runs Supabase's self-host kit plus Mushi's published images (amd64 and arm64), generates every secret, closes sign-up and keeps every port on `127.0.0.1`. `sh mushi.sh https your.domain` adds HTTPS; `backup`, `restore` and `update` are one command each; your own model server (Ollama, vLLM) works too. Walkthroughs: [`docs/SELF_HOSTED.md`](./docs/SELF_HOSTED.md) and [Docker guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose). Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 

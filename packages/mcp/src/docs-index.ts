@@ -2055,7 +2055,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting",
     markdown: "self-hosting/index.md",
     keywords: ["self-hosting", "self", "hosting"],
-    headings: ["What you'll deploy", "Quickstart: your own Supabase project", "Docker Compose (experimental)"],
+    headings: ["What you'll deploy", "Quickstart: your own Supabase project", "Docker"],
     excerpt: "Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
   },
   {
@@ -2068,13 +2068,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Build and deploy the Mushi Mushi admin console yourself. A static Vite and React app that talks to your Supabase project, and the env vars it needs.",
   },
   {
-    title: "Docker Compose (experimental)",
+    title: "Docker (one-command install)",
     url: docUrl("/self-hosting/docker-compose"),
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
-    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "experimental"],
-    headings: ["Generate the secrets", "Bring the stack up", "Open the console", "What's running", "Not included", "Production notes"],
-    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.",
+    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "one-command", "install"],
+    headings: ["One-command install", "Run the installer", "Open the console", "Add an AI key (optional)", "HTTPS on your own domain", "Your own model server (Ollama, vLLM, LM Studio)", "Day to day", "Point your app and tools at it"],
+    excerpt: "Run the whole Mushi Mushi stack on your own server with no Supabase account. One install command on Supabase's self-host kit, published images, generated secrets, closed sign-up…",
   },
   {
     title: "Edge Functions deploy",

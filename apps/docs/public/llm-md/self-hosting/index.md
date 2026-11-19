@@ -11,7 +11,7 @@ description: Run Mushi Mushi on your own Supabase project with one command, mush
 
 Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
-  **Supported path:** your own [Supabase](https://supabase.com) project (the free tier works) and one command, `mushi selfhost up`. You need Node 22+, a clone of this repo and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). An LLM key is optional. **Docker Compose** and the **Helm chart** are experimental: nobody has run them end to end yet.
+  **Supported path:** your own [Supabase](https://supabase.com) project (the free tier works) and one command, `mushi selfhost up`. You need Node 22+, a clone of this repo and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). An LLM key is optional. **No Supabase account?** The [one-command Docker install](/self-hosting/docker-compose) runs everything on one server; CI installs it from scratch before every image release. The build-from-source Compose file and the **Helm chart** are experimental.
 
 ## What you'll deploy
 
@@ -57,6 +57,13 @@ mushi selfhost doctor
 3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
 4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking
 
-## Docker Compose (experimental)
+## Docker
 
-To run every service in containers with no Supabase account, see [Docker Compose](/self-hosting/docker-compose).
+To run every service on one server with no Supabase account:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com
+```
+
+See [Docker](/self-hosting/docker-compose) for HTTPS, backups, updates and your own model server.

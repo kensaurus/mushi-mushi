@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import { isValidBackendUrl, mcpOAuthSignInUrl } from './env'
+import { isValidBackendUrl, mcpOAuthSignInUrl, readRuntimeConfig } from './env'
+
+describe('readRuntimeConfig', () => {
+  it('reads the self-hosted container config and trims trailing slashes', () => {
+    const cfg = readRuntimeConfig({
+      supabaseUrl: 'https://mushi.example.com/',
+      supabaseAnonKey: ' anon ',
+      instanceType: 'Self-Hosted',
+    })
+    expect(cfg.supabaseUrl).toBe('https://mushi.example.com')
+    expect(cfg.supabaseAnonKey).toBe('anon')
+    expect(cfg.instanceType).toBe('self-hosted')
+    expect(cfg.apiUrl).toBe('')
+  })
+
+  it('allows a dotless homelab host, but only http(s)', () => {
+    expect(readRuntimeConfig({ supabaseUrl: 'http://nas:8000' }).supabaseUrl).toBe('http://nas:8000')
+    expect(readRuntimeConfig({ supabaseUrl: 'javascript:alert(1)' }).supabaseUrl).toBe('')
+    expect(readRuntimeConfig({ apiUrl: 'not a url' }).apiUrl).toBe('')
+  })
+
+  it('treats a missing or odd global as empty (the hosted build)', () => {
+    for (const v of [undefined, null, 'x', 42]) {
+      expect(readRuntimeConfig(v)).toEqual({ supabaseUrl: '', supabaseAnonKey: '', apiUrl: '', mcpHttpUrl: '', instanceType: '' })
+    }
+    expect(readRuntimeConfig({ supabaseAnonKey: 7 }).supabaseAnonKey).toBe('')
+  })
+})
 
 describe('isValidBackendUrl', () => {
   it('accepts the canonical Mushi Cloud Supabase URL', () => {

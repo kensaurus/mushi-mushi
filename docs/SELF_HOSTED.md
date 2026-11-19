@@ -3,8 +3,11 @@
 Run Mushi Mushi on your own Supabase project. The free tier is enough.
 
 **Supported path:** your own Supabase project + `mushi selfhost up` (below).
-**Experimental:** [Docker Compose](#docker-compose-experimental) and the
-[Helm chart](../deploy/helm/README.md). Nobody has run either end to end yet.
+**No Supabase account:** the [one-command Docker install](#docker-one-command-install)
+(`deploy/selfhost/`), checked from an empty server in CI before every image
+release. **Experimental:** the build-from-source
+[Docker Compose file](#docker-compose-from-source-experimental) and the
+[Helm chart](../deploy/helm/README.md).
 
 ## What you need
 
@@ -188,7 +191,29 @@ SELECT cron.schedule('mushi-anomaly-detector', '0 * * * *',
 > source of truth; a deploy of a stale `index.ts` silently drops new routes.
 > After deploying, check `GET /v1/health`: its `version` is the deployed commit.
 
-## Docker Compose (experimental)
+## Docker: one-command install
+
+`deploy/selfhost/install.sh` sets up Supabase's self-host kit (pinned tag) plus
+Mushi's images `ghcr.io/kensaurus/mushi-mushi-{edge,admin,migrate}` on one
+Linux or macOS server (Windows: WSL), with no Supabase account and no clone:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com          # console on http://127.0.0.1:3000
+sh mushi/mushi.sh https mushi.example.com     # optional: HTTPS with Caddy
+```
+
+It generates every secret, closes sign-up and creates your admin account,
+keeps every port on `127.0.0.1`, runs Realtime and Studio (Studio only through
+an SSH tunnel), and configures the console at start, so the images serve any
+domain. `mushi.sh` has `status`, `add-user`, `backup`, `restore`, `update`,
+`https` and `secrets`. Your own model server: `OPENAI_BASE_URL` with
+`MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true` and `MUSHI_OPENAI_MODEL_MAP`. The
+`smoke` job of `.github/workflows/publish-selfhost-images.yml` installs it from
+scratch with the new images (`deploy/selfhost/smoke.sh`) before any image is
+pushed. Details: [Docker guide](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose), ADR 0064.
+
+## Docker Compose from source (experimental)
 
 `deploy/docker-compose.yml` runs the whole stack without a Supabase account:
 Postgres, Auth, PostgREST, Storage (Supabase's images), every edge function in

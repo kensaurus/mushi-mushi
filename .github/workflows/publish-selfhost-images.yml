@@ -2,6 +2,11 @@
 # PURPOSE: Build and push the self-host images the Helm chart and docs use:
 #            ghcr.io/<owner>/mushi-mushi-edge   (deploy/Dockerfile.edge)
 #            ghcr.io/<owner>/mushi-mushi-admin  (deploy/Dockerfile.admin)
+#            ghcr.io/<owner>/mushi-mushi-migrate (deploy/Dockerfile.migrate)
+#          for linux/amd64 and linux/arm64. First the `smoke` job installs the
+#          stack from scratch with these images (deploy/selfhost/install.sh:
+#          Supabase's kit, every migration on an empty database, sign-in, a
+#          report), so a broken image is never pushed.
 #
 # WHEN:    Only on release tags and manual dispatch. Never on pull requests or
 #          branch pushes (Actions minutes are billed; see ci-cost rules).
@@ -38,8 +43,41 @@ permissions:
   contents: read
 
 jobs:
+  smoke:
+    name: Install from scratch with the new images
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Build the images (amd64, local)
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          set -euo pipefail
+          for image in edge admin migrate; do
+            docker build -q -f "deploy/Dockerfile.${image}" -t "ghcr.io/kensaurus/mushi-mushi-${image}:ci" .
+          done
+
+      - name: Install
+        env:
+          MUSHI_VERSION: ci
+          MUSHI_SKIP_PULL: '1'
+        run: sh deploy/selfhost/install.sh --dir "$RUNNER_TEMP/mushi" --email ci@example.com --yes | tee "$RUNNER_TEMP/install.log"
+
+      - name: Check the running install
+        working-directory: ${{ runner.temp }}/mushi
+        run: sh "$GITHUB_WORKSPACE/deploy/selfhost/smoke.sh" "$RUNNER_TEMP/install.log"
+
+      - name: Logs on failure
+        if: failure()
+        working-directory: ${{ runner.temp }}/mushi
+        run: docker compose logs --tail 80 mushi-migrate functions mushi-admin mushi-caddy auth db || true
+
   publish:
-    name: Build & push edge + admin images
+    name: Build & push edge + admin + migrate images
+    needs: smoke
     runs-on: ${{ (github.actor != 'dependabot[bot]' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 45
     permissions:
@@ -89,6 +127,12 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
+      - name: Enable arm64 builds
+        run: |
+          set -euo pipefail
+          docker run --privileged --rm tonistiigi/binfmt:qemu-v10.2.1@sha256:d3b963f787999e6c0219a48dba02978769286ff61a5f4d26245cb6a6e5567ea3 --install arm64
+          docker buildx create --use --name mushi-multiarch --driver docker-container
+
       - name: Build & push
         env:
           DOCKER_BUILDKIT: '1'
@@ -97,21 +141,25 @@ jobs:
           LATEST: ${{ steps.tags.outputs.latest }}
         run: |
           set -euo pipefail
-          for image in edge admin; do
+          for image in edge admin migrate; do
             repo="ghcr.io/${OWNER}/mushi-mushi-${image}"
-            docker build \
+            tags=(-t "${repo}:${VERSION}")
+            if [ "$LATEST" = "true" ]; then tags+=(-t "${repo}:latest"); fi
+            # The admin build stage runs on the runner's platform ($BUILDPLATFORM);
+            # only the nginx stage is per-architecture.
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
               -f "deploy/Dockerfile.${image}" \
               --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
               --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
               --label "org.opencontainers.image.version=${VERSION}" \
-              -t "${repo}:${VERSION}" .
-            docker push "${repo}:${VERSION}"
-            if [ "$LATEST" = "true" ]; then
-              docker tag "${repo}:${VERSION}" "${repo}:latest"
-              docker push "${repo}:latest"
-            fi
-            echo "::notice::Pushed ${repo}:${VERSION}"
+              "${tags[@]}" --push .
+            echo "::notice::Pushed ${repo}:${VERSION} (amd64, arm64)"
           done
+
+      - name: Remove the build container
+        if: always()
+        run: docker buildx rm mushi-multiarch || true
 
       - name: Log out
         if: always()

@@ -1,0 +1,9 @@
+# HTTPS on your own domain: `sh mushi.sh https mushi.example.com` adds this file
+# to COMPOSE_FILE and sets MUSHI_SITE_ADDRESS, MUSHI_DOMAIN and the public URLs.
+# The domain's DNS must point at this server, with ports 80 and 443 open.
+services:
+  mushi-caddy:
+    ports: !override
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
