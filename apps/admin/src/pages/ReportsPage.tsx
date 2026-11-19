@@ -18,8 +18,6 @@ import { useDispatchPreflight } from '../lib/useDispatchPreflight'
 import {
   EmptyState,
   RecommendedAction,
-  Tooltip,
-  Kbd,
   Btn,
   FreshnessPill,
 } from '../components/ui'
@@ -27,6 +25,7 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
+import { PhoneCollapse } from '../components/reports/PhoneCollapse'
 import { SendToWorkerButton } from '../components/pipeline/SendToWorkerButton'
 import { usePageCopy } from '../lib/copy'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
@@ -37,7 +36,7 @@ import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
 import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { FixFirstQueue } from '../components/reports/FixFirstQueue'
-import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { ReportsStatusBanner, reportsBannerCoversQueue } from '../components/reports/ReportsStatusBanner'
 import { ReportsSentryImport } from '../components/reports/ReportsSentryImport'
 import { ReportsFileIssue } from '../components/reports/ReportsFileIssue'
 import {
@@ -56,7 +55,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DismissReportDialog } from '../components/reports/DismissReportDialog'
 import { CloseReasonSelect } from '../components/reports/CloseReasonSelect'
-import { bulkConfirmCopy, defaultSortDir, kpiTileFilter, sanitizeListFilters } from '../lib/reportsListFilters'
+import { bulkConfirmCopy, defaultSortDir, DEFAULT_REPORT_STATUS, kpiTileFilter, resolveStatusParam, sanitizeListFilters, statusParamValue } from '../lib/reportsListFilters'
 import { humanizeDispatchError } from '../lib/dispatchConfirm'
 import { OTHER_APP_BULK_REASON, otherAppDispatchNote, selectionCrossesPinnedApp } from '../components/reports/allAppsRowActions'
 
@@ -78,7 +77,9 @@ export function ReportsPage() {
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/reports')
 
-  const status = searchParams.get('status') ?? ''
+  // Opens on Open (waiting on a decision); `?status=all` lists every bug.
+  // '' means every status below (lib/reportsListFilters resolveStatusParam).
+  const status = resolveStatusParam(searchParams.get('status'))
   const category = searchParams.get('category') ?? ''
   const userCategory = searchParams.get('user_category') ?? ''
   const severity = searchParams.get('severity') ?? ''
@@ -301,7 +302,8 @@ export function ReportsPage() {
   const setFilter = useCallback(
     (key: string, value: string) => {
       const next = new URLSearchParams(searchParams)
-      if (value) next.set(key, value)
+      const v = key === 'status' ? statusParamValue(value) : value
+      if (v) next.set(key, v)
       else next.delete(key)
       next.delete('page')
       setSearchParams(next)
@@ -432,11 +434,16 @@ export function ReportsPage() {
   // red dot when there's unresolved severity=critical work. Inline here
   // because `criticalQueuedCount` further down is filtered by status.
   const criticalOnPage = reports.filter((r) => r.severity === 'critical').length
-  const hasFilters = Boolean(status || category || userCategory || severity || platform || sdkPackage || origin || source || component || reporter || endUser || session || area || days || q)
+  // The default Open list is not a filter the user applied ('' = every status).
+  const hasFilters = Boolean((status !== DEFAULT_REPORT_STATUS && status) || category || userCategory || severity || platform || sdkPackage || origin || source || component || reporter || endUser || session || area || days || q)
   // A project with no reports at all and nothing filtered: the page is the
   // "get your first report" state, so the filter rails and the second and
   // third "Send test report" buttons stay out of it (re-audit 2026-11-11).
-  const emptyProject = !loading && !error && total === 0 && !hasFilters
+  // On the default Open list an empty page can still mean every bug is
+  // closed: that is "nothing open", not "no reports yet".
+  const noOpenButSomeClosed =
+    !loading && !error && total === 0 && !hasFilters && status === DEFAULT_REPORT_STATUS && reportsStats.totalAllTime > 0
+  const emptyProject = !loading && !error && total === 0 && !hasFilters && !noOpenButSomeClosed && !(status === DEFAULT_REPORT_STATUS && reportsStatsLoading)
 
   usePublishPageContext({
     route: '/reports',
@@ -662,6 +669,12 @@ export function ReportsPage() {
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
   ).length
 
+  const statusBannerShown = !reportsStatsLoading && isReportsBannerVisible(reportsStats) && !(emptyProject && setup.activeProject)
+  // The status banner already says how many wait for review or are critical;
+  // a second card saying "3 reports are waiting for triage" repeated it
+  // (fresh-eyes sweep 2026-11-18). One strip.
+  const bannerCoversQueue = reportsBannerCoversQueue(reportsStats, statusBannerShown)
+
   const recommendation = (() => {
     if (loading || error) return null
     if (total === 0 && !hasFilters) {
@@ -679,6 +692,7 @@ export function ReportsPage() {
         tone: 'info' as const,
       }
     }
+    if (bannerCoversQueue) return null
     if (criticalQueuedCount > 0) {
       return {
         title: `${pluralizeWithCount(criticalQueuedCount, 'critical report')} ${pluralize(criticalQueuedCount, 'needs', 'need')} triage`,
@@ -697,7 +711,7 @@ export function ReportsPage() {
         tone: 'urgent' as const,
       }
     }
-    if (queuedCount > 0 && !status) {
+    if (queuedCount > 0 && (!status || status === DEFAULT_REPORT_STATUS)) {
       return {
         title: `${pluralizeWithCount(queuedCount, 'report')} ${pluralize(queuedCount, 'is', 'are')} waiting for triage`,
         description:
@@ -818,27 +832,11 @@ export function ReportsPage() {
         >
           Import from Sentry
         </Btn>
-        {/* The box is sized for the widest form ("137 total · page 1/4") so the
-            count landing never re-wraps the actions row and drops the whole
-            page by a line (layout shift at 390px). `ch` is exact in mono. */}
-        <span
-          className="inline-block text-right text-xs text-fg-muted font-mono tabular-nums"
-          style={{ minWidth: '21ch' }}
-        >
-          {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
-        </span>
-        <Tooltip content="Show keyboard shortcuts (?)">
-          <Btn
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowHelp((v) => !v)}
-            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5"
-            aria-label="Show keyboard shortcuts"
-          >
-            <Kbd>?</Kbd>
-          </Btn>
-        </Tooltip>
+        {/* No "903 total · page 1/19" here: the Open chip and the pager carry
+            the count (round-3 sweep 2026-11-19: 903 was on the page 4×). */}
+        {/* One help button: "How this page works" lists the shortcuts and the
+            ? key still opens the cheat sheet; a second "?" button beside it
+            read as two helps (R2 sweep 2026-11-18). */}
       </PageHeaderBar>
 
       {fileIssueOpen && !allApps && activeProjectId && (
@@ -852,7 +850,7 @@ export function ReportsPage() {
             priority: POSTURE_PRIORITY.status,
             // On an empty project the first-diagnosis card below has the one
             // "Send test report" button; this banner would repeat it.
-            show: !reportsStatsLoading && isReportsBannerVisible(reportsStats) && !(emptyProject && setup.activeProject),
+            show: statusBannerShown,
             children: (
               <ReportsStatusBanner
                 stats={reportsStats}
@@ -864,6 +862,7 @@ export function ReportsPage() {
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
             children: (
+              <PhoneCollapse label="Severity tiles" testId="reports-kpi-collapse">
               <ReportsKpiStrip
                 scope={fetchScope}
                 activeSeverity={severity}
@@ -879,6 +878,7 @@ export function ReportsPage() {
                   setSearchParams(next)
                 }}
               />
+              </PhoneCollapse>
             ),
           },
         ]}
@@ -989,10 +989,21 @@ export function ReportsPage() {
         noun="new report"
       />
 
-      {loading ? (
+      {loading || (total === 0 && !hasFilters && status === DEFAULT_REPORT_STATUS && reportsStatsLoading) ? (
         <TableSkeleton rows={8} columns={6} showFilters={false} label="Loading reports" />
       ) : error ? (
         <PageLoadError error={error} resource="reports" onRetry={reload} />
+      ) : noOpenButSomeClosed ? (
+        <EmptyState
+          icon={<HeroSearch accent="text-fg-faint" />}
+          title="No open bugs."
+          description="Every bug is fixed or dismissed."
+          action={
+            <Btn size="sm" variant="ghost" onClick={() => setFilter('status', '')}>
+              Show all bugs
+            </Btn>
+          }
+        />
       ) : reports.length === 0 && hasFilters ? (
         <EmptyState
           icon={<HeroSearch accent="text-fg-faint" />}

@@ -90,6 +90,42 @@ export function stuckAges(stages: readonly PipelineStage[], now: number): StuckA
   return { needYou, waiting, unaged, unlisted }
 }
 
+/**
+ * Every stuck group that needs a person, biggest first: the rule Home's "Needs you" uses
+ * (server `_shared/project-home.ts` buildNeedsYou: tone stuck, count > 0), so /home, /pipeline
+ * and /inbox count the same items. It includes the triaged backlog's stuck group ("triaged over
+ * 3 days ago, no fix started"): Home listed it under Needs you while /pipeline said "Nothing
+ * needs you now" (round-2 review, 2026-11-18).
+ */
+export function needsYouGroups(stages: readonly PipelineStage[]): PipelineGroup[] {
+  return stages.flatMap((s) => s.groups.filter((g) => g.tone === 'stuck' && g.count > 0)).sort((a, b) => b.count - a.count)
+}
+
+/** How many items need a person: the sum of `needsYouGroups`, and how many of them failed (not the waiting backlog). */
+export function needsYouCount(stages: readonly PipelineStage[]): { total: number; backlog: number; failing: number } {
+  let total = 0
+  let backlog = 0
+  for (const g of needsYouGroups(stages)) {
+    total += g.count
+    if (g.stage === 'triaged') backlog += g.count
+  }
+  return { total, backlog, failing: total - backlog }
+}
+
+/**
+ * The age bar as one "Need you" row that adds up to `needsYouCount().total`: the backlog's
+ * buckets join it, so the bar, the status line and Home never give three different counts
+ * (and the backlog row's impossible "0–3 d 0" bucket, on items stuck over 3 days, is gone).
+ */
+export function needYouAges(ages: StuckAges): StuckAges {
+  return {
+    needYou: add(ages.needYou, ages.waiting),
+    waiting: [0, 0, 0, 0],
+    unaged: { needYou: ages.unaged.needYou + ages.unaged.waiting, waiting: 0 },
+    unlisted: { needYou: ages.unlisted.needYou + ages.unlisted.waiting, waiting: 0 },
+  }
+}
+
 /** The colour each stage earns: the bottleneck danger, a near-equal second warn, the rest none. */
 export function stageTones(stages: readonly PipelineStage[]): Partial<Record<PipelineStage['id'], SignalTone>> {
   const counted = stages.filter((s) => s.id !== 'triaged' && s.stuck > 0)

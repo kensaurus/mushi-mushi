@@ -261,7 +261,8 @@ function WizardChecklist({ project, requiredDone, pct, nextRequiredId, adminEndp
     const extras = project.steps.filter((step) => !step.required)
     return (
       <div className="space-y-3" data-testid="setup-extras">
-        <p className="text-xs text-fg-muted">Optional. Each one adds something once your app is set up.</p>
+        {/* The tab guide says "All optional" once; this line said it again,
+            and every card carried an "optional" chip (round-2 review). */}
         <ol className="space-y-2">
           {extras.map((step) => (
             <li key={step.id}>
@@ -509,9 +510,10 @@ function ChecklistCard({
   const diag = buildSdkDiagnostic(step, adminEndpointHost)
   const fix = useSdkFix(step, projectId)
   return (
-    <div className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
+    // A done step is said once, by the ✓: no green fill and no "done" chip.
+    <div data-step-done={step.complete ? 'true' : undefined} className={`rounded-md border p-3 motion-safe:transition-[transform,opacity] ${
       step.complete
-        ? 'border-ok/30 bg-ok-muted/10'
+        ? 'border-edge-subtle bg-surface-raised/30'
         : current
           ? 'border-brand/40 bg-brand/5 ring-2 ring-brand/40'
           : step.required
@@ -530,16 +532,8 @@ function ChecklistCard({
                 do this next
               </span>
             )}
-            {!step.required && !current && (
-              <span className="rounded-sm bg-surface-raised px-1 py-px text-2xs text-fg-faint">
-                optional
-              </span>
-            )}
-            {step.complete && (
-              <span className="rounded-sm px-1.5 py-px text-2xs bg-ok-muted/50 text-ok-foreground">
-                done
-              </span>
-            )}
+            {/* Wizard cards sit under "Optional: N of M on" or the extras
+                tab's "All optional" guide: no per-card "optional" chip. */}
           </div>
           <p className="mt-1 text-xs text-fg-muted">{step.description}</p>
           {diag && <SdkDiagnostic tone={diag.tone} lines={diag.lines} />}

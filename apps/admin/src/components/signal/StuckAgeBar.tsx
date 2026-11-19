@@ -52,7 +52,7 @@ function Row({ label, buckets, unaged, unlisted, ramp, testId }: { label: string
             )}
         </span>
         <span className="flex flex-wrap gap-x-3 text-3xs text-fg-secondary" aria-hidden="true">
-          {buckets.map((n, i) => (
+          {buckets.map((n, i) => n === 0 ? null : (
             <span key={i} className="inline-flex items-center gap-1">
               <span className={`${ramp[i]} inline-block h-2 w-2 rounded-xs`} />
               {AGE_BUCKET_LABELS[i]}
@@ -85,7 +85,7 @@ export function StuckAgeBar({ ages }: { ages: StuckAges }) {
       <figcaption className="mb-1 text-3xs font-bold tracking-wider text-fg-secondary uppercase">How long stuck work has waited in its stage</figcaption>
       <ul className="space-y-1.5">
         {anyNeed && <Row label="Need you" buckets={needYou} unaged={unaged.needYou} unlisted={unlisted.needYou} ramp={RED} testId="pipeline-age-need-you" />}
-        {anyWait && <Row label="Waiting for a fix" buckets={waiting} unaged={unaged.waiting} unlisted={unlisted.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
+        {anyWait && <Row label="Waiting over 3 d" buckets={waiting} unaged={unaged.waiting} unlisted={unlisted.waiting} ramp={TEAL} testId="pipeline-age-waiting" />}
       </ul>
     </figure>
   )

@@ -69,8 +69,8 @@ function ExploreNodeChip({
     >
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0 !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0 !w-2 !h-2" />
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="truncate flex-1" style={{ color: textColor }}>{node.label}</span>
+      <div className="flex items-start gap-1.5 min-w-0">
+        <span className="min-w-0 flex-1 wrap-anywhere" style={{ color: textColor }}>{node.label}</span>
         {ext && (
           <span
             className="shrink-0 text-3xs font-mono px-1 py-px rounded-sm"

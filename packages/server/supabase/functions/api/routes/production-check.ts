@@ -199,7 +199,7 @@ export function buildReportEmail(
           { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
           {
             kind: 'p',
-            text: 'Want this caught before your users hit it? Mushi Mushi watches your live app, explains each bug in plain English and opens a reviewed fix. Free for one app:',
+            text: 'Want this caught before your users hit it? Mushi Mushi watches your live app, explains each bug in plain English and opens a reviewed fix. Free for three apps:',
           },
           { kind: 'link', label: 'Set up Mushi Mushi', url: SIGNUP_FROM_EMAIL },
         ],
@@ -216,7 +216,7 @@ export function buildReportEmail(
           { kind: 'button', label: 'Open the full report', url: reportUrl(id) },
           {
             kind: 'p',
-            text: 'A clean first visit is half of it; the other half is the bugs your users hit after they sign in. Mushi Mushi turns their reports into plain-English diagnoses and reviewed fixes. Free for one app:',
+            text: 'A clean first visit is half of it; the other half is the bugs your users hit after they sign in. Mushi Mushi turns their reports into plain-English diagnoses and reviewed fixes. Free for three apps:',
           },
           { kind: 'link', label: 'Set up Mushi Mushi', url: SIGNUP_FROM_EMAIL },
         ],

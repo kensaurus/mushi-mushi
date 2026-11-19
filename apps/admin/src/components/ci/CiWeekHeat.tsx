@@ -111,7 +111,17 @@ export function CiWeekHeat({ hourly, hourlyFrom, now }: { hourly: CiHourly[] | u
                 }
               >
                 <span className="text-3xs font-semibold">{d.label}</span>
-                <span className="font-mono text-sm font-extrabold tabular-nums">{pct == null ? '–' : `${pct < target ? '▼' : '▲'} ${pct}%`}</span>
+                {/* One line at 390 too: a narrow glyph and a smaller number below the wide breakpoint ("▲ / 100%" wrapped, round 3). */}
+                <span className="font-mono text-2xs font-extrabold whitespace-nowrap tabular-nums sm:text-sm">
+                  {pct == null ? (
+                    '–'
+                  ) : (
+                    <>
+                      <span className="text-3xs sm:text-2xs" aria-hidden="true">{pct < target ? '▼' : '▲'}</span>
+                      {pct}%
+                    </>
+                  )}
+                </span>
               </li>
             )
           })}

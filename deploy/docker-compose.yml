@@ -1,108 +1,213 @@
 # FILE: docker-compose.yml
-# PURPOSE: Self-hosted Mushi Mushi deployment — all services in Docker
-
-version: '3.8'
+# PURPOSE: Self-hosted Mushi Mushi, every service in Docker. EXPERIMENTAL —
+#          the supported path is your own Supabase project + `mushi selfhost up`
+#          (docs/SELF_HOSTED.md). Known gaps: no Realtime service (the console's
+#          live updates fall back to reloads), no email delivery (sign-up is
+#          auto-confirmed), and no Studio.
+#
+# Usage (from the repo root):
+#   ./deploy/generate-secrets.sh            # or: npx mushi-mushi selfhost secrets
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+#
+# Layout: Caddy is the only published port. It serves the console at / and acts
+# as the Supabase API gateway (/auth/v1, /rest/v1, /storage/v1, /functions/v1)
+# on the public origin, and again on :8000 inside the network for the edge
+# functions and pg_cron (mushi_runtime_config.supabase_url = http://caddy:8000).
+# Images mirror supabase/docker/docker-compose.yml; pin digests on upgrade.
 
 services:
-  postgres:
-    image: supabase/postgres:15.8.1.060
+  db:
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "log_min_messages=fatal"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ../packages/server/supabase/migrations:/docker-entrypoint-initdb.d
+      # Supabase's own init scripts stay in place; these two only add to them.
+      - ./db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mushimushi}
-      POSTGRES_DB: mushimushi
-    ports:
-      - "5432:5432"
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:?run deploy/generate-secrets.sh first}
+      JWT_EXP: 3600
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
-  supabase-auth:
-    image: supabase/gotrue:v2.170.0
+  auth:
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     environment:
-      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-mushimushi}@postgres:5432/mushimushi
-      GOTRUE_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
-      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${MUSHI_PUBLIC_URL:-http://localhost}/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}@db:5432/postgres
+      GOTRUE_SITE_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
+      GOTRUE_URI_ALLOW_LIST: ${MUSHI_PUBLIC_URL:-http://localhost}/**
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?run deploy/generate-secrets.sh first}
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      # No SMTP in this stack: accounts are confirmed on sign-up.
       GOTRUE_MAILER_AUTOCONFIRM: "true"
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:9999}
-    ports:
-      - "9999:9999"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
-  supabase-rest:
-    image: postgrest/postgrest:v12.2.3
+  rest:
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     environment:
-      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-mushimushi}@postgres:5432/mushimushi
-      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
-      PGRST_DB_SCHEMAS: public
-    ports:
-      - "3001:3000"
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public,storage,graphql_public
+      PGRST_DB_EXTRA_SEARCH_PATH: public,extensions
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET:?run deploy/generate-secrets.sh first}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: 3600
 
-  supabase-storage:
-    image: supabase/storage-api:v1.14.4
+  storage:
+    image: supabase/storage-api:v1.81.0
+    restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
+      rest:
+        condition: service_started
     environment:
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-mushimushi}@postgres:5432/mushimushi
+      ANON_KEY: ${SUPABASE_ANON_KEY:?run deploy/generate-secrets.sh first}
+      SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?run deploy/generate-secrets.sh first}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET:?run deploy/generate-secrets.sh first}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}@db:5432/postgres
+      STORAGE_PUBLIC_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      PGRST_JWT_SECRET: ${JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      FILE_SIZE_LIMIT: 52428800
+      GLOBAL_S3_BUCKET: stub
+      TENANT_ID: stub
+      REGION: stub
+      ENABLE_IMAGE_TRANSFORMATION: "false"
     volumes:
       - storagedata:/var/lib/storage
-    ports:
-      - "5000:5000"
+    healthcheck:
+      # Storage listens on 127.0.0.1 and the container IP, not on ::1, and "localhost" can
+      # resolve to ::1 in this image; Supabase's own compose checks the service name.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage:5000/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: applies packages/server/supabase/migrations in order (ledger in
+  # supabase_migrations.schema_migrations, the table `supabase db push` uses),
+  # after Auth and Storage have created their schemas, then points
+  # mushi_runtime_config at this stack. Re-running applies only new files.
+  migrate:
+    image: supabase/postgres:17.6.1.136
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    entrypoint: ["bash", "/deploy/db/migrate.sh"]
+    volumes:
+      - ./db/migrate.sh:/deploy/db/migrate.sh:ro
+      - ../packages/server/supabase/migrations:/migrations:ro
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}
+      MUSHI_GATEWAY_URL: http://caddy:8000
+      MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET:?run deploy/generate-secrets.sh first}
+    restart: "no"
 
   edge-functions:
     build:
-      context: ../packages/server
-      dockerfile: ../../deploy/Dockerfile.edge
+      context: ..
+      dockerfile: deploy/Dockerfile.edge
+    restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      SUPABASE_URL: http://supabase-rest:3000
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      JWT_SECRET: ${JWT_SECRET:?run deploy/generate-secrets.sh first}
+      # The gateway, not PostgREST: functions call /rest/v1, /storage/v1,
+      # /auth/v1 and /functions/v1/<other function> under this URL.
+      SUPABASE_URL: http://caddy:8000
+      SUPABASE_PUBLIC_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?run deploy/generate-secrets.sh first}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?run deploy/generate-secrets.sh first}
+      SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}@db:5432/postgres
+      MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET:?run deploy/generate-secrets.sh first}
+      ADMIN_BASE_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      # LANGFUSE_BASE_URL is canonical; LANGFUSE_HOST is accepted as an alias by edge code
-      LANGFUSE_HOST: ${LANGFUSE_HOST:-${LANGFUSE_BASE_URL:-}}
-    ports:
-      - "8000:8000"
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+      # Optional headless bootstrap (POST /v1/admin/bootstrap; docs/SELF_HOSTED.md).
+      MUSHI_INIT_OWNER_EMAIL: ${MUSHI_INIT_OWNER_EMAIL:-}
+      MUSHI_INIT_ORG_NAME: ${MUSHI_INIT_ORG_NAME:-}
+      MUSHI_INIT_PROJECT_NAME: ${MUSHI_INIT_PROJECT_NAME:-}
+      MUSHI_INIT_REPORTER_KEY: ${MUSHI_INIT_REPORTER_KEY:-}
+    volumes:
+      - denocache:/root/.cache/deno
 
   admin:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.admin
-    ports:
-      - "3000:3000"
-    environment:
-      VITE_SUPABASE_URL: http://localhost:3001
-      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      # Vite inlines these at build time; runtime env has no effect on the
+      # static bundle. Change a value → `docker compose build admin`.
+      args:
+        VITE_SUPABASE_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:?run deploy/generate-secrets.sh first}
+        VITE_API_URL: ${MUSHI_PUBLIC_URL:-http://localhost}/functions/v1/api
+        VITE_INSTANCE_TYPE: self-hosted
+    restart: unless-stopped
 
   caddy:
     image: caddy:2-alpine
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      MUSHI_SITE_ADDRESS: ${MUSHI_SITE_ADDRESS:-http://localhost}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
     depends_on:
       - admin
+      - auth
+      - rest
+      - storage
       - edge-functions
 
 volumes:
   pgdata:
   storagedata:
   caddydata:
+  denocache:

@@ -99,10 +99,10 @@ See [.github/CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/mast
 |---|---|---|
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
-| Mushi Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Mushi Cloud — Free tier | Yes — 3 apps, 300 diagnoses / mo, **hard stop** at limit (no limit with your own AI key) | — |
 | Mushi Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 (Builder) or $0.02 (Studio) per extra diagnosis; Enterprise from $499 / mo |
 
-**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 14 days), team seats, and enterprise features (SSO, compliance exports).
+**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 30 days), team seats, and enterprise features (SSO, compliance exports).
 
 Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 classification (Sonnet produces a plain-English root cause + fix hint). Noise-filtered reports and duplicates collapsed into an existing group do not count.
 

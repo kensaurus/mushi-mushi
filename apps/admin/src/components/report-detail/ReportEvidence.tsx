@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   CodeValue,
   DefinitionChips,
-  DetailRows,
   InfoHint,
 } from '../ui'
 import { EmptySectionMessage } from './ReportClassification'
@@ -18,6 +17,7 @@ import {
   PERF_TONE_CLASS,
   PERF_VITAL_POOR_THRESHOLD,
   perfVitalTone,
+  platformLabel,
   platformPillClass,
   type ConsoleLevel,
 } from './reportLogFormat'
@@ -70,7 +70,11 @@ export function EnvironmentFields({ environment, sessionId }: {
       ? {
           label: 'Viewport',
           hint: 'Browser inner width × height at report time.',
-          value: (
+          // A 0 x 0 viewport is the SDK not measuring (a Sentry import, a
+          // server event), not a window with no size (sweep 2026-11-18).
+          value: !(viewport.width > 0 && viewport.height > 0) ? (
+            <span className="text-2xs text-fg-muted" data-testid="env-viewport-missing">not captured</span>
+          ) : (
             <span className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono tabular-nums text-fg">
               <span className="text-info">{viewport.width.toLocaleString()}</span>
               <span className="text-fg-faint">×</span>
@@ -84,7 +88,7 @@ export function EnvironmentFields({ environment, sessionId }: {
           label: 'Platform',
           hint: 'navigator.platform from the reporter device.',
           value: (
-            <span className={platformPillClass(platform)}>{platform}</span>
+            <span className={platformPillClass(platform)}>{platformLabel(platform)}</span>
           ),
         }
       : null,
@@ -186,21 +190,22 @@ export function EnvironmentFields({ environment, sessionId }: {
         </div>
       )}
 
+      {/* Plain rows under a rule, not a bordered list inside the card
+          (round-3 sweep 2026-11-19: one level of card). */}
       {metaRows.length > 0 && (
-        <DetailRows
-          dense
-          items={metaRows.map((row) => ({
-            label: row.label,
-            hint: row.hint,
-            value: row.value,
-            wrap: row.wrap,
-          }))}
-        />
+        <dl className="divide-y divide-edge-subtle border-t border-edge-subtle text-2xs" data-testid="env-meta-rows">
+          {metaRows.map((row) => (
+            <div key={row.label} className={`py-1 ${row.wrap ? 'flex flex-col gap-0.5' : 'flex items-start justify-between gap-3'}`}>
+              <dt className="shrink-0 text-3xs font-semibold text-fg-secondary" title={row.hint}>
+                {row.label}
+              </dt>
+              <dd className={`min-w-0 leading-snug wrap-break-word ${row.wrap ? '' : 'text-right'}`}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
-      {!sessionId && metaRows.length > 0 && (
-        <p className="text-2xs text-fg-faint">Session ID was not captured.</p>
-      )}
+      {/* A missing session ID is on the page's one "Not captured" line. */}
     </div>
   )
 }

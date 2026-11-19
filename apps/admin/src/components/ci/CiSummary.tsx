@@ -9,17 +9,16 @@
 
 import type { ComponentType, ReactNode } from 'react'
 import type { CiOverview } from '../../lib/ciTypes'
-import { ciOutcomeCounts, ciVerdict, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
+import { ciVerdict, ciWindowCounts, formatPercent, formatSeconds, type CiJobOutcome } from '../../lib/ciView'
 import { IconAlertTriangle, IconCheck, IconGauge, IconInfo, IconPlay } from '../icons'
-import { Card } from '../ui'
 import { CI_OUTCOME_STYLE, CiOutcomeLegend } from './ciOutcome'
 import { CiWeekHeat } from './CiWeekHeat'
 
 const VERDICT_TONE = {
-  ok: { Icon: IconCheck, ring: 'border-ok/30 bg-ok-muted/40', icon: 'text-ok' },
-  warn: { Icon: IconAlertTriangle, ring: 'border-warn/35 bg-warn-muted/45', icon: 'text-warn-foreground' },
-  danger: { Icon: IconAlertTriangle, ring: 'border-danger/30 bg-danger-muted/40', icon: 'text-danger' },
-  neutral: { Icon: IconInfo, ring: 'border-edge-subtle bg-surface-overlay/40', icon: 'text-fg-secondary' },
+  ok: { Icon: IconCheck, icon: 'text-ok' },
+  warn: { Icon: IconAlertTriangle, icon: 'text-warn-foreground' },
+  danger: { Icon: IconAlertTriangle, icon: 'text-danger' },
+  neutral: { Icon: IconInfo, icon: 'text-fg-secondary' },
 } as const
 
 function Tile({
@@ -40,7 +39,7 @@ function Tile({
   return (
     <a
       href={href}
-      className="group flex min-w-0 items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2.5 hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+      className="group flex min-w-0 items-start gap-2.5 rounded-sm py-1 hover:bg-surface-overlay/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
     >
       <span className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${tone}`}>
         <Icon size={14} />
@@ -63,29 +62,41 @@ const BAR_ORDER: Array<{ key: 'passed' | 'codeFailures' | 'infra' | 'other'; out
 
 export function CiSummary({ overview }: { overview: CiOverview }) {
   const verdict = ciVerdict(overview)
-  const counts = ciOutcomeCounts(overview.stats)
+  // One window for the headline, the bar and its counts (ciWindowCounts): the whole window when the
+  // server counted it, so "N jobs failed on the code" and "Tests failed N" are the same N.
+  const counts = ciWindowCounts(overview.stats)
   const { stats } = overview
   const tone = VERDICT_TONE[verdict.tone]
   const days = overview.window.days
-  // The server counts the whole window in the database (stats.windowJobs); the outcome counts come
-  // from the newest jobs it read, which a busy day fills in hours (1,005 of 10,954 on 2026-11-17).
+  // Older servers send only the newest jobs read (at most about 1,000): say so once.
   const weekJobs = Math.max(stats.windowJobs ?? counts.total, counts.total)
   const sampled = weekJobs > counts.total
 
+  // "769 jobs failed on the code. 34 more stopped because of the test machine" restated the legend
+  // just below ("Tests failed 769", "Test machine stopped 34"; round 3): that plain count is for
+  // screen readers only. A verdict that says something the bar does not (the machine, not your
+  // code; all passed) still shows.
+  const restatesLegend = verdict.tone === 'neutral'
   return (
-    <Card className="flex flex-col gap-3 p-3" data-testid="ci-summary">
-      <div className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 ${tone.ring}`} role="status">
-        <tone.Icon size={16} className={`mt-0.5 shrink-0 ${tone.icon}`} />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-fg" data-testid="ci-verdict">
-            {verdict.headline}
-          </p>
-          {verdict.detail && <p className="text-xs text-fg-secondary">{verdict.detail}</p>}
+    <div className="flex flex-col gap-3" data-testid="ci-summary">
+      {restatesLegend ? (
+        <p className="sr-only" role="status" data-testid="ci-verdict">
+          {verdict.headline}
+        </p>
+      ) : (
+        <div className="flex items-start gap-2.5 border-b border-edge-subtle pb-2.5" role="status">
+          <tone.Icon size={16} className={`mt-0.5 shrink-0 ${tone.icon}`} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-fg" data-testid="ci-verdict">
+              {verdict.headline}
+            </p>
+            {verdict.detail && <p className="text-xs text-fg-secondary">{verdict.detail}</p>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Waiting and running now are the status board's, right above: the week only. */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-b border-edge-subtle pb-2.5">
         <Tile
           Icon={IconGauge}
           label="Half the jobs wait at most"
@@ -141,21 +152,16 @@ export function CiSummary({ overview }: { overview: CiOverview }) {
             )
           })}
         </ul>
-        {counts.infra > 0 && (
-          <p className="text-2xs text-fg-muted">
-            <span className="font-medium text-fg">{CI_OUTCOME_STYLE.infra.label}</span> is not a code failure: the
-            machine died or never picked the job up, so the code was never tested. Re-run those jobs.
-          </p>
-        )}
+        {/* "Not a code failure" is said once, in the alert strip above; the legend below holds the meaning. */}
       </div>
 
       {/* Real per-hour counts (stats.hourly); older servers do not send them and this stays out. */}
       <CiWeekHeat hourly={stats.hourly} hourlyFrom={stats.hourlyFrom} now={Date.parse(overview.generatedAt)} />
 
-      <details className="group rounded-md border border-edge-subtle px-3 py-2">
+      <details className="group border-t border-edge-subtle pt-2">
         <summary className="cursor-pointer text-2xs font-medium text-fg-secondary">What the colours and icons mean</summary>
         <CiOutcomeLegend className="mt-2" />
       </details>
-    </Card>
+    </div>
   )
 }

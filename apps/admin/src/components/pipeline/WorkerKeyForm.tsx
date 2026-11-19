@@ -43,7 +43,7 @@ export function WorkerKeyForm({ projects, onCreated }: Props) {
         </Callout>
         <CodeValue value={key} />
         <p className="text-xs text-fg-muted">On the machine, paste it into the install (it is read from stdin, so it stays out of your shell history):</p>
-        <CodeValue value="mushi worker install --key-stdin --lane my-app --project <app id> --repo-dir ~/src/my-app" multiline />
+        <CodeValue value="mushi worker install --key-stdin --lane my-app --project <app id> --repo-dir ~/src/my-app" className="w-full" />
       </div>
     )
   }

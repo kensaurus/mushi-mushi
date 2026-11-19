@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveProjectNextSteps, deriveProjectPlainStatus } from './projectNextSteps'
+import { deriveProjectNextSteps, deriveProjectPlainStatus, rankProjectNeeds } from './projectNextSteps'
 import type { Project } from './project-models'
 
 function project(overrides: Partial<Project> = {}): Project {
@@ -117,5 +117,25 @@ describe('the public demo app', () => {
 
   it('a customer app that merely has "demo" in its name is a real app', () => {
     expect(deriveProjectPlainStatus(project({ name: 'demo-app', slug: 'demo-app' })).tone).not.toBe('sample')
+  })
+})
+
+describe('rankProjectNeeds (fresh-eyes review 2026-11-18: 9 stuck sat above 129)', () => {
+  it('puts the most stuck first, the healthy after, and the demo last', () => {
+    const stuck = (id: string, n: number) => project({ id, name: id, slug: id, pdca_bottleneck_label: `${n} reports still unfixed`, pdca_bottleneck_count: n })
+    const rows = rankProjectNeeds([
+      project({ id: 'demo', name: 'Mushi demo (sample data)', slug: 'mushi-demo' }),
+      stuck('lets-talk', 9),
+      project({ id: 'calm', name: 'calm' }),
+      stuck('solo-boss-cloud', 129),
+    ])
+    expect(rows.map((r) => r.project.id)).toEqual(['solo-boss-cloud', 'lets-talk', 'calm', 'demo'])
+    expect(rows.map((r) => r.stuck)).toEqual([129, 9, 0, null])
+  })
+
+  it('leaves the stuck count unknown for an app that is not connected, never 0', () => {
+    const [row] = rankProjectNeeds([project({ active_key_count: 0, api_keys: [] })])
+    expect(row!.status.tone).toBe('inactive')
+    expect(row!.stuck).toBeNull()
   })
 })

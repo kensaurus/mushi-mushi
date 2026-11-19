@@ -12,7 +12,7 @@ can move it along your Linear workflow.
 Linear on the **Integrations** page of the console (OAuth or an API key, on
 any plan) and Mushi Mushi files and closes Linear issues itself. Run this package
 only if you want the Linear calls to come from your own server. Installing
-**Linear Sync** from the Marketplace needs a paid plan (Builder or above, see
+**Linear Sync** from the Marketplace works on every plan, Free included (see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
@@ -67,4 +67,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 78 edge functions · 575 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 578 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode, RefObject } from 'react'
+import { PhoneCollapse } from './PhoneCollapse'
 import { FilterSelect, Input, FILTER_SELECT_CLASS } from '../ui'
 import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
 import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
@@ -15,6 +16,7 @@ import {
   SDK_FILTER_OPTIONS,
   optionLabel,
   statusFilterLabel,
+  DEFAULT_REPORT_STATUS,
 } from '../../lib/reportsListFilters'
 
 export interface ContextChip {
@@ -77,11 +79,12 @@ export function ReportsFilterBar({
   // urgency band already applied; status uses neutral so the eye reads
   // the value first.
   const railFilters: ActiveFilter[] = [
-    status && {
+    // Open is the default list, not a filter the user applied.
+    status && status !== DEFAULT_REPORT_STATUS && {
       key: 'status',
       label: 'Status',
       value: statusFilterLabel(status),
-      onClear: () => onSetFilter('status', ''),
+      onClear: () => onSetFilter('status', DEFAULT_REPORT_STATUS),
       tone: 'info' as const,
     },
     category && {
@@ -142,8 +145,13 @@ export function ReportsFilterBar({
     })),
   ].filter(Boolean) as ActiveFilter[]
 
+  // Filters the user applied (the active rail lists them), shown on the
+  // phone's collapsed "Filters" line.
+  const activeCount = railFilters.length + (searchInput ? 1 : 0)
+
   return (
     <div className="mb-3 space-y-2">
+      <PhoneCollapse label="Filters" hint={activeCount > 0 ? `${activeCount} on` : null} testId="reports-filters-collapse">
       {/* One row: chips, search, selects. Sticky from lg, where it stays one or
           two lines; on a phone it would take the screen. */}
       <div
@@ -248,6 +256,7 @@ export function ReportsFilterBar({
           </button>
         )}
       </div>
+      </PhoneCollapse>
       <ActiveFiltersRail
         filters={railFilters}
         onClearAll={onClearAll}

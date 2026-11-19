@@ -1,24 +1,46 @@
 # FILE: Caddyfile
-# PURPOSE: Reverse proxy for self-hosted Mushi Mushi
+# PURPOSE: Reverse proxy + Supabase API gateway for self-hosted Mushi Mushi
+#          (deploy/docker-compose.yml).
+#
+# The gateway strips the Supabase path prefixes the services do not know about,
+# like Kong/Envoy in supabase/docker: /rest/v1/x → rest:3000/x,
+# /functions/v1/api/v1/x → edge-functions:8000/api/v1/x (the edge main service
+# picks the function from the first path segment).
 
-{$DOMAIN:localhost} {
-    handle /functions/v1/* {
-        reverse_proxy edge-functions:8000
-    }
+(gateway) {
+	handle_path /auth/v1/* {
+		reverse_proxy auth:9999
+	}
+	handle_path /rest/v1/* {
+		reverse_proxy rest:3000
+	}
+	handle_path /storage/v1/* {
+		reverse_proxy storage:5000
+	}
+	handle_path /functions/v1/* {
+		reverse_proxy edge-functions:8000 {
+			# Stage 2 classification streams for up to 180 s.
+			transport http {
+				read_timeout 400s
+			}
+		}
+	}
+}
 
-    handle /auth/* {
-        reverse_proxy supabase-auth:9999
-    }
+# Public site: the console at /, the API on the same origin. MUSHI_SITE_ADDRESS
+# is http://localhost by default; a domain name gets a certificate automatically.
+{$MUSHI_SITE_ADDRESS:http://localhost} {
+	import gateway
+	handle {
+		reverse_proxy admin:3000
+	}
+}
 
-    handle /rest/* {
-        reverse_proxy supabase-rest:3000
-    }
-
-    handle /storage/* {
-        reverse_proxy supabase-storage:5000
-    }
-
-    handle {
-        reverse_proxy admin:3000
-    }
+# Internal gateway for the edge functions (SUPABASE_URL) and pg_cron
+# (mushi_runtime_config.supabase_url). Not published by compose.
+:8000 {
+	import gateway
+	handle {
+		respond 404
+	}
 }

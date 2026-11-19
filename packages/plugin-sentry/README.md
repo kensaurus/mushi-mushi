@@ -12,7 +12,7 @@ Sentry errors, and marks them resolved when Mushi Mushi applies a fix.
 Cloud, Sentry errors flowing *into* Mushi Mushi, and resolving the linked Sentry
 issue when a Mushi Mushi fix merges, are built in: connect Sentry on the
 **Integrations** page of the console, on any plan. Installing **Sentry Mirror**
-from the Marketplace needs a paid plan (Builder or above, see
+from the Marketplace works on every plan, Free included (see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)).
 
 ```bash
@@ -89,4 +89,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 78 edge functions · 575 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 578 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

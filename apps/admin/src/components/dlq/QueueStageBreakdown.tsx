@@ -27,8 +27,16 @@ const STATUS_BAR_CLS: Record<(typeof BACKLOG_STATUSES)[number], string> = {
   dead_letter: 'bg-danger-muted',
 }
 
+/** Unfinished jobs per stage (completed is not backlog). @internal Exported for tests. */
+export function stageBacklog(summary: Pick<QueueSummary, 'stages' | 'byStage'>, stage: string): number {
+  const b = summary.byStage[stage] ?? {}
+  return BACKLOG_STATUSES.reduce((a, st) => a + (b[st] ?? 0), 0)
+}
+
 export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props) {
   if (summary.stages.length === 0) return null
+  // No backlog anywhere: a card of "0" rows says nothing the queue status does not (2026-11-18).
+  if (summary.stages.every((s) => stageBacklog(summary, s) === 0)) return null
 
   return (
     <Card elevated className="p-3">
@@ -54,7 +62,7 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
       <div className="space-y-1.5">
         {summary.stages.map((s) => {
           const breakdown = summary.byStage[s] ?? {}
-          const totalForStage = BACKLOG_STATUSES.reduce((a, st) => a + (breakdown[st] ?? 0), 0)
+          const totalForStage = stageBacklog(summary, s)
           return (
             <button
               key={s}
@@ -65,8 +73,10 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
                 selectedStage === s ? 'bg-brand/10 ring-1 ring-brand/40' : 'hover:bg-surface-overlay'
               }`}
             >
-              <span className="text-xs font-mono text-fg-secondary">{queueStageLabel(s)}</span>
-              <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle">
+              <span className="text-xs text-fg-secondary">{queueStageLabel(s)}</span>
+              {/* No backlog, no bar: a full grey track read as a full bar for 0 (2026-11-18). */}
+              {totalForStage === 0 ? <span aria-hidden className="h-2" data-testid="stage-bar-empty" /> : (
+              <div className="flex h-2 rounded-sm overflow-hidden bg-edge-subtle" data-testid="stage-bar">
                 {BACKLOG_STATUSES.map((st) => {
                   const v = breakdown[st] ?? 0
                   if (v === 0) return null
@@ -80,7 +90,8 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
                   )
                 })}
               </div>
-              <span className="text-2xs font-mono text-fg-muted text-right">{totalForStage}</span>
+              )}
+              <span className="text-2xs text-fg-muted text-right tabular-nums">{totalForStage}</span>
             </button>
           )
         })}

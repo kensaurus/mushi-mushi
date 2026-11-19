@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { brokenConnections, buildConnectionGrid, connectionGridSentence, type ConnectionGridInput } from './connectionGridModel'
+import { alertChannelGap, brokenConnections, buildConnectionGrid, connectionGridSentence, type ConnectionGridInput } from './connectionGridModel'
 import { sentryConnectionFromPageData } from '../../lib/useSentryConnection'
 import type { HealthRow, PlatformResponse } from './types'
 
@@ -241,5 +241,18 @@ describe('the GitHub tile follows the app binding the GitHub card uses', () => {
   it('no repo reads not connected; without the status yet it falls back to the token form', () => {
     expect(github(buildConnectionGrid(input({ github: { state: 'not_connected', repo: null } }))).view.state).toBe('not_connected')
     expect(github(buildConnectionGrid(input({ github: null }))).view.state).toBe('working')
+  })
+})
+
+describe('alertChannelGap', () => {
+  it('is a gap only when events are on and Slack, Discord and Teams are all not connected', () => {
+    const none = buildConnectionGrid(input())
+    expect(alertChannelGap(none, 8)).toBe(true)
+    expect(alertChannelGap(none, 0)).toBe(false)
+    // Prefs still loading: unknown is never a gap.
+    expect(alertChannelGap(none, null)).toBe(false)
+    expect(alertChannelGap(buildConnectionGrid(input({ discordConfigured: true })), 8)).toBe(false)
+    // Slack settings still loading read as present, so the gap never flashes.
+    expect(alertChannelGap(buildConnectionGrid(input({ slack: { configured: null, canPost: false, channelId: null } })), 8)).toBe(false)
   })
 })

@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AiRoute, ModelPrice, OpsMeta, OpsSnapshot, ProviderAccount, ProviderState } from './kensaurusOpsTypes'
 import {
+  accountLabel,
+  allSharedAccounts,
   actorLabel,
   ageLabel,
   applyOptimistic,
@@ -14,9 +16,12 @@ import {
   buildHourlyBars,
   buildSpendGrid,
   cellKey,
+  chainSignature,
   diffFields,
   formatMicroUsd,
+  groupHistory,
   groupRoutes,
+  hourlyEmptyText,
   marginChange,
   marginOf,
   nextFreePriority,
@@ -370,6 +375,30 @@ describe('tabs and errors', () => {
   })
 })
 
+describe('fresh-eyes fixes (2026-11-18)', () => {
+  it('never says "no calls" for the hourly chart when the 24 h digest has calls', () => {
+    expect(hourlyEmptyText(2, 40)).toBeNull()
+    expect(hourlyEmptyText(0, 0)).toBe('No calls in the last 48 hours.')
+    expect(hourlyEmptyText(0, 3)).not.toMatch(/no calls/i)
+  })
+
+  it('folds a run of adds by one actor into one item and keeps changes one row each', () => {
+    const row = (id: string, op: 'INSERT' | 'UPDATE' | 'DELETE', actor = 'migration') => ({ id, at: AT, actor, op, kind: 'route' as const, subject: id, diff: [] })
+    const items = groupHistory([row('u1', 'UPDATE'), row('u2', 'UPDATE'), row('u3', 'UPDATE'), row('a1', 'INSERT'), row('a2', 'INSERT'), row('a3', 'INSERT'), row('b1', 'INSERT', 'console:x'), row('b2', 'INSERT', 'console:x')])
+    expect(items.map((i) => (i.type === 'row' ? i.row.id : `${i.id}:${i.rows.length}`))).toEqual(['u1', 'u2', 'u3', 'g-a1:3', 'b1', 'b2'])
+  })
+
+  it('gives identical chains the same signature and different params a different one', () => {
+    const r = (app: string, priority: number, model: string, params: Record<string, unknown> = {}) =>
+      ({ app, feature: '*', priority, provider: 'openai', model, enabled: true, params, provider_state: 'ok' }) as unknown as AiRoute
+    const a = { app: 'a', feature: '*', routes: [r('a', 1, 'm1'), r('a', 2, 'm2')] }
+    const b = { app: 'b', feature: '*', routes: [r('b', 1, 'm1'), r('b', 2, 'm2')] }
+    const c = { app: 'c', feature: '*', routes: [r('c', 1, 'm1', { effort: 'low' }), r('c', 2, 'm2')] }
+    expect(chainSignature(a)).toBe(chainSignature(b))
+    expect(chainSignature(a)).not.toBe(chainSignature(c))
+  })
+})
+
 describe('provider states and margins in the kit (2026-11-18)', () => {
   it('maps each provider state to its own run status', () => {
     expect(PROVIDER_STATUS).toEqual({ down: 'failed', warn: 'slow', ok: 'passed', stale: 'waiting', unknown: 'idle' })
@@ -380,5 +409,17 @@ describe('provider states and margins in the kit (2026-11-18)', () => {
     expect(marginChange(0.12)).toEqual({ text: '▲ +12%', worse: false })
     expect(marginChange(-0.08)).toEqual({ text: '▼ -8%', worse: true })
     expect(marginChange(null)).toBeNull()
+  })
+})
+
+// Round 3 (2026-11-19): "(shared key)" on every row and an "anthropic" chip beside "Anthropic".
+describe('account labels', () => {
+  it('says "shared" once when every account is shared, and drops a chip the name already says', () => {
+    const rows = [{ label: 'Anthropic (shared key)', provider: 'anthropic' }, { label: 'fal.ai (shared account)', provider: 'fal' }]
+    expect(allSharedAccounts(rows)).toBe(true)
+    expect(accountLabel(rows[0]!, true)).toEqual({ text: 'Anthropic', showProvider: false })
+    expect(accountLabel(rows[1]!, true)).toEqual({ text: 'fal.ai', showProvider: false })
+    expect(accountLabel({ label: 'Team key', provider: 'openai' }, false)).toEqual({ text: 'Team key', showProvider: true })
+    expect(allSharedAccounts([...rows, { label: 'Own key' }])).toBe(false)
   })
 })

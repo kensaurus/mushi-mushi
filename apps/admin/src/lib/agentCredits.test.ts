@@ -129,4 +129,15 @@ describe('the setup checklist in plain words', () => {
     expect(out[0]!.cta_label).not.toBe('')
     expect(out[1]!.cta_label).toBe('')
   })
+
+  it('keeps a button on each card-anchored step of the same page (round-3: Connect Slack had none)', () => {
+    const out = plainSetupSteps([
+      step('sentry_connected', '/integrations/config#platform-card-sentry'),
+      step('slack_connected', '/integrations/config#integrations-slack'),
+      step('again', '/integrations/config#integrations-slack'),
+    ])
+    expect(out[0]!.cta_label).not.toBe('')
+    expect(out[1]!.cta_label).toBe('Connect Slack')
+    expect(out[2]!.cta_label).toBe('')
+  })
 })

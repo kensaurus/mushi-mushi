@@ -139,6 +139,13 @@ describe('ResourceCsvImport', () => {
     expect(api.apiFetchMutate).not.toHaveBeenCalled()
   })
 
+  it('is a plain row under a hairline, not a dashed box inside the card', () => {
+    act(() => root.render(createElement(ResourceCsvImport, { orgId: ORG, onImported: vi.fn() })))
+    const box = container.querySelector('[data-testid="resource-csv-import"]')!
+    expect(box.className).not.toMatch(/dashed|rounded/)
+    expect(box.className.split(' ')).toEqual(expect.arrayContaining(['border-t', 'border-edge-subtle']))
+  })
+
   it('the card shows the import to owners and admins only', () => {
     pageData.usePageData.mockReturnValue({ data: { canImport: false, resources: [] }, loading: false, error: null, reload: vi.fn() })
     act(() => root.render(createElement(SharedResourcesCard, { orgId: ORG, iconFor: (id: string) => ({ project_id: id, project_name: id, project_slug: id }) })))

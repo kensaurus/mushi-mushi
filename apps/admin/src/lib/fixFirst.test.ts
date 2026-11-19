@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bugQuestions, fixFirstOrder, peopleHit } from './fixFirst'
+import { bugQuestions, fixFirstGroups, fixFirstOrder, peopleHit } from './fixFirst'
 
 const r = (id: string, severity: string | null, users = 1, created_at = '2026-10-20T00:00:00Z', status = 'classified') => ({
   id,
@@ -12,7 +12,13 @@ const r = (id: string, severity: string | null, users = 1, created_at = '2026-10
 describe('fixFirstOrder', () => {
   it('puts the worst severity first, then the bug that reached more people', () => {
     const order = fixFirstOrder([r('low-many', 'low', 40), r('high-one', 'high', 1), r('critical', 'critical', 1), r('high-ten', 'high', 10)])
-    expect(order.map((x) => x.id)).toEqual(['high-ten', 'critical', 'low-many', 'high-one'])
+    expect(order.map((x) => x.id)).toEqual(['critical', 'high-ten', 'high-one', 'low-many'])
+  })
+
+  // Fresh-eyes sweep 2026-11-18: Mediums that reached 12 and 9 people sat above two Criticals.
+  it('never puts a medium above a critical, however many people it reached', () => {
+    const order = fixFirstOrder([r('med-12', 'medium', 12), r('med-9', 'medium', 9), r('crit-1', 'critical', 1), r('crit-1b', 'critical', 1, '2026-10-01T00:00:00Z')])
+    expect(order.map((x) => x.id)).toEqual(['crit-1', 'crit-1b', 'med-12', 'med-9'])
   })
 
   it('shows one row per duplicate group, the best of it', () => {
@@ -36,6 +42,18 @@ describe('fixFirstOrder', () => {
   it('counts at least one person, and duplicates when users are unknown', () => {
     expect(peopleHit({})).toBe(1)
     expect(peopleHit({ dedup_count: 4 })).toBe(4)
+  })
+})
+
+describe('fixFirstGroups', () => {
+  // Fresh-eyes sweep 2026-11-18: one "next 16.4.2" hole from three apps was three identical rows.
+  it('makes one row per title, counting the apps it is in', () => {
+    const hole = (id: string, project_id: string, sev: string) => ({ ...r(id, sev), project_id, title: 'Known security hole in next 16.4.2: upgrade to 16.4.5' })
+    const groups = fixFirstGroups([hole('a', 'glot', 'medium'), hole('b', 'mushi', 'high'), hole('c', 'yen', 'high'), { ...r('d', 'low'), project_id: 'glot', title: 'Footer link' }])
+    expect(groups.map((g) => [g.lead.id, g.members.length, g.apps])).toEqual([
+      ['b', 3, 3],
+      ['d', 1, 1],
+    ])
   })
 })
 

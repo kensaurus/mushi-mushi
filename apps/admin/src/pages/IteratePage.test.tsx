@@ -200,6 +200,8 @@ describe('IteratePage with no runs', () => {
     mocks.hideSnapshot = false
     render()
     expect(document.body.textContent).not.toContain('Run history')
+    // "Start a run" is the one way in; the Runs | New Run tab bar would repeat it.
+    expect(document.querySelector('[aria-label="Improvement run sections"]')).toBeNull()
   })
 
   it('keeps the run history when the status block is hidden', () => {
@@ -207,5 +209,6 @@ describe('IteratePage with no runs', () => {
     mocks.listRuns = []
     render()
     expect(document.body.textContent).toContain('Run history')
+    expect(document.querySelector('[aria-label="Improvement run sections"]')).not.toBeNull()
   })
 })

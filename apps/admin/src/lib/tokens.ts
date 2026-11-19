@@ -38,11 +38,14 @@ export const CATEGORY_LABELS: Record<string, string> = {
 }
 
 /** Badge chrome per category — pairs with `SEVERITY` for scan-friendly triage rows. */
+// A category is a kind of report, not a state: neutral chips. Status colours (red = failed,
+// amber = warning, blue = running, violet = selected) mean state on this console (fresh-eyes
+// 2026-11-18: "Bug" read red in four places on every report).
 export const CATEGORY_BADGE: Record<string, string> = {
-  bug: CHIP_TONE.dangerSubtle,
-  slow: CHIP_TONE.warnSubtle,
-  visual: CHIP_TONE.infoSubtle,
-  confusing: CHIP_TONE.accentSubtle,
+  bug: CHIP_TONE.neutral,
+  slow: CHIP_TONE.neutral,
+  visual: CHIP_TONE.neutral,
+  confusing: CHIP_TONE.neutral,
   other: CHIP_TONE.neutral,
 }
 
@@ -54,23 +57,6 @@ export const CATEGORY_BADGE: Record<string, string> = {
 export function categoryLabel(id: string | null | undefined): string {
   if (!id) return 'Other'
   return CATEGORY_LABELS[id] ?? id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-/**
- * Badge class for a category id.
- * Falls back to `neutral` tone for unknown custom categories.
- */
-export function categoryBadge(id: string | null | undefined): string {
-  if (!id) return CHIP_TONE.neutral
-  return CATEGORY_BADGE[id] ?? CHIP_TONE.neutral
-}
-
-/** Styling for LLM confidence percentage chips (0–1). */
-export function confidenceBadgeClass(c: number | null | undefined): string {
-  if (c == null) return CHIP_TONE.neutral
-  if (c >= 0.85) return CHIP_TONE.okSubtle
-  if (c >= 0.65) return CHIP_TONE.warnSubtle
-  return CHIP_TONE.dangerSubtle
 }
 
 /**
@@ -256,14 +242,6 @@ export const NODE_COLORS: Record<string, string> = {
   db_dep:       'oklch(0.7 0.12 300)',
   test:         'oklch(0.75 0.16 145)',
   user_story:   'oklch(0.78 0.12 85)',
-}
-
-export const SCORE_COLORS: Record<string, string> = {
-  overall:   'oklch(0.58 0.22 280)',
-  accuracy:  'oklch(0.68 0.16 240)',
-  severity:  'oklch(0.65 0.22 25)',
-  component: 'oklch(0.72 0.19 155)',
-  repro:     'oklch(0.80 0.15 80)',
 }
 
 export { META_CHIP_TONE } from './chipTone'

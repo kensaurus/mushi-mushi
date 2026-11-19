@@ -30,6 +30,7 @@ program
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
   .option('--skip-test-report', 'Skip the end-of-wizard "send a test report" prompt')
   .option('--audit', 'Audit an existing install (doctor checks) instead of running the wizard')
+  .option('--dry-run', 'Print what the wizard would install and write, then stop (changes nothing)')
   .action(async (opts: {
     projectId?: string
     apiKey?: string
@@ -40,6 +41,7 @@ program
     endpoint?: string
     skipTestReport?: boolean
     audit?: boolean
+    dryRun?: boolean
   }) => {
     await runInit({
       projectId: opts.projectId,
@@ -51,6 +53,7 @@ program
       endpoint: opts.endpoint,
       sendTestReport: opts.skipTestReport ? false : undefined,
       audit: opts.audit,
+      dryRun: opts.dryRun,
     })
   })
 

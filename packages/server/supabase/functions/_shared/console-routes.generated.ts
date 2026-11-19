@@ -80,7 +80,7 @@ export const CONSOLE_ROUTES: ConsoleRouteEntry[] = [
   { path: "/setup-copilot", label: "Setup copilot", description: "Diagnose setup: SDK heartbeat, version and fix dispatch for one project, with copy-paste commands.", group: "Start", keywords: ["setup","copilot","verify","dispatch","guided","diagnose"] },
   { path: "/cli-auth", label: "CLI sign-in", description: "Approve the Mushi Mushi CLI sign-in from your terminal.", group: "Start", keywords: ["cli auth","cli","oauth","auth","terminal","login"] },
   { path: "/docs-bridge", label: "Docs", description: "Open the documentation, signed in, in a new tab.", group: "Workspace", keywords: ["docs bridge","docs","documentation","bridge","token"] },
-  { path: "/skills", label: "Skill catalog", description: "Browse 70+ agent skills from kenji skills by category.", group: "Start", keywords: ["catalog","skill catalog","cursor-kenji","kenji skills"] },
+  { path: "/skills", label: "Skill catalog", description: "Browse the agent skills catalog by category.", group: "Start", keywords: ["catalog","skill catalog","cursor-kenji","kenji skills"] },
   { path: "/skills", label: "Skill runs", description: "Track live skill pipeline runs and check in each step.", group: "Start", keywords: ["skill pipelines","pipeline runs","handoff","context packet","checkin"] },
   { path: "/skills", label: "Skill sources", description: "Add GitHub repos (e.g. kensaurus/skills) and sync SKILL.md files.", group: "Start", keywords: ["skill sources","skill sync","skills.sh","kenji skills","cursor-kenji"] },
 ]

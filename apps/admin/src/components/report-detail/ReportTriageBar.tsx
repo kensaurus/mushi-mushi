@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useInRouterContext } from 'react-router-dom'
 import { Card } from '../../components/ui'
 import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS, CATEGORY_LABELS } from '../../lib/tokens'
@@ -74,6 +75,7 @@ export function ReportTriageBar({
   repoChoice,
   hasCodeLocation = true,
 }: ReportTriageBarProps) {
+  const inRouter = useInRouterContext()
   const [showSaved, setShowSaved] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -254,16 +256,29 @@ export function ReportTriageBar({
       </div>
 
       <div className="ml-auto flex flex-wrap items-end gap-2">
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={syncToIntegrations}
-          disabled={syncing}
-          loading={syncing}
-          title={destinations.length === 0 ? 'No routing destinations active' : `Push to: ${destinations.map((t) => PROVIDER_LABEL[t] ?? t).join(', ')}`}
-        >
-          {syncing ? 'Syncing\u2026' : `Sync to ${destinations.length} ${destinations.length === 1 ? 'destination' : 'destinations'}`}
-        </Btn>
+        {destinations.length === 0 ? (
+          // "Sync to 0 destinations" was a button that could do nothing (sweep 2026-11-18).
+          <Btn
+            variant="ghost"
+            size="sm"
+            {...(inRouter ? { to: '/integrations' } : { href: `${import.meta.env.BASE_URL}integrations` })}
+            title="Connect Jira, Linear, GitHub Issues or PagerDuty"
+            data-testid="triage-connect-destination"
+          >
+            Connect a destination
+          </Btn>
+        ) : (
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={syncToIntegrations}
+            disabled={syncing}
+            loading={syncing}
+            title={`Push to: ${destinations.map((t) => PROVIDER_LABEL[t] ?? t).join(', ')}`}
+          >
+            {syncing ? 'Syncing\u2026' : `Sync to ${destinations.length} ${destinations.length === 1 ? 'destination' : 'destinations'}`}
+          </Btn>
+        )}
         {repoChoice && repoChoice.repos.length > 1 && (
           <SelectField
             label="Repo"

@@ -35,6 +35,7 @@ that one with you for free on a call, whether or not you use Mushi.
 
 ## Reply to "how much?"
 
-Free for one app. Builder is $29 a month for three apps (1,000 diagnoses).
+Free for three apps (300 diagnoses a month). Builder is $29 a month for 1,000
+diagnoses.
 You bring your own AI key, so the fix PRs run on your account, and nothing
 merges without passing the review.

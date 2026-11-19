@@ -23,7 +23,7 @@ import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { setActiveProjectIdSnapshot } from '../lib/activeProject'
-import { Badge, Btn, Card, FreshnessPill, StatCard, StatGrid, type BadgeTone } from '../components/ui'
+import { Badge, Btn, Card, FreshnessPill, StatCard, StatGrid } from '../components/ui'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { PageLoadError } from '../components/PageLoadError'
@@ -31,8 +31,8 @@ import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { BarSparkline } from '../components/charts'
 import { relTime } from '../components/dashboard/types'
 import { IconGauge } from '../components/icons'
-import { HEARTBEAT_HINT, heartbeatStateFromTimestamp } from '../lib/heartbeat'
-import { SpringChromeEnter } from '../components/motion/SpringChromeEnter'
+import { HEARTBEAT_HINT } from '../lib/heartbeat'
+import { HEALTH_BADGE_TONE, HEALTH_RANK, healthBadgeLabel, healthToneFor, isCalmTone, splitBySessions, type HealthTone } from '../lib/overviewView'
 import { useAdminMode } from '../lib/mode'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -67,71 +67,6 @@ interface ProjectCard {
    *  RPC ran and reports no key has ever authenticated. */
   last_seen_at?: string | null
   dau_spark: DauPoint[]
-}
-
-type HealthTone = 'critical' | 'not-connected' | 'silent' | 'warn' | 'quiet' | 'ok'
-
-/**
- * A project with no heartbeat used to fall through to `ok` and render a green
- * "Healthy" badge — the never-connected case looked identical to the perfectly
- * healthy one. Connectivity is now checked before the quiet-and-fine path.
- *
- * Critical reports still outrank connectivity: a project with live critical
- * bugs is the more urgent thing to say, and reports only exist if something
- * connected at some point anyway.
- */
-function healthToneFor(card: ProjectCard): HealthTone {
-  if (card.critical_reports > 0) return 'critical'
-
-  const heartbeat = heartbeatStateFromTimestamp(card.last_seen_at)
-  if (heartbeat === 'never') return 'not-connected'
-  if (heartbeat === 'dead') return 'silent'
-
-  if (card.open_reports > 5) return 'warn'
-  // No user sessions this week is not evidence of health: a project nobody
-  // used for 7 days rendered the same green "Healthy" as a busy one.
-  if (card.sessions_7d === 0) return 'quiet'
-  return 'ok'
-}
-
-/** Tones that need nothing from the user right now. */
-function isCalmTone(tone: HealthTone): boolean {
-  return tone === 'ok' || tone === 'quiet'
-}
-
-const HEALTH_RANK: Record<HealthTone, number> = {
-  critical: 0,
-  'not-connected': 1,
-  silent: 2,
-  warn: 3,
-  quiet: 4,
-  ok: 5,
-}
-
-const HEALTH_BADGE_TONE: Record<HealthTone, BadgeTone> = {
-  critical: 'dangerSubtle',
-  'not-connected': 'neutral',
-  silent: 'warnSubtle',
-  warn: 'warnSubtle',
-  quiet: 'neutral',
-  ok: 'okSubtle',
-}
-
-function healthBadgeLabel(card: ProjectCard, tone: HealthTone): string {
-  switch (tone) {
-    case 'critical':
-      return `${card.critical_reports} critical`
-    case 'not-connected':
-      return 'Not connected'
-    case 'silent':
-      return 'Silent'
-    case 'warn':
-      return `${card.open_reports} open`
-    case 'quiet':
-      return 'Quiet'
-    case 'ok':
-      return 'Healthy'
-  }
 }
 
 const HEALTH_BADGE_HINT: Record<HealthTone, string | undefined> = {
@@ -223,7 +158,7 @@ export function OverviewPage() {
                 <StatCard label="Open reports" value={fmt(portfolioTotals.totalOpen)} />
                 {portfolioTotals.totalCritical > 0 && (
                   <StatCard
-                    label="Critical"
+                    label="Open critical"
                     value={fmt(portfolioTotals.totalCritical)}
                     accent="text-danger"
                   />
@@ -293,18 +228,25 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
     [cards],
   )
 
-  const attention = sorted.filter((c) => !isCalmTone(healthToneFor(c)))
-  const healthy = sorted.filter((c) => isCalmTone(healthToneFor(c)))
+  const { active, idle } = splitBySessions(sorted)
+  const attention = active.filter((c) => !isCalmTone(healthToneFor(c)))
+  const healthy = active.filter((c) => isCalmTone(healthToneFor(c)))
   const showGroups = isAdvanced && attention.length > 0 && healthy.length > 0
+  const idleList = idle.length > 0 ? <NoSessionsList cards={idle} recipeWorst={recipeWorst} /> : null
 
+  // No per-card entrance stagger: the tenth card was still fading in when the
+  // page settled and read as "dimmed" with no reason (round-2 sweep 2026-11-18).
   if (!showGroups) {
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {sorted.map((card, i) => (
-          <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-            <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
-          </SpringChromeEnter>
-        ))}
+      <div className="flex flex-col gap-4">
+        {active.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {active.map((card) => (
+              <ProjectHealthCard key={card.project_id} card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
+            ))}
+          </div>
+        )}
+        {idleList}
       </div>
     )
   }
@@ -319,10 +261,8 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
           Needs attention ({attention.length})
         </h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {attention.map((card, i) => (
-            <SpringChromeEnter key={card.project_id} delay={i * 0.03}>
-              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
-            </SpringChromeEnter>
+          {attention.map((card) => (
+            <ProjectHealthCard key={card.project_id} card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
           ))}
         </div>
       </section>
@@ -334,14 +274,60 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
           Nothing needed ({healthy.length})
         </h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {healthy.map((card, i) => (
-            <SpringChromeEnter key={card.project_id} delay={(attention.length + i) * 0.03}>
-              <ProjectHealthCard card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
-            </SpringChromeEnter>
+          {healthy.map((card) => (
+            <ProjectHealthCard key={card.project_id} card={card} recipeWorst={recipeWorst.get(card.project_id) ?? null} />
           ))}
         </div>
       </section>
+      {idleList}
     </div>
+  )
+}
+
+/**
+ * Apps with no sessions this week, one row each in one card: name, the same
+ * badge the card would carry and when the last bug came in.
+ */
+function NoSessionsList({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWorst: ReadonlyMap<string, ElementState> }) {
+  return (
+    <Card className="overflow-hidden" data-testid="overview-no-sessions">
+      <h3 className="border-b border-edge px-4 py-2 text-xs font-semibold text-fg-secondary">
+        No sessions this week ({cards.length})
+      </h3>
+      <ul className="divide-y divide-edge">
+        {cards.map((card) => {
+          const tone = healthToneFor(card)
+          const badge = healthBadgeLabel(card, tone)
+          const worst = recipeWorst.get(card.project_id) ?? null
+          const pick = () => setActiveProjectIdSnapshot(card.project_id)
+          return (
+            <li key={card.project_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs">
+              <Link to="/dashboard" onClick={pick} className="min-w-0 truncate text-sm font-medium text-fg hover:underline" title={card.slug ?? undefined}>
+                {card.label}
+              </Link>
+              {badge && (
+                <Link to={card.open_reports > 0 ? '/reports?status=open' : '/reports'} onClick={pick} aria-label={`${badge}: open this app's bugs`}>
+                  <Badge tone={HEALTH_BADGE_TONE[tone]} title={HEALTH_BADGE_HINT[tone]}>
+                    {badge}
+                  </Badge>
+                </Link>
+              )}
+              {worst && (
+                <Link to="/recipe" onClick={pick} className="inline-flex items-center gap-1 text-2xs text-fg-muted hover:text-fg" aria-label="Open this project's recipe">
+                  <span>Recipe</span>
+                  <RecipeStateChip state={worst} />
+                </Link>
+              )}
+              {card.last_report_at && (
+                <span className="ml-auto text-fg-faint" title={`Last bug report ${card.last_report_at}`}>
+                  last bug {relTime(card.last_report_at)}
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }
 
@@ -350,6 +336,8 @@ function PortfolioGrid({ cards, recipeWorst }: { cards: ProjectCard[]; recipeWor
 function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWorst: ElementState | null }) {
   const dauValues = (card.dau_spark ?? []).map((p) => p.dau)
   const healthTone = healthToneFor(card)
+  const badge = healthBadgeLabel(card, healthTone)
+  const hasSessions = card.sessions_7d > 0
 
   const handleSwitchProject = () => {
     setActiveProjectIdSnapshot(card.project_id)
@@ -361,7 +349,7 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
   const borderTone =
     healthTone === 'critical'
       ? 'border-danger/40'
-      : healthTone === 'warn' || healthTone === 'silent'
+      : healthTone === 'silent'
         ? 'border-warn/40'
         : ''
 
@@ -369,10 +357,12 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
     <Card
       className={`group relative flex flex-col overflow-hidden transition-shadow hover:shadow-sm ${borderTone}`}
     >
-      {/* Header — title is the stretched primary target (WCAG 2.5.8) */}
+      {/* Header — the title is the stretched primary target (WCAG 2.5.8):
+          the whole card opens this app's Home, so the footer's "Home" link
+          and the slug under the name (a repeat of it) are gone (round-2 sweep 2026-11-18). */}
       <div className="flex items-start justify-between gap-2 px-4 pt-4">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-fg">
+          <h3 className="truncate text-sm font-semibold text-fg" title={card.slug ?? undefined}>
             <Link
               to="/dashboard"
               onClick={handleSwitchProject}
@@ -381,75 +371,65 @@ function ProjectHealthCard({ card, recipeWorst }: { card: ProjectCard; recipeWor
               {card.label}
             </Link>
           </h3>
-          {card.slug && (
-            <p className="mt-0.5 truncate font-mono text-2xs text-fg-faint">{card.slug}</p>
-          )}
         </div>
-        <Badge
-          tone={HEALTH_BADGE_TONE[healthTone]}
-          title={HEALTH_BADGE_HINT[healthTone]}
-          className="relative z-10 shrink-0"
-        >
-          {healthBadgeLabel(card, healthTone)}
-        </Badge>
-      </div>
-
-      {/* Sparkline */}
-      {dauValues.length > 0 ? (
-        <div className="mt-3 px-4">
-          <BarSparkline values={dauValues} height={32} />
-        </div>
-      ) : (
-        <div className="mt-3 flex h-8 items-center px-4">
-          <span className="text-2xs text-fg-faint">No sessions this week</span>
-        </div>
-      )}
-
-      {/* Stats row */}
-      <div className="mt-3 flex gap-4 border-t border-edge px-4 py-3 text-xs text-fg-muted">
-        <span title="Sessions this week">
-          <span className="font-medium text-fg">{fmt(card.sessions_7d)}</span> sessions
-        </span>
-        <span title="Unique users this week">
-          <span className="font-medium text-fg">{fmt(card.users_7d)}</span> users
-        </span>
-        {card.last_report_at && (
-          <span className="ml-auto text-fg-faint" title={card.last_report_at}>
-            {relTime(card.last_report_at)}
-          </span>
+        {badge && (
+          <Link
+            to={card.open_reports > 0 ? '/reports?status=open' : '/reports'}
+            onClick={handleSwitchProject}
+            className="relative z-10 shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            aria-label={`${badge}: open this app's bugs`}
+          >
+            <Badge tone={HEALTH_BADGE_TONE[healthTone]} title={HEALTH_BADGE_HINT[healthTone]}>
+              {badge}
+            </Badge>
+          </Link>
         )}
       </div>
 
-      {/* Footer links — z-10 so they sit above the stretched title link */}
-      <div className="relative z-10 flex gap-2 border-t border-edge px-4 py-2">
-        <Link
-          to="/dashboard?view=users"
-          onClick={handleSwitchProject}
-          className="inline-flex min-h-6 items-center text-2xs text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
-        >
-          User activity →
-        </Link>
-        {/* The open-status list (QA 175). The badge above already gives the
-            count; the footer said "65 open" a third time (2026-10-28). */}
-        <Link
-          to={card.open_reports > 0 ? '/reports?status=open' : '/reports'}
-          onClick={handleSwitchProject}
-          className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
-        >
-          {card.open_reports > 0 ? 'Open bugs' : 'Bugs'}
-        </Link>
-        <Link
-          to="/dashboard"
-          onClick={handleSwitchProject}
-          className="inline-flex min-h-6 items-center text-2xs text-fg-muted hover:text-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
-        >
-          Home
-        </Link>
+      {/* Sessions a day; the ringed last bar is today so far. */}
+      {hasSessions && dauValues.length > 0 && (
+        <div className="mt-3 px-4">
+          <BarSparkline
+            values={dauValues}
+            height={32}
+            ariaLabel={`Sessions a day, last ${dauValues.length} days; the last bar is today so far`}
+            barTitles={(card.dau_spark ?? []).map((p, i, all) => `${p.day}: ${p.dau} sessions${i === all.length - 1 ? ' (today so far)' : ''}`)}
+          />
+          <p className="mt-1 text-3xs text-fg-faint">Sessions a day, last {dauValues.length} d · last bar is today so far</p>
+        </div>
+      )}
+
+      {/* One link row: the numbers open User activity; z-10 above the stretched title link. */}
+      <div className="relative z-10 mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-edge px-4 py-3 text-xs text-fg-muted">
+        {hasSessions ? (
+          <Link
+            to="/dashboard?view=users"
+            onClick={handleSwitchProject}
+            className="inline-flex min-h-6 items-center gap-4 rounded-sm hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            title="Open User activity for this app"
+          >
+            <span>
+              <span className="font-medium text-fg">{fmt(card.sessions_7d)}</span> sessions
+            </span>
+            <span>
+              <span className="font-medium text-fg">{fmt(card.users_7d)}</span> users
+            </span>
+          </Link>
+        ) : (
+          <span className="inline-flex min-h-6 items-center text-fg-faint" data-testid="overview-no-sessions">
+            No sessions this week
+          </span>
+        )}
+        {card.last_report_at && (
+          <span className="ml-auto text-fg-faint" title={`Last bug report ${card.last_report_at}`}>
+            last bug {relTime(card.last_report_at)}
+          </span>
+        )}
         {recipeWorst && (
           <Link
             to="/recipe"
             onClick={handleSwitchProject}
-            className="ml-auto inline-flex min-h-6 items-center gap-1 rounded-sm text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="inline-flex min-h-6 items-center gap-1 rounded-sm text-2xs text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             aria-label="Open this project's recipe"
           >
             <span>Recipe</span>

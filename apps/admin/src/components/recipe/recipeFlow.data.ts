@@ -17,7 +17,8 @@ import type { RecipeElementKey, RecipeElementSummary } from '../../lib/recipeTyp
 import { RECIPE_LANES, elementStateMeta } from './recipeState'
 
 const RECIPE_NODE_WIDTH = 248
-const LANE_GAP = 296
+// 272: the four lanes fit a 1440 px desktop's main column with the sidebar open (296 cut the Deploy lane, 2026-11-18).
+const LANE_GAP = 272
 /** Vertical step between stacked cards: taller than a canvas card, which is capped at RECIPE_CARD_MAX_HEIGHT (max-h-65 in RecipeElementCard). */
 const ROW = 280
 

@@ -99,7 +99,8 @@ describe('GateFindingsSection', () => {
     render()
     await flush()
     const text = container.textContent ?? ''
-    expect(text).toContain('Failing · 230 open')
+    // By severity, so a card's counts add up to the page's error / warning totals (2026-11-18).
+    expect(text).toContain('Failing · 230 errors')
     const summary = [...container.querySelectorAll('summary')].find((s) => s.textContent?.includes('findings'))
     expect(summary?.textContent).toBe('Show 50 of 230 findings')
     expect(text).not.toContain('Show the 50 findings')
@@ -128,7 +129,7 @@ describe('GateFindingsSection', () => {
     await flush()
     const summary = [...container.querySelectorAll('summary')].find((s) => s.textContent?.includes('findings') || s.textContent === 'Findings')
     expect(summary?.textContent).toBe('Show the 4 findings')
-    expect(container.textContent).toContain('4 open')
+    expect(container.textContent).toContain('Needs a look · 4 warnings')
     expect(container.textContent).not.toContain('more not shown')
   })
 

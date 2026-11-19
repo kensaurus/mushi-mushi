@@ -13,7 +13,7 @@ export function CiJobOutcomeChip({ job, outcome }: { job?: Pick<CiJob, 'status' 
   const o = outcome ?? (job ? jobOutcome(job) : 'waiting')
   const s = CI_OUTCOME_STYLE[o]
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-medium ${s.chip}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-medium whitespace-nowrap ${s.chip}`}>
       <s.Icon size={10} />
       {s.label}
     </span>

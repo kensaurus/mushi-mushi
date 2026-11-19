@@ -26,7 +26,8 @@ function AlertBarRow({ bar, max }: { bar: CiAlertBar; max: number }) {
   const fill = bar.severity === 'critical' ? 'bg-st-failed' : 'bg-st-waiting'
   return (
     <li {...link} className={`${link.className} grid grid-cols-subgrid col-span-3 items-center`} data-testid="ci-alert-bar">
-      <span className="truncate text-2xs font-semibold text-fg">{bar.label}</span>
+      {/* Wraps, never cut: "the-wanting-mi…" had room to break (round 3). */}
+      <span className="min-w-0 text-2xs leading-tight font-semibold wrap-break-word text-fg">{bar.label}</span>
       <span className="relative block h-2 overflow-hidden rounded-xs bg-surface-overlay" aria-hidden="true">
         <span className={`ci-grow-x absolute inset-y-0 left-0 ${fill}`} style={{ width: `${Math.max(4, barPct(bar.value, max))}%` }} />
       </span>
@@ -127,7 +128,8 @@ export function CiAlertStrip({ overview, status, now }: { overview: CiOverview; 
   return (
     <AlertCards
       alerts={alerts}
-      emptyText="Nothing needs you: no failing jobs, nothing stuck, no machine down."
+      // A mark and a short label, not a sentence restating the empty strip (round 3, 390).
+      emptyText="Nothing needs you"
       maxShown={ALERTS_SHOWN}
       columns={6}
       testIdPrefix="ci"

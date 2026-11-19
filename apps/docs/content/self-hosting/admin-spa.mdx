@@ -46,4 +46,8 @@ After deploy, open the console and complete the **Onboarding** wizard (`/onboard
 2. Connect your GitHub OAuth app.
 3. Show the SDK snippet for your first project.
 
-If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build — these cannot be injected after build time.
+If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build. Vite inlines them at build time, so environment variables on the server that serves `dist/` have no effect.
+
+A build with `VITE_INSTANCE_TYPE=self-hosted` and no `VITE_SUPABASE_URL` opens a setup screen instead. It asks for the Supabase URL and anon key and keeps them in that browser. The published Docker image (`ghcr.io/kensaurus/mushi-mushi-admin`) works this way. To bake the values in, build your own image: `docker build -f deploy/Dockerfile.admin --build-arg VITE_SUPABASE_URL=… --build-arg VITE_SUPABASE_ANON_KEY=… .` (nginx serves it on port 3000 with the SPA fallback).
+
+Point the CLI at the console, so `mushi login` signs in there instead of on Mushi Mushi Cloud: `mushi config consoleUrl https://your-console.example.com`. Alternatively, pass `--console-url` to `mushi selfhost up`.

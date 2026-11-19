@@ -25,6 +25,8 @@ interface Props {
   showBudgetPicker?: boolean
   label?: string
   size?: 'sm' | 'md'
+  /** On a phone, take the full width as one toolbar row (the page header). */
+  fill?: boolean
 }
 
 export function CopyRepoDigestButton({
@@ -33,6 +35,7 @@ export function CopyRepoDigestButton({
   showBudgetPicker = true,
   label = 'Copy digest',
   size = 'sm',
+  fill = false,
 }: Props) {
   const toast = useToast()
   const [budget, setBudget] = useState<number>(DEFAULT_DIGEST_BUDGET)
@@ -62,15 +65,15 @@ export function CopyRepoDigestButton({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5" data-testid="copy-repo-digest">
+    <span className={`${fill ? 'flex w-full sm:inline-flex sm:w-auto' : 'inline-flex'} items-center gap-1.5`} data-testid="copy-repo-digest">
       {showBudgetPicker && (
-        <label className="inline-flex">
+        <label className={fill ? 'flex min-w-0 flex-1 sm:inline-flex sm:flex-none' : 'inline-flex'}>
           <span className="sr-only">Digest size</span>
           <select
             aria-label="Digest size"
             value={budget}
             onChange={(e) => setBudget(Number(e.target.value))}
-            className={FILTER_SELECT_CLASS}
+            className={`${FILTER_SELECT_CLASS}${fill ? ' w-full sm:w-auto' : ''}`}
             disabled={busy}
           >
             {DIGEST_BUDGET_OPTIONS.map((o) => (
@@ -86,6 +89,7 @@ export function CopyRepoDigestButton({
         variant="ghost"
         onClick={() => void copy()}
         loading={busy}
+        className="whitespace-nowrap"
         title={
           reportId
             ? 'Copy the code around this bug (its files first) as one paste for an AI chat'

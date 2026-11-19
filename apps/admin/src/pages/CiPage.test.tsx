@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   projectId: 'p1' as string | null,
   paths: [] as Array<{ path: string | null; scope?: string }>,
   error: null as unknown,
+  loading: false,
+  reloads: 0,
   summary: '' as string,
   syncs: [] as Array<{ path: string; scope?: string }>,
 }))
@@ -46,7 +48,8 @@ vi.mock('../lib/usePageData', () => ({
           }
         : null
     const error = path?.startsWith('/v1/admin/ci/overview') ? state.error : null
-    return { data, loading: false, error, isValidating: false, reload: () => {}, lastFetchedAt: null }
+    const loading = path?.startsWith('/v1/admin/ci/overview') ? state.loading : false
+    return { data, loading, error, isValidating: false, reload: () => { state.reloads += 1 }, lastFetchedAt: null }
   },
 }))
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => state.projectId }))
@@ -68,6 +71,7 @@ vi.mock('../components/ci/CiRunnerMap', async () => {
 })
 
 import { CiPage } from './CiPage'
+import { CI_READ_TIMEOUT_MS } from '../lib/ciReadTimeout'
 import { getStoredProjectScopeMode, setStoredProjectScopeMode } from '../lib/projectScope'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -86,6 +90,8 @@ beforeEach(() => {
   state.paths = []
   state.syncs = []
   state.error = null
+  state.loading = false
+  state.reloads = 0
   state.summary = ''
   window.localStorage.clear()
 })
@@ -116,7 +122,7 @@ describe('CiPage', () => {
     await render()
     expect(host.querySelector('h1')!.textContent).toBe('CI runners')
     expect(host.textContent).toContain('Where your tests run, how long they wait, and what slows them down.')
-    const order = ['Queue', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
+    const order = ['Finished jobs', 'Timeline'].map((t) => headings().findIndex((h) => h.startsWith(t)))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     // "Which machine, what is slow, when will it finish, what broke" (2026-11-16): the plain status
@@ -180,7 +186,7 @@ describe('CiPage', () => {
       expect(active.getAttribute('href')).toContain(`view=${view}`)
     }
     const tabs = Array.from(host.querySelectorAll('[role="tab"]')).map((t) => t.textContent ?? '')
-    expect(tabs.map((t) => t.replace(/\d+$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
+    expect(tabs.map((t) => t.replace(/\d+( stopped)?$/, ''))).toEqual(['Now', 'Machines', 'Speed and cost', 'Settings'])
   })
 
   it('keeps old section links working: the hash picks the view, then scrolls to it', async () => {
@@ -194,6 +200,9 @@ describe('CiPage', () => {
 
   it('labels each tab count with what it counts', async () => {
     await render()
+    // "Machines 7" read as seven machines while three were listed (2026-11-18).
+    const machinesTab = Array.from(host.querySelectorAll('[role="tab"]')).find((t) => t.textContent?.startsWith('Machines'))!
+    expect(machinesTab.textContent).toMatch(/Machines\d+ stopped$/)
     const labels = Array.from(host.querySelectorAll('[role="tab"] [aria-label]')).map((b) => b.getAttribute('aria-label') ?? '')
     expect(labels.some((l) => /jobs? waiting for a test machine$/.test(l))).toBe(true)
     expect(labels.some((l) => /changes? that would speed CI up$/.test(l))).toBe(true)
@@ -216,8 +225,22 @@ describe('CiPage', () => {
     expect(q('ci-updated-ago')!.textContent).toBe('Updated 20 s ago')
   })
 
-  it('lays out the queue: waiting oldest first with counts, hints and fix links', async () => {
+  // 2026-11-18: the queue repeated every job "Running now" lists. Live jobs are listed once, under
+  // Right now (with their fix link); the queue below holds what finished.
+  it('lists each live job once: under Running now with its fix link, the queue holds finished jobs', async () => {
     await render()
+    expect(q('ci-queue-count-waiting')).toBeNull()
+    expect(q('ci-queue-count-running')).toBeNull()
+    expect(q('ci-queue-count-finished')!.textContent).toBe('4')
+    expect(hasHeading('Finished jobs')).toBe(true)
+    for (const id of ['j1', 'j2', 'j3', 'j4']) expect(q(`ci-queue-job-${id}`)).toBeNull()
+    const fix = q('ci-waiting-j2')!.querySelector('[data-testid="ci-live-fix-link"]')
+    expect(fix?.getAttribute('href')).toBe('/reports/report-142')
+    expect(q('ci-running-j1')).not.toBeNull()
+  })
+
+  it('lays out the queue with a live job deep-linked: waiting oldest first with counts, hints and fix links', async () => {
+    await render('/ci?job=j2')
     expect(q('ci-queue-count-waiting')!.textContent).toBe('3')
     expect(q('ci-queue-count-running')!.textContent).toBe('1')
     expect(q('ci-queue-count-finished')!.textContent).toBe('4')
@@ -266,6 +289,29 @@ describe('CiPage', () => {
     expect(q('ci-queue-job-j5')).toBeNull()
   })
 
+  // Problems first (2026-11-18): failures lead Finished, passes fold into one row, empty columns go.
+  it('leads Finished with the failures, folds the passes into one row, and hides empty columns', async () => {
+    await render()
+    const finished = Array.from(host.querySelectorAll('[data-testid="ci-queue-list-finished"] > li')).map((el) => el.getAttribute('data-testid'))
+    expect(finished[0]).toBe('ci-queue-job-j7')
+    expect(q('ci-queue-job-j5')).toBeNull()
+    const toggle = q('ci-queue-passed-toggle')!
+    expect(toggle.textContent).toContain('1 passed')
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(q('ci-queue-job-j5')).not.toBeNull()
+
+    act(() => root.unmount())
+    root = createRoot(host)
+    const o = ciOverviewFixture()
+    state.overview = { ...o, jobs: o.jobs.filter((j) => j.status === 'completed') }
+    await render()
+    expect(q('ci-queue-count-waiting')).toBeNull()
+    expect(q('ci-queue-count-running')).toBeNull()
+    expect(q('ci-queue-count-finished')).not.toBeNull()
+  })
+
   it('focuses the job named in ?job=', async () => {
     await render('/ci?job=j3')
     expect(q('ci-queue-job-j3')!.dataset.focused).toBe('true')
@@ -281,11 +327,12 @@ describe('CiPage', () => {
       // A new array: the fixture's jobs list is shared between calls.
       state.overview = { ...o, jobs: [...o.jobs, ...extra] }
     }
-    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] > li').length
+    const waitingCards = () => host.querySelectorAll('[data-testid="ci-queue-list-waiting"] [data-testid^="ci-queue-job-"]').length
 
     it('shows six cards, then all of them on "Show N more"', async () => {
       withWaiting(6) // 3 in the fixture + 6
-      await render()
+      // A live job in ?job= opens the live columns (Now otherwise lists live jobs under Running now).
+      await render('/ci?job=j2')
       expect(q('ci-queue-count-waiting')!.textContent).toBe('9')
       expect(waitingCards()).toBe(6)
       expect(q('ci-queue-list-waiting')!.className).not.toMatch(/overflow-y-auto|max-h-/)
@@ -340,6 +387,17 @@ describe('CiPage', () => {
     // GitHub's raw message stays one click away, behind a plain sentence.
     expect(q('ci-infra-failures')!.textContent).toContain('lost touch with GitHub')
     expect(q('ci-infra-failures')!.textContent).toContain('lost communication')
+    // The reason is said once for the list, and the jobs group by app and PR (2026-11-18).
+    expect(q('ci-infra-failures')!.textContent!.match(/lost touch with GitHub/g)).toHaveLength(1)
+    expect(host.querySelectorAll('[data-testid^="ci-infra-group-"]').length).toBeGreaterThan(0)
+  })
+
+  it('puts the stopped jobs above the GitHub-access banner on Machines', async () => {
+    state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
+    await render('/ci?view=machines')
+    const stopped = q('ci-infra-failures')!
+    const banner = Array.from(host.querySelectorAll('*')).find((el) => el.children.length === 0 && el.textContent?.startsWith('GitHub lists a runner to Mushi Mushi'))!
+    expect(stopped.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows one advice card per rule, with a chip per workflow and the fix once', async () => {
@@ -361,6 +419,10 @@ describe('CiPage', () => {
     expect(advice.textContent!.match(/Draft pull requests run the full CI/g)).toHaveLength(1)
     for (const file of ['ci-pr.yml', 'pricing-parity.yml', 'mushi-freshness.yml']) expect(advice.textContent).toContain(file)
     expect(advice.querySelectorAll('button[aria-label="Copy the fix"]')).toHaveLength(2)
+    // Severity is a mark, not a text pill; evidence that only names each chip again is dropped (2026-11-18).
+    expect([...advice.querySelectorAll('[data-testid="ci-advice-severity"]')].map((el) => el.getAttribute('data-severity'))).toEqual(['low', 'low'])
+    expect(advice.textContent).not.toMatch(/\bLow\b/)
+    expect(advice.textContent!.match(/Why Mushi Mushi thinks so/g)).toHaveLength(1)
     // Evidence joined with "; " reads as a list.
     expect([...advice.querySelectorAll('ul.list-disc li')].map((li) => li.textContent)).toEqual(expect.arrayContaining([`${T} · e2e · playwright: 9 min (4 runs)`]))
   })
@@ -392,7 +454,7 @@ describe('CiPage', () => {
   })
 
   it('explains a missing runner permission where the runners are, not on top of Now', async () => {
-    const text = 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here.'
+    const text = 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way'
     state.overview = ciOverviewFixture({ permissions: { jobs: 'ok', runners: 'missing' } })
     await render('/ci?view=machines')
     expect(host.textContent).toContain(text)
@@ -451,14 +513,41 @@ describe('CiPage', () => {
       root.render(createElement(MemoryRouter, { initialEntries: ['/ci?apps=all&view=settings&project=p1'] }, createElement(CiPage), createElement(Probe)))
     })
     const picker = host.querySelector('[data-testid="ci-placement-app-picker"]') as HTMLElement
-    expect(Array.from(picker.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['glot.it', 'yen-yen'])
-    const yen = Array.from(picker.querySelectorAll('button')).find((b) => b.textContent === 'yen-yen') as HTMLButtonElement
+    expect(Array.from(picker.querySelectorAll('[data-app-name]')).map((b) => b.textContent)).toEqual(['glot.it', 'yen-yen'])
+    // Each chip marks where the app's jobs ran this week (2026-11-18): glot.it on both, yen-yen none seen.
+    const buttons = Array.from(picker.querySelectorAll('button'))
+    expect(buttons.map((b) => b.dataset.runsOn)).toEqual(['both', 'none'])
+    expect(buttons[0].textContent).toContain('●○')
+    const yen = buttons.find((b) => b.querySelector('[data-app-name]')?.textContent === 'yen-yen') as HTMLButtonElement
     await act(async () => yen.click())
     const params = new URLSearchParams(search)
     expect(params.get('project')).toBe('p2')
     expect(params.get('apps')).toBeNull()
     expect(params.get('view')).toBe('settings')
     expect(getStoredProjectScopeMode()).toBe('project')
+  })
+
+  // Round 3 (2026-11-19): 390 All apps sat on "Reading your CI…" on a blank page while the
+  // overview hit its CPU limit. After the timeout it says "not checked" with one Retry.
+  it('turns an All apps read that never answers into "CI runners: not checked" with Retry', async () => {
+    vi.useRealTimers()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-21T12:00:00Z'))
+    state.projectId = null
+    state.overview = null
+    state.loading = true
+    await render()
+    expect(host.textContent).toContain('Reading your CI…')
+    expect(q('ci-not-checked')).toBeNull()
+    await act(async () => {
+      vi.advanceTimersByTime(CI_READ_TIMEOUT_MS)
+    })
+    const row = q('ci-not-checked')!
+    expect(row.textContent).toContain('CI runners: not checked')
+    expect(host.textContent).not.toContain('Reading your CI…')
+    await act(async () => Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!.click())
+    expect(state.reloads).toBeGreaterThan(0)
+    expect(host.textContent).toContain('Reading your CI…')
   })
 
   it('says the page could not load, not that it is still loading, when the overview fails', async () => {

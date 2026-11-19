@@ -187,6 +187,27 @@ async function mintRunnerKey(c: Context, deps: CiRouteDeps): Promise<Response> {
   )
 }
 
+/**
+ * The built overview, per scope and window, for a few seconds (2026-11-18). The CI page polls
+ * every 30 s and the Apps page's CI card reads the same thing, so two tabs or two pages paid the
+ * whole build twice; together with the workflow parsing it pushed the function past its CPU
+ * budget (27 of 773 reads ended in 546 in a day). Keyed by the access-checked project list, so a
+ * caller only ever gets a build of projects it may read. `refresh=1` always builds again.
+ * Per route instance (deps), so tests with different fixtures never share an entry.
+ */
+const OVERVIEW_CACHE_MS = 15_000
+const OVERVIEW_CACHE_MAX = 64
+const overviewCaches = new WeakMap<CiRouteDeps, Map<string, { at: number; data: unknown }>>()
+
+function overviewCacheFor(deps: CiRouteDeps): Map<string, { at: number; data: unknown }> {
+  let m = overviewCaches.get(deps)
+  if (!m) {
+    m = new Map()
+    overviewCaches.set(deps, m)
+  }
+  return m
+}
+
 async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   const userId = c.get('userId') as string
   const db = deps.getServiceClient()
@@ -211,10 +232,18 @@ async function ciOverview(c: Context, deps: CiRouteDeps): Promise<Response> {
   }
 
   const now = deps.now()
+  const cache = overviewCacheFor(deps)
+  const cacheKey = `${days}|${[...scope].sort().join(',')}`
+  const hit = cache.get(cacheKey)
+  if (!refresh && hit && now.getTime() - hit.at < OVERVIEW_CACHE_MS) return c.json({ ok: true, data: hit.data })
   const from = new Date(now.getTime() - days * 24 * 60 * 60_000)
   try {
     const rows = await loadCiOverviewRows(db as never, scope, from)
-    return c.json({ ok: true, data: buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt }) })
+    const data = buildCiOverview(rows, { now, days, from, refreshedAt: rows.lastLiveSyncAt })
+    cache.delete(cacheKey)
+    cache.set(cacheKey, { at: now.getTime(), data })
+    if (cache.size > OVERVIEW_CACHE_MAX) cache.delete(cache.keys().next().value as string)
+    return c.json({ ok: true, data })
   } catch (err) {
     clog.error('ci overview read failed', { err: err instanceof Error ? err.message : String(err) })
     return jsonError(c, 'CI_OVERVIEW_FAILED', 'The CI overview could not be read. Try again in a minute.', 500)

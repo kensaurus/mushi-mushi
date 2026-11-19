@@ -62,15 +62,52 @@ export function decideScopes(keyScopes: string[] | null, configured: readonly Mc
   return { kind: 'serve', scopes: configured.filter((s) => granted.has(s)) }
 }
 
+/** Where the SDK key came from, and the project it is for, so the fix can be one exact command. */
+export interface SdkKeyFixContext {
+  projectId?: string
+  /** `env`: MUSHI_API_KEY in this server's env block. `cli-config`: the key saved by the CLI. */
+  keySource?: 'env' | 'cli-config' | ''
+}
+
+/**
+ * The one command that fixes an SDK key: `login` mints a report:write +
+ * mcp:read key through a browser approval and saves it to the CLI config,
+ * which this server reads when MUSHI_API_KEY is unset.
+ */
+function mcpKeyLoginCommand(projectId?: string): string {
+  return `npx mushi-mushi login${projectId ? ` --project-id ${projectId}` : ''}`
+}
+
+/** The copy-paste fix for an SDK key, worded for where the key came from. */
+export function sdkKeyNextAction(consoleUrl: string, ctx: SdkKeyFixContext = {}): string {
+  const command = mcpKeyLoginCommand(ctx.projectId)
+  const then =
+    ctx.keySource === 'env'
+      ? "then remove MUSHI_API_KEY from this server's env block (the server then uses the saved key) and restart it."
+      : 'then restart this server.'
+  return (
+    `Run \`${command}\` (approve in the browser; it saves a key that can read reports), ${then} ` +
+    `Or mint an MCP key in the console (${consoleUrl}/mcp → "Mint mcp:read key") and put it in MUSHI_API_KEY.`
+  )
+}
+
 /** The stderr report and diagnose_setup detail for an SDK key. */
-export function sdkKeyReport(keyScopes: string[], consoleUrl: string): string {
+export function sdkKeyReport(keyScopes: string[], consoleUrl: string, ctx: SdkKeyFixContext = {}): string {
   const held = keyScopes.length > 0 ? keyScopes.join(', ') : 'none'
+  const then =
+    ctx.keySource === 'env'
+      ? "            then remove MUSHI_API_KEY from this server's env block and restart it."
+      : '            then restart this server.'
   return [
     '',
     `[mushi-mcp] This API key has scopes: ${held}. It can send bug reports (the SDK key) but not read them,`,
     '            so the MCP tools would all be refused. Serving setup mode.',
-    `            Fix: mint an MCP key in the console (${consoleUrl}/mcp → "Mint mcp:read key"),`,
-    '            or run `mushi login`, then put it in MUSHI_API_KEY for this server and restart it.',
+    '            Fix (one command, approve in the browser):',
+    '',
+    `              ${mcpKeyLoginCommand(ctx.projectId)}`,
+    '',
+    then,
+    `            Or mint an MCP key in the console (${consoleUrl}/mcp → "Mint mcp:read key") and put it in MUSHI_API_KEY.`,
     '',
   ].join('\n')
 }

@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/components/report-detail/ReportDiagnosisGraph.tsx
  * PURPOSE: "How Mushi reached this diagnosis" on the report page: evidence,
  *          signals, diagnosis, checks and fix as five lanes with the links
- *          between them drawn, a numbered path to the verdict, and a side
+ *          between them drawn, the path to the verdict numbered on its
+ *          nodes, and a side
  *          panel with the reasoning and the field each claim came from.
  *          Claims under 80% confidence carry a "check this" mark so a person
  *          knows where to look first.
@@ -53,6 +54,9 @@ function stateChip(node: DiagnosisNode): { label: string; tone: string } | null 
   if (node.state === 'failed') return { label: 'failed', tone: CHIP_TONE.dangerSubtle }
   if (node.needsLook) return { label: node.confidence != null ? `check · ${Math.round(node.confidence * 100)}%` : 'check this', tone: CHIP_TONE.warnSubtle }
   if (node.state === 'pending') return { label: 'in progress', tone: CHIP_TONE.infoSubtle }
+  // Unchecked: the title says it ("Not graded yet"); a "not checked" chip
+  // under it said it twice (round-3 sweep 2026-11-19).
+  if (node.state === 'unchecked') return null
   if (node.state === 'open') return { label: 'your move', tone: CHIP_TONE.infoSubtle }
   if (node.state === 'done') return { label: 'done', tone: CHIP_TONE.okSubtle }
   if (node.confidence != null) return { label: `${Math.round(node.confidence * 100)}%`, tone: CHIP_TONE.okSubtle }
@@ -119,14 +123,16 @@ function useEdgePaths(
 function NodeButton({
   node,
   selected,
-  onPath,
+  step,
   onSelect,
 }: {
   node: DiagnosisNode
   selected: boolean
-  onPath: boolean
+  /** 1-based place on the path to the verdict, or null when off the path. */
+  step: number | null
   onSelect: (id: string) => void
 }) {
+  const onPath = step != null
   return (
     <button
       type="button"
@@ -136,16 +142,25 @@ function NodeButton({
       className={[
         'relative z-10 flex w-full flex-col gap-1 rounded-md border border-l-4 bg-surface-raised px-2.5 py-2 text-left',
         'motion-safe:transition-[box-shadow,border-color] hover:shadow-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60',
-        LANE_STRIPE[node.lane],
+        // Nothing checked yet is grey, not the Checks lane's green.
+        node.state === 'unchecked' ? 'border-l-edge' : LANE_STRIPE[node.lane],
         selected ? 'border-brand ring-2 ring-brand/40' : onPath ? 'border-info/40' : 'border-edge-subtle',
       ].join(' ')}
     >
-      <span className="line-clamp-3 text-xs font-medium leading-snug text-fg" title={node.title}>
-        {node.title}
+      {/* Titles and details wrap: "judg…", "next s…", "networ…" were cut
+          mid-word (R2 sweep 2026-11-18). The step number replaces the
+          separate numbered list that repeated every node's title. */}
+      <span className="flex min-w-0 items-start gap-1.5">
+        {step != null ? (
+          <span className="shrink-0 font-mono text-3xs leading-snug text-fg-faint" data-testid="diagnosis-step">
+            {step}.
+          </span>
+        ) : null}
+        <span className="min-w-0 break-words text-xs font-medium leading-snug text-fg">{node.title}</span>
       </span>
-      <span className="flex min-w-0 items-center gap-1.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         <StateChip node={node} />
-        <span className="min-w-0 truncate font-mono text-3xs text-fg-muted" title={node.detail}>
+        <span className="min-w-0 break-words text-3xs text-fg-muted">
           <VitalText text={node.detail} />
         </span>
       </span>
@@ -179,7 +194,7 @@ function WhyMushiBelieves({ why }: { why: string }) {
       tabIndex={overflows ? 0 : undefined}
       role={overflows ? 'region' : undefined}
       aria-label={overflows ? 'Why Mushi Mushi believes this' : undefined}
-      className="max-h-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-overlay/40 px-2.5 py-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+      className="max-h-64 overflow-y-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
     >
       <p className="whitespace-pre-line text-xs leading-relaxed text-fg-secondary">{why}</p>
     </div>
@@ -224,7 +239,9 @@ function NodePanel({
         <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[node.lane]}`} />
         {lane?.label}
       </div>
-      <h4 className="text-sm font-semibold leading-snug text-fg">{node.title}</h4>
+      {/* The stored field a claim was read from is an operator tooltip, not
+          page text ("from stage2_analysis", round-3 sweep 2026-11-19). */}
+      <h4 className="text-sm font-semibold leading-snug text-fg" title={showInternals ? `Read from ${node.source}` : undefined}>{node.title}</h4>
       <div className="flex flex-wrap items-center gap-2 text-2xs text-fg-muted">
         <StateChip node={node} />
         <span className="font-mono"><VitalText text={node.detail} /></span>
@@ -246,8 +263,6 @@ function NodePanel({
           </a>
         )}
       </div>
-      {/* The stored field a claim was read from: for operator accounts. */}
-      {showInternals && <p className="font-mono text-3xs text-fg-faint">from {node.source}</p>}
     </div>
   )
 }
@@ -269,7 +284,7 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
     if (!wide) requestAnimationFrame(() => panel.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
   }
   const paths = useEdgePaths(canvas, graph, wide)
-  const onPath = useMemo(() => new Set(graph.path), [graph.path])
+  const stepOf = useMemo(() => new Map(graph.path.map((id, i) => [id, i + 1])), [graph.path])
   const byId = useMemo(() => new Map(graph.nodes.map((n) => [n.id, n])), [graph.nodes])
   const marks = graph.nodes.filter((n) => n.needsLook).length
   const node = selected ? byId.get(selected) ?? null : null
@@ -286,27 +301,6 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
           </span>
         )}
       </div>
-
-      <ol className="mb-3 grid gap-x-6 gap-y-1 sm:grid-cols-2" aria-label="Path to the diagnosis">
-        {graph.path.map((id, i) => {
-          const n = byId.get(id)!
-          return (
-            <li key={id} className="flex min-w-0 items-baseline gap-2 text-xs">
-              <span className="w-4 shrink-0 text-right font-mono text-3xs text-fg-faint">{i + 1}.</span>
-              <button
-                type="button"
-                onClick={() => select(id)}
-                aria-current={selected === id ? 'step' : undefined}
-                className={`min-w-0 truncate text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${selected === id ? 'font-semibold text-fg' : 'text-link'}`}
-                title={n.title}
-              >
-                {n.title}
-              </button>
-              <StateChip node={n} />
-            </li>
-          )
-        })}
-      </ol>
 
       <div className="grid gap-3 lg:grid-cols-5">
         <div className="min-w-0 overflow-x-auto lg:col-span-4">
@@ -331,11 +325,14 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
             )}
             {DIAGNOSIS_LANES.map((lane) => {
               const laneNodes = graph.nodes.filter((n) => n.lane === lane.id)
+              // A green Checks dot over a lane where nothing was checked read
+              // as "passed" (round-3 sweep 2026-11-19).
+              const idle = laneNodes.length > 0 && laneNodes.every((n) => n.state === 'unchecked')
               return (
                 <section key={lane.id} aria-label={`${lane.label}: ${lane.hint}`} className="relative flex min-w-0 flex-col gap-2">
                   <header className="relative z-10 flex flex-col gap-0.5 border-b border-edge-subtle pb-1" title={lane.hint}>
                     <span className="flex items-center gap-1.5">
-                      <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${LANE_DOT[lane.id]}`} />
+                      <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${idle ? LANE_DOT.evidence : LANE_DOT[lane.id]}`} data-testid={`diagnosis-lane-dot-${lane.id}`} />
                       <span className="text-2xs font-semibold text-fg-secondary">{lane.label}</span>
                     </span>
                     <span className="text-3xs text-fg-faint">{lane.hint}</span>
@@ -344,7 +341,7 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
                     <p className="relative z-10 text-2xs text-fg-faint">Nothing yet.</p>
                   ) : (
                     laneNodes.map((n) => (
-                      <NodeButton key={n.id} node={n} selected={selected === n.id} onPath={onPath.has(n.id)} onSelect={select} />
+                      <NodeButton key={n.id} node={n} selected={selected === n.id} step={stepOf.get(n.id) ?? null} onSelect={select} />
                     ))
                   )}
                 </section>
@@ -353,9 +350,10 @@ export function ReportDiagnosisGraph({ report, showInternals = false }: { report
           </div>
         </div>
         <aside ref={panel} className="min-w-0 scroll-mt-16 lg:sticky lg:top-3 lg:self-start" aria-label="Selected node">
-          <Card variant="flat" className="p-3">
+          {/* A rule, not a card inside the card (sweep 2026-11-18). */}
+          <div className="border-t border-edge-subtle pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0" data-testid="diagnosis-node-panel">
             <NodePanel node={node} graph={graph} onSelect={select} showInternals={showInternals} />
-          </Card>
+          </div>
         </aside>
       </div>
     </Card>

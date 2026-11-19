@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Callout, Card, CopyButton } from './ui'
 import { ConfirmDialog } from './ConfirmDialog'
+import { StatusGlyph } from './signal/StatusGlyph'
 import { IconCheck, IconExternalLink, IconRefresh } from './icons'
 import { usePageData } from '../lib/usePageData'
 import { LINK_ACCENT } from '../lib/chipTone'
@@ -143,8 +144,17 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
               ? !health.data
                 ? ''
                 : notes.length > 0
-                  ? // Never "all good" while a check could not run.
-                    `No problems in the checks that ran, but ${notes.length} ${notes.length === 1 ? 'check' : 'checks'} could not run (below).`
+                  ? // Never "all good" while a check could not run: unknown is ○, not a pass.
+                    (
+                      // No green mark beside "0 problems" while a check did not run
+                      // (round-2 review 2026-11-18): the not-checked mark leads.
+                      <span className="inline-flex flex-wrap items-center gap-x-1.5" data-testid="sdk-health-tally">
+                        <StatusGlyph tone="off" />
+                        <span className="font-medium text-fg-secondary">{notes.length} not checked</span>
+                        <span aria-hidden="true">·</span>
+                        <span>0 problems in the checks that ran</span>
+                      </span>
+                    )
                   : 'No SDK problems found.'
               : settingUp
                 ? `${problems.length} ${problems.length === 1 ? 'step' : 'steps'} left before this app sends bug reports.`
@@ -199,10 +209,11 @@ export function SdkHealthPanel({ projectId, bare, nativeApp = false }: SdkHealth
         </div>
       )}
 
+      {/* The tally above already says "1 not checked": the list follows it with no heading of
+          its own ("not checked" three times, round-3 review 2026-11-19). */}
       {notes.length > 0 && (
         <div className="space-y-1">
-          <p className="text-3xs font-semibold text-fg-secondary">Not checked</p>
-          <ul className="space-y-0.5 text-2xs text-fg-muted">
+          <ul className="space-y-0.5 text-2xs text-fg-muted" aria-label="Checks that did not run">
             {notes.map((n) => (
               <li key={n.check}>
                 <span className="font-medium text-fg-secondary">{NOTE_LABEL[n.check]}:</span> {n.detail}

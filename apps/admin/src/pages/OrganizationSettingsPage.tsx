@@ -27,6 +27,8 @@ import { Badge,
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -124,10 +126,12 @@ interface MembersResponse {
   invitations: Invitation[]
 }
 
+// A role is a fact, not a status: no amber "owner" or green "member"
+// (round-2 review 2026-11-18; red/amber/green mean failure/warning/passing).
 const ROLE_TONE: Record<OrgRole, string> = {
-  owner: CHIP_TONE.warnSubtle,
-  admin: CHIP_TONE.brand,
-  member: CHIP_TONE.okSubtle,
+  owner: 'bg-surface-overlay text-fg font-semibold',
+  admin: 'bg-surface-overlay text-fg-secondary',
+  member: 'bg-surface-overlay text-fg-secondary',
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
@@ -147,17 +151,19 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
   founding_owner: {
     label: 'Founder',
     tooltip: 'Created this organization. Has been here since day one.',
-    tone: CHIP_TONE.warnSubtle,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
+  // "Invited" in a status colour beside "Active 22 hours ago" read as a
+  // pending invite. It is how they joined: a plain word, no status colour.
   invitation: {
-    label: 'Invited',
+    label: 'Via invite',
     tooltip: 'Joined by accepting an email invitation.',
-    tone: CHIP_TONE.brand,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
   sso: {
     label: 'SSO',
     tooltip: 'Provisioned through your identity provider (SCIM/OIDC).',
-    tone: CHIP_TONE.okSubtle,
+    tone: 'bg-surface-overlay text-fg-muted',
   },
   direct_admin: {
     label: 'Direct',
@@ -275,6 +281,9 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
   const { data: statsData, reload: reloadStats } = usePageData<MembersStats>(statsPath)
   const stats = statsData ?? EMPTY_MEMBERS_STATS
+  // Never an endless skeleton (2026-11-19: Members sat on it at 390): after 20 s the read says
+  // "not checked" with one Retry.
+  const membersWait = useReadTimedOut(loading && !data)
 
   const reloadAll = useCallback(() => {
     reload()
@@ -331,7 +340,8 @@ export function OrganizationSettingsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'roster' as const, label: 'Roster', count: stats.memberCount || undefined },
+      // No count on Roster: the Seats number above is the one member count.
+      { id: 'roster' as const, label: 'Roster' },
       {
         id: 'invites' as const,
         label: 'Invites',
@@ -642,6 +652,18 @@ export function OrganizationSettingsPage() {
       </div>
     )
   }
+  if (loading && !data && membersWait.timedOut) {
+    return (
+      <CiNotChecked
+        what="Team members"
+        testId="members-not-checked"
+        onRetry={() => {
+          membersWait.restart()
+          reloadAll()
+        }}
+      />
+    )
+  }
   if (loading) return <PanelSkeleton rows={5} label="Loading members" />
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
@@ -660,8 +682,10 @@ export function OrganizationSettingsPage() {
         ]}
         helpHowToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       >
-        <Badge className={teamsEnabled ? CHIP_TONE.okSubtle : CHIP_TONE.warnSubtle}>
-          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
+        {/* The plan name is not a status: neutral unless teams are locked. Labelled, so a bare
+            "Studio" chip doesn't sit unexplained beside the help button (2026-11-19). */}
+        <Badge className={teamsEnabled ? CHIP_TONE.neutral : CHIP_TONE.warnSubtle}>
+          Plan: {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeaderBar>
 
@@ -673,7 +697,8 @@ export function OrganizationSettingsPage() {
               <MembersStatusBanner
                 stats={stats}
                 teamsEnabled={teamsEnabled}
-                onInvitesTab={() => setTab('invites')}
+                // On the Invites tab the form is right there: no second "Invite teammate".
+                onInvitesTab={activeTab === 'invites' ? undefined : () => setTab('invites')}
               />
             ),
           },
@@ -753,9 +778,9 @@ export function OrganizationSettingsPage() {
             </p>
           </div>
           {data?.organization?.slug && (
-            <code className="text-2xs font-mono text-fg-faint" title="Team handle (immutable)">
-              {data.organization.slug}
-            </code>
+            <span className="text-2xs text-fg-muted" title="Used in shareable links; it does not change when you rename the team.">
+              Link name <code className="font-mono text-fg-secondary">{data.organization.slug}</code>
+            </span>
           )}
         </div>
         {canRename ? (
@@ -782,11 +807,9 @@ export function OrganizationSettingsPage() {
                   renamingOrg || !orgNameDraft.trim() || orgNameDraft.trim() === orgName
                 }
                 loading={renamingOrg}
-                aria-label="Save team name"
                 title="Save team name"
-                className="px-2"
               >
-                <IconCheck />
+                Save
               </Btn>
               {orgNameDraft !== orgName && !renamingOrg && (
                 <Btn
@@ -863,9 +886,10 @@ export function OrganizationSettingsPage() {
               disabled={!teamsEnabled || !canManage}
             />
             <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as Invitation['role'])} disabled={!teamsEnabled || !canManage}>
-              <option value="admin">Admin — manage team + all projects</option>
-              <option value="member">Member — triage and fix work</option>
-              <option value="viewer">Viewer — read-only</option>
+              {/* Short names: the line under the form spells out the chosen role. */}
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
             </SelectField>
             <div className="flex items-end">
               {!canManage && teamsEnabled ? (
@@ -948,16 +972,8 @@ export function OrganizationSettingsPage() {
         </p>
       </Card>
 
-      {visibleInvitations.length === 0 ? (
-        <EmptyState
-          title="No pending invitations"
-          description={
-            teamsEnabled && canManage
-              ? 'Send an invite above — pending rows appear here with resend and copy-link actions.'
-              : 'Pending invitations show here once teams is enabled and you have admin access.'
-          }
-        />
-      ) : (
+      {/* No empty box: "Everyone you invited has joined" above already says there are none. */}
+      {visibleInvitations.length === 0 ? null : (
         <Card className="p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>
@@ -1114,10 +1130,10 @@ export function OrganizationSettingsPage() {
       <OrgRoleGuideCard />
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle px-3 py-2 text-2xs text-fg-secondary font-semibold">
+          {/* The Members tile and the Roster tab already count everyone; the
+              caption speaks only while the inactive filter is on. */}
           <span>
-            {showInactiveOnly
-              ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
-              : `${totalVisibleMembers} member${totalVisibleMembers === 1 ? '' : 's'}`}
+            {showInactiveOnly ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)` : 'Members'}
           </span>
           {totalVisibleMembers >= 3 && (
             <label className="inline-flex cursor-pointer items-center gap-1.5 normal-case tracking-normal">
@@ -1140,8 +1156,10 @@ export function OrganizationSettingsPage() {
             long email plus the role control pushed Remove outside overflow-hidden.
             Role, Active and Actions keep a fixed share so the email wraps in
             what is left and every column stays on screen. */}
-        <table className="w-full table-fixed text-sm">
-          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs text-fg-secondary font-semibold">
+        {/* Below 480px each member is a stacked row (email on its own line,
+            then role, Active and remove), so the email never breaks mid-word. */}
+        <table className="block w-full text-sm min-[480px]:table min-[480px]:table-fixed" data-testid="org-roster-table">
+          <thead className="hidden border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs text-fg-secondary font-semibold min-[480px]:table-header-group">
             <tr>
               <th className="px-2 py-2 sm:px-3">Member</th>
               <th className="w-24 px-1 py-2 sm:w-36 sm:px-3">
@@ -1150,12 +1168,10 @@ export function OrganizationSettingsPage() {
                 </Tooltip>
               </th>
               <th className="w-24 px-1 py-2 sm:w-32 sm:px-3">Active</th>
-              <th className="w-14 px-0.5 py-2 text-right sm:w-24 sm:px-3">
-                <span className="sr-only sm:not-sr-only">Actions</span>
-              </th>
+              <th className="w-16 px-1 py-2 text-right sm:w-24 sm:px-3">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-edge-subtle">
+          <tbody className="block divide-y divide-edge-subtle min-[480px]:table-row-group">
             {sortedMembers.length === 0 && showInactiveOnly && (
               <tr>
                 <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
@@ -1186,14 +1202,16 @@ export function OrganizationSettingsPage() {
               })
               const memberLabel = member.email ?? 'this teammate'
               return (
-                <tr key={member.user_id}>
-                  <td className="min-w-0 px-2 py-2 sm:px-3">
-                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span className="min-w-0 max-w-full font-medium wrap-break-word text-fg">{member.email ?? 'Unknown email'}</span>
-                      {isSelf && <Badge className="bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
+                <tr key={member.user_id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-2 min-[480px]:table-row min-[480px]:p-0">
+                  <td className="block min-w-0 basis-full min-[480px]:table-cell min-[480px]:px-2 min-[480px]:py-2 sm:px-3">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate whitespace-nowrap font-medium text-fg" title={member.email ?? undefined}>
+                        {member.email ?? 'Unknown email'}
+                      </span>
+                      {isSelf && <Badge className="shrink-0 whitespace-nowrap bg-surface-overlay text-fg-muted text-2xs">you</Badge>}
                       {joinedMeta && (
                         <Tooltip content={joinedMeta.tooltip}>
-                          <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
+                          <Badge className={`${joinedMeta.tone} shrink-0 whitespace-nowrap text-2xs`}>{joinedMeta.label}</Badge>
                         </Tooltip>
                       )}
                     </div>
@@ -1203,7 +1221,7 @@ export function OrganizationSettingsPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-1 py-2 sm:px-3">
+                  <td className="block w-28 min-[480px]:table-cell min-[480px]:w-auto min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {perms.roleOptions.length > 0 ? (
                       <select
                         value={member.role}
@@ -1233,7 +1251,7 @@ export function OrganizationSettingsPage() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-1 py-2 text-xs whitespace-nowrap sm:px-3">
+                  <td className="block text-xs whitespace-nowrap min-[480px]:table-cell min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {isNeverActive ? (
                       <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
                         <span className="text-warn">Never seen</span>
@@ -1244,7 +1262,7 @@ export function OrganizationSettingsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-0.5 py-2 text-right sm:px-3">
+                  <td className="ml-auto block text-right min-[480px]:table-cell min-[480px]:px-1 min-[480px]:py-2 sm:px-3">
                     {perms.removeAction === 'leave' ? (
                       <Btn
                         size="sm"
@@ -1267,6 +1285,12 @@ export function OrganizationSettingsPage() {
                       >
                         <IconTrash />
                       </Btn>
+                    ) : isSelf ? (
+                      // Your own row: the reason in words, not a dead trash button whose reason
+                      // only showed on hover (2026-11-19).
+                      <span className="text-2xs text-fg-muted" title={perms.removeLockedReason ?? undefined} data-testid="members-self-locked">
+                        {perms.removeLockedReason ? 'Only owner' : null}
+                      </span>
                     ) : (
                       <Tooltip content={perms.removeLockedReason ?? 'You cannot remove this person.'}>
                         <span className="inline-flex">

@@ -14,12 +14,18 @@
  * Connect"); offerings are a packages × platform grid. RevenueCat sends no history, so the
  * tiles have no sparkline or delta.
  *
+ * One level of card (2026-11-18 sweep): the hub, each app and its Checks are rows split by
+ * hairlines inside the one Section, never boxes in boxes. Apps are worst first; products the
+ * store is still reviewing wait (◷), they do not fail (✕).
+ *
  * Data: GET  /v1/admin/orgs/:orgId/monetization
  *       POST /v1/admin/orgs/:orgId/connector-actions   (ask; nothing runs)
  */
 
 import { useState } from 'react'
-import { Btn, Callout, CopyButton, DisclosurePanel, Loading, Section } from '../ui'
+import { Btn, Callout, CopyButton, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
+import { IconChevronDown, IconChevronRight } from '../icons'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { formatRelative } from '../ui/metrics'
 import { usePageData } from '../../lib/usePageData'
@@ -41,6 +47,7 @@ import {
   productState,
   productStatus,
   RULE_TITLE,
+  sortAppsWorstFirst,
   type MonetizationAppView,
   type MonetizationFinding,
   type MonetizationFindingGroup,
@@ -85,7 +92,7 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
   return (
     <Section title="Payments across apps">
       {error && <PageLoadError error={error} resource="payments" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading what each app sells…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading what each app sells…" what="Payments" onRetry={reload} testId="portfolio-payments-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>
@@ -97,12 +104,12 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
         </p>
       )}
       {data && (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 divide-y divide-edge-subtle [&>*:not(:first-child)]:pt-3">
           {data.hubs.map((hub) => (
-            <HubBlock key={hub.rcProjectId} hub={hub} busy={busy} onAsk={ask} iconFor={iconFor} />
+            <HubBlock key={hub.rcProjectId} hub={hub} busy={busy} onAsk={ask} iconFor={iconFor} planned={data.planned} />
           ))}
           {data.outsideHub.length > 0 && (
-            <div className="rounded-md border border-edge-subtle p-2">
+            <div className="border-t border-edge-subtle pt-2">
               <p className="text-xs font-semibold text-fg">Selling outside any RevenueCat project</p>
               <ul className="mt-1 divide-y divide-edge-subtle">
                 {data.outsideHub.map((o) => (
@@ -127,9 +134,9 @@ export function MonetizationCard({ orgId, iconFor }: { orgId: string; iconFor?: 
 
 type AskFn = (hub: MonetizationHubView, finding: MonetizationFinding, projectId: string | null, key: string) => void
 
-function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; busy: string | null; onAsk: AskFn; iconFor?: IconFor }) {
+function HubBlock({ hub, busy, onAsk, iconFor, planned }: { hub: MonetizationHubView; busy: string | null; onAsk: AskFn; iconFor?: IconFor; planned: readonly string[] }) {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-edge-subtle p-2">
+    <div className="flex flex-col gap-2" data-testid={`payments-hub-${hub.rcProjectId}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-fg">
           RevenueCat <code className="font-mono text-2xs text-fg-secondary">{hub.rcProjectId}</code>
@@ -170,10 +177,10 @@ function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; bus
       })()}
       {hub.metrics?.state === 'unknown' && <p className="text-2xs text-fg-muted">Numbers not read: {hub.metrics.reason}</p>}
       <CatalogLine catalog={hub.catalog} />
-      <ul className="flex flex-col gap-1.5">
-        {hub.apps.map((app) => (
+      <ul className="divide-y divide-edge-subtle border-y border-edge-subtle" data-testid="payments-apps">
+        {sortAppsWorstFirst(hub.apps).map((app) => (
           <li key={app.projectId}>
-            <AppBlock hub={hub} app={app} busy={busy} onAsk={onAsk} iconFor={iconFor} />
+            <AppBlock hub={hub} app={app} busy={busy} onAsk={onAsk} iconFor={iconFor} planned={planned} />
           </li>
         ))}
       </ul>
@@ -198,9 +205,13 @@ function HubBlock({ hub, busy, onAsk, iconFor }: { hub: MonetizationHubView; bus
 function CatalogLine({ catalog }: { catalog: MonetizationHubView['catalog'] }) {
   if (catalog.state === 'read') {
     return (
-      <p className="flex items-center gap-1.5 text-2xs text-fg-secondary">
+      // Label above the value: at 390 "Billing / catalog" wrapped beside a path cut as "kensaurus- / spine" (round 3).
+      <p className="flex min-w-0 items-start gap-1.5 text-2xs text-fg-secondary">
         <StatusMark status="passed" />
-        Billing catalog <code className="font-mono">{catalog.source}</code>
+        <span className="flex min-w-0 flex-col">
+          <span>Billing catalog</span>
+          <code className="font-mono wrap-break-word">{catalog.source}</code>
+        </span>
       </p>
     )
   }
@@ -220,61 +231,85 @@ function CatalogLine({ catalog }: { catalog: MonetizationHubView['catalog'] }) {
   )
 }
 
-function AppBlock({ hub, app, busy, onAsk, iconFor }: { hub: MonetizationHubView; app: MonetizationAppView; busy: string | null; onAsk: AskFn; iconFor?: IconFor }) {
-  const mark = appStatus(app)
+function AppBlock({ hub, app, busy, onAsk, iconFor, planned }: { hub: MonetizationHubView; app: MonetizationAppView; busy: string | null; onAsk: AskFn; iconFor?: IconFor; planned: readonly string[] }) {
+  const mark = appStatus(app, planned)
   const groups = groupMonetizationFindings(app.findings, appProducts(app))
+  // Something to fix opens the app (amber warnings too, not only red failures).
+  const [open, setOpen] = useState(app.findings.some((f) => f.severity !== 'info'))
+  const [checksOpen, setChecksOpen] = useState(false)
   return (
-    <DisclosurePanel
-      title={
+    <div>
+      {/* A row, not a box: the name wraps on a phone instead of truncating beside its pill. */}
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-1 py-2 text-left text-sm font-medium text-fg hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+      >
+        <span className="shrink-0 text-fg-muted" aria-hidden="true">
+          {open ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
+        </span>
         <span className="flex min-w-0 items-center gap-1.5" data-testid={`payments-app-${app.projectId}`}>
           {iconFor && <ProjectFavicon {...iconFor(app.projectId)} size={12} />}
-          <span className="truncate">{app.name}</span>
+          <span className="min-w-0 wrap-break-word">{app.name}</span>
         </span>
-      }
-      defaultOpen={mark.status === 'failed' && app.findings.some((f) => f.severity !== 'info')}
-      trailing={<StatusPill status={mark.status} label={mark.label} />}
-    >
-      <div className="flex flex-col gap-2">
-        {groups.length > 0 && (
-          <ul className="divide-y divide-edge-subtle" aria-label="Why a purchase would fail">
-            {groups.map((g) => (
-              <li key={g.key} className="py-1">
-                <FindingGroupRow group={g} hub={hub} projectId={app.projectId} busy={busy} onAsk={onAsk} />
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-          <div className="min-w-0">
-            <p className="text-2xs font-semibold text-fg-secondary">Entitlements</p>
-            {app.entitlements.length === 0 ? (
-              <p className="text-xs text-fg-muted">None tied to this app.</p>
-            ) : (
-              <ul className="mt-0.5 flex flex-col gap-0.5">
-                {app.entitlements.map((e) => (
-                  <li key={e.lookupKey} className="flex flex-wrap items-center gap-1 text-xs">
-                    <code className="font-mono text-fg">{e.lookupKey}</code>
-                    <Products products={e.products} />
+        <StatusPill status={mark.status} label={mark.label} />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 pb-2.5 pl-5 pr-1">
+          {groups.length > 0 && (
+            <ul className="divide-y divide-edge-subtle" aria-label="Why a purchase would fail">
+              {groups.map((g) => (
+                <li key={g.key} className="py-1">
+                  <FindingGroupRow group={g} hub={hub} projectId={app.projectId} busy={busy} onAsk={onAsk} />
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="min-w-0">
+              <p className="text-2xs font-semibold text-fg-secondary">Entitlements</p>
+              {app.entitlements.length === 0 ? (
+                <p className="text-xs text-fg-muted">None tied to this app.</p>
+              ) : (
+                <ul className="mt-0.5 flex flex-col gap-0.5">
+                  {app.entitlements.map((e) => (
+                    <li key={e.lookupKey} className="flex flex-wrap items-center gap-1 text-xs">
+                      <code className="font-mono text-fg">{e.lookupKey}</code>
+                      <Products products={e.products} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <OfferingsGrid app={app} />
+          </div>
+          <div className="border-t border-edge-subtle pt-1.5">
+            <button
+              type="button"
+              aria-expanded={checksOpen}
+              onClick={() => setChecksOpen(!checksOpen)}
+              className="inline-flex items-center gap-1 rounded-sm text-2xs font-semibold text-fg-secondary hover:text-fg focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+              data-testid={`payments-checks-${app.projectId}`}
+            >
+              <span aria-hidden="true">{checksOpen ? <IconChevronDown size={10} /> : <IconChevronRight size={10} />}</span>
+              Checks ({app.rules.length})
+            </button>
+            {checksOpen && (
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {app.rules.map((r) => (
+                  <li key={r.ruleId} className="flex flex-wrap items-center gap-1.5 text-xs" title={r.reason}>
+                    <StatusMark status={RULE_MARK[r.state]} label={r.state === 'ok' ? 'OK' : r.state === 'finding' ? 'To fix' : r.state === 'unknown' ? 'Not checked' : 'Could not check'} />
+                    <span className="font-semibold text-fg">{RULE_TITLE[r.ruleId] ?? r.ruleId}</span>
+                    {(r.state === 'unknown' || r.state === 'error') && <span className="text-fg-muted">{r.reason}</span>}
                   </li>
                 ))}
               </ul>
             )}
           </div>
-          <OfferingsGrid app={app} />
         </div>
-        <DisclosurePanel title="Checks">
-          <ul className="flex flex-col gap-0.5">
-            {app.rules.map((r) => (
-              <li key={r.ruleId} className="flex flex-wrap items-center gap-1.5 text-xs" title={r.reason}>
-                <StatusMark status={RULE_MARK[r.state]} label={r.state === 'ok' ? 'OK' : r.state === 'finding' ? 'To fix' : r.state === 'unknown' ? 'Not checked' : 'Could not check'} />
-                <span className="font-semibold text-fg">{RULE_TITLE[r.ruleId] ?? r.ruleId}</span>
-                {(r.state === 'unknown' || r.state === 'error') && <span className="text-fg-muted">{r.reason}</span>}
-              </li>
-            ))}
-          </ul>
-        </DisclosurePanel>
-      </div>
-    </DisclosurePanel>
+      )}
+    </div>
   )
 }
 
@@ -287,9 +322,46 @@ function OfferingsGrid({ app }: { app: MonetizationAppView }) {
       {app.offerings.length === 0 ? (
         <p className="text-xs text-fg-muted">None tied to this app.</p>
       ) : (
-        // Long store product ids: the table scrolls in its own box, never the page. `relative` keeps
-        // its screen-reader-only text (absolutely placed) inside that box too.
-        <div className="relative min-w-0 overflow-x-auto" data-testid="offerings-scroll">
+        <>
+        {/* A phone stacks each package's platforms: the table scrolled and hid Android at 390 (round 3). */}
+        <ul className="mt-0.5 flex flex-col gap-1.5 sm:hidden" data-testid="offerings-stacked">
+          {app.offerings.map((o) => (
+            <li key={o.lookupKey} className="flex flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                <code className="font-mono font-semibold text-fg">{o.lookupKey}</code>
+                {o.isCurrent && <StatusPill status="running" label="current" />}
+                <StatusMark status={o.hasPaywall ? 'passed' : 'idle'} label={o.hasPaywall ? 'Paywall set' : 'No paywall'} />
+              </span>
+              {o.packages === null ? (
+                <span className="text-2xs text-fg-muted">Packages not read yet.</span>
+              ) : (
+                <ul className="flex flex-col divide-y divide-edge-subtle pl-2">
+                  {o.packages.map((k) => (
+                    <li key={k.id} className="flex flex-col gap-0.5 py-1">
+                      <code className="font-mono text-2xs text-fg-secondary">{k.lookupKey}</code>
+                      {platforms.map((pf) => {
+                        const here = k.products.filter((p) => p.platform === pf)
+                        return (
+                          <span key={pf} className="flex flex-wrap items-center gap-1 text-2xs" data-platform={pf}>
+                            <span className="w-14 shrink-0 text-fg-muted">{pf}</span>
+                            {here.length === 0 ? (
+                              <span className="text-fg-muted">none</span>
+                            ) : (
+                              here.map((p) => <ProductChip key={p.id} product={p} />)
+                            )}
+                          </span>
+                        )
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+        {/* Long store product ids: the table scrolls in its own box, never the page. `relative` keeps
+            its screen-reader-only text (absolutely placed) inside that box too. */}
+        <div className="relative hidden min-w-0 overflow-x-auto sm:block" data-testid="offerings-scroll">
         <table className="mt-0.5 w-full border-collapse text-xs" data-testid="offerings-grid">
           <caption className="sr-only">Offerings of {app.name}: products by platform</caption>
           <thead>
@@ -348,6 +420,7 @@ function OfferingsGrid({ app }: { app: MonetizationAppView }) {
           </tbody>
         </table>
         </div>
+        </>
       )}
     </div>
   )
@@ -393,7 +466,7 @@ function FindingGroupRow({
   onAsk?: AskFn
 }) {
   const [open, setOpen] = useState(false)
-  const mark = SEV_MARK[group.severity]
+  const mark = group.waiting ? { status: 'waiting' as RunStatus, word: 'Waiting on the store' } : SEV_MARK[group.severity]
   const single = group.findings.length === 1 ? group.findings[0]! : null
   const askButton = (f: MonetizationFinding) => {
     if (!f.action || !hub?.connector || !onAsk) return null

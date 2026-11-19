@@ -40,11 +40,12 @@ interface JobSpread {
   usualPct: number
   slowPct: number
   longestPct: number
+  /** The longest run lies past the scale: the whisker runs to the edge and ends in an arrow. */
+  clipped: boolean
 }
 
 /**
- * The shared scale is the longest run of ANY job, not only the rows on screen, so "Show more"
- * never rescales the rows already read. Null when the job has no finished run to draw.
+ * Where a job's runs sit on the shared scale. Null when the job has no finished run to draw.
  *
  * @internal Exported for tests only.
  */
@@ -54,13 +55,23 @@ export function jobSpread(t: Pick<CiJobType, 'durationP50s' | 'durationP90s' | '
   const usual = t.durationP50s
   const slow = Math.max(usual, t.durationP90s ?? usual)
   const longest = Math.max(slow, t.durationMaxS ?? slow)
-  return { usualPct: pct(usual), slowPct: pct(slow), longestPct: pct(longest) }
+  return { usualPct: pct(usual), slowPct: pct(slow), longestPct: pct(longest), clipped: longest > scaleMaxS }
 }
 
-/** @internal Exported for tests only. */
+/**
+ * The shared scale: the slowest "slow runs" (p90) of the rows on screen. Round 3 (2026-11-19):
+ * a scale over every job read "0 – 55 min" while no visible bar passed 45%, so the scale follows
+ * what is shown ("Show more" rescales once). Not the longest single run: one 55-minute outlier
+ * squeezed every bar under 30% of the column (2026-11-18). A longer run's whisker is clipped at
+ * the edge (`clipped`).
+ *
+ * @internal Exported for tests only.
+ */
 export function spreadScaleMax(byJob: ReadonlyArray<Pick<CiJobType, 'durationP50s' | 'durationP90s' | 'durationMaxS'>>): number {
   let max = 0
-  for (const t of byJob) max = Math.max(max, t.durationMaxS ?? 0, t.durationP90s ?? 0, t.durationP50s ?? 0)
+  for (const t of byJob) max = Math.max(max, t.durationP90s ?? 0, t.durationP50s ?? 0)
+  // Only longest runs known: fall back to them rather than draw nothing.
+  if (max === 0) for (const t of byJob) max = Math.max(max, t.durationMaxS ?? 0)
   return max
 }
 
@@ -74,7 +85,12 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
         className="absolute top-1/2 h-px -translate-y-1/2 bg-fg-muted"
         style={{ left: `${spread.slowPct}%`, width: `${Math.max(0, spread.longestPct - spread.slowPct)}%` }}
       />
-      <span className="absolute top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${spread.longestPct}%` }} />
+      {spread.clipped ? (
+        // Past the scale: an arrow at the edge instead of the end tick.
+        <span className="absolute top-1/2 right-0 -translate-y-1/2 text-3xs leading-none text-fg-muted" data-testid="ci-job-spread-clipped">▸</span>
+      ) : (
+        <span className="absolute top-0.5 h-2 w-px bg-fg-muted" style={{ left: `${spread.longestPct}%` }} />
+      )}
       {/* Usual run: solid; usual to slow runs: the lighter box. */}
       <span className="absolute inset-y-0.5 left-0 rounded-l-sm bg-fg-secondary" style={{ width: `${spread.usualPct}%` }} />
       <span
@@ -86,7 +102,42 @@ function SpreadBar({ spread, title }: { spread: JobSpread; title: string }) {
 }
 
 /** A graded number cell: the colour says how bad, the number inside says exactly. */
-const CELL = 'inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold tabular-nums'
+const CELL = 'inline-block min-w-12 rounded-xs px-1.5 py-0.5 text-right font-mono font-bold whitespace-nowrap tabular-nums'
+
+/**
+ * The same job on a phone (2026-11-18: Pass and Fails sat off-screen behind the inner scroll):
+ * name with its fail rate beside it, then the times on one line.
+ */
+function JobCard({ t, waitMax }: { t: CiJobType; waitMax: number }) {
+  const link = useCiLink([ciJobKey(t.repo, t.job), ciRepoKey(t.repo)], ciJobKey(t.repo, t.job))
+  const failPct = t.failRate == null ? null : Math.round(t.failRate * 100)
+  return (
+    <li {...link} className={`${link.className} flex flex-col gap-1 py-1.5 text-xs`} data-testid="ci-job-times-card">
+      <span className="flex min-w-0 items-start gap-2">
+        <span className="min-w-0 flex-1">
+          <span className="block wrap-anywhere font-medium text-fg">{t.job}</span>
+          <span className="block truncate text-2xs text-fg-faint" title={t.repo}>
+            {repoShortName(t.repo)} · {t.workflow}
+          </span>
+        </span>
+        {failPct != null && (
+          <span className={`${CELL} shrink-0 text-2xs ${failClass(t.failRate)}`} title="How often it fails">
+            {failPct}% fail
+          </span>
+        )}
+      </span>
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-2xs text-fg-secondary tabular-nums">
+        <span className="whitespace-nowrap">{t.runs} runs</span>
+        <span className="whitespace-nowrap">usually {formatSeconds(t.durationP50s)}</span>
+        <span className="whitespace-nowrap">longest {formatSeconds(t.durationMaxS)}</span>
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
+          waits <span className={`${CELL} min-w-0 ${heatClass(t.queueP50s, waitMax)}`}>{formatSeconds(t.queueP50s)}</span>
+        </span>
+        {t.infraFailures > 0 && <span className="whitespace-nowrap text-fg-faint">+{t.infraFailures} stopped</span>}
+      </span>
+    </li>
+  )
+}
 
 function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; waitMax: number }) {
   const link = useCiLink([ciJobKey(t.repo, t.job), ciRepoKey(t.repo)], ciJobKey(t.repo, t.job))
@@ -101,14 +152,14 @@ function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; wait
         </span>
       </DataTableCell>
       <DataTableCell align="right">{t.runs}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationP50s)}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationP90s)}</DataTableCell>
-      <DataTableCell align="right">{formatSeconds(t.durationMaxS)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationP50s)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationP90s)}</DataTableCell>
+      <DataTableCell align="right" className="whitespace-nowrap">{formatSeconds(t.durationMaxS)}</DataTableCell>
       <DataTableCell className={WIDE_ONLY}>
         {spread ? (
           <SpreadBar
             spread={spread}
-            title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}`}
+            title={`Usually ${formatSeconds(t.durationP50s)}, 1 in 10 over ${formatSeconds(t.durationP90s)}, longest ${formatSeconds(t.durationMaxS)}${spread.clipped ? ' (past the scale)' : ''}`}
           />
         ) : (
           <span className="text-fg-faint">–</span>
@@ -131,21 +182,29 @@ function JobRow({ t, scaleMax, waitMax }: { t: CiJobType; scaleMax: number; wait
 
 export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; days: number }) {
   const [all, setAll] = useState(false)
-  const scaleMax = useMemo(() => spreadScaleMax(byJob ?? []), [byJob])
   const sorted = useMemo(() => failingFirst(byJob ?? []), [byJob])
   const waitMax = useMemo(() => Math.max(0, ...(byJob ?? []).map((t) => t.queueP50s ?? 0)), [byJob])
   if (!byJob) return <p className="text-xs text-fg-muted">Job times appear after the next update of this page.</p>
   if (byJob.length === 0) return <p className="text-xs text-fg-muted">No finished jobs in the last {days} days.</p>
   const rows = all ? sorted : sorted.slice(0, SHOWN)
+  const scaleMax = spreadScaleMax(rows)
   return (
     <div className="@container min-w-0 overflow-x-auto">
-      <table className="w-full text-xs" data-testid="ci-job-times">
+      <ul className="divide-y divide-edge-subtle @3xl:hidden" data-testid="ci-job-times-stacked">
+        {rows.map((t) => (
+          <JobCard key={`${t.repo}|${t.workflow}|${t.job}`} t={t} waitMax={waitMax} />
+        ))}
+      </ul>
+      <table className="hidden w-full text-xs @3xl:table" data-testid="ci-job-times">
         <thead>
           <tr className="border-b border-edge-subtle">
             <DataTableHead>Job</DataTableHead>
             <DataTableHead align="right">Runs</DataTableHead>
             <DataTableHead align="right">Usually</DataTableHead>
-            <DataTableHead align="right">Slow runs (1 in 10)</DataTableHead>
+            {/* Short and unbroken: "Slow runs (1 in 10)" wrapped over two lines (2026-11-18); the key below says the rest. */}
+            <DataTableHead align="right" className="whitespace-nowrap">
+              <span title="1 run in 10 takes longer than this">Slow (1 in 10)</span>
+            </DataTableHead>
             <DataTableHead align="right">Longest</DataTableHead>
             <DataTableHead className={`${WIDE_ONLY} w-1/3`}>
               <span className="flex items-center justify-between gap-2">
@@ -172,7 +231,7 @@ export function CiJobTimes({ byJob, days }: { byJob: CiJobType[] | undefined; da
       <p className="mt-1.5 hidden items-center gap-3 text-2xs text-fg-muted @5xl:flex" aria-hidden="true">
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-secondary" /> usual run</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2 w-4 rounded-sm bg-fg-faint/40" /> up to the slow runs (1 in 10)</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-4 bg-fg-muted" /> to the longest</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-px w-4 bg-fg-muted" /> to the longest (▸ past the scale)</span>
       </p>
     </div>
   )

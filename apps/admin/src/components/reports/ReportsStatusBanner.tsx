@@ -7,8 +7,18 @@ import { RelativeTime } from '../ui'
 import { usePageCopy } from '../../lib/copy'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
-import { scopedHref, triageBacklogHint } from '../../lib/humanPageHints'
+import { scopedHref } from '../../lib/humanPageHints'
 import type { ReportsStats, ReportsTabId } from './ReportsStatsTypes'
+
+/**
+ * The status banner already counts the reports waiting for review (or the
+ * critical ones), so the page's "N reports are waiting for triage" card
+ * repeated it (fresh-eyes sweep 2026-11-18). True when the shown banner is
+ * one of those; the page then drops the card.
+ */
+export function reportsBannerCoversQueue(stats: Pick<ReportsStats, 'hasIngest' | 'topPriority'>, bannerShown: boolean): boolean {
+  return bannerShown && stats.hasIngest && stats.topPriority !== 'clear'
+}
 
 interface Props {
   stats: ReportsStats
@@ -103,8 +113,10 @@ export function ReportsStatusBanner({
     return (
       <StatusBannerShell
         tone="warn"
-        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting for review`}
-        subtitle={stats.topPriorityLabel ?? triageBacklogHint(stats.openBacklog)}
+        // The wait goes in the title; the server's line ("3 reports waiting
+        // over an hour — …") restated it word for word under it (round-3
+        // sweep 2026-11-19). openBacklog counts New reports over an hour old.
+        title={`${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} waiting over an hour for review`}
         action={
           <StatusBannerAction
             label={actions.backlog ?? `Review ${stats.openBacklog} waiting`}

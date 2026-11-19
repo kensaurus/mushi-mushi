@@ -132,6 +132,7 @@ function countOf(stages: readonly PipelineStage[], id: PipelineStageId): number 
  * waiting for a fix take at that pace, and who started fixes in the last day.
  * Null with no stages. The owner (2026-11-16): "I don't know what is the bottleneck
  * or what is running well, and what I can estimate".
+ * @internal Exported for tests.
  */
 export function pipelinePace(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): string | null {
   if (stages.length === 0) return null
@@ -163,6 +164,46 @@ export function pipelinePace(stages: readonly PipelineStage[], dispatchers: read
     parts.push(who + quiet)
   }
   return parts.join(' ')
+}
+
+/** The pace as figures for a short labelled row (2026-11-18): the same numbers as `pipelinePace`. */
+export interface PaceFigures {
+  merged7: number
+  /** "about 5 a day", "about one every 3 days", or null when nothing merged. */
+  rate: string | null
+  waiting: number
+  /** How long the waiting bugs take at this pace ("5 months"); null with nothing merged or nothing waiting. */
+  clears: string | null
+  /** Fixes started in the last 24 h; null when the server sent no dispatchers. */
+  started24h: number | null
+  /** Who started them, when any: "all by your own worker", "3 by your worker, 2 by cloud agents". */
+  startedBy: string | null
+  /** Apps with auto-fix on that started nothing in 24 h. */
+  quietApps: string[]
+}
+
+export function pipelinePaceFigures(stages: readonly PipelineStage[], dispatchers: readonly DispatcherStatus[] | null): PaceFigures | null {
+  if (stages.length === 0) return null
+  const merged7 = countOf(stages, 'merged') + countOf(stages, 'deployed')
+  const waiting = countOf(stages, 'triaged')
+  const perDay = merged7 / 7
+  const rate = merged7 === 0 ? null : perDay >= 1 ? `about ${Math.round(perDay)} a day` : `about one every ${Math.round(1 / perDay)} days`
+  let clears: string | null = null
+  if (waiting > 0 && perDay > 0) {
+    const days = waiting / perDay
+    clears = days < 14 ? `${Math.max(1, Math.round(days))} days` : days < 120 ? `${Math.round(days / 7)} weeks` : `${Math.round(days / 30)} months`
+  }
+  let started24h: number | null = null
+  let startedBy: string | null = null
+  let quietApps: string[] = []
+  if (dispatchers && dispatchers.length > 0) {
+    const local = dispatchers.reduce((n, d) => n + d.local.runs24h, 0)
+    const server = dispatchers.reduce((n, d) => n + d.server.dispatches24h, 0)
+    started24h = local + server
+    if (started24h > 0) startedBy = server === 0 ? 'all by your own worker' : local === 0 ? 'all by cloud agents' : `${local} by your worker, ${server} by cloud agents`
+    quietApps = dispatchers.filter((d) => d.autofixOn && d.server.dispatches24h === 0 && d.local.runs24h === 0).map((d) => d.name)
+  }
+  return { merged7, rate, waiting, clears, started24h, startedBy, quietApps }
 }
 
 /** "server 0 · local 6 · nobody 2": apps by who opened a fix in the last 24 h. */
@@ -223,7 +264,11 @@ interface ActionMeta {
   needsConfirm: boolean
   /** A reason is kept as a team note on the report. */
   needsReason: boolean
-  variant: 'primary' | 'ghost' | 'danger' | 'success'
+  /**
+   * The button's look. Never `success`: a green-filled "Requeue" or "Send to CI repair" read as a
+   * passed state, not an action (round-2 review, 2026-11-18). Ink primary or outline only.
+   */
+  variant: 'primary' | 'ghost' | 'danger'
 }
 
 export const ACTION_META: Record<PipelineAction, ActionMeta> = {
@@ -232,14 +277,14 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Sends each PR to an agent that makes its CI green without weakening tests: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   followup: {
     label: 'Send to follow-up',
     confirm: 'Sends each PR’s Opus findings to an agent that fixes them on the same branch: Mushi Mushi’s cloud agent when review follow-ups can run, otherwise your local mushi work lanes on their next mushi work --followups run.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   rerun_ci: {
     label: 'Re-run CI',
@@ -274,7 +319,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Takes each draft out of draft on GitHub, so its CI runs.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   queue_merge: {
     label: 'Queue to merge',
@@ -309,7 +354,7 @@ export const ACTION_META: Record<PipelineAction, ActionMeta> = {
     confirm: 'Puts each report back at the front of the local worker lane that ran it. The machine stopped it, not the code, so it never counts against the report.',
     needsConfirm: true,
     needsReason: false,
-    variant: 'success',
+    variant: 'ghost',
   },
   close: {
     label: 'Close PR',

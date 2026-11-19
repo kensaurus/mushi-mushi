@@ -73,7 +73,7 @@ export function BarCell({
   }
   return (
     <span className={`inline-flex items-center gap-1.5 ${className}`}>
-      <span className="min-w-8 text-right font-mono text-2xs font-bold text-fg tabular-nums">{text}</span>
+      <span className="min-w-8 whitespace-nowrap text-right font-mono text-2xs font-bold text-fg tabular-nums">{text}</span>
       {bar}
     </span>
   )

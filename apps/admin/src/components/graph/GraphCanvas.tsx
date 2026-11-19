@@ -153,6 +153,20 @@ export function GraphCanvas({
     }
   }
 
+  // Nothing to draw: a full-width line instead of a tall empty canvas with a narrow card in it.
+  if (filteredCount === 0 && !hidden) {
+    return (
+      <div className="rounded-md border border-edge-subtle bg-surface-raised px-3 py-3 text-xs text-fg-secondary" data-testid="graph-canvas-empty">
+        <span className="font-medium text-fg">No nodes match these filters.</span>{' '}
+        Try the{' '}
+        <button type="button" onClick={onResetView} className="underline hover:text-fg">
+          All
+        </button>{' '}
+        view, or turn on more node and edge types.
+      </div>
+    )
+  }
+
   return (
     <div
       // 2026-05-08 — switched from a raw calc() to clamp() so the canvas
@@ -205,7 +219,7 @@ export function GraphCanvas({
               <button
                 type="button"
                 onClick={dismissHint}
-                className="ml-2 rounded-sm px-1 text-danger hover:bg-danger-muted/50 text-xs leading-none"
+                className="ml-2 rounded-sm px-1 text-fg-faint hover:bg-surface-overlay hover:text-fg text-xs leading-none"
                 aria-label="Dismiss hint"
               >
                 ✕
@@ -214,7 +228,7 @@ export function GraphCanvas({
           </Panel>
         )}
         <Panel position="bottom-left">
-          <GraphLegend />
+          <GraphLegend showEdges={filteredEdgeCount > 0} />
         </Panel>
         {selectedNode && onClearSelection && (
           // In-canvas detail panel.
@@ -234,24 +248,6 @@ export function GraphCanvas({
                 onClear={onClearSelection}
               />
             </div>
-          </Panel>
-        )}
-        {filteredCount === 0 && (
-          <Panel position="top-center">
-            <Card  className="backdrop-blur px-3 py-2 text-2xs text-fg-secondary max-w-sm text-center">
-              <div className="font-medium text-fg mb-0.5">No nodes match these filters</div>
-              <div className="text-fg-muted">
-                Try the{' '}
-                <button
-                  type="button"
-                  onClick={onResetView}
-                  className="underline hover:text-fg"
-                >
-                  All
-                </button>{' '}
-                view, enable more node/edge types, or uncheck "Hide isolated nodes".
-              </div>
-            </Card>
           </Panel>
         )}
       </ReactFlow>

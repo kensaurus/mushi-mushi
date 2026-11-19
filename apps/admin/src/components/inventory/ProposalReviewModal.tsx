@@ -330,6 +330,7 @@ export function ProposalReviewModal({
  * Pages with their actions under `elements`. Passive-discovery drafts write
  * `elements`; live-crawl drafts (story-mapper) write `actions: [{ id, label }]`,
  * which the modal used to ignore and so showed "0 actions" for a draft with 22.
+ * @internal Exported for tests.
  */
 export function proposedPages(raw: ProposedPage[] | undefined): ProposedPage[] {
   return (raw ?? []).map((page) =>

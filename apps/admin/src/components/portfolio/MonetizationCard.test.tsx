@@ -17,7 +17,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { appStatus, appSummary, groupMonetizationFindings, kpiTile, metricText, offeringPlatforms, productState, productStatus, type MonetizationFinding, type MonetizationResponse } from './monetizationView'
+import { appStatus, appSummary, groupMonetizationFindings, kpiTile, metricText, offeringPlatforms, productState, productStatus, sortAppsWorstFirst, type MonetizationFinding, type MonetizationResponse } from './monetizationView'
 
 const ORG = '0000000b-0000-4000-8000-000000000000'
 
@@ -80,6 +80,10 @@ describe('monetization labels', () => {
   it('an app with an unchecked rule is "partly checked", never "every check passed"', () => {
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }, { ruleId: 'y', state: 'unknown', reason: '' }], findings: [] }).text).toBe('Partly checked')
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }], findings: [] }).text).toBe('Every check passed')
+    // A planned rule never ran: not "Every check passed" but how many of them were checked.
+    const three = ['x', 'y', 'z'].map((ruleId) => ({ ruleId, state: 'ok' as const, reason: '' }))
+    expect(appSummary({ rules: three, findings: [] }, ['monetization_billing_library_outdated'])).toEqual({ text: '3 of 4 checked', tone: 'neutral' })
+    expect(appStatus({ rules: three, findings: [] }, ['monetization_billing_library_outdated']).status).toBe('idle')
     expect(appSummary({ rules: [], findings: [] }).text).toBe('Partly checked')
     expect(appSummary({ rules: [{ ruleId: 'x', state: 'error', reason: '' }], findings: [] }).tone).toBe('dangerSubtle')
   })
@@ -105,6 +109,24 @@ describe('payments signals', () => {
     ])
   })
 
+  it('marks products the store is reviewing as waiting, and missing metadata as a fix', () => {
+    const groups = groupMonetizationFindings([unready('a'), unready('b', 'WAITING_FOR_REVIEW'), unready('c', 'MISSING_METADATA')])
+    expect(groups.map((g) => [g.title, g.waiting])).toEqual([
+      ['1 product in review', true],
+      ['1 product waiting for review', true],
+      ['1 product missing metadata', false],
+    ])
+  })
+
+  it('sorts apps worst first: something to fix, then partly checked, every check passed last', () => {
+    const ok = { name: 'glot.it', rules: [{ ruleId: 'x', state: 'ok' as const, reason: '' }], findings: [] }
+    const notes = { name: 'yen-yen', rules: [{ ruleId: 'x', state: 'ok' as const, reason: '' }], findings: [{ ...unready('n'), severity: 'info' as const }] }
+    const partly = { name: 'lets-talk', rules: [{ ruleId: 'x', state: 'unknown' as const, reason: '' }], findings: [] }
+    const one = { name: 'a-app', rules: [], findings: [unready('a')] }
+    const three = { name: 'Help Her Take Photo', rules: [], findings: [unready('a'), unready('b'), unready('c')] }
+    expect(sortAppsWorstFirst([ok, notes, partly, one, three]).map((a) => a.name)).toEqual(['Help Her Take Photo', 'a-app', 'lets-talk', 'yen-yen', 'glot.it'])
+  })
+
   it('reads $0 as "no revenue yet" and a missing number as not sent, never $0', () => {
     const metrics = { state: 'read' as const, currency: 'USD', items: [{ id: 'mrr', name: 'MRR', value: 0, unit: '$', period: 'P0D' }, { id: 'active_trials', name: 'Trials', value: 0, unit: '#', period: 'P0D' }, { id: 'revenue', name: 'Revenue', value: 42, unit: '$', period: 'P28D' }] }
     expect(kpiTile(metrics, 'mrr')).toEqual({ value: '$0', sublabel: 'No revenue yet' })
@@ -119,8 +141,12 @@ describe('payments signals', () => {
     expect(productStatus({ platform: 'Android', storeState: 'NOT_IN_STORE' })).toBe('failed')
     expect(productStatus({ platform: 'Android', storeState: null })).toBe('idle')
     expect(appStatus({ rules: [{ ruleId: 'x', state: 'ok', reason: '' }], findings: [] })).toEqual({ status: 'passed', label: 'Every check passed' })
-    expect(appStatus({ rules: [{ ruleId: 'x', state: 'unknown', reason: '' }], findings: [] })).toEqual({ status: 'waiting', label: 'Partly checked' })
-    expect(appStatus({ rules: [], findings: [unready('a')] }).status).toBe('failed')
+    // Not fully checked is grey, never amber; products waiting in review are a warning (amber), not a failure.
+    expect(appStatus({ rules: [{ ruleId: 'x', state: 'unknown', reason: '' }], findings: [] })).toEqual({ status: 'idle', label: 'Partly checked' })
+    // Round 3: products only waiting on the store's review say so, not "to fix".
+    expect(appStatus({ rules: [], findings: [unready('a'), unready('b'), unready('c')] })).toEqual({ status: 'waiting', label: '3 in review' })
+    expect(appStatus({ rules: [], findings: [unready('a'), unready('b', 'MISSING_METADATA')] })).toEqual({ status: 'waiting', label: '2 to fix' })
+    expect(appStatus({ rules: [], findings: [unready('a'), { ...unready('b'), severity: 'error' }] })).toEqual({ status: 'failed', label: '2 to fix' })
     expect(offeringPlatforms({ offerings: [], rcApps: [{ id: 'a', platform: 'Android', storeId: null }, { id: 'b', platform: 'iOS', storeId: null }] })).toEqual(['iOS', 'Android'])
   })
 })
@@ -164,9 +190,9 @@ describe('MonetizationCard', () => {
     expect(chip.textContent).toBe('pro_monthly:monthly')
     expect(chip.getAttribute('title')).toBe('Android · pro_monthly:monthly: store not read')
     expect(chip.getAttribute('data-status')).toBe('idle')
-    // The app row: one mark with its words, red for something to fix.
+    // The app row: one mark with its words; the finding is a warning (severity warn), so amber, not red.
     const pill = container.querySelector('[data-testid="payments-app-p-yy"]')!.closest('button')!.querySelector('[data-testid="status-pill"]')!
-    expect([pill.getAttribute('data-status'), pill.textContent]).toEqual(['failed', '1 to fix'])
+    expect([pill.getAttribute('data-status'), pill.textContent]).toEqual(['waiting', '1 to fix'])
     expect(text).toContain('$21')
     expect(text).toContain('Planned, not checked yet')
     const link = Array.from(container.querySelectorAll('a')).find((a) => a.textContent?.includes('Open in RevenueCat'))
@@ -219,10 +245,25 @@ describe('MonetizationCard', () => {
     expect(rows[0]!.textContent).toContain('3 products in review:')
     expect(rows[0]!.querySelector('[data-testid="payments-finding-targets"]')!.textContent).toBe('pack_5· pack_10· pack_25')
     expect(rows[0]!.textContent).toContain('→ Submit in App Store Connect')
+    // In review waits on the store: ◷, never the failure ✕.
+    expect(rows[0]!.querySelector('[data-testid="status-mark"]')!.getAttribute('data-status')).toBe('waiting')
     // The per-product sentences open on request, not by default.
     expect(container.textContent).not.toContain('so buying it fails')
     await act(async () => (rows[0]!.querySelector('button[aria-expanded]') as HTMLButtonElement).click())
     expect(container.textContent).toContain('The App Store product pack_10 is IN_REVIEW')
+  })
+
+  it('draws one level of card: app rows and Checks are hairline rows, not boxes in boxes', async () => {
+    await render()
+    const apps = container.querySelector('[data-testid="payments-apps"]')!
+    expect(apps.className.split(' ')).toContain('divide-y')
+    expect(container.querySelector('[data-testid="payments-hub-proj7ff5b439"]')!.className).not.toMatch(/rounded|border/)
+    // No bordered box below the section: every nested div is borderless or a hairline.
+    expect([...apps.querySelectorAll('div')].some((d) => /\brounded-md\b.*\bborder\b|\bborder\b.*\brounded-md\b/.test(d.className))).toBe(false)
+    const checks = container.querySelector('[data-testid="payments-checks-p-yy"]') as HTMLButtonElement
+    expect(container.textContent).not.toContain('Purchases reach your backend')
+    await act(async () => checks.click())
+    expect(container.textContent).toContain('Matches the billing catalog')
   })
 
   it('says nothing is checked when no RevenueCat project is connected', async () => {

@@ -306,12 +306,33 @@ describe('ProvidersPage tabs', () => {
     expect(rows[1]!.textContent).toContain('85% used')
   })
 
+  it('lines every value up under its column name, and labels values on a phone', async () => {
+    await render()
+    const width = (el: Element) => (el.className.match(/md:w-\S+|md:flex-1/g) ?? []).join(' ')
+    const head = [...q('[data-testid="providers-head"]')!.children].map(width)
+    const row = q('[data-testid^="provider-row-"]')!
+    expect([...row.children].map(width)).toEqual(head)
+    expect(head.every((w) => w !== '')).toBe(true)
+    // Phone-only words beside the bare age and the empty incidents cell.
+    expect(row.querySelector('[data-testid="provider-probed"]')?.textContent).toMatch(/probed .+ ago|never probed/)
+    const rows = [...container.querySelectorAll('[data-testid^="provider-row-"]')]
+    const noInc = rows.find((r) => !r.querySelector('[data-testid="provider-incidents"] [title]'))
+    if (noInc) expect(noInc.querySelector('[data-testid="provider-incidents"]')?.textContent).toContain('no incidents')
+    // No balance reading is unknown: hatched "not checked", never "no balance".
+    const anthropic = q('[data-testid="provider-row-kenji:anthropic"]')!
+    expect(anthropic.querySelector('[data-testid="gauge-not-checked"]')?.textContent).toBe('not checked')
+    expect(container.textContent).not.toContain('no balance')
+  })
+
   it('renders Spend with KPIs, the grid, totals and the hourly bars', async () => {
     await render('/providers?tab=spend')
     expect(q('[data-testid="spend-grid"]')).not.toBeNull()
     expect(q('[data-testid="spend-totals"]')?.textContent).toContain('$11.50')
     expect(q('[data-testid="spend-liability"]')?.textContent).toContain('$123.45')
     expect(container.querySelectorAll('[data-testid="hour-error-tick"]').length).toBe(1)
+    // A chart is drawn, so its legend shows and no empty sentence does.
+    expect(q('[data-testid="spend-hourly-legend-errors"]')).not.toBeNull()
+    expect(q('[data-testid="spend-hourly-empty"]')).toBeNull()
   })
 
   it('outlines a cell whose cost beat what it sold', async () => {
@@ -326,7 +347,10 @@ describe('ProvidersPage tabs', () => {
     expect(q('[data-testid="chain-yen-yen-*"]')?.textContent).toContain('default')
     const first = q('[data-testid="route-yen-yen|*|1"]')!
     expect(first.textContent).toContain('tried last')
-    expect(first.querySelector('.line-through')?.textContent).toBe('gpt-6-luna')
+    // The model shows once: the switcher is its name, struck when its provider is down.
+    const model = first.querySelector<HTMLSelectElement>('[data-testid="switch-model"]')!
+    expect(model.value).toBe('gpt-6-luna')
+    expect(model.className).toContain('line-through')
     expect(q('[data-testid="route-yen-yen|*|3"] [data-testid="route-param-chips"]')?.textContent).toContain('effort high')
   })
 

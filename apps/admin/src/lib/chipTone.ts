@@ -27,8 +27,10 @@ export const CHIP_TONE = {
  * border-brand/28` — `text-brand-foreground` clears WCAG AA on the muted
  * brand wash, and the recipe already owns its single border.
  */
+// 2026-11-18: selection is the violet accent (DESIGN-SYSTEM "Red means a failure, nothing
+// else"); the old amber wash read as a warning on the trigger picker.
 export const SELECTED_TONE =
-  'bg-brand-subtle text-brand-foreground border border-brand/40'
+  'bg-accent-muted text-accent-foreground border border-accent/40'
 
 /** Idle companion for SELECTED_TONE on the same control set. */
 export const SELECTED_TONE_IDLE =

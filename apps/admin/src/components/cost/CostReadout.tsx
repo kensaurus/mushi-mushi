@@ -9,11 +9,7 @@ import { RESOLVED_EXTERNAL_API_URL } from '../../lib/env'
 import type { CostStats } from './types'
 import { IconBilling, IconGlobe } from '../icons'
 
-function fmtSpend(n: number): string {
-  if (n >= 1) return `$${n.toFixed(2)}`
-  if (n >= 0.01) return `$${n.toFixed(4)}`
-  return `$${n.toFixed(6)}`
-}
+import { formatSpendUsd as fmtSpend } from '../../lib/costView'
 
 interface Props {
   stats: CostStats

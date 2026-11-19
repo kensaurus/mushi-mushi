@@ -17,6 +17,7 @@ import type { FindingGroup, PortfolioFindingsResponse } from '../../lib/portfoli
 import type { PageDataState } from '../../lib/usePageData'
 import { fixOnceRows } from '../../lib/groupAppFindings'
 import { FindingsMatrix } from './FindingsMatrix'
+import { mergeSameAppRows } from './portfolioView'
 import { PortfolioFindings } from './PortfolioFindings'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -76,9 +77,17 @@ describe('FindingsMatrix', () => {
     const cols = [...container.querySelectorAll('[data-testid^="fix-once-col-"]')]
     expect(cols.map((c) => c.getAttribute('data-testid'))).toEqual(['fix-once-col-d', 'fix-once-col-c', 'fix-once-col-b', 'fix-once-col-a'])
     expect(cols[0]!.getAttribute('title')).toBe('calm-app')
-    expect(cols[0]!.querySelector('.sr-only')!.textContent).toBe('calm-app')
-    // The favicon (initials in jsdom) sits in the header, not a printed name list.
-    expect(cols[0]!.children.length).toBeGreaterThan(1)
+    // Each column head is the icon; the name is its tooltip and screen-reader text, never a rotated, cut label.
+    expect(cols[0]!.querySelector('[data-testid="fix-once-app-name"]')!.className).toContain('sr-only')
+    expect(cols[0]!.querySelector('[data-testid="fix-once-app-name"]')!.textContent).toBe('calm-app')
+    expect(cols.map((c) => c.textContent)).toEqual(expect.arrayContaining(['calm-app', 'twm', 'yen-yen', 'glot.it'].map((n) => expect.stringContaining(n))))
+  })
+
+  it('leads each problem with its open/close chevron, not a column of its own at the far end', async () => {
+    await render(createElement(FindingsMatrix, { rows: fixOnceRows(GROUPS, (g) => g.sampleMessage), appOrder: [], iconFor }))
+    const toggle = container.querySelector<HTMLButtonElement>('[data-testid="fix-once-row-byok_key_invalid"] button[aria-expanded]')!
+    expect(toggle.firstElementChild!.getAttribute('data-testid')).toBe('fix-once-toggle-mark')
+    expect(toggle.getAttribute('title')).toBe('Show why')
   })
 
   it('draws a dot only in the cells of the apps a problem is open in', async () => {
@@ -116,6 +125,26 @@ describe('FindingsMatrix', () => {
   })
 })
 
+describe('mergeSameAppRows', () => {
+  it('merges problems open in exactly the same apps with the same fix into one row', () => {
+    const rows = fixOnceRows(
+      [
+        group({ ruleId: 'provider_key_invalid', severity: 'error', projectIds: ['a', 'b', 'c'], suggestedFix: 'fix 1' }),
+        group({ ruleId: 'byok_key_invalid', severity: 'error', projectIds: ['c', 'b', 'a'], suggestedFix: 'fix 2' }),
+        group({ ruleId: 'spend_cap_unset', projectIds: ['a', 'b', 'c'] }),
+      ],
+      (g) => g.sampleMessage,
+    )
+    const merged = mergeSameAppRows(rows)
+    expect(merged.map((r) => [r.ruleId, r.title, r.projectIds.length])).toEqual([
+      ['provider_key_invalid+byok_key_invalid', 'A connected key stopped working · AI key rejected', 3],
+      // Same apps but another severity and action: its own row.
+      ['spend_cap_unset', expect.any(String), 3],
+    ])
+    expect(merged[0]!.fix).toBe('fix 1\n\nfix 2')
+  })
+})
+
 describe('PortfolioFindings', () => {
   const state = (data: PortfolioFindingsResponse): PageDataState<PortfolioFindingsResponse> =>
     ({ data, loading: false, error: null, errorCode: null, errorEndpoint: null, requestId: null, reload: vi.fn(), isValidating: false, lastFetchedAt: null }) as unknown as PageDataState<PortfolioFindingsResponse>
@@ -131,7 +160,9 @@ describe('PortfolioFindings', () => {
       iconFor,
       appOrder: ['a', 'b', 'c', 'd'],
     }))
-    const rows = [...container.querySelectorAll('[data-testid="across-apps"] > li')]
+    // Across your apps is no card of its own: its row sits in the one Fix once list.
+    expect(container.querySelector('[data-testid="across-apps"]')).toBeNull()
+    const rows = [...container.querySelectorAll('[data-testid^="fix-once-item-across:"]')]
     expect(rows).toHaveLength(1)
     expect(rows[0]!.textContent).toContain('No version probe')
     expect(rows[0]!.querySelector('[data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('3')
@@ -173,10 +204,39 @@ describe('PortfolioFindings', () => {
       appOrder: [],
     }))
     const pills = [...container.querySelectorAll('[data-testid="status-pill"]')]
-    expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([
-      ['passed', 'Nothing open in 2+ apps'],
-      ['passed', 'All on the latest SDK'],
-      ['passed', 'Nothing missing'],
-    ])
+    // One list, one mark (it was three green pills for three cards).
+    expect(pills.map((p) => [p.getAttribute('data-status'), p.textContent])).toEqual([['passed', 'Nothing to fix across your apps']])
+  })
+
+  it('puts SDK versions and missing setups in the same list, worst first, each with its one action', async () => {
+    await render(createElement(PortfolioFindings, {
+      findings: state({
+        organizationId: 'o', generatedAt: '', groups: GROUPS, crossProject: [], readErrors: [],
+        sdkSkew: [
+          { projectId: 'a', package: '@mushi-mushi/web', version: '1.0.0', latest: '1.37.0', status: 'behind', reason: '' },
+          { projectId: 'c', package: '@mushi-mushi/web', version: '1.2.0', latest: '1.37.0', status: 'behind', reason: '' },
+        ],
+        holes: [{ projectId: 'd', integration: 'sentry', siblingsWith: 3, reason: '' }],
+      }),
+      iconFor,
+      appOrder: ['a', 'b', 'c', 'd'],
+    }))
+    // One card ("Fix once"), not four.
+    expect(container.textContent).not.toContain('Missing setups')
+    expect(container.textContent).not.toContain('Mushi Mushi SDK versions')
+    const ids = [...container.querySelectorAll('[data-testid^="fix-once-item-"]')].map((i) => i.getAttribute('data-testid')!.replace('fix-once-item-', ''))
+    // Serious first; the missing setup (a note) last; one row for the SDK behind.
+    expect(ids[0]).toBe('byok_key_invalid')
+    expect(ids[ids.length - 1]).toBe('hole:sentry')
+    expect(ids.filter((id) => id.startsWith('sdk:'))).toHaveLength(1)
+    const sdk = container.querySelector('[data-testid^="fix-once-item-sdk:"]')!
+    expect(sdk.textContent).toContain('@mushi-mushi/web behind → 1.37.0')
+    expect(sdk.querySelector('a')!.getAttribute('href')).toBe('/connect')
+    expect(sdk.querySelector('li[data-app="a"]')!.getAttribute('title')).toBe('glot.it · on 1.0.0')
+    expect(container.querySelector('[data-testid="fix-once-item-hole:sentry"] a')!.getAttribute('href')).toBe('/integrations')
+    // The wide matrix draws the same rows, a link button for Upgrade and Connect.
+    const wide = container.querySelector('[data-testid="fix-once-wide"]')!
+    expect(wide.querySelectorAll('[data-testid^="fix-once-row-"]')).toHaveLength(ids.length)
+    expect([...wide.querySelectorAll('a')].map((a) => a.textContent)).toEqual(expect.arrayContaining(['Upgrade', 'Connect']))
   })
 })

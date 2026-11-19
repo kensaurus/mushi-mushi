@@ -50,7 +50,6 @@ import {
 } from '../components/drift/DriftStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-import { PdcaContextHint } from '../components/PdcaContextHint'
 import { PageHero } from '../components/PageHero'
 import type { PageAction } from '../components/PageActionBar'
 import { CHIP_TONE, runStatusChipTone, HEADER_BADGE_TONE } from '../lib/chipTone'
@@ -108,6 +107,15 @@ const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
   { id: 'snapshots', label: 'Scans', description: 'Every scan so far and how many routes and tables each one saw.' },
   { id: 'scanner', label: 'Run a scan', description: 'Scan your API and database now.' },
 ]
+
+/**
+ * Exported for tests; page modules are knip entries. Before the first scan, Changes and Scans are
+ * empty and "Run a scan" repeats the first step's "Run first scan": the bar stays away until there
+ * is a scan, except on the scanner itself so the way back stays (2026-11-18: a third stacked bar).
+ */
+export function showDriftTabs(snapshotCount: number, activeTab: DriftTabId): boolean {
+  return snapshotCount > 0 || activeTab !== 'overview'
+}
 
 function resolveDriftTab(value: string | null): DriftTabId {
   if (value === 'findings' || value === 'snapshots' || value === 'scanner') return value
@@ -320,7 +328,7 @@ export function DriftPage() {
         projectScope={stats.projectName ?? projectName ?? undefined}
         withPageHero={!ux.hideOverviewChrome}
 
-        contextChip={<PdcaContextHint stage="check" />}
+        // No unexplained "C Check" stage chip before the heading (round 3): the section bar names the place.
         helpTitle={copy?.help?.title ?? 'Contract drift detection'}
         helpWhatIsIt={copy?.help?.whatIsIt ?? 'Each scan reads your API routes, your app map and your database tables, and compares them with the scan before.'}
         helpUseCases={copy?.help?.useCases ?? [
@@ -477,7 +485,7 @@ export function DriftPage() {
         ]}
       />
 
-      {!ux.hideTabs && (
+      {!ux.hideTabs && showDriftTabs(stats.snapshotCount, activeTab) && (
       <SegmentedControl<DriftTabId>
         size="sm"
         ariaLabel="Drift sections"

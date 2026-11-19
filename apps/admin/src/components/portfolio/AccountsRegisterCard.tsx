@@ -16,7 +16,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, DisclosurePanel, Input, Loading, Section, SelectField } from '../ui'
+import { Badge, Btn, Callout, DisclosurePanel, Input, Section, SelectField } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate, apiFetchRaw } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -129,7 +130,7 @@ export function AccountsRegisterCard({ orgId }: { orgId: string }) {
         Names and contacts only: never passwords, keys or recovery codes.
       </p>
       {error && <PageLoadError error={error} resource="accounts and resilience" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the register…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading the register…" what="Accounts register" onRetry={reload} testId="portfolio-accounts-not-checked" />
       {notice && (
         <Callout tone={notice.tone}>
           <span role="status">{notice.text}</span>

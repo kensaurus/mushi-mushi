@@ -26,7 +26,7 @@ vi.mock('../../lib/usePageData', () => ({
 }))
 
 import { JudgeAgreementOverview, agreementPoints } from './JudgeAgreementOverview'
-import { judgeStatusSentence } from './JudgeSnapshotStrip'
+import { judgeStatusSentence, judgeWeekMetricLabel } from './JudgeSnapshotStrip'
 import { EMPTY_JUDGE_STATS, type JudgeStats } from './JudgeStatsTypes'
 
 let host: HTMLDivElement
@@ -88,7 +88,7 @@ describe('JudgeAgreementOverview', () => {
     expect(host.querySelector('[data-testid="metric-timeline"]')).not.toBeNull()
     const worst = host.querySelector('[data-testid="judge-worst-disagreements"]')!
     expect(worst.textContent).toContain('Pay button does nothing')
-    expect(worst.textContent).toContain('12%')
+    expect(worst.textContent).toContain('grade 12%')
     expect(worst.textContent).toContain('The crash is in checkout, not auth.')
     expect(worst.textContent).not.toContain('CartService')
     expect(worst.querySelector('a')?.getAttribute('href')).toBe('/reports/r1')
@@ -99,6 +99,24 @@ describe('JudgeAgreementOverview', () => {
     expect(q.get('sort')).toBe('score_asc')
     expect(q.get('limit')).toBe('3')
     expect(Date.parse(q.get('to')!) - Date.parse(q.get('from')!)).toBe(14 * 86_400_000)
+  })
+})
+
+describe('JudgeAgreementOverview with one graded week', () => {
+  it('shows no chart and no "0% agreed" line: the status line already counts the disagreements', () => {
+    mocks.evaluations = []
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(JudgeAgreementOverview, { weeks: [{ weekStart: '2026-11-09', graded: 2, agreed: 0 }], windowDays: 14 }),
+        ),
+      ),
+    )
+    expect(host.querySelector('[data-testid="metric-timeline"]')).toBeNull()
+    expect(host.querySelector('[data-testid="judge-agreement-single"]')).toBeNull()
+    expect(host.textContent).not.toContain('agreed, week of')
   })
 })
 
@@ -114,15 +132,23 @@ describe('judgeStatusSentence', () => {
     disagreementRatePct: 32,
   }
 
-  it('counts disagreements over the recent window and says so', () => {
+  it('counts disagreements over the recent window and says so, without repeating the grade', () => {
     expect(judgeStatusSentence({ ...base, recentWindowDays: 14, recentEvaluations: 10, recentDisagreements: 1 })).toBe(
-      'Diagnoses scored 66% this week across 53 grades. In the last 14 days the grader disagreed with 1 of 10 diagnoses (10%).',
+      'In the last 14 days the grader would have diagnosed 1 of 10 reports differently. Read those before merging their fixes.',
     )
   })
 
   it('says "so far" for an all-time count from an older server', () => {
     expect(judgeStatusSentence(base)).toBe(
-      'Diagnoses scored 66% this week across 53 grades. So far the grader disagreed with 18 of 57 diagnoses (32%).',
+      'So far the grader would have diagnosed 18 of 57 reports differently. Read those before merging their fixes.',
     )
+  })
+
+  it('says "every" when the grader disagreed with all of them, and labels the grade with its week', () => {
+    expect(judgeStatusSentence({ ...base, recentWindowDays: 14, recentEvaluations: 2, recentDisagreements: 2 })).toBe(
+      'In the last 14 days the grader would have diagnosed every report it graded differently. Read those before merging their fixes.',
+    )
+    expect(judgeWeekMetricLabel({ latestWeekLabel: 'week of Nov 9' })).toBe('Avg grade · Nov 9')
+    expect(judgeWeekMetricLabel({ latestWeekLabel: 'this week' })).toBe('Avg grade · this week')
   })
 })

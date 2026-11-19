@@ -120,11 +120,13 @@ function defaultLabel(state: ConnectionState, expiresAt: string | null | undefin
 }
 
 /**
- * "checking" with the default words is a configured connection nobody tested yet: ✓ connected.
- * With a caller's label ("Testing…", "Sending a test…") a check is in flight: running.
+ * "checking" with the default words is a configured connection nobody tested yet: a hollow ○,
+ * never a passed ✓ (DESIGN-SYSTEM "Not checked yet. Never shown as working"; fresh-eyes
+ * 2026-11-18 caught a green ✓ beside "NOT CHECKED"). With a caller's label ("Testing…") a
+ * check is in flight: running.
  */
 function pillStatus(state: ConnectionState, label: string | undefined): RunStatus {
-  if (state === 'checking') return label ? 'running' : 'passed'
+  if (state === 'checking') return label ? 'running' : 'idle'
   return STATUS[state]
 }
 

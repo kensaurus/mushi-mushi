@@ -1,8 +1,12 @@
 /**
  * FILE: apps/admin/src/components/projects/BulkSdkUpgradePanel.tsx
- * PURPOSE: One-click "Update all projects" — fan out the existing per-project
- *          "Create Upgrade PR" flow across every GitHub-connected project so the
- *          operator never has to switch active project and click N times.
+ * PURPOSE: One-click "Update all apps" — fan out the existing per-project
+ *          "Create Upgrade PR" flow across every GitHub-connected app so the
+ *          operator never has to switch the active app and click N times.
+ *          Since 2026-11-18 (round 2) it lives inside "What needs you, per app"
+ *          (ProjectNextStepsPanel): each row's SDK cell is a `SdkUpgradeCell`
+ *          (version + Open PR) and the bulk buttons sit in the table header
+ *          (`BulkUpgradeToolbar`); a second card repeated every version pair.
  *
  * WHY: Every other upgrade affordance (ConnectPage UpdateCenter, the
  *      SdkUpgradeCTA on the projects list, the DashboardPage banner) is bound to
@@ -11,18 +15,18 @@
  *      gives an aggregate view ("which repos are behind") plus a single button
  *      that enqueues an upgrade PR for all eligible repos at once.
  *
- * DESIGN: Each row mounts the existing `useSdkUpgrade(projectId)` hook, so it
+ * DESIGN: Each cell mounts the existing `useSdkUpgrade(projectId)` hook, so it
  *      reuses the fully-tested enqueue → SSE → poll → resume machinery and the
  *      already-deployed `POST /v1/admin/projects/:pid/sdk-upgrade` endpoint —
  *      no new backend surface, no new migration, no edge-function deploy. The
- *      "Update all" button bumps a `runToken`; each eligible row fires its own
+ *      "Open PRs" button bumps a `runToken`; each eligible cell fires its own
  *      `createUpgradePr()` when the token changes. POST dedupe: in-flight jobs
  *      return 409; open upgrade PRs return 200 reused (no new branch); use
  *      `refreshUpgradePr()` to update an existing PR branch.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Card, Btn, Tooltip, MetricTooltipContent } from '../ui'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Btn, Tooltip, MetricTooltipContent } from '../ui'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { CHIP_TONE } from '../../lib/chipTone'
 import { CodeInline } from '../CodePanel'
@@ -30,7 +34,6 @@ import {
   IconBolt,
   IconCheck,
   IconExternalLink,
-  IconGit,
   IconInfo,
   IconRefresh,
 } from '../icons'
@@ -46,6 +49,7 @@ import {
   prJobChipLabel,
 } from '../../lib/bulkSdkUpgradeTooltips'
 import type { SdkStatus } from '../SdkVersionBadge'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 
 export interface BulkUpgradeProject {
   id: string
@@ -61,6 +65,23 @@ export interface BulkUpgradeProject {
 }
 
 const IN_FLIGHT: SdkUpgradeStatus[] = ['queueing', 'queued', 'running', 'awaiting_lockfile']
+
+/**
+ * The catalog says this app already runs the latest SDK: no row button, and not counted in
+ * "Open PRs (N)". Both read this one source, so the header count matches the rows marked
+ * behind (fresh-eyes review 2026-11-18: "Open PRs (9)" beside 7 apps behind).
+ * @internal Exported for tests only.
+ */
+function catalogUpToDate(project: Pick<BulkUpgradeProject, 'sdk_version' | 'sdk_latest_version' | 'sdk_status'>): boolean {
+  return (
+    resolveSdkDisplay({
+      observedVersion: project.sdk_version ?? null,
+      latestVersion: project.sdk_latest_version ?? null,
+      backendStatus: project.sdk_status,
+      deprecated: project.sdk_status === 'deprecated',
+    }).kind === 'up-to-date'
+  )
+}
 
 /**
  * A finished job that did not bump this project's SDK to the latest release: it
@@ -123,7 +144,7 @@ function RowStatus({
   }
   if (status === 'running' || status === 'awaiting_lockfile') {
     return wrap(
-      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.accentSubtle}`}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-2xs font-medium ${CHIP_TONE.infoSubtle}`}>
         {spinner} {label}
       </span>,
     )
@@ -160,60 +181,6 @@ function RowStatus({
 }
 
 // ---------------------------------------------------------------------------
-// Static freshness chip shown before any job runs.
-// ---------------------------------------------------------------------------
-function FreshnessChip({
-  project,
-  upgradeStatus,
-}: {
-  project: BulkUpgradeProject
-  upgradeStatus?: SdkUpgradeStatus
-}) {
-  const resolution = resolveSdkDisplay({
-    observedVersion: project.sdk_version ?? null,
-    latestVersion: project.sdk_latest_version ?? null,
-    backendStatus: project.sdk_status,
-    deprecated: project.sdk_status === 'deprecated',
-  })
-  const { prefix, text } = freshnessChipLabel(project)
-  const tooltip = buildFreshnessTooltip(project, upgradeStatus)
-  const conflict = catalogPrSignalsConflict(project, upgradeStatus)
-
-  const toneClass = (() => {
-    if (resolution.kind === 'deprecated') {
-      return CHIP_TONE.dangerSubtle
-    }
-    if (resolution.kind === 'upgrade-available') {
-      return conflict
-        ? `${CHIP_TONE.warnSubtle} ring-1 ring-info/25`
-        : CHIP_TONE.warnSubtle
-    }
-    if (resolution.kind === 'up-to-date') {
-      return CHIP_TONE.okSubtle
-    }
-    if (resolution.kind === 'catalog-ahead') {
-      return CHIP_TONE.infoSubtle
-    }
-    return CHIP_TONE.neutral
-  })()
-
-  return (
-    <Tooltip content={<MetricTooltipContent data={tooltip} />} side="top" nowrap={false} portal>
-      <span
-        className={`inline-flex cursor-help items-center gap-1 rounded-sm px-2 py-px text-2xs font-medium ${toneClass}`}
-        aria-label={`Catalog freshness: ${text}`}
-      >
-        <span className="text-3xs font-semibold opacity-70">{prefix}</span>
-        {resolution.kind === 'up-to-date' && <IconCheck className="h-3 w-3" aria-hidden />}
-        {resolution.kind === 'deprecated' && text === 'Deprecated' && resolution.upgradeTarget
-          ? `Deprecated → v${resolution.upgradeTarget}`
-          : text}
-      </span>
-    </Tooltip>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Release status pill shown in the cockpit section after a PR is opened.
 // ---------------------------------------------------------------------------
 const RELEASE_STATUS_LABELS: Record<string, string> = {
@@ -228,12 +195,12 @@ const RELEASE_STATUS_LABELS: Record<string, string> = {
   failed: 'Release failed',
 }
 const RELEASE_STATUS_COLORS: Record<string, string> = {
-  pr_opened: CHIP_TONE.accentSubtle,
+  pr_opened: CHIP_TONE.infoSubtle,
   blocked: CHIP_TONE.dangerSubtle,
   ready_to_merge: CHIP_TONE.okSubtle,
-  merging: CHIP_TONE.accentSubtle,
+  merging: CHIP_TONE.infoSubtle,
   merged: CHIP_TONE.okSubtle,
-  deploying: CHIP_TONE.accentSubtle,
+  deploying: CHIP_TONE.infoSubtle,
   deployed: CHIP_TONE.okSubtle,
   verified: CHIP_TONE.okSubtle,
   failed: CHIP_TONE.dangerSubtle,
@@ -271,7 +238,7 @@ function ReleaseStatusPill({
   )
 }
 
-export interface RowReleaseMeta {
+interface RowReleaseMeta {
   releaseStatus?: string
   jobId?: string
   checkRunConclusion?: string
@@ -280,38 +247,64 @@ export interface RowReleaseMeta {
 }
 
 // ---------------------------------------------------------------------------
-// One row = one project. Mounts the existing per-project upgrade hook.
+// The SDK version, with its catalog-freshness details on hover or focus.
 // ---------------------------------------------------------------------------
-function BulkUpgradeRow({
-  project,
-  runToken,
-  syncToken,
-  mergeToken,
-  onStatus,
-  onReleaseMeta,
-}: {
-  project: BulkUpgradeProject
-  runToken: number
-  syncToken: number
-  mergeToken: number
-  onStatus: (id: string, status: SdkUpgradeStatus) => void
-  onReleaseMeta: (id: string, meta: RowReleaseMeta | null) => void
-}) {
+function VersionText({ project, upgradeStatus }: { project: BulkUpgradeProject; upgradeStatus?: SdkUpgradeStatus }) {
+  const resolution = resolveSdkDisplay({
+    observedVersion: project.sdk_version ?? null,
+    latestVersion: project.sdk_latest_version ?? null,
+    backendStatus: project.sdk_status,
+    deprecated: project.sdk_status === 'deprecated',
+  })
+  const tone: SignalTone =
+    resolution.kind === 'deprecated'
+      ? 'danger'
+      : resolution.kind === 'upgrade-available'
+        ? 'warn'
+        : resolution.kind === 'up-to-date'
+          ? 'ok'
+          : resolution.kind === 'catalog-ahead'
+            ? 'info'
+            : 'off'
+  const { text } = freshnessChipLabel(project)
+  return (
+    <Tooltip content={<MetricTooltipContent data={buildFreshnessTooltip(project, upgradeStatus)} />} side="top" nowrap={false} portal>
+      <span
+        // Focusable, so a tap (or Tab) opens the details too: the tooltip opens on hover and focus.
+        tabIndex={0}
+        className="inline-flex cursor-help items-center gap-1 rounded-sm font-mono text-2xs whitespace-nowrap text-fg tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        aria-label={`SDK ${project.sdk_version ?? 'unknown'}. Catalog freshness: ${text}`}
+        data-testid={`project-needs-sdk-${project.id}`}
+      >
+        <StatusGlyph tone={tone} />
+        {resolution.upgradeTarget && project.sdk_version ? `${project.sdk_version} → ${resolution.upgradeTarget}` : project.sdk_version}
+      </span>
+    </Tooltip>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// One app's SDK cell in "What needs you, per app". Mounts the per-project
+// upgrade hook, so the version and its Open PR live in one place (2026-11-18
+// round 2: the same version pairs sat in a second card below the table).
+// ---------------------------------------------------------------------------
+export function SdkUpgradeCell({ project, bulk }: { project: BulkUpgradeProject; bulk: BulkSdkUpgrade }) {
+  const { runToken, syncToken, mergeToken, onStatus, onReleaseMeta } = bulk
   const { state, createUpgradePr, refreshUpgradePr, mergePr, syncStatus } = useSdkUpgrade(project.id)
   const lastRunToken = useRef(0)
   const lastSyncToken = useRef(0)
   const lastMergeToken = useRef(0)
 
-
   const superseded = state.status === 'completed' && upgradeJobSuperseded(state.plan, project)
+  const upToDate = catalogUpToDate(project)
 
-  // Report status up so the panel header can summarise progress. A superseded
+  // Report status up so the toolbar can summarise progress. A superseded
   // job counts as not started, so "Open PRs (N)" includes the row.
   useEffect(() => {
     onStatus(project.id, superseded ? 'idle' : state.status)
   }, [project.id, state.status, onStatus, superseded])
 
-  // Report release metadata for panel-level Refresh all / Merge all ready.
+  // Report release metadata for the toolbar's Refresh all / Merge all ready.
   useEffect(() => {
     if (state.status === 'completed' && state.prUrl && state.jobId && !superseded) {
       onReleaseMeta(project.id, {
@@ -336,17 +329,18 @@ function BulkUpgradeRow({
     superseded,
   ])
 
-  // Fire when the "Open PRs" button bumps the shared runToken — skip rows that
-  // already have an open PR (completed) so bulk update cannot stack duplicates.
+  // Fire when "Open PRs" bumps the shared runToken — skip rows that already
+  // have an open PR (completed) so a bulk update cannot stack duplicates.
   useEffect(() => {
     if (runToken === 0 || runToken === lastRunToken.current) return
     lastRunToken.current = runToken
     if (state.status === 'completed' && state.prUrl && !superseded) return
     if (state.status !== 'idle' && state.status !== 'failed' && !superseded) return
+    if (upToDate) return
     void createUpgradePr()
-  }, [runToken, state.status, state.prUrl, createUpgradePr, superseded])
+  }, [runToken, state.status, state.prUrl, createUpgradePr, superseded, upToDate])
 
-  // Panel-level Refresh all — sync CI / deploy for every open PR row.
+  // Toolbar Refresh all — sync CI / deploy for every open PR row.
   useEffect(() => {
     if (syncToken === 0 || syncToken === lastSyncToken.current) return
     lastSyncToken.current = syncToken
@@ -354,7 +348,7 @@ function BulkUpgradeRow({
     void syncStatus(state.jobId)
   }, [syncToken, state.status, state.jobId, syncStatus])
 
-  // Panel-level Merge all ready — only rows with green CI.
+  // Toolbar Merge all ready — only rows with green CI.
   useEffect(() => {
     if (mergeToken === 0 || mergeToken === lastMergeToken.current) return
     lastMergeToken.current = mergeToken
@@ -365,120 +359,97 @@ function BulkUpgradeRow({
   const inFlight = IN_FLIGHT.includes(state.status)
   const signalConflict = catalogPrSignalsConflict(project, state.status)
   const hasOpenPr = state.status === 'completed' && Boolean(state.prUrl) && !superseded
-  const showOpenAction = inFlight || state.status === 'idle' || state.status === 'failed' || superseded
+  const showOpenAction = inFlight || ((state.status === 'idle' || state.status === 'failed' || superseded) && !upToDate)
   const showRefreshAction = hasOpenPr && !inFlight
 
   return (
-    <div className="border-t border-edge-subtle px-3 py-2 first:border-t-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <IconGit className="h-4 w-4 shrink-0 text-fg-faint" aria-hidden />
-          <span className="truncate text-sm font-medium text-fg" title={project.name}>
-            {project.name}
-          </span>
-          <CodeInline className="hidden text-2xs sm:inline-flex">{project.slug}</CodeInline>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <FreshnessChip project={project} upgradeStatus={state.status} />
-          {state.status !== 'idle' && !superseded && (
-            <RowStatus
-              status={state.status}
-              prUrl={state.prUrl}
-              error={state.error}
-              plan={state.plan}
-              releaseStatus={state.releaseStatus}
-              project={project}
-            />
-          )}
-          {showOpenAction && (
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => void createUpgradePr()}
-              disabled={inFlight}
-              leadingIcon={
-                state.status === 'failed'
-                  ? <IconRefresh className="h-3.5 w-3.5" aria-hidden />
-                  : <IconBolt className="h-3.5 w-3.5" aria-hidden />
-              }
-              aria-label={`Open SDK bump PR for ${project.name}`}
-            >
-              {inFlight ? 'Opening…' : state.status === 'failed' ? 'Retry PR' : 'Open PR'}
-            </Btn>
-          )}
-          {showRefreshAction && (
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={() => void refreshUpgradePr()}
-              leadingIcon={<IconRefresh className="h-3.5 w-3.5" aria-hidden />}
-              aria-label={`Refresh existing upgrade PR for ${project.name}`}
-            >
-              Refresh PR
-            </Btn>
-          )}
-        </div>
-      </div>
-
-      {signalConflict && (
-        <Tooltip
-          content={
-            <MetricTooltipContent
-              data={buildFreshnessTooltip(project, state.status)}
-            />
-          }
-          side="bottom"
-          nowrap={false}
-          portal
-        >
-          <p className="mt-1 cursor-help text-2xs leading-snug text-fg-muted">
-            <span className="font-medium text-info">Two signals:</span> catalog shows a newer npm
-            release, but no package.json bump PR was needed (often a{' '}
-            <CodeInline>workspace:*</CodeInline> monorepo). Hover chips for details.
-          </p>
-        </Tooltip>
-      )}
-
-      {state.syncError && (
-        <p className="mt-1 text-2xs text-danger-foreground" role="status">{state.syncError}</p>
-      )}
-
-      {/* Compact release hint — full actions live in the panel header */}
-      {state.status === 'completed' && state.prUrl && state.releaseStatus && !superseded && (
-        <div className="mt-1">
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <VersionText project={project} upgradeStatus={state.status} />
+        {state.status !== 'idle' && !superseded && (
+          <RowStatus status={state.status} prUrl={state.prUrl} error={state.error} plan={state.plan} releaseStatus={state.releaseStatus} project={project} />
+        )}
+        {state.status === 'completed' && state.prUrl && state.releaseStatus && !superseded && (
           <ReleaseStatusPill
             releaseStatus={state.releaseStatus}
             checkRunConclusion={state.checkRunConclusion}
             deployUrl={state.deployUrl}
             prUrl={state.prUrl}
           />
-        </div>
+        )}
+        {showOpenAction && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => void createUpgradePr()}
+            disabled={inFlight}
+            leadingIcon={state.status === 'failed' ? <IconRefresh className="h-3.5 w-3.5" aria-hidden /> : <IconBolt className="h-3.5 w-3.5" aria-hidden />}
+            aria-label={`Open SDK bump PR for ${project.name}`}
+            className="whitespace-nowrap"
+          >
+            {inFlight ? 'Opening…' : state.status === 'failed' ? 'Retry PR' : 'Open PR'}
+          </Btn>
+        )}
+        {showRefreshAction && (
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => void refreshUpgradePr()}
+            leadingIcon={<IconRefresh className="h-3.5 w-3.5" aria-hidden />}
+            aria-label={`Refresh existing upgrade PR for ${project.name}`}
+            className="whitespace-nowrap"
+          >
+            Refresh PR
+          </Btn>
+        )}
+      </span>
+      {signalConflict && (
+        <Tooltip content={<MetricTooltipContent data={buildFreshnessTooltip(project, state.status)} />} side="bottom" nowrap={false} portal>
+          <span className="cursor-help text-2xs leading-snug text-fg-muted">
+            <span className="font-medium text-info">Two signals:</span> a newer npm release, but no bump PR was needed (often a{' '}
+            <CodeInline>workspace:*</CodeInline> monorepo).
+          </span>
+        </Tooltip>
       )}
-    </div>
+      {state.syncError && (
+        <span className="text-2xs text-danger-foreground" role="status">
+          {state.syncError}
+        </span>
+      )}
+    </span>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Panel
+// Shared state for the cells and the toolbar.
 // ---------------------------------------------------------------------------
-export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject[] }) {
-  const eligible = useMemo(() => projects.filter((p) => p.hasRepo), [projects])
-  const ineligibleCount = projects.length - eligible.length
+export interface BulkSdkUpgrade {
+  /** Apps an upgrade PR can be opened for (a GitHub repo is connected). */
+  eligible: BulkUpgradeProject[]
+  runToken: number
+  syncToken: number
+  mergeToken: number
+  onStatus: (id: string, status: SdkUpgradeStatus) => void
+  onReleaseMeta: (id: string, meta: RowReleaseMeta | null) => void
+  statusMap: Record<string, SdkUpgradeStatus>
+  releaseMetaMap: Record<string, RowReleaseMeta>
+  openAll: () => void
+  syncAll: () => void
+  mergeAllReady: () => void
+}
 
+export function useBulkSdkUpgrade(eligible: BulkUpgradeProject[]): BulkSdkUpgrade {
   const [runToken, setRunToken] = useState(0)
   const [syncToken, setSyncToken] = useState(0)
   const [mergeToken, setMergeToken] = useState(0)
   const [statusMap, setStatusMap] = useState<Record<string, SdkUpgradeStatus>>({})
   const [releaseMetaMap, setReleaseMetaMap] = useState<Record<string, RowReleaseMeta>>({})
-  // Both bulk actions write to GitHub (open PRs; squash-merge PRs). Each asks
-  // first and lists every repo it will touch (QA bug 32).
-  const [confirmBulk, setConfirmBulk] = useState<'merge' | 'open' | null>(null)
 
-  const handleStatus = useCallback((id: string, status: SdkUpgradeStatus) => {
+  const onStatus = useCallback((id: string, status: SdkUpgradeStatus) => {
     setStatusMap((prev) => (prev[id] === status ? prev : { ...prev, [id]: status }))
   }, [])
 
-  const handleReleaseMeta = useCallback((id: string, meta: RowReleaseMeta | null) => {
+  const onReleaseMeta = useCallback((id: string, meta: RowReleaseMeta | null) => {
     setReleaseMetaMap((prev) => {
       if (!meta) {
         if (!(id in prev)) return prev
@@ -487,10 +458,10 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
       }
       const cur = prev[id]
       if (
-        cur?.releaseStatus === meta.releaseStatus
-        && cur?.jobId === meta.jobId
-        && cur?.checkRunConclusion === meta.checkRunConclusion
-        && cur?.deployUrl === meta.deployUrl
+        cur?.releaseStatus === meta.releaseStatus &&
+        cur?.jobId === meta.jobId &&
+        cur?.checkRunConclusion === meta.checkRunConclusion &&
+        cur?.deployUrl === meta.deployUrl
       ) {
         return prev
       }
@@ -498,18 +469,40 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
     })
   }, [])
 
+  return {
+    eligible,
+    runToken,
+    syncToken,
+    mergeToken,
+    onStatus,
+    onReleaseMeta,
+    statusMap,
+    releaseMetaMap,
+    openAll: () => setRunToken((t) => t + 1),
+    syncAll: () => setSyncToken((t) => t + 1),
+    mergeAllReady: () => setMergeToken((t) => t + 1),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The bulk actions, in the table's header: Open PRs (N), Refresh all, Merge all ready.
+// ---------------------------------------------------------------------------
+export function BulkUpgradeToolbar({ bulk }: { bulk: BulkSdkUpgrade }) {
+  const { eligible, statusMap, releaseMetaMap } = bulk
+  // Both bulk actions write to GitHub (open PRs; squash-merge PRs). Each asks
+  // first and lists every repo it will touch (QA bug 32).
+  const [confirmBulk, setConfirmBulk] = useState<'merge' | 'open' | null>(null)
+
   const statuses = Object.values(statusMap)
   const anyInFlight = statuses.some((s) => IN_FLIGHT.includes(s))
   const prCount = statuses.filter((s) => s === 'completed').length
-  const upToDateCount = statuses.filter((s) => s === 'completed_no_pr').length
   const failedCount = statuses.filter((s) => s === 'failed').length
-  const readyToMergeCount = Object.values(releaseMetaMap).filter(
-    (m) => m.releaseStatus === 'ready_to_merge',
-  ).length
+  const readyToMergeCount = Object.values(releaseMetaMap).filter((m) => m.releaseStatus === 'ready_to_merge').length
 
   // Rows still worth bulk-opening: never run, idle, or failed — not rows that
   // already have an open PR (completed) or are up to date (completed_no_pr).
   const pendingRows = eligible.filter((p) => {
+    if (catalogUpToDate(p)) return false
     const s = statusMap[p.id]
     return !s || s === 'idle' || s === 'failed'
   })
@@ -517,170 +510,77 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
   const nothingToDo = statuses.length > 0 && !anyInFlight && pendingCount === 0
   const readyRows = eligible.filter((p) => releaseMetaMap[p.id]?.releaseStatus === 'ready_to_merge')
 
-  if (eligible.length === 0) {
-    if (projects.length === 0) return null
-    return (
-      <Card className="p-4">
-        <div className="flex items-start gap-3">
-          <IconGit className="h-5 w-5 shrink-0 text-fg-muted" aria-hidden />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-fg">SDK version upgrades</p>
-            <p className="mt-0.5 text-xs text-fg-muted">
-              Connect GitHub on a project to open bump PRs for{' '}
-              <CodeInline>@mushi-mushi/*</CodeInline>.
-            </p>
-          </div>
-        </div>
-      </Card>
-    )
-  }
+  if (eligible.length === 0) return null
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge-subtle bg-surface-raised px-4 py-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <IconBolt className="h-4 w-4 text-accent" aria-hidden />
-            <h3 className="text-sm font-semibold text-fg">SDK version upgrades</h3>
-            <Tooltip
-              content={<MetricTooltipContent data={buildPanelLegendTooltip()} />}
-              side="bottom"
-              nowrap={false}
-              portal
-            >
-              <button
-                type="button"
-                className="inline-flex cursor-help items-center rounded-sm text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                aria-label="How catalog freshness and upgrade PRs relate"
-              >
-                <IconInfo className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </Tooltip>
-          </div>
-          <p className="mt-0.5 text-xs text-fg-muted">
-            Open bump PRs on GitHub, then refresh CI and merge when green. Hover chips for
-            version details.
-          </p>
-          {(prCount > 0 || upToDateCount > 0 || failedCount > 0 || readyToMergeCount > 0) && (
-            <div className="mt-1.5 flex flex-wrap items-center gap-1.5" role="status" aria-live="polite">
-              {prCount > 0 && (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.okSubtle}`}>
-                  {prCount} PR{prCount === 1 ? '' : 's'} to review
-                </span>
-              )}
-              {readyToMergeCount > 0 && (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.okSubtle}`}>
-                  {readyToMergeCount} ready to merge
-                </span>
-              )}
-              {upToDateCount > 0 && (
-                <Tooltip
-                  content="No package.json bump PR was created — registry pins already latest or only workspace:* deps."
-                  side="top"
-                >
-                  <span className={`inline-flex cursor-help items-center gap-1 rounded-full px-2 py-0.5 text-2xs ${CHIP_TONE.neutral}`}>
-                    {upToDateCount} no PR needed
-                  </span>
-                </Tooltip>
-              )}
-              {failedCount > 0 && (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`}>
-                  {failedCount} PR{failedCount === 1 ? '' : 's'} failed
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {prCount > 0 && (
-            <Tooltip
-              content="Pull the latest CI and deploy status from GitHub for every open bump PR."
-              side="top"
-            >
-              <Btn
-                size="md"
-                variant="ghost"
-                onClick={() => setSyncToken((t) => t + 1)}
-                leadingIcon={<IconRefresh className="h-4 w-4" aria-hidden />}
-                aria-label="Refresh CI and deploy status for all open PRs"
-              >
-                Refresh all
-              </Btn>
-            </Tooltip>
-          )}
-          {readyToMergeCount > 0 && (
-            <Tooltip
-              content={`Squash-merge ${readyToMergeCount} PR${readyToMergeCount === 1 ? '' : 's'} that passed CI.`}
-              side="top"
-            >
-              <Btn
-                size="md"
-                variant="ghost"
-                onClick={() => setConfirmBulk('merge')}
-                leadingIcon={<IconCheck className="h-4 w-4" aria-hidden />}
-                aria-label={`Merge ${readyToMergeCount} PRs that passed CI`}
-              >
-                Merge all ready ({readyToMergeCount})
-              </Btn>
-            </Tooltip>
-          )}
-          <Tooltip
-            content={
-              anyInFlight
-                ? 'Opening bump PRs on GitHub…'
-                : nothingToDo
-                  ? 'Every connected repo already has an open PR or does not need a bump.'
-                  : `Open a draft bump PR on ${pendingCount} connected repo${pendingCount === 1 ? '' : 's'}.`
-            }
-            side="top"
+    <div className="flex flex-wrap items-center justify-end gap-2" data-testid="bulk-upgrade-toolbar">
+      <Tooltip content={<MetricTooltipContent data={buildPanelLegendTooltip()} />} side="bottom" nowrap={false} portal>
+        <button
+          type="button"
+          className="inline-flex cursor-help items-center rounded-sm text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          aria-label="How catalog freshness and upgrade PRs relate"
+        >
+          <IconInfo className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </Tooltip>
+      {failedCount > 0 && (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${CHIP_TONE.dangerSubtle}`} role="status">
+          {failedCount} PR{failedCount === 1 ? '' : 's'} failed
+        </span>
+      )}
+      {prCount > 0 && (
+        <Tooltip content={`Pull the latest CI and deploy status from GitHub for the ${prCount} open bump PR${prCount === 1 ? '' : 's'}.`} side="top">
+          <Btn size="sm" variant="ghost" onClick={bulk.syncAll} leadingIcon={<IconRefresh className="h-3.5 w-3.5" aria-hidden />} aria-label="Refresh CI and deploy status for all open PRs">
+            Refresh all ({prCount})
+          </Btn>
+        </Tooltip>
+      )}
+      {readyToMergeCount > 0 && (
+        <Tooltip content={`Squash-merge ${readyToMergeCount} PR${readyToMergeCount === 1 ? '' : 's'} that passed CI.`} side="top">
+          <Btn
+            size="sm"
+            variant="ghost"
+            onClick={() => setConfirmBulk('merge')}
+            leadingIcon={<IconCheck className="h-3.5 w-3.5" aria-hidden />}
+            aria-label={`Merge ${readyToMergeCount} PRs that passed CI`}
           >
-            <Btn
-              size="md"
-              variant="primary"
-              loading={anyInFlight}
-              disabled={anyInFlight || nothingToDo}
-              onClick={() => setConfirmBulk('open')}
-              leadingIcon={
-                nothingToDo
-                  ? <IconCheck className="h-4 w-4" aria-hidden />
-                  : <IconBolt className="h-4 w-4" aria-hidden />
-              }
-            >
-              {anyInFlight
-                ? 'Opening PRs…'
-                : nothingToDo
-                  ? 'Nothing to open'
-                  : `Open PRs (${pendingCount})`}
-            </Btn>
-          </Tooltip>
-        </div>
-      </div>
-
-      <div>
-        {eligible.map((project) => (
-          <BulkUpgradeRow
-            key={project.id}
-            project={project}
-            runToken={runToken}
-            syncToken={syncToken}
-            mergeToken={mergeToken}
-            onStatus={handleStatus}
-            onReleaseMeta={handleReleaseMeta}
-          />
-        ))}
-      </div>
+            Merge all ready ({readyToMergeCount})
+          </Btn>
+        </Tooltip>
+      )}
+      <Tooltip
+        content={
+          anyInFlight
+            ? 'Opening bump PRs on GitHub…'
+            : nothingToDo
+              ? 'Every connected repo already has an open PR or does not need a bump.'
+              : `Open a draft bump PR on ${pendingCount} connected repo${pendingCount === 1 ? '' : 's'}.`
+        }
+        side="top"
+      >
+        <Btn
+          size="sm"
+          variant="primary"
+          loading={anyInFlight}
+          disabled={anyInFlight || nothingToDo}
+          onClick={() => setConfirmBulk('open')}
+          leadingIcon={nothingToDo ? <IconCheck className="h-3.5 w-3.5" aria-hidden /> : <IconBolt className="h-3.5 w-3.5" aria-hidden />}
+        >
+          {anyInFlight ? 'Opening PRs…' : nothingToDo ? 'Nothing to open' : `Open PRs (${pendingCount})`}
+        </Btn>
+      </Tooltip>
 
       {confirmBulk === 'merge' && (
         <ConfirmDialog
           title={`Merge ${readyRows.length} upgrade PR${readyRows.length === 1 ? '' : 's'} on GitHub?`}
-          body="Each PR below passed CI and is squash-merged into its repo's default branch. A merge cannot be undone from Mushi."
+          body="Each PR below passed CI and is squash-merged into its repo's default branch. A merge cannot be undone from Mushi Mushi."
           details={<BulkRepoList projects={readyRows} meta={releaseMetaMap} />}
           confirmLabel={`Merge ${readyRows.length}`}
           tone="danger"
           onCancel={() => setConfirmBulk(null)}
           onConfirm={() => {
             setConfirmBulk(null)
-            setMergeToken((t) => t + 1)
+            bulk.mergeAllReady()
           }}
         />
       )}
@@ -688,24 +588,17 @@ export function BulkSdkUpgradePanel({ projects }: { projects: BulkUpgradeProject
       {confirmBulk === 'open' && (
         <ConfirmDialog
           title={`Open ${pendingRows.length} upgrade PR${pendingRows.length === 1 ? '' : 's'} on GitHub?`}
-          body="Mushi pushes a branch that bumps @mushi-mushi/* in each repo below and opens a PR for you to review. Nothing merges until you merge it."
+          body="Mushi Mushi pushes a branch that bumps the SDK in each repo below and opens a PR for you to review. Nothing merges until you merge it."
           details={<BulkRepoList projects={pendingRows} meta={releaseMetaMap} />}
           confirmLabel={`Open ${pendingRows.length} PR${pendingRows.length === 1 ? '' : 's'}`}
           onCancel={() => setConfirmBulk(null)}
           onConfirm={() => {
             setConfirmBulk(null)
-            setRunToken((t) => t + 1)
+            bulk.openAll()
           }}
         />
       )}
-
-      {ineligibleCount > 0 && (
-        <p className="border-t border-edge-subtle px-4 py-2 text-2xs text-fg-muted">
-          {ineligibleCount} other project{ineligibleCount === 1 ? '' : 's'} ha{ineligibleCount === 1 ? 's' : 've'} no
-          connected repo — connect GitHub to include {ineligibleCount === 1 ? 'it' : 'them'}.
-        </p>
-      )}
-    </Card>
+    </div>
   )
 }
 

@@ -72,7 +72,7 @@ allowance alone rarely forces an upgrade; the number of apps does.
 
 | Tier | For whom | Includes | Limit | Monthly | Annual |
 |---|---|---|---|---|---|
-| Free | first app, see it work | SDK + widget, plain-English diagnosis, **bring your own key allowed**, fix packet in the editor (MCP/CLI), first-time user test | 1 app, 100 diagnoses, 14-day retention | $0 | — |
+| Free | first app, see it work | SDK + widget, plain-English diagnosis, **bring your own key allowed**, fix packet in the editor (MCP/CLI), first-time user test | 3 apps, 300 diagnoses (no cap with your own AI key), 30-day retention; plugins and usage alerts included (2026-11-19) | $0 | — |
 | Builder (recommended) | the solo vibe coder shipping to real users | everything in Free + automatic fix PRs with the Opus review gate, merge queue, Slack/Discord, Sentry on-ramp, site watch | 3 apps, 1,000 diagnoses then $0.03, cap you set; 90 days | $19–29 (test) | 2 months free |
 | Studio | the portfolio operator (ADR 0017) | everything in Builder + portfolio Home, local worker lanes, release trains, weekly report, 5 seats | 10 apps, 5,000 diagnoses then $0.02; 180 days | $59–79 (test) | 2 months free |
 | Enterprise | teams with compliance | SSO/SCIM, self-host, SOC 2 pack, residency, SLA | custom | **from $499/mo** shown | annual |

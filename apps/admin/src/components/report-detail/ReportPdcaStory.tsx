@@ -25,9 +25,10 @@
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { CATEGORY_LABELS } from '../../lib/tokens'
 import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { ACT_BLOCKER_COPY, ACT_BLOCKER_LINK_LABEL, ACT_BLOCKER_STAMP, actBlocker } from '../../lib/pdcaAct'
-import { Card, RelativeTime } from '../ui'
+import { Card, InfoHint, RelativeTime } from '../ui'
 import { ActionPill, InlineProof } from './ReportSurface'
 import type { DispatchState } from '../../lib/dispatchFix'
 import { isReportClassified } from '../../lib/reportDiagnosis'
@@ -77,12 +78,9 @@ export function ReportPdcaStory({ report, dispatchState, showInternals = false }
     // The heading sits outside the list: an <ol> may only hold <li>, and a
     // <header> inside it broke the list for screen readers (REPORT A14).
     <Card className="relative mb-3 p-3 motion-safe:animate-mushi-fade-in">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h3 className="text-2xs font-semibold text-fg-secondary">
-          The story so far
-        </h3>
-        <span className="text-3xs text-fg-faint">Explained → Fix written → Fix checked → Fix live</span>
-      </div>
+      {/* No "Explained → Fix written → …" chain beside the heading: the four
+          rows are that chain (round-3 sweep 2026-11-19). */}
+      <h3 className="mb-2 text-2xs font-semibold text-fg-secondary">The story so far</h3>
       <ol aria-label="Progress of this report">
         {PDCA_ORDER.map((id, idx) => {
           const node = nodes[id]
@@ -138,16 +136,18 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           {PDCA_ORDER.indexOf(node.id) + 1}
         </span>
         <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{STEP_NAME[node.id] ?? meta.label}</span>
-        <span className={`text-2xs font-semibold ${v.copy}`} aria-label={`Status: ${v.label}`}>
-          {v.glyph} {v.label}
-        </span>
+        {/* The circle shows the state; "✓ Done" / "○ Not yet" beside it said
+            it again (round-3 sweep 2026-11-19). Screen readers still hear it. */}
+        <span className="sr-only">Status: {v.label}</span>
+        {isIdle && <InfoHint content={node.headline} />}
         {node.at && (
           <span className="text-2xs text-fg-faint ml-auto">
             <RelativeTime value={node.at} />
           </span>
         )}
       </div>
-      <InlineProof className={`mt-0.5 ${isIdle ? 'text-fg-faint' : ''}`}>{node.headline}</InlineProof>
+      {/* A step that has not started says why behind its ⓘ, not in a grey sentence. */}
+      {!isIdle && <InlineProof className="mt-0.5">{node.headline}</InlineProof>}
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
@@ -216,21 +216,18 @@ export function buildStoryNodes(
   const planHeadline = classifyFailed
     ? `Classification failed — ${report.processing_error}`
     : classified
-      ? report.summary || `Classified as ${report.category}`
+      // The summary shows once, higher up (summaryPlace); the step says what was decided.
+      ? `Sorted as ${(CATEGORY_LABELS[report.category] ?? report.category ?? 'a report').toLowerCase()}`
       : 'Report received — the LLM is classifying it now'
   const plan: StoryNode = {
     id: 'plan',
     state: planState,
     headline: planHeadline,
     at: report.classified_at ?? report.created_at,
-    details: [
-      report.severity ? `severity: ${report.severity}` : null,
-      report.confidence != null ? `conf ${(report.confidence * 100).toFixed(0)}%` : null,
-      // "precomputed" and "0ms" are how the pipeline ran, not what a builder
-      // needs; the sample report is named as one instead.
-      isSampleModel(report.stage1_model) ? SAMPLE_EXPLANATION_LABEL : showInternals ? report.stage1_model || null : null,
-      showInternals && report.stage1_latency_ms != null ? `${report.stage1_latency_ms}ms` : null,
-    ],
+    // Severity, confidence, model and latency live in the classification card
+    // and the triage bar; repeating them here made "Medium" ×5 and "97%" ×4
+    // (round-3 sweep 2026-11-19). Only the sample report is named here.
+    details: [isSampleModel(report.stage1_model) ? SAMPLE_EXPLANATION_LABEL : null],
   }
 
   // DO — dispatch metadata

@@ -56,7 +56,7 @@ interface AgentSpec {
 }
 
 /**
- * @internal Exported for tests only. What one `cursor-agent status` run says.
+ * What one `cursor-agent status` run says.
  * "Not logged in" is checked before "logged in", which it contains.
  */
 export function cursorSignInState(p: Proc): AgentSignIn {
@@ -142,7 +142,7 @@ export function agentSpec(agent: LocalAgent): AgentSpec {
   return AGENTS[agent]
 }
 
-/** @internal Exported for tests only. The argv and stdin that start `agent` in `workspace`. */
+/** The argv and stdin that start `agent` in `workspace`. */
 export function agentRun(agent: LocalAgent, o: { mode: AgentMode; workspace: string; model?: string; prompt: string }): AgentRun {
   return AGENTS[agent].run(o)
 }
@@ -155,7 +155,7 @@ export function parseLocalAgent(raw: unknown, where = '--agent'): LocalAgent {
 }
 
 /**
- * @internal Exported for tests only. A model id Claude Code takes: an alias or
+ * A model id Claude Code takes: an alias or
  * a claude-… id. A lane's model is set in the console for Cursor (grok-4.7-xhigh,
  * gpt-5): handed to Claude Code, every run would fail.
  */
@@ -179,7 +179,7 @@ export const AGENT_UNAVAILABLE =
   /ActionRequiredError|Increase limits|usage limit|out of (?:extra )?(?:usage|credits)|Cannot use this model|You've (?:hit|reached) your|You're out of usage|(?:spend|usage) limit reached|limit reached\s*[·∙•]\s*resets|credit balance (?:is )?too low|run \/login|Invalid API key|OAuth token (?:has )?(?:expired|refresh failed|unavailable)|issue with the selected model/i
 
 /**
- * @internal Exported for tests only. True when an agent run ended because its
+ * True when an agent run ended because its
  * account could not run, not because of the report: only a run that failed
  * (a finished agent's summary may well talk about a usage limit; Mushi Mushi
  * has a billing page) and only on the start and end of what it printed.

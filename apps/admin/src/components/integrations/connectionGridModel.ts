@@ -325,6 +325,13 @@ export function brokenConnections(tiles: readonly GridTile[]): GridTile[] {
 }
 
 /** The page's one status sentence. */
+/** Connected tools: checked and working vs never checked yet. */
+export function connectionTally(tiles: readonly GridTile[]): { working: number; unchecked: number } {
+  const connected = tiles.filter((t) => t.view.state !== 'not_connected')
+  const unchecked = connected.filter((t) => t.view.state === 'checking').length
+  return { working: connected.length - unchecked, unchecked }
+}
+
 export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: string; tone: 'ok' | 'warn' | 'neutral' } {
   const broken = brokenConnections(tiles)
   const connected = tiles.filter((t) => t.view.state !== 'not_connected')
@@ -343,4 +350,21 @@ export function connectionGridSentence(tiles: readonly GridTile[]): { sentence: 
   if (unchecked === 0) return { sentence: `${working} connected and working.`, tone: 'ok' }
   if (working === 0) return { sentence: `${unchecked} connected, not checked yet.`, tone: 'neutral' }
   return { sentence: `${working} connected and working, ${unchecked} not checked yet.`, tone: 'neutral' }
+}
+
+/** The tools that deliver Alert events. */
+const ALERT_CHANNELS: readonly GridToolId[] = ['slack', 'discord', 'teams']
+
+/**
+ * Alert events with no channel to go to: at least one event is on and Slack,
+ * Discord and Teams are all not connected (round-2 review 2026-11-18: eight
+ * toggles ON with nothing connected read as "1 working"). A channel still
+ * loading counts as present, so the gap never flashes while settings load;
+ * `eventsOn` null (prefs not loaded) is not a gap either.
+ */
+export function alertChannelGap(tiles: readonly GridTile[], eventsOn: number | null): boolean {
+  if (eventsOn == null || eventsOn <= 0) return false
+  const channels = tiles.filter((t) => ALERT_CHANNELS.includes(t.id))
+  if (channels.length === 0) return false
+  return channels.every((t) => t.view.state === 'not_connected')
 }

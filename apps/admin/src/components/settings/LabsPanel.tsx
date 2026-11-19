@@ -25,9 +25,10 @@ export function LabsPanel() {
 
   return (
     <div className="space-y-3" data-testid="settings-labs">
+      {/* "Under Labs" named a group the sidebar only shows once a page is on,
+          so it read as missing (round-3 review 2026-11-19). */}
       <p className="text-sm text-fg-muted">
-        Pages to keep in your sidebar under Labs. Every other page is one click away under More pages
-        in the sidebar, and in ⌘K.
+        Switch a page on to pin it in your sidebar. Every page is also under More pages in the sidebar, and in ⌘K.
       </p>
       {/* The query sits on this wrapper; the grid inside reads it (a container never matches its own @min-*). */}
       <div className="@container">
@@ -51,9 +52,11 @@ export function LabsPanel() {
                         <Toggle ariaLabel={`${f.label} in the sidebar`} checked={on} onChange={(next) => setEnabled(f.id, next)} />
                         <span className="min-w-0 flex-1 leading-tight">
                           <span className="block truncate text-xs font-semibold text-fg">{f.label}</span>
-                          <span className="block truncate text-3xs text-fg-secondary" title={f.description}>
-                            <span className={on ? 'font-semibold text-ok-foreground' : ''}>{on ? 'In sidebar' : 'Not in sidebar'}</span>
-                            {' · '}
+                          {/* Only an "on" row says so: "Not in sidebar" on twenty rows was a wall next to
+                              the switches the heading already explains (fresh-eyes 2026-11-18). */}
+                          {/* Two lines, not one: one line cut every description mid-word. */}
+                          <span className="line-clamp-2 text-3xs text-fg-secondary" title={f.description}>
+                            {on && <span className="font-semibold text-ok-foreground">● In sidebar · </span>}
                             {f.description}
                           </span>
                         </span>

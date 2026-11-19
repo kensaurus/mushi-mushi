@@ -6,7 +6,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { Btn, EmptySectionMessage } from '../ui'
+import { Btn } from '../ui'
 import type { HomeSection } from '../../lib/projectHome'
 import { semanticBannerTone } from '../../lib/tokens'
 import { homeConnectHref } from '../../lib/homeConnectHref'
@@ -32,9 +32,8 @@ export function HomeSectionBody<T>({ section, what, notConnectedText, children }
   if (section.status === 'not_connected') {
     return (
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <EmptySectionMessage text={notConnectedText} />
-        </div>
+        {/* One plain line: a dashed box inside the card was a card in a card (sweep 2026-11-18). */}
+        <p className="min-w-0 flex-1 text-xs text-fg-muted">{notConnectedText}</p>
         {section.connect && (
           <Btn size="sm" variant="ghost" to={homeConnectHref(section.connect)}>
             {section.connect.label}
@@ -43,6 +42,6 @@ export function HomeSectionBody<T>({ section, what, notConnectedText, children }
       </div>
     )
   }
-  if (section.data == null) return <EmptySectionMessage text={`Nothing to show for ${what} yet.`} />
+  if (section.data == null) return <p className="text-xs text-fg-muted">Nothing to show for {what} yet.</p>
   return <>{children(section.data)}</>
 }

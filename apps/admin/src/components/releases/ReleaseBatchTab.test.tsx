@@ -116,7 +116,34 @@ describe('ReleaseBatchTab', () => {
     await render()
     const d = q('batch-deploy')!
     expect(d.textContent).toContain('No deploy seen since the merge yet.')
-    expect(d.querySelector('a')!.getAttribute('href')).toBe('/onboarding#setup-gaps')
+    // The gap is the card's problem: it leads the card and the tab's sentence, not the third column.
+    const gap = q('batch-deploy-gap')!
+    expect(gap.querySelector('a')!.getAttribute('href')).toBe('/onboarding#setup-gaps')
+    const card = q('batch-repo-kensaurus/glot.it')!
+    expect(card.textContent!.indexOf('No deploy of this app seen in 14 days')).toBeLessThan(card.textContent!.indexOf('Next train'))
+    // Round 3: the strip leads with the count; the why is said once, in the amber row.
+    expect(q('batch-status')!.textContent).toMatch(/^1 repo has no deploy in 14 days\./)
+    expect(q('batch-status')!.textContent).not.toContain('so reporters are not told')
+  })
+
+  it('an idle repo says "nothing queued" once', async () => {
+    state.data = {
+      generatedAt: '2026-10-27T12:00:00Z',
+      partial: [],
+      repos: [
+        repoFixture({
+          members: [],
+          train: { kind: 'next', prNumber: null, state: null, attempt: 1, detail: null, createdAt: null, ci: 'unknown', ciFailing: [], leavesAt: null, readyCount: 0, maxMembers: 15, intervalMinutes: 360 },
+          deploy: { state: 'no_merge', train: null, seenAt: null, version: null, setupGapHref: null },
+        }),
+      ],
+    }
+    await render()
+    const card = q('batch-repo-kensaurus/glot.it')!
+    expect(q('batch-idle')!.textContent).toBe('Nothing is queued to merge in this repo, and no train merged in the last 7 days.')
+    expect(card.textContent).not.toContain('Next train')
+    expect(card.textContent).not.toContain('No fix is queued')
+    expect(card.querySelector('[data-testid="batch-deploy"]')).toBeNull()
   })
 
   it('an open train, release mode "each", and failed reads each say so', async () => {

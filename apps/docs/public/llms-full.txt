@@ -3,7 +3,7 @@
 > One place to improve AI-built apps: fix bugs, smooth user journeys and clean up the code.
 
 Canonical docs: https://kensaur.us/mushi-mushi/docs
-Pages: 240
+Pages: 243
 
 This file contains the full prose of every documentation page, stripped of
 JSX syntax, suitable for offline LLM ingestion. Getting-started pages come
@@ -51,7 +51,7 @@ A real bug from Mushi Mushi's own app, from the report to the merged fix.
 ## What it takes
 
 - **No monitoring stack.** No Sentry, no logging service, no AI key of your own. Mushi Mushi's AI writes the diagnosis.
-- **Free to start.** One app and 100 diagnoses a month with no card. Repeat reports of one bug count once.
+- **Free to start.** Three apps and 300 diagnoses a month with no card. Repeat reports of one bug count once.
 - **Your AI does the fix, you approve it.** Mushi Mushi hands Cursor, Claude Code or Lovable the prompt. Nothing ships until you say so. If you let an agent open the fix as a pull request, a second AI reads it next to the original report and can refuse it: [here is one it held](https://github.com/kensaurus/mushi-mushi/pull/864).
 
 ## Why I built it
@@ -186,7 +186,12 @@ description: Set up the Mushi Mushi MCP server with npx mushi-mushi setup. Read 
 
 ### Add the Mushi Mushi server [#add-the-mushi-server]
 
-One click: pick your editor on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
+One click:
+
+[![Add to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=mushi&config=eyJ1cmwiOiJodHRwczovL2tlbnNhdXIudXMvbXVzaGktbXVzaGkvaG9zdGVkLW1jcC8ifQ%3D%3D)
+[![Add to VS Code](https://img.shields.io/badge/VS_Code-Add_Mushi_Mushi-0098FF?logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%22mushi%22%2C%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fkensaur.us%2Fmushi-mushi%2Fhosted-mcp%2F%22%7D)
+
+Other editors: pick yours on the [Connect page](https://kensaur.us/mushi-mushi/docs/connect).
 No signup needed for the read-only demo. Or run one command:
 
 ```bash
@@ -210,6 +215,18 @@ projects it may see, and click **Approve**. In Claude Code, run `claude mcp logi
 Try *"list mushi tools"*, then *"Get the latest Mushi Mushi report and fix it."*
 
 **You'll see:** the Mushi Mushi tools in the list, then a fix brief: the cause, the files to change and how to check it.
+
+**Prefer your AI editor to do it?** Paste this into Cursor or Claude Code:
+
+```text
+Set up Mushi Mushi in this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it. It sends a test report at the end. If it prints code and names a
+file, add the code there. Then run `npx mushi-mushi doctor` and tell me what it
+reports. Last, run `npx mushi-mushi setup --ide cursor` (or `--ide claude`) so
+you can read Mushi Mushi reports over MCP.
+```
 
 The rest of this page is detail: how sign-in works, manual config files,
 the hosted transport for headless agents, and the tool list.
@@ -449,6 +466,19 @@ npx mushi-mushi
 ```
 
 **You'll see:** a report button in your app, and a new project in the [console](https://kensaur.us/mushi-mushi/admin).
+
+Prefer your AI editor to run it? Paste this into Cursor or Claude Code:
+
+```text
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
+```
+
+No SDK fits your stack? File reports with [one curl](/quickstart/http-api).
 
 ### Send your first report
 
@@ -814,6 +844,102 @@ export class FeedbackButtonComponent {
 ```
 
 API detail: [`mushi-mushi/angular`](/sdks/angular). Widget behavior: [`mushi-mushi`](/sdks/web).
+
+---
+
+## Ask Bolt why it broke
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/bolt-mcp
+
+---
+title: Ask Bolt why it broke
+description: Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what users reported. Bolt reads the plain-English diagnosis and fixes the bug.
+---
+
+# Ask Bolt why it broke
+
+A user says your app is broken. Ask Bolt *"what did my users report?"* and it
+reads Mushi Mushi's diagnosis of each report, gets the fix prompt and fixes
+the code.
+
+- Add Mushi Mushi in Bolt as a custom MCP connector: one URL, sign in, approve.
+- Turn the connector on in your project.
+- Ask in the chat: "what did my users report?"
+
+You need a Mushi Mushi project that receives reports. No report button in
+your app yet? Add it with one prompt first:
+[Mushi Mushi in Lovable or Bolt](/quickstart/lovable-bolt).
+
+### Open your connectors
+
+On the Bolt home page, click the **+** in the chatbox, then
+**Connectors** → **Manage connectors**
+([Bolt docs](https://support.bolt.new/integrations/mcp)).
+
+### Add Mushi Mushi as a custom MCP server
+
+Click **Custom MCP server** and fill in the form:
+
+| Field | Value |
+| --- | --- |
+| **Name** | `Mushi Mushi` |
+| **URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+| **Transport type** | `HTTP` |
+| **Authentication** | `MCP OAuth` |
+
+Click **Connect**.
+
+### Sign in and approve
+
+A Mushi Mushi page opens. Sign in, choose which projects Bolt may see, and
+click **Approve**. You never copy a key, and you can revoke this connection
+from the Mushi Mushi console at any time.
+
+**You'll see:** a **Connected** status at the top right of the connector page.
+
+### Turn it on in your project
+
+Open your project, click the **+** in the chatbox, then **Connectors**, and
+switch Mushi Mushi on. Or tick **Auto-enable for all projects** on the
+connector page.
+
+### Ask Bolt
+
+```text
+Using the Mushi Mushi connector, what did my users report this week?
+```
+
+```text
+Get the Mushi Mushi fix context for the top report and fix it.
+```
+
+No reports yet? Ask for a test one:
+
+```text
+Using Mushi Mushi, file a test report: "The Save button on the settings page does nothing."
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Bolt's edit.
+
+## Which tools Bolt gets
+
+The `?features=vibe` part of the URL keeps the list to the 12 tools a builder
+uses: list and search reports, read one, get the fix prompt, mark it fixed,
+reply to the reporter, file a report, a setup check and the docs. Bolt turns
+every tool on by default. To stop Bolt changing anything, open the connector,
+click **⋯** → **Edit**, and untick `transition_status`, `reply_to_reporter`
+and `file_report`.
+
+  Bolt notes that many connectors at once can slow it down. Turn Mushi Mushi
+  on only in the projects that need it.
+
+## If it does not connect
+
+- **Use the `kensaur.us` URL above.** The sign-in needs it; a `supabase.co`
+  URL fails the OAuth lookup.
+- **Pick `MCP OAuth`, not `API key`.** An API key works too, but it must be
+  an `mcp:read` key, never the key in your app's script tag.
+- **Still stuck:** ask Bolt to call `diagnose_setup`. It says what is missing.
 
 ---
 
@@ -1274,6 +1400,121 @@ Full API: [`mushi_mushi` (Flutter)](/sdks/flutter).
 
 ---
 
+## HTTP API: file a bug report with one curl
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/http-api
+
+---
+title: "HTTP API: file a bug report with one curl"
+description: Send a bug report to Mushi Mushi with one HTTP call, no SDK. How to get a key, the scopes, the rate limits, and the OpenAPI 3.1 spec for code generators.
+---
+
+# HTTP API: one curl, no SDK
+
+Use the API when an SDK does not fit: a server, a cron job, a script, a
+no-code tool, or a language Mushi Mushi has no SDK for. One `POST` files a
+report. Mushi Mushi diagnoses it like a report from the widget.
+
+- Get a key with `npx mushi-mushi`, or in the console under **Manage apps**.
+- `POST /v1/reports` with the key in the `X-Mushi-Api-Key` header.
+- The report shows up in the console with a plain-English cause, and your editor can read it over MCP.
+
+### Get your project ID and key
+
+Run `npx mushi-mushi` in your app's folder. It signs you in through your
+browser and writes both values to `.env.local` (`*_MUSHI_PROJECT_ID` and
+`*_MUSHI_API_KEY`). No app folder? Open **Manage apps** in the
+[console](https://kensaur.us/mushi-mushi/admin), pick your project and click
+**Generate API key**.
+
+This key can only send reports. It cannot read them, so it is safe in a page
+or a public script.
+
+### Send a report
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports -H "Content-Type: application/json" -H "X-Mushi-Api-Key: $MUSHI_API_KEY" -d '{"projectId":"'"$MUSHI_PROJECT_ID"'","category":"bug","description":"The Save button on the settings page does nothing.","reporterToken":"curl-test-1","createdAt":"2026-11-18T09:00:00Z","environment":{"url":"https://example.com/settings","userAgent":"curl","platform":"server","language":"en","viewport":{"width":0,"height":0},"referrer":"","timestamp":"2026-11-18T09:00:00Z","timezone":"UTC"}}'
+```
+
+**You'll see:** `{"ok":true,"data":{"reportId":"…","status":"submitted"}}`, then the report in the [console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause, usually within a minute.
+
+### Check it
+
+```bash
+curl -sS https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/v1/reports/REPORT_ID/status -H "X-Mushi-Api-Key: $MUSHI_API_KEY"
+```
+
+**You'll see:** the status (`new`, then `classified`), the category, the severity and a one-line summary.
+
+## The fields
+
+Every field below is required. The rest of the body is optional.
+
+| Field | What to send |
+| --- | --- |
+| `projectId` | Your project ID. It must match the key's project. |
+| `category` | `bug`, `slow`, `visual`, `confusing`, `other`, `feedback`, `question` or `feature` |
+| `description` | What the user saw, in their words. Up to 5,000 characters. |
+| `reporterToken` | A random ID for the person reporting, with no name or email in it. Reports with the same token group together. |
+| `createdAt` | The time, in ISO 8601 with a time zone, for example `2026-11-18T09:00:00Z`. |
+| `environment` | `url`, `userAgent`, `platform`, `language`, `viewport` (`width`, `height`), `referrer`, `timestamp`, `timezone`. Send `""` or `0` when you have no value. |
+
+Optional fields that make the diagnosis better: `severity`
+(`low` to `critical`), `consoleLogs`, `networkLogs`, `screenshotDataUrl`
+(a `data:` URL, about 1.5 MB at most), `metadata`, and `environment.route`.
+
+A missing field returns `400` with the field named, for example
+`{"ok":false,"error":{"code":"INGEST_ERROR","message":"environment.timezone: Required"}}`.
+
+## Keys and scopes
+
+Each key has scopes. Use the smallest one that does the job.
+
+| Scope | What it can do | Where it can live |
+| --- | --- | --- |
+| `report:write` | Send reports, spans and metrics; read its own report's status | In your app or a public script |
+| `mcp:read` | Read reports, diagnoses and lessons (`/v1/sync/*`, MCP) | On your computer or a server only |
+| `mcp:write` | Everything `mcp:read` can, plus replying to reporters and starting fixes | On your computer or a server only |
+
+  Never put an `mcp:read` or `mcp:write` key in a web page. Mushi Mushi
+  refuses such a key once it has been seen in a browser
+  (`KEY_EXPOSED_IN_BROWSER`).
+
+## Rate limits
+
+| Route | Limit, per project |
+| --- | --- |
+| `POST /v1/reports` and `/v1/reports/batch` | 120 reports a minute (you can change it per project); a batch counts each report |
+| `POST /v1/ingest/spans` | 500 calls a minute |
+| `POST /v1/ingest/metrics` | 60 calls a minute |
+
+Over the limit you get `429 RATE_LIMITED` with a `Retry-After` header in
+seconds. When the plan's monthly reports run out you get
+`402 QUOTA_EXCEEDED`, also with `Retry-After`. Wait that long, then retry.
+
+To make a retry safe, add an `id` to the body (a UUID you make once per
+report). Sending the same `id` again returns the report already stored instead
+of filing a second one. The same reporter, text and category within 60 seconds
+is also merged into the first report.
+
+## More than one report
+
+`POST /v1/reports/batch` takes `{"reports":[…]}`. It keeps the first 10 and
+drops the rest, and checks each report on its own, so one bad report does not
+fail the others.
+
+## OpenAPI spec
+
+The full machine-readable spec (OpenAPI 3.1) is at
+[`/functions/v1/api/openapi.json`](https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api/openapi.json).
+Point a code generator or an agent at it. It covers ingest, the
+`/v1/sync/*` read routes, fix dispatch and the A2A task routes.
+
+Want your editor to read reports instead of calling the API by hand? Use the
+[MCP server](/quickstart/mcp).
+
+---
+
 ## iOS (Swift) quickstart
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/ios
@@ -1476,7 +1717,7 @@ button also checks in with Mushi Mushi when a page loads, which records your
 site's address (not the page) and the browser type.
 
 **How long it is kept.** On the free plan, reports and everything attached to
-them are deleted after 14 days. Paid plans keep them longer:
+them are deleted after 30 days. Paid plans keep them longer:
 [the privacy policy](/legal/privacy#7-retention) has the table.
 
 **Tell your users.** You must tell them that reports can include a
@@ -1571,7 +1812,7 @@ servers. Ask them to turn on **Custom MCP** under **Connectors → Admin setting
 
 | Field | Value |
 | --- | --- |
-| **Server name** | `Mushi` |
+| **Server name** | `Mushi Mushi` |
 | **Connection** (shown only on some workspaces) | **Direct connection** |
 | **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
 | **Authentication** | **OAuth** (the default) |
@@ -1591,21 +1832,21 @@ and you can revoke it from the Mushi Mushi console at any time.
 In a project chat, try:
 
 ```text
-Using the Mushi connector, what did my users report this week?
+Using the Mushi Mushi connector, what did my users report this week?
 ```
 
 ```text
-Get the Mushi fix context for the checkout report and fix it.
+Get the Mushi Mushi fix context for the checkout report and fix it.
 ```
 
 ```text
-That's deployed. Mark the report fixed in Mushi and tell the reporter.
+That's deployed. Mark the report fixed in Mushi Mushi and tell the reporter.
 ```
 
 No reports yet? Ask for a test one. Mushi Mushi diagnoses it like a real user report:
 
 ```text
-Using Mushi, file a test report: "The Save button on the settings page does nothing."
+Using Mushi Mushi, file a test report: "The Save button on the settings page does nothing."
 ```
 
 **You'll see:** the report, the likely cause in plain English and the files to change, then Lovable's edit.
@@ -1746,7 +1987,7 @@ each use one small extra package, which the setup page lists. On Capacitor
 they are settings. The setup takes a few minutes, then you make a new build of
 your app so the button ships with it.
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI
 key of your own. See [pricing](/pricing).
 
 ## Native iOS, Android and Flutter (previews)
@@ -2081,6 +2322,94 @@ If nothing arrives:
 
 ---
 
+## Mushi Mushi in Replit
+
+Source: https://kensaur.us/mushi-mushi/docs/quickstart/replit
+
+---
+title: Mushi Mushi in Replit
+description: Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.
+---
+
+# Mushi Mushi in Replit
+
+Two parts, about five minutes each. First your app gets a report button.
+Then Replit Agent gets Mushi Mushi as an MCP server, so you can ask it what
+broke and have it fix the code.
+
+- Ask Replit Agent to add one script tag: your app gets a report button.
+- Add Mushi Mushi under Integrations as a custom MCP server: one URL, sign in, approve.
+- Ask Agent: "what did my users report?"
+
+## Add the report button
+
+1. [Sign up free](https://kensaur.us/mushi-mushi/admin/signup?src=quickstart-replit) and create a project.
+2. In the console, open **Set up** → **Install widget** → **Script tag** and copy the line.
+3. Send this to Replit Agent, with your line in place of the example:
+
+```text
+Add this script tag inside the <head> of the app's main HTML page exactly as written, and change nothing else:
+<script async src="https://cdn.jsdelivr.net/npm/@mushi-mushi/web@1/dist/mushi.loader.global.js" data-project="YOUR_PROJECT_ID" data-key="YOUR_SDK_KEY"></script>
+```
+
+4. Open the app, tap the report button and send one sentence.
+
+**You'll see:** the report in your [Mushi Mushi console](https://kensaur.us/mushi-mushi/admin/reports) with a title, how serious it is and the likely cause.
+
+What your users see, what it collects and how to remove it: the same as in
+[Lovable or Bolt](/quickstart/lovable-bolt#what-your-users-will-see).
+
+## Connect Replit Agent
+
+### Add the server
+
+One click: [Add Mushi Mushi to Replit](https://replit.com/integrations?mcp=eyJkaXNwbGF5TmFtZSI6Ik11c2hpIE11c2hpIiwiYmFzZVVybCI6Imh0dHBzOi8va2Vuc2F1ci51cy9tdXNoaS1tdXNoaS9ob3N0ZWQtbWNwLz9mZWF0dXJlcz12aWJlIn0=).
+
+Or by hand ([Replit docs](https://docs.replit.com/build/connect-via-mcp#add-a-custom-mcp-server)):
+open **Settings** → **Integrations** → **Your integrations**, choose
+**Add custom** → **Add personal MCP server**, and fill in:
+
+| Field | Value |
+| --- | --- |
+| **Display name** | `Mushi Mushi` |
+| **Server URL** | `https://kensaur.us/mushi-mushi/hosted-mcp/?features=vibe` |
+
+Leave **Advanced settings** empty. Click **Test & save**.
+
+### Sign in and approve
+
+A Mushi Mushi page opens. Sign in, choose which projects Replit may see, and
+click **Approve**. You never copy a key.
+
+**You'll see:** Mushi Mushi under **MCP Servers** with a connected status.
+
+### Ask Agent
+
+```text
+Use the Mushi Mushi MCP server: what did my users report this week?
+```
+
+```text
+Use Mushi Mushi to get the fix context for the top report, then fix it.
+```
+
+**You'll see:** the report, the likely cause in plain English and the files to change, then Agent's edit.
+
+  Custom MCP servers depend on your Replit plan and workspace permissions. If
+  **Add custom** is missing, ask your workspace admin.
+
+## If it does not connect
+
+- **Use the `kensaur.us` URL above.** The sign-in needs it; a `supabase.co`
+  URL fails the OAuth lookup.
+- **Signing in is not an option?** Open **Advanced settings** and add the
+  header `X-Mushi-Api-Key` with an `mcp:read` key (**Manage apps** →
+  **Generate API key** → **MCP read-only**). Never use the key from your
+  script tag here.
+- **Still stuck:** ask Agent to call `diagnose_setup`. It says what is missing.
+
+---
+
 ## Bug report widget for Svelte and SvelteKit
 
 Source: https://kensaur.us/mushi-mushi/docs/quickstart/svelte
@@ -2308,7 +2637,8 @@ A test message should arrive in the channel. See [Slack app](/plugins/slack) and
 
 ## 6. AI keys and cost
 
-**What you get:** Free includes 100 diagnoses a month, with a hard stop.
+**What you get:** Free includes 300 diagnoses a month, with a hard stop. With
+your own Anthropic or OpenAI key, Free has no cap.
 Builder and Studio include more, and monthly plans can run into capped
 overage. Reports are always kept, even when diagnoses pause. See
 [Pricing](/pricing).
@@ -2421,7 +2751,7 @@ events. If no deploy has been seen in 14 days, it says so. See
   before they send. Under **Connect → Bug capture SDK**, keep **Privacy caption
   on screenshot preview** on, or write your own text.
 - **Retention.** Reports older than your plan's window are deleted daily: Free
-  14 days, Builder 90, Studio 180, Enterprise custom.
+  30 days, Builder 90, Studio 180, Enterprise custom.
 - **Storage.** To keep screenshots in your own bucket, see [Storage](/admin/storage)
   and [BYO storage](/security/byo-storage).
 - **Who can see what.** Review **Team → Members** when someone joins or leaves.
@@ -2638,12 +2968,12 @@ Source: https://kensaur.us/mushi-mushi/docs/pricing
 
 ---
 title: "Pricing: Free, Builder, Studio and self-host"
-description: Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.
+description: Mushi Mushi pricing. Free for three apps and 300 AI bug diagnoses a month. Builder $29/mo for 1,000 diagnoses, Studio $79/mo for 10 apps. Free to self-host.
 ---
 
 # Pricing
 
-Free for one app. You pay only when you want Mushi Mushi on more apps. A
+Free for three apps. You pay only when you want more diagnoses, longer history or more apps. A
 **diagnosis** is one bug explained in plain English, and repeat reports of the
 same bug count once.
 
@@ -2656,17 +2986,17 @@ developers are below.
 
 ## All plans
 
-A plan sets how many **apps** your team can have: one on Free, three on Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
+A plan sets how many **apps** your team can have: three on Free and Builder, ten on Studio. Diagnoses are the allowance under it. Reports are always captured and are never billed.
 
 **More than one app?** A plan belongs to your team. Upgrade from any app's card on the Billing page and every app in the team is on the plan: the diagnoses a month are shared by all of them, and so are the overage, the spend cap, the app limit, seats, history, plugins and the widget without a Mushi Mushi mark. Eight apps on Studio cost $79 a month, not eight times that.
 
-**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Installing plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) needs Builder or above. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
+**What Free can fix.** On Free you can ask for a fix pull request from the built-in fixer once GitHub is connected, send a bug to a Cursor cloud agent with your own Cursor key, and run fixes on your own computer with `mushi work`. Plugins from the Marketplace (PagerDuty, Zapier, Linear Sync, Sentry Mirror, and the Cursor plugin that starts a fix by itself on each new bug) work on Free too, and so do usage alerts. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on every plan. Team invites need Studio.
 
   **Annual billing saves two months.** Pay for 10 months, get 12: Builder is $290 a year, Studio $790. Annual plans have no pay-as-you-go overage: they include the plan's diagnoses each month and pause new diagnoses at that limit. Pick annual at checkout, or switch an existing plan with **Change plan** on the Billing page. For Enterprise commits, contact us.
 
   **Overage is capped.** Builder and Studio include a default cap on overage spend ($50 and $200 a month, on top of the base fee). You can lower or raise it in the console. At the cap, Mushi Mushi pauses new diagnoses and says so, instead of sending a bigger invoice. Email alerts fire at **50%, 80%, and 100%** of your included diagnoses.
 
-  **Free has a hard stop**, not a soft limit. At 100 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock.
+  **Free has a hard stop**, not a soft limit. At 300 diagnoses Mushi Mushi stops diagnosing new reports until the next calendar month. No card, no charge, no bill shock. The cap is for diagnoses on Mushi Mushi's AI key: a free project that adds its own Anthropic or OpenAI key is not capped.
 
 **Details for developers**: what counts as a diagnosis, an estimator, example bills, your own AI key, and a comparison with Sentry
 
@@ -2678,7 +3008,7 @@ One diagnosis = one completed classification pass. Specifically:
 - It is not a duplicate of an existing group already classified this period.
 - The classifier finishes and writes a plain-English root cause + severity + fix hint.
 
-Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to your plan.
+Under the hood that is a two-stage pipeline (Haiku fast-filter → Sonnet structured output). Classification, deduplication, knowledge-graph writes, and MCP tool calls are **not** counted separately: they are included in the per-diagnosis price. Fix PRs and agent runs are not counted as diagnoses. A diagnosis counts whichever key wrote it: adding your own AI key (see [below](#your-own-ai-key-and-the-self-host-path)) moves the AI vendor's bill to you, but does not add diagnoses to a paid plan. On Free, your own Anthropic or OpenAI key lifts the monthly cap.
 
 **What does NOT count:**
 
@@ -2754,7 +3084,7 @@ Sentry + Seer is strong at code-thrown errors, tracing, breadcrumbs and session 
 
 ### What happens when I hit my diagnosis limit?
 
-**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured.
+**Free:** New plain-English diagnoses pause until the next calendar month. Reports are still captured. A free project with its own Anthropic or OpenAI key does not pause.
 
 **Builder / Studio (monthly):** You can keep diagnosing into overage until your **spend cap** stops new classification runs. Reports are never dropped.
 
@@ -2766,7 +3096,7 @@ The console says how many apps your plan watches and how many your team has, and
 
 ### Can I use my own AI key on Free?
 
-Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. A diagnosis on your own key still counts toward the 100 a month.
+Yes. Bring-your-own-key works on every plan, Free included. Add an Anthropic, OpenAI or Cursor key under **Settings → AI keys**. Mushi Mushi then uses your Anthropic or OpenAI key first for the diagnosis and for fix drafts, and a Cursor key lets a Cursor cloud agent write fixes. On Free, a project with its own Anthropic or OpenAI key is not capped: the 300 a month is for diagnoses on Mushi Mushi's key. On a paid plan, a diagnosis on your own key still counts toward the plan.
 
 ### When does my quota reset?
 
@@ -3182,7 +3512,7 @@ Source: https://kensaur.us/mushi-mushi/docs/compare/sentry-vs-mushi
 
 ---
 title: Sentry vs Mushi Mushi
-description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.
+description: Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing beside Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.
 ---
 
 # Sentry vs Mushi Mushi
@@ -3374,7 +3704,7 @@ To let a client see only their own app, put that app in **its own team**:
    **Team → Team members**. Invitations need Studio; a team on Free or Builder
    has one seat, yours.
 
-A new team starts on the Free plan (one app, 100 diagnoses a month). A plan is
+A new team starts on the Free plan (three apps, 300 diagnoses a month). A plan is
 bought per team (see [What it costs](#what-it-costs)), so a separate team for a
 client is a separate plan: it costs more than keeping their app in your main
 team, where one plan covers every app.
@@ -3399,7 +3729,7 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 
 | Plan | Apps in a team | People | Diagnoses a month | Price |
 | --- | --- | --- | --- | --- |
-| Free | 1 | 1 | 100 | $0 |
+| Free | 3 | 1 | 300 | $0 |
 | Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
 | Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
@@ -3448,7 +3778,7 @@ Details on [pricing](/pricing).
   screenshot and code snippets. Mushi Mushi does not train models on reports or
   code. The full list of companies is in the
   [Privacy Policy, section 5](/legal/privacy#5-sub-processors).
-- **How long it is kept.** Reports are deleted after 14 days on Free, 90 on
+- **How long it is kept.** Reports are deleted after 30 days on Free, 90 on
   Builder and 180 on Studio. You can set a shorter time per app under
   **Team → Compliance**.
 - **Who is responsible.** For the reports from a client's app, you or your
@@ -3540,7 +3870,7 @@ npx mushi-mushi
 ```
 
 The wizard installs the right SDK, writes env vars, and can file a test
-report so you see the loop before real users do. One app and 100 diagnoses a month free;
+report so you see the loop before real users do. Three apps and 300 diagnoses a month free;
 self-host if you prefer.
 
 **Next:** [Incident loop quickstart](/quickstart/incident-loop) ·
@@ -3598,7 +3928,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide claude
 ```
 
-Free tier: one app, 100 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
+Free tier: three apps, 300 diagnoses a month, no card. MIT SDKs, AGPLv3 server,
 self-hostable with one command.
 
 **Next:** [MCP server quickstart](/quickstart/mcp) ·
@@ -3657,7 +3987,7 @@ npx mushi-mushi
 npx mushi-mushi setup --ide cursor
 ```
 
-Free tier: one app, 100 diagnoses a month, no card. Open source, self-hostable.
+Free tier: three apps, 300 diagnoses a month, no card. Open source, self-hostable.
 
 **Next:** [Cursor integration guide](/integrations/cursor) ·
 [MCP server quickstart](/quickstart/mcp) ·
@@ -3758,7 +4088,7 @@ it:
 npx mushi-mushi
 ```
 
-Free is one app and 100 diagnoses a month with no card; self-hosting is free. Other
+Free is three apps and 300 diagnoses a month with no card; self-hosting is free. Other
 tools that solve parts of this are compared on
 [Sentry alternatives for solo founders](/compare/sentry-alternatives-for-solo-founders).
 
@@ -3815,7 +4145,7 @@ worst one."* The full tool list and configuration options live in the
 
 ## Hosted or self-hosted
 
-Point the server at Mushi Mushi Cloud (one app and 100 diagnoses a month free) or at your own
+Point the server at Mushi Mushi Cloud (three apps and 300 diagnoses a month free) or at your own
 self-hosted stack — the MCP surface is identical. Reports come from the
 [SDKs](/sdks) your users already trigger; install those with:
 
@@ -3872,8 +4202,8 @@ A few minutes for the setup, plus the time your app takes to build.
 
 ## What it costs
 
-Free for one app: 100 diagnoses a month, no card and no AI key of your own.
-More apps are on [Builder and Studio](/pricing).
+Free for three apps: 300 diagnoses a month, no card and no AI key of your own.
+More diagnoses and apps are on [Builder and Studio](/pricing).
 
 ## Next
 
@@ -3930,9 +4260,9 @@ about 10 seconds.
 
 ## What it costs
 
-Free for one app: 100 diagnoses a month, no card and no AI key of your own. A
+Free for three apps: 300 diagnoses a month, no card and no AI key of your own. A
 diagnosis is one bug explained, and repeat reports of the same bug count once.
-More apps are on [Builder and Studio](/pricing).
+More diagnoses and apps are on [Builder and Studio](/pricing).
 
 ## Next
 
@@ -4001,7 +4331,7 @@ vars:
 npx mushi-mushi
 ```
 
-The free tier watches one app with 100 diagnoses a month and no card, and you can
+The free tier watches three apps with 300 diagnoses a month and no card, and you can
 [self-host the whole stack](/self-hosting) with one command if you'd rather
 keep everything on your own infrastructure.
 
@@ -6401,10 +6731,10 @@ See [.github/CONTRIBUTING.md](https://github.com/kensaurus/mushi-mushi/blob/mast
 |---|---|---|
 | SDK packages (MIT) | Yes — embed in any app | — |
 | Self-hosted server (AGPLv3) | Yes — run on your own infra, unlimited diagnoses | Your own LLM API costs (BYOK) |
-| Mushi Mushi Cloud — Free tier | Yes — 1 app, 100 diagnoses / mo, **hard stop** at limit | — |
+| Mushi Mushi Cloud — Free tier | Yes — 3 apps, 300 diagnoses / mo, **hard stop** at limit (no limit with your own AI key) | — |
 | Mushi Mushi Cloud — Builder / Studio / Enterprise | Flat base by apps watched + usage overage | $29 (3 apps) or $79 (10 apps) / mo base + $0.03 (Builder) or $0.02 (Studio) per extra diagnosis; Enterprise from $499 / mo |
 
-**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 14 days), team seats, and enterprise features (SSO, compliance exports).
+**One sentence:** the MIT + AGPL core self-hosts free; the cloud sells managed hosting, LLM key pooling, longer retention (Free keeps 30 days), team seats, and enterprise features (SSO, compliance exports).
 
 Diagnoses are the unit of cloud value. A diagnosis = one completed Stage-2 classification (Sonnet produces a plain-English root cause + fix hint). Noise-filtered reports and duplicates collapsed into an existing group do not count.
 
@@ -9909,7 +10239,7 @@ without installing it for good.
 2. **Signs you in** through your browser, and makes a project and a key that can only send reports.
 3. **Installs `mushi-mushi`** with the package manager your lockfile uses. React Native and Capacitor apps get their own package, `@mushi-mushi/react-native` or `@mushi-mushi/capacitor`.
 4. **Writes two settings** (your project ID and key) to `.env.local`, or to `.env` if you already have one. Each name gets the prefix your framework needs, such as `VITE_` or `NEXT_PUBLIC_`.
-5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first. For React, Vue and the others it prints the code, because that code has to wrap your app and a wizard that rewrites your components can break them.
+5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first (with `--yes` it adds it). For React, Next.js, Vue and the others it prints the code and one line naming the file to paste it into, because that code has to wrap your app and a wizard that rewrites your components can break them.
 6. **Offers to send a test report**, so you see your first report in the [console](https://kensaur.us/mushi-mushi/admin).
 
 Apart from that offer, it doesn't change your app's code. It warns you if
@@ -9927,10 +10257,12 @@ Mushi Mushi setting that is already there, except with `--yes`
 Paste this into Cursor, Claude Code or any AI editor that can run commands:
 
 ```text
-Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
-It prints a sign-in link: show it to me and wait while I approve it in my
-browser. Then add the code it prints to the file it names, and tell me which
-file you changed.
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
 ```
 
 `--yes` takes the default answers, which an AI editor's terminal needs because
@@ -9979,6 +10311,7 @@ short `mushi` command.
 ## Flags
 
 ```bash
+npx mushi-mushi --dry-run                      # show what it would do: no sign-in, no install, no writes
 npx mushi-mushi --framework next               # skip framework detection
 npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
 npx mushi-mushi --skip-install                 # print the install command, don't run it
@@ -13234,7 +13567,7 @@ description: Replace Instabug (now Luciq) with Mushi Mushi for in-app bug report
 ## Why switch
 
 - **Open source and price.** Mushi Mushi SDKs are MIT and the server is AGPLv3.
-  Self-hosting is free; the cloud is free for one app and 100 diagnoses a
+  Self-hosting is free; the cloud is free for three apps and 300 diagnoses a
   month. Compare with your Luciq contract.
 - **AI triage.** Mushi Mushi ships a built-in two-stage classifier
   (fast-filter + classify-report) that turns raw user reports into
@@ -14225,7 +14558,7 @@ trigger on mobile.
   MIT on npm; its backend is a hosted service.)
 - **Self-host.** Mushi Mushi runs on your own Supabase / Postgres.
 - **AI triage.** Mushi Mushi's two-stage classifier and judge loop ship in the box.
-- **Pricing.** Self-hosting is free. The cloud is free for one app and 100
+- **Pricing.** Self-hosting is free. The cloud is free for three apps and 300
   diagnoses a month; paid plans are priced by number of apps (see
   [pricing](/pricing)).
 
@@ -16220,7 +16553,7 @@ Source: https://kensaur.us/mushi-mushi/docs/cloud
 
 ---
 title: Mushi Mushi Cloud
-description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.
+description: Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for three apps with 300 diagnoses a month.
 ---
 
 # Mushi Mushi Cloud
@@ -16235,10 +16568,11 @@ plan. [Pricing](/pricing) has the details.
 No plan needs an AI key of your own: Mushi Mushi's AI writes the diagnosis.
 You can add your own Anthropic, OpenAI or Cursor key on any plan, Free
 included. Mushi Mushi then uses your Anthropic or OpenAI key first for the
-diagnosis and for fix drafts; a diagnosis on your own key still counts toward
-your plan. The Integrations page (Sentry, Slack, GitHub, Linear, Jira) works on
-every plan; installing plugins from the Marketplace needs Builder or above, and
-team invites need Studio. Full details are on [pricing](/pricing).
+diagnosis and for fix drafts. On Free, a project with its own Anthropic or
+OpenAI key has no monthly diagnosis cap; on a paid plan a diagnosis on your own
+key still counts toward the plan. The Integrations page (Sentry, Slack, GitHub,
+Linear, Jira) and plugins from the Marketplace work on every plan, and team
+invites need Studio. Full details are on [pricing](/pricing).
 
 ## Sign-up flow
 
@@ -16273,14 +16607,14 @@ Source: https://kensaur.us/mushi-mushi/docs/self-hosting
 
 ---
 title: Self-hosting
-description: Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
+description: Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.
 ---
 
 # Self-hosting
 
 Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin` runs the same code as this repo — there is no closed-source plus-tier. Every edge function, migration, and admin SPA you see here is what powers Mushi Mushi Cloud. The one difference is data: the hosted service keeps its own tuning (prompt wording, evaluation sets and scoring weights tuned on live traffic) as configuration. The repo ships working default prompts, so your stack has every feature. See [Open source & licensing](/concepts/open-source#what-the-hosted-service-keeps).
 
-  **What you need** depends on the path. **Docker Compose** (below) needs only Docker and an Anthropic key: it runs the open-source Supabase services (Postgres, Auth, REST, Storage) in containers on your own machine, so you do not need a Supabase account. The **managed-Supabase path** needs Node ≥ 22, a [Supabase](https://supabase.com) project, and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+  **Supported path:** your own [Supabase](https://supabase.com) project (the free tier works) and one command, `mushi selfhost up`. You need Node 22+, a clone of this repo and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started). An LLM key is optional. **Docker Compose** and the **Helm chart** are experimental: nobody has run them end to end yet.
 
 ## What you'll deploy
 
@@ -16292,39 +16626,43 @@ Mushi Mushi is **OSS-first**. Mushi Mushi Cloud at `kensaur.us/mushi-mushi/admin
 | Observability | Langfuse + Sentry | MIT / Commercial |
 | Sandbox *(optional)* | E2B, Modal or Cloudflare, through `@mushi-mushi/agents` | External |
 
-## Fastest path — Docker Compose
-
-The whole stack (Postgres + Auth + REST + Storage + edge functions + console)
-in one command, no managed Supabase project required:
+## Quickstart: your own Supabase project
 
 ```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env   # set ANTHROPIC_API_KEY and the keys for the local stack
-docker compose up -d
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+supabase login
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> --console-url https://mushi.example.com
 ```
 
-See [Self-host in minutes](/self-hosting/docker-compose) for the full walkthrough.
+`selfhost up` links the project, applies every migration and sets the function secrets. It points the database's cron jobs at your project (the migrations seed the Mushi Mushi Cloud URL) and lifts the Cloud free-plan limits on your instance. Then it deploys every edge function and saves the endpoint and console URL to the CLI config. It asks for an Anthropic **or** OpenAI key; press Enter to skip.
 
-## Managed-Supabase path
-
-Prefer a hosted Supabase project? Link it and push the schema:
+Next, serve the console ([Admin SPA deploy](/self-hosting/admin-spa)) and sign up there; the first account owns the instance. Then sign the CLI in. This mints your key; no SQL needed:
 
 ```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi
-pnpm install                                       # installs all workspaces
-cd packages/server                                 # Supabase CLI works relative to this dir
-npx supabase link --project-ref <your-ref>
-npx supabase db push                               # applies all migrations
+mushi login --endpoint https://<your-ref>.supabase.co/functions/v1/api
+mushi selfhost doctor
 ```
 
-Then follow the guides in order:
+| Setting | Required? | What it unlocks |
+| --- | --- | --- |
+| Supabase project + CLI login | Required | Everything |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Required; `selfhost up` generates it | pg_cron calling your functions |
+| Anthropic or OpenAI key | Optional | The plain-English diagnosis and fix drafts |
+| OpenAI key | Optional | Duplicate detection, semantic search, voice transcription |
+| `--console-url` | Recommended | Report links in Slack/Discord, and `mushi login` opening your console instead of Mushi Mushi Cloud |
 
-1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
+**Without an LLM key**, reports are still ingested, stored and shown in the console, with a rule-based category and severity. You do not get the diagnosis, fix drafts or duplicate detection.
+
+[`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) is the step-by-step reference. The detailed guides:
+
+1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and the runtime config
 2. [Edge Functions deploy](/self-hosting/edge-functions) — all edge functions + secrets
 3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
 4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking
+
+## Docker Compose (experimental)
+
+To run every service in containers with no Supabase account, see [Docker Compose](/self-hosting/docker-compose).
 
 ---
 
@@ -16376,103 +16714,122 @@ After deploy, open the console and complete the **Onboarding** wizard (`/onboard
 2. Connect your GitHub OAuth app.
 3. Show the SDK snippet for your first project.
 
-If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build — these cannot be injected after build time.
+If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build. Vite inlines them at build time, so environment variables on the server that serves `dist/` have no effect.
+
+A build with `VITE_INSTANCE_TYPE=self-hosted` and no `VITE_SUPABASE_URL` opens a setup screen instead. It asks for the Supabase URL and anon key and keeps them in that browser. The published Docker image (`ghcr.io/kensaurus/mushi-mushi-admin`) works this way. To bake the values in, build your own image: `docker build -f deploy/Dockerfile.admin --build-arg VITE_SUPABASE_URL=… --build-arg VITE_SUPABASE_ANON_KEY=… .` (nginx serves it on port 3000 with the SPA fallback).
+
+Point the CLI at the console, so `mushi login` signs in there instead of on Mushi Mushi Cloud: `mushi config consoleUrl https://your-console.example.com`. Alternatively, pass `--console-url` to `mushi selfhost up`.
 
 ---
 
-## Self-host in minutes (Docker Compose)
+## Docker Compose (experimental)
 
 Source: https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
 
 ---
-title: Self-host in minutes (Docker Compose)
-description: Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.
+title: Docker Compose (experimental)
+description: Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.
 ---
 
-# Self-host in minutes
+# Docker Compose (experimental)
 
-The fastest way to run the whole Mushi Mushi stack on your own box. One Compose file
-brings up Postgres, Auth, REST, Storage, the edge functions, the admin console,
-and a Caddy reverse proxy — no managed Supabase project required.
+One Compose file runs the whole stack on your own machine: Supabase's Postgres,
+Auth, PostgREST and Storage images, every edge function in one
+`supabase/edge-runtime` container, the admin console, and Caddy as the gateway.
+You do not need a Supabase account.
 
-  **Prerequisite:** Docker + Docker Compose, and an `ANTHROPIC_API_KEY` (or BYOK
-  key) for the classification pipeline. Everything else has a sane default.
+  **Experimental.** Nobody has run this stack end to end yet, so expect to fix
+  things. The supported path is [your own Supabase project + `mushi selfhost up`](/self-hosting).
 
-## One command
+### Generate the secrets
 
-### Clone and configure
-
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/deploy
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
+From the repo root:
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...          # the diagnosis engine — no second key needed elsewhere
-SUPABASE_ANON_KEY=your-anon-key       # generated from your JWT_SECRET
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+./deploy/generate-secrets.sh            # bash + openssl
+# or, on any OS with Node 22+:
+npx mushi-mushi selfhost secrets
 ```
+
+Either one writes `deploy/.env` (mode 600). It contains a random Postgres
+password, JWT secret and internal caller secret, plus the anon and
+service_role JWTs signed with that JWT secret, so you never mint JWTs by hand.
+Neither overwrites an existing file.
+For a public domain, pass it first:
+`MUSHI_PUBLIC_URL=https://mushi.example.com ./deploy/generate-secrets.sh`
+(or `--public-url`).
+
+Optional: add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `deploy/.env`. Either
+one turns on the plain-English diagnosis and fix drafts. Without one, reports
+get rule-based triage only.
 
 ### Bring the stack up
 
 ```bash
-docker compose up -d
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
+
+Compose refuses to start while a required secret is missing.
 
 ### Open the console
 
-| Service | URL | Notes |
-| --- | --- | --- |
-| Admin console | `http://localhost:3000` | React + Vite SPA, served by nginx |
-| Edge functions (`api`) | `http://localhost:8000` | Hono on Deno |
-| PostgREST | `http://localhost:3001` | the REST surface the SPA talks to |
-| Auth (GoTrue) | `http://localhost:9999` | email auto-confirm in local mode |
+Go to `http://localhost` (or your domain) and sign up. The first account owns
+the instance; sign-up is auto-confirmed, because the stack has no SMTP. Then:
+
+```bash
+mushi config consoleUrl http://localhost     # or the CLI signs in on Mushi Mushi Cloud
+mushi login --endpoint http://localhost/functions/v1/api
+```
 
 ## What's running
 
 ```
 deploy/docker-compose.yml
-├── postgres          supabase/postgres (migrations auto-applied from initdb)
-├── supabase-auth     GoTrue
-├── supabase-rest     PostgREST
-├── supabase-storage  Storage API (file backend)
-├── edge-functions    classify-report, api, fix-worker, … (Dockerfile.edge)
-├── admin             admin console SPA (Dockerfile.admin → nginx)
-└── caddy             reverse proxy / TLS (Caddyfile)
+├── db              supabase/postgres 17 (+ deploy/db/roles.sql, jwt.sql on first boot)
+├── auth            GoTrue
+├── rest            PostgREST
+├── storage         Storage API (file backend)
+├── migrate         one-shot: applies the migrations, sets mushi_runtime_config, lifts plan limits
+├── edge-functions  every function behind deploy/edge/main (Dockerfile.edge)
+├── admin           console SPA on nginx :3000 (Dockerfile.admin, VITE_* as build args)
+└── caddy           the only published port: console at /, gateway at /auth/v1, /rest/v1,
+                    /storage/v1, /functions/v1; plus an internal gateway on :8000
 ```
 
-The Postgres container mounts `packages/server/supabase/migrations` into
-`/docker-entrypoint-initdb.d`, so a fresh volume applies the full schema on
-first boot. To re-apply after a schema change, recreate the volume
-(`docker compose down -v && docker compose up -d`) or run `supabase db push`
-against the container.
+- **Migrations** run in the `migrate` service, after Auth and Storage have
+  created their schemas. Each file runs in one transaction. Applied files are
+  recorded in `supabase_migrations.schema_migrations`, the ledger
+  `supabase db push` uses, so `docker compose up` again applies only new ones.
+- **Cron jobs** call `http://caddy:8000`: `migrate` writes that URL into
+  `mushi_runtime_config`, together with `MUSHI_INTERNAL_CALLER_SECRET`.
+- **Console settings** are baked at build time. After changing
+  `MUSHI_PUBLIC_URL` or the anon key, run
+  `docker compose -f deploy/docker-compose.yml --env-file deploy/.env build admin`.
+
+## Not included
+
+- **Realtime**: the console's live updates need a page reload.
+- **Email**: no SMTP, so accounts are confirmed on sign-up.
+- **Studio**: use `psql` against the `db` container.
+- **Signed file links**: the functions build signed Storage URLs from the
+  internal gateway (`http://caddy:8000`), so screenshot and capture links the
+  API hands to the browser may not load yet.
 
 ## Production notes
 
-- **TLS / domain** — set `DOMAIN` in `.env` and Caddy will provision a
-  certificate automatically.
-- **Internal functions** — `classify-report`, `fix-worker`, `judge-batch`, and
-  friends authenticate via `requireServiceRoleAuth`. Only the public `api`
-  function should face the internet — never expose the others with
-  `--no-verify-jwt`.
-- **Kubernetes** — for a single-pod cluster deploy, use the Helm chart at
-  [`deploy/helm/`](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm).
+- **TLS / domain**: set `MUSHI_PUBLIC_URL` and `MUSHI_SITE_ADDRESS` to
+  `https://your-domain`, and Caddy provisions a certificate.
+- **Internal functions** (`classify-report`, `fix-worker`, `judge-batch`, …)
+  check `MUSHI_INTERNAL_CALLER_SECRET` or the service-role key
+  (`requireServiceRoleAuth`) inside the handler.
+- **Kubernetes**: the [Helm chart](https://github.com/kensaurus/mushi-mushi/tree/master/deploy/helm)
+  runs the functions and console against an existing Supabase API. It is
+  experimental too.
 
-## Managed Supabase instead
-
-Prefer to point the console at a hosted Supabase project rather than running
-Postgres locally? Skip Compose and follow the
-[step-by-step guides](/self-hosting) — [Supabase setup](/self-hosting/supabase),
-[Edge Functions deploy](/self-hosting/edge-functions), and
-[Admin SPA deploy](/self-hosting/admin-spa).
-
-  Same code, either way. Mushi Mushi Cloud runs this exact stack — there is no
+  It is the same code either way. Mushi Mushi Cloud runs this exact stack; there is no
   closed-source plus-tier. The hosted service adds only its own tuning data
-  (prompts and scoring weights kept as configuration); the repo's default
+  (prompts and scoring weights kept as configuration). The repo's default
   prompts give you every feature. See [Open source & licensing](/concepts/open-source).
 
 ---
@@ -16488,7 +16845,7 @@ description: Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted in
 
 # Edge Functions deploy
 
-Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). For a working self-host you only need the **minimal ingest + classification** set below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
+Mushi Mushi ships Supabase Edge Functions under `packages/server/supabase/functions/` (run `pnpm docs-stats` for the live count). `mushi selfhost up` deploys **all** of them in one `supabase functions deploy`, with each function's `verify_jwt` taken from `config.toml`, the same as the production deploy. That is the simplest complete install: the cron jobs the migrations schedule call many of these functions. To deploy by hand, the **minimal ingest + classification** set is below; deploy every function directory except `_shared` (or mirror [`.github/workflows/deploy-edge-functions.yml`](https://github.com/kensaurus/mushi-mushi/blob/master/.github/workflows/deploy-edge-functions.yml)) for a complete instance. Include **`healthz`** for unauthenticated monitoring probes. The repo root guide [`docs/SELF_HOSTED.md`](https://github.com/kensaurus/mushi-mushi/blob/master/docs/SELF_HOSTED.md) remains the authoritative step-by-step.
 
 ## Minimal required (ingest + classify)
 
@@ -16586,11 +16943,15 @@ The remaining workers (billing, retention, SDK upgrade, skill-sync, rewards payo
 
 ## Required secrets
 
-Set secrets before deploying — functions read them at cold-start:
+Set secrets before deploying — functions read them at cold-start. Only
+`MUSHI_INTERNAL_CALLER_SECRET` is required (`mushi selfhost up` generates it
+and writes the same value into `mushi_runtime_config`). One LLM key, Anthropic
+or OpenAI, turns on the diagnosis and fix drafts. Everything else is optional:
 
 ```bash
 cd packages/server
 
+npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=$(openssl rand -hex 32)   # + mushi_runtime_config, see Supabase setup
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
 npx supabase secrets set OPENAI_API_KEY=sk-…
 npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
@@ -16711,11 +17072,14 @@ description: Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI
 
 # Supabase setup
 
+The one-command path, `mushi selfhost up --project-ref <your-ref>`, does all of
+this page ([Self-hosting](/self-hosting)). By hand:
+
 ```bash
 cd packages/server
 npx supabase login
 npx supabase link --project-ref <your-ref>
-npx supabase db push          # applies every migration in supabase/migrations/
+npx supabase db push --remote # every migration; CLI 2.x: --linked (3.x without it pushes to your LOCAL db)
 ```
 
   Run these commands from `packages/server/` — the Supabase CLI looks for `supabase/` relative to the current directory.
@@ -16764,11 +17128,24 @@ using (project_id in (
 
 Do **not** use bare `auth.uid()`: the subquery form is evaluated once per query instead of once per row, which matters on large tables.
 
-## Seed data
+## Seed data and runtime config
 
-There is no separate seed file. The migrations insert the lookup rows themselves
-(pricing plans, the plugin registry, the `mushi_runtime_config` defaults), so
-`db push` is enough.
+There is no separate seed file. The migrations insert the lookup rows
+themselves (pricing plans, the plugin registry, `mushi_runtime_config`
+defaults). **`db push` alone is not enough for a self-hosted project:**
+
+- The migrations seed `mushi_runtime_config.supabase_url` with the Mushi Mushi
+  Cloud URL, and leave `service_role_key` and `internal_caller_token` empty.
+  Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
+  fails.
+- New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
+  Mushi Cloud: on Free, 300 diagnoses a month (then reports stop at
+  `quota_exceeded`), 3 apps, 1 seat and 30-day retention.
+
+`mushi selfhost up` fixes both after every `db push`. It upserts the three
+runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and
+lifts the plan limits on your instance. `mushi selfhost up --print-commands`
+prints the SQL if you run it by hand.
 
 ## Verifying the setup
 
@@ -16812,7 +17189,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 | **Data residency** | Pick a region (US, EU or JP) at project creation | All hosted data is in one Tokyo (`ap-northeast-1`) project today, whatever region you pick. Dedicated US and EU clusters are planned, not live | [Data residency](/security/data-residency) |
 | **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
-| **Retention sweep** | Reports older than your plan window (Free 14 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily | [SOC 2 → retention](/security/soc2#data-retention-policies) |
+| **Retention sweep** | Reports older than your plan window (Free 30 d · Builder 90 d · Studio 180 d · Enterprise custom) or your per-project policy are hard-deleted daily; legal holds are skipped | Live, daily | [SOC 2 → retention](/security/soc2#data-retention-policies) |
 | **Tenant isolation** | Row-level security is enabled on the public tables, and policies scope rows to the projects you own or belong to (`(SELECT auth.uid())`) | Live | [No client data leakage](/security/no-leakage-claim) |
 | **Nightly RLS coverage check** | `mushi_rls_coverage_snapshot()` lists every public table and whether RLS is enabled; the `soc2-evidence` job records the result as control CC6.1 | Live, nightly | [SOC 2 → automated controls](/security/soc2#automated-controls) |
 | **Prompt-injection defence** | The diagnosis runs in two stages so the main model never reads raw report text; text sent to the fix and review agents passes `sanitizeForLLM()`; screenshots go to an image-only call; an OWASP LLM01-style corpus runs in CI | Live | [Prompt-injection defence](/security/prompt-injection) |
@@ -17299,7 +17676,7 @@ Retention is set per project in **Compliance → Retention** and stored in `proj
 | `byok_audit_retention_days` | 365 | Must be greater than 0 |
 | `legal_hold` | off | When on, nothing in the project is deleted |
 
-On Mushi Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 14 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
+On Mushi Mushi Cloud the daily `retention-sweep` job also applies your plan's window (Free 30 days, Builder 90, Studio 180) when the project has no explicit policy. It hard-deletes expired reports and writes one `audit_logs` row per project with the count.
 
 ## DSAR (Data Subject Access Request)
 
@@ -17348,12 +17725,12 @@ description: What Mushi Mushi collects, why, who processes it, how long it is ke
 # Privacy Policy
 
   **Draft, not yet reviewed by a lawyer.** This page is a complete plain-English
-  description of how Mushi Mushi handles personal data as of 2026-11-11. Treat
+  description of how Mushi Mushi handles personal data as of 2026-11-19. Treat
   it as a description of current practice, not a finished legal document.
   Operator details are set; a lawyer's review is pending.
   Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 6. Version 6 adds the operator's address (sections 1, 9 and 13); nothing about the data we handle changes. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
+**Effective date:** 2026-11-19 · **Version:** 7. Version 7 keeps reports on the Free plan for 30 days instead of 14 (section 7). Version 6, 2026-11-11, added the operator's address (sections 1, 9 and 13); nothing about the data we handle changed. Version 5, 2026-10-29, added two things we record from that day: for each SDK key, the first and last time it checked in from each kind of place (dev machine, live site, store app, server), with the host only; and milestones our servers record about your account and projects (section 2, "Product usage events" and "SDK key check-ins"). Version 4, earlier the same day, lists Langfuse and Browserbase, which we already used but had left out of section 5; neither is new, and we are telling console account holders about the omission by email; says Sentry also receives errors from Mushi Mushi's own servers; says model providers also receive code snippets for fixes and reviews; describes the request tracker as it is (it records requests, it does not produce a signed export); and corrects the tester ID-check threshold to US$400. (Version 3, 2026-10-28, did not include the version 4 corrections; version 2, 2026-10-10, did not list the free production check or the cookieless visit count; version 1, 2026-09-21, did not list the opt-in known-fix search sent to Firecrawl.)
 
 This policy covers **Mushi Mushi Cloud** (the hosted service at
 `kensaur.us/mushi-mushi`), the **admin console**, the **docs site**, the
@@ -17486,7 +17863,7 @@ Dedicated US and EU clusters are planned, not live. See
 
 | Data | Kept for | Mechanism |
 | --- | --- | --- |
-| End-user reports and everything attached to them | The retention window of your plan: **Free 14 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
+| End-user reports and everything attached to them | The retention window of your plan: **Free 30 days · Builder 90 days · Studio 180 days · Enterprise as agreed**, or a shorter per-project policy you set in **Compliance → Data retention** | A daily `retention-sweep` job hard-deletes rows past the window. Legal-hold rows are skipped |
 | Product usage events (Mushi Mushi's own console analytics) | **730 days (2 years)** | Nightly `prune_product_events` job, using the 730-day retention set on Mushi Mushi's own analytics project |
 | Docs-site analytics | 730 days (2 years) | Same table and job as above |
 | SDK key check-ins (first and last seen per key and kind of place) | While the key exists | Deleted with the key or the project (database cascade) |
@@ -17622,7 +17999,7 @@ description: The terms for Mushi Mushi Cloud, the admin console, the SDKs and th
   draft. Operator details and governing law are set; a lawyer's review is
   pending. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 3 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3 sets the governing law and court in section 14 and adds the operator's address and responsible person in section 17). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
+**Effective date:** 2026-11-19 · **Version:** 4 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3, 2026-11-11, set the governing law and court in section 14 and added the operator's address and responsible person in section 17; version 4 raises Free in section 7 to three apps, 300 diagnoses a month and 30 days of history, with no diagnosis cap for a project that uses its own AI key). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
 
 These terms are between you and **Kensaurus 合同会社** (Japan,
 "Mushi Mushi", "we") and cover **Mushi Mushi Cloud** at `kensaur.us/mushi-mushi`,
@@ -17711,10 +18088,11 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
-14-day report retention. At 100, the pipeline **stops** for the rest of the
+The **Free** plan includes **three apps and 300 diagnoses per month**, one seat,
+and 30-day report retention. At 300, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
-run until the counter resets or you upgrade. We do not silently bill overage
+run until the counter resets or you upgrade. A project that uses its own
+Anthropic or OpenAI key is not stopped. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
 
 ## 8. Paid plans and billing
@@ -18169,7 +18547,7 @@ So the human stays in the loop. The loop just gets shorter.
 
 Every SDK is MIT: web, React, Vue, Svelte, Angular, React Native, Capacitor and Node on npm, plus the CLI and the MCP server. iOS, Android and Flutter SDKs are previews in the repo. It is all on [github.com/kensaurus/mushi-mushi](https://github.com/kensaurus/mushi-mushi). The backend (Supabase Edge Functions + Postgres + pgvector for the embeddings) and the admin console are AGPLv3, which is OSI open source: self-host it free, fork it, modify it for your own org. Offer a modified server as a hosted service and you publish your changes (§13) or take a commercial license.
 
-It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers one app and 100 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](/pricing)).
+It's open-core: the core is open source (AGPLv3). What costs money is the hosted service beyond its free plan, and a small source-available enterprise edition (SSO, audit export, retention policies, region pinning) that a solo builder never needs. The hosted Free plan covers three apps and 300 diagnoses a month; Builder is $29 a month and Studio $79 ([pricing](/pricing)).
 
 ## Try it
 
@@ -19119,7 +19497,7 @@ can fix it from.
 ## Get this for your own app
 
 When a real user reports a bug, Mushi Mushi writes a diagnosis like this one. It
-needs no Sentry and no AI key of yours: the free plan covers one app and 100 diagnoses a
+needs no Sentry and no AI key of yours: the free plan covers three apps and 300 diagnoses a
 month.
 
 - **Lovable or Bolt:** sign up, copy one line and ask your builder to add it. No
@@ -19265,7 +19643,7 @@ Source: https://kensaur.us/mushi-mushi/docs/ja
 
 ---
 title: Mushi Mushi とは（日本語）
-description: Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。
+description: Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 3 本・月 300 件の診断まで。
 ---
 
 # Mushi Mushi とは
@@ -19303,12 +19681,12 @@ AI の診断は間違うことがあります。変更内容は、公開する�
 
 | プラン | アプリ数 | 診断（月・チーム全体） | 料金 |
 | --- | --- | --- | --- |
-| Free | 1 本 | 100 件 | 無料 |
+| Free | 3 本 | 300 件 | 無料 |
 | Builder | 3 本 | 1,000 件 | 月額 29 ドル |
 | Studio | 10 本 | 3,000 件 | 月額 79 ドル |
 
-- **無料プランはアプリ 1 本・月 100 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
-- 月 100 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。
+- **無料プランはアプリ 3 本・月 300 件の診断までです。カード登録は不要です。** AI の利用料は Mushi Mushi 側が負担するため、自分の AI キーも要りません。
+- 月 300 件に達すると、その月の診断は止まります。報告そのものは引き続き保存され、請求は発生しません。自分の Anthropic または OpenAI のキーを設定したアプリには、この上限はありません。
 - プランはチーム単位です。どのアプリからアップグレードしても、チーム内のすべてのアプリが同じプランになり、月の診断件数もチーム全体で共有します。
 - 料金は米ドル建てです（Builder 月額 29 ドル、Studio 月額 79 ドル）。Stripe でカード決済され、円換算額はカード会社のレートで決まります。
 - サーバーを自分で運用する場合（セルフホスト）は無料です。
@@ -19448,9 +19826,10 @@ Sentry, you can connect it, but you don't have to.
 
 ## What it costs
 
-The free plan covers one app and 100 diagnoses a month, with no card and no AI
+The free plan covers three apps and 300 diagnoses a month, with no card and no AI
 key of your own. A diagnosis is one bug explained, and repeat reports of the
-same bug count once. Paid plans are for more apps. See [pricing](/pricing).
+same bug count once. Paid plans add more diagnoses, longer history and more
+apps. See [pricing](/pricing).
 
 ## What about bugs nobody reports?
 
@@ -19556,7 +19935,7 @@ not write most of the code by hand, and you don't always know how it works.
 
 **Start here:** the install box on the [home page](/) (one command for Claude
 Code, one click for Cursor, a script tag for [Lovable or Bolt](/quickstart/lovable-bolt)).
-The free plan covers one app with 100 diagnoses a month, no card and no AI key.
+The free plan covers three apps with 300 diagnoses a month, no card and no AI key.
 
 ## You're a developer and you own your code
 
@@ -20108,7 +20487,7 @@ Below the bar you will see:
 
 **What happens at 100%?**
 
-- **Free:** New reports are captured but **not diagnosed** until the period resets.
+- **Free:** New reports are captured but **not diagnosed** until the period resets. A free project with its own Anthropic or OpenAI key is not capped.
 - **Builder / Studio (monthly):** Overage continues ($0.03 a diagnosis on Builder, $0.02 on Studio) until your **spend cap** pauses Stage-2 classification. No reports are lost.
 - **Builder / Studio (annual):** No overage. Stage-2 classification pauses at the included diagnoses until the next calendar month. No reports are lost.
 
@@ -20143,7 +20522,7 @@ Both settings save immediately via the Billing API. Leave the cap blank to rever
 
 ## Apps on your plan
 
-A plan sets how many apps your team watches: **Free 1, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
+A plan sets how many apps your team watches: **Free 3, Builder 3, Studio 10, Enterprise no limit**. Creating one more app than the plan allows stops with a message that names your plan, how many apps the team has, and the plan that fits, plus a **See plans** button that opens the Plans tab. Apps you already have keep working.
 
 The **Plans** tab compares Free, Builder, Studio and Enterprise by apps, diagnoses, overage and history, and shows whether your team's apps and this period's diagnoses fit each plan.
 
@@ -27245,7 +27624,7 @@ Teams are available on Studio and Enterprise.
 
 | Plan | Teams |
 | --- | --- |
-| Free | Solo workspace, 1 app |
+| Free | Solo workspace, 3 apps |
 | Builder | Solo workspace, 3 apps |
 | Studio | 5 seats (you and up to 4 teammates; pending invitations count) and 10 apps |
 | Enterprise | Teams plus SSO and SOC 2 controls, no app limit |

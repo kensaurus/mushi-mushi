@@ -4,7 +4,7 @@
  * role, so a split frontend/backend project reads as one app.
  */
 
-import { Card, Btn, Badge } from '../ui'
+import { Btn, Badge } from '../ui'
 import { StatusPill } from '../signal/StatusMark'
 import type { PreflightState } from '../../lib/useDispatchPreflight'
 import { IconArrowRight, IconIntegrations } from '../icons'
@@ -59,11 +59,14 @@ export function GithubConnectionCard({
     )
   }
 
+  // The GitHub section on Connect is the card; a second frame here was card in card.
   return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-3 p-4">
+    <div>
+      <div className="flex flex-wrap items-center gap-3 py-1">
         <BrandIcon brand="github" size={20} decorative className="text-fg" />
-        <div className="min-w-0 flex-1">
+        {/* A floor width so the actions wrap below on a phone instead of
+            squeezing the name to "GitHub rep" under them (round-2 review 2026-11-18). */}
+        <div className="min-w-44 flex-1">
           <p className="text-sm font-medium text-fg">
             {linked.length > 1 ? `GitHub repositories (${linked.length})` : 'GitHub repository'}
           </p>
@@ -102,7 +105,7 @@ export function GithubConnectionCard({
         {loading ? (
           <StatusPill status="running" label="Checking" />
         ) : hasGithub ? (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusPill status="passed" label="Connected" />
             <Btn to="/repo" size="sm" variant="ghost" className="gap-1.5">
               {linked.length > 1 ? 'Manage repos' : 'Add a repo'}
@@ -120,6 +123,6 @@ export function GithubConnectionCard({
             </Btn>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

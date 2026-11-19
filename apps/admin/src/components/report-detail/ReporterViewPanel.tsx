@@ -105,16 +105,9 @@ export function ReporterViewPanel({
   }
   if (!data) return null
 
-  if (!data.has_reporter) {
-    return (
-      <Card className="p-4 space-y-1">
-        <h3 className="text-sm font-semibold text-fg">Reporter view</h3>
-        <p className="text-xs text-fg-muted">
-          This report came from an integration, not the in-app widget, so there is no reporter to update.
-        </p>
-      </Card>
-    )
-  }
+  // No reporter, no section (sweep 2026-11-18): the page hides it for
+  // integrations up front; this covers a widget report with no reporter key.
+  if (!data.has_reporter) return null
 
   const view = reporterStatus(data.status_input)
 
@@ -190,10 +183,10 @@ export function ReporterViewPanel({
           className="w-full rounded-md border border-edge-subtle bg-surface px-2 py-1.5 text-xs text-fg"
         />
         <div className="flex items-center justify-between gap-2">
-          <span className="text-2xs text-fg-muted">
+          <span className="min-w-0 text-2xs text-fg-muted">
             Shown to the reporter verbatim; their report reads “Waiting on you” until they answer.
           </span>
-          <Btn size="sm" onClick={() => void ask()} loading={asking} disabled={!question.trim()}>
+          <Btn size="sm" className="shrink-0 whitespace-nowrap" onClick={() => void ask()} loading={asking} disabled={!question.trim()}>
             Ask reporter
           </Btn>
         </div>

@@ -51,7 +51,9 @@ async function render(stats: IntelligenceStats) {
 describe('IntelligenceSnapshotStrip', () => {
   it('does not report an old failure once a newer summary landed', async () => {
     await render(upToDate)
-    expect(container.textContent).toContain('140 bugs reported')
+    expect(container.textContent).toContain('The latest summary covers the week of Oct 19')
+    // The count is the tile, not repeated in the sentence (round-2 sweep 2026-11-18).
+    expect(container.textContent).not.toContain('bugs reported')
     expect(container.textContent).not.toMatch(/failed/i)
   })
 

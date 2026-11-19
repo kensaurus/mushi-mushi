@@ -100,7 +100,7 @@ describe('FixesFirstView', () => {
     const stopped = attempt({ id: 'f1', report_fix_state: 'failed', is_latest_attempt: true, status: 'failed', error: 'boom' } as Partial<FixAttempt> & { id: string })
     await render([stopped], null, 2)
     expect(container.textContent).toContain('Stopped: 2 reports')
-    expect(container.textContent).toContain('The reasons below cover the 1 in the newest attempts loaded on this page.')
+    expect(container.textContent).toContain('Reasons for the newest 1.')
     // Each reason's count is a bar beside its number.
     expect(container.querySelector('[data-testid="fixes-stopped-reasons"] [data-testid="bar-cell-fill"]')).not.toBeNull()
   })

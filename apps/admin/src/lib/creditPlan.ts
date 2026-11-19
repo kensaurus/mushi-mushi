@@ -16,6 +16,27 @@ function daysLeft(until: string | null | undefined, now: Date): number | null {
   return Math.max(0, Math.ceil((t - now.getTime()) / DAY_MS))
 }
 
+/**
+ * Whole hours left, rounded the way the server's worker flag says them (durationText: minutes
+ * rounded, then hours floored), so a card and the flag above it give the same number
+ * (2026-11-19: "expires in 32 h" in the flag beside "2 days" on the card).
+ */
+function hoursLeft(until: string | null | undefined, now: Date): number | null {
+  if (!until) return null
+  const t = Date.parse(until)
+  if (!Number.isFinite(t)) return null
+  return Math.max(0, Math.floor(Math.round((t - now.getTime()) / 60_000) / 60))
+}
+
+/**
+ * "crsr_7cb4a9e...e96d" → "crsr_…e96d": the long hint wrapped mid-key in the card title
+ * (2026-11-19). Hints in another shape are kept.
+ */
+export function shortKeyHint(hint: string): string {
+  const m = /^([A-Za-z]+_)[A-Za-z0-9]*(?:\.\.\.|…)([A-Za-z0-9]{2,6})$/.exec(hint.trim())
+  return m ? `${m[1]}…${m[2]}` : hint
+}
+
 export interface WatchCost {
   status: string
   page_limit: number
@@ -114,6 +135,8 @@ export interface CreditCountdown {
   provider: 'cursor' | 'firecrawl'
   name: string
   daysLeft: number
+  /** Whole hours left, for a card under two days: it then says "32 h", like the worker flag. */
+  hoursLeft?: number | null
   /** "Oct 31" */
   date: string
   verb: 'expires' | 'resets'
@@ -121,6 +144,8 @@ export interface CreditCountdown {
   used: number
   of: number | null
   usedLine: string
+  /** The bar's label when it differs from usedLine. */
+  meterLabel?: string
   leftLine: string
   /** A Cursor key with an expiry date and spend-down off: its credits are not fixing bugs. */
   idle: boolean
@@ -158,8 +183,9 @@ export function creditCountdowns(input: {
       out.push({
         id: k.id,
         provider: 'cursor',
-        name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${k.keyHint})` : ''}`,
+        name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${shortKeyHint(k.keyHint)})` : ''}`,
         daysLeft: days,
+        hoursLeft: hoursLeft(k.creditsExpireAt, input.now),
         date: shortDate(k.creditsExpireAt),
         verb: 'resets',
         used: 0,
@@ -177,17 +203,20 @@ export function creditCountdowns(input: {
     out.push({
       id: k.id,
       provider: 'cursor',
-      name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${k.keyHint})` : ''}`,
+      name: `Cursor${k.label ? ` · ${k.label}` : ''}${k.keyHint ? ` (${shortKeyHint(k.keyHint)})` : ''}`,
       daysLeft: days,
+      hoursLeft: hoursLeft(k.creditsExpireAt, input.now),
       date: shortDate(k.creditsExpireAt),
       verb: 'expires',
       used: k.dispatchedToday,
       of: k.dailyLimit,
       usedLine: `${n(k.dispatchedToday)} of ${n(k.dailyLimit)} fixes sent today${week}`,
+      // Spend-down off is said once, by the status line's nudge (2026-11-19: four times on the
+      // page), so an idle card adds no line of its own.
       leftLine: expired
         ? 'These credits have expired.'
         : idle
-          ? 'Spend-down is off, so nothing is spending these credits.'
+          ? ''
           : `Room for up to ${n(room)} more fixes before they expire.`,
       idle,
       tone: expired ? 'neutral' : idle ? (days <= 3 ? 'danger' : 'warn') : 'ok',
@@ -202,12 +231,16 @@ export function creditCountdowns(input: {
       provider: 'firecrawl',
       name: 'Firecrawl',
       daysLeft: fcDays,
+      hoursLeft: hoursLeft(fc.periodEnd, input.now),
       date: shortDate(fc.periodEnd),
       verb: 'resets',
       used,
       of: fc.limit,
-      usedLine: fc.limit != null ? `${n(used)} of ${n(fc.limit)} credits used` : 'Usage not reported',
-      leftLine: `${n(fc.remaining)} credits left until the reset.`,
+      // One credits line: "37,044 of 100,000 used" and "62,956 left" said the same fact twice.
+      // The balance stays; the bar keeps the used count as its label.
+      usedLine: `${n(fc.remaining)} credits left until the reset.`,
+      meterLabel: fc.limit != null ? `${n(used)} of ${n(fc.limit)} credits used` : undefined,
+      leftLine: '',
       idle: false,
       tone: 'ok',
     })

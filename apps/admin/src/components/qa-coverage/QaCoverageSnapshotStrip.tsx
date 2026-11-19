@@ -5,7 +5,6 @@
 
 import { Link } from 'react-router-dom'
 import { Section, StatCard, SnapshotSectionHint } from '../ui'
-import { MetricStrip } from '../MetricStrip'
 import type { QaCoverageStats } from './QaCoverageStatsTypes'
 import {
   avgPassRateDetail,
@@ -32,7 +31,7 @@ export function QaCoverageSnapshotStrip({
   statsFetchedAt,
   statsValidating,
   description,
-  sectionTitle = 'QA SNAPSHOT',
+  sectionTitle = 'Summary',
   statLabels,
   hideLinks = false,
 }: Props) {
@@ -45,7 +44,9 @@ export function QaCoverageSnapshotStrip({
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
     >
       <SnapshotSectionHint text={description} />
-      <MetricStrip cols={3} ariaLabel="QA coverage snapshot">
+      {/* Three compact columns at every width (2026-11-18 sweep): the shared
+          strip's 2-column phone grid left "Runs (24h)" alone on a row. */}
+      <div role="group" aria-label="Scheduled tests summary" className="grid grid-cols-3 gap-2 [&>*]:min-w-0">
         <StatCard
           label={statLabels?.stories ?? 'Stories'}
           value={stats.totalStories}
@@ -75,7 +76,7 @@ export function QaCoverageSnapshotStrip({
           detail={runs24hDetail(stats)}
           to={qaCoverageLinks.runs24h}
         />
-      </MetricStrip>
+      </div>
       {!hideLinks ? (
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-fg-muted">
           {stats.topFailingStoryId ? (

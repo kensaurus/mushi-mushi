@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, DisclosurePanel, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
+import { DisclosurePanel, EmptyState, ErrorAlert, Loading, Section, SegmentedControl } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetchMutate } from '../lib/supabase'
@@ -228,10 +228,7 @@ function ProjectDesign({ projectId }: { projectId: string }) {
         helpHowToUse="Check your colours and the drift line at the top, then run a drift check. To change a token or a rule, queue the edit, preview the diff and confirm: Mushi Mushi opens a draft PR and never writes to your repo directly."
         helpFlowPath="/design"
       >
-        {/* One control, one tab stop (QA 293); named as the sidebar names the page. */}
-        <Btn to="/recipe" size="sm" variant="ghost">
-          App blueprint
-        </Btn>
+        {/* No "App blueprint" button here: the Related links at the foot already open it (2026-11-18). */}
       </PageHeaderBar>
 
       <PagePosture

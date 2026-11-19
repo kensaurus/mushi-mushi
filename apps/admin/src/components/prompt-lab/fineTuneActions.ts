@@ -22,3 +22,12 @@ export function fineTuneNextActions(job: Pick<FineTuningJob, 'status' | 'validat
     canReject: status !== 'rejected' && status !== 'promoted' && status !== 'pending',
   }
 }
+
+/**
+ * Fine-tuning lives in this page's Advanced section. The old /fine-tuning route opened AI
+ * prompts with that section closed (round-2 review, 2026-11-18): `?tab=fine-tuning` opens
+ * it and brings it into view. Read by PromptLabPage.
+ */
+export function opensFineTuning(tab: string | null): boolean {
+  return tab === 'fine-tuning' || tab === 'fine_tuning' || tab === 'advanced'
+}

@@ -244,10 +244,10 @@ const COPY: CopyRegistry = {
     },
     '/projects': {
       title: 'Manage apps',
-      description: 'Banner shows what needs you — then Overview for the big picture, Your projects to create apps and copy keys.',
+      description: 'Banner shows what needs you — then Overview for the big picture, Your apps to add an app and copy its keys.',
       help: {
         title: 'About managing apps',
-        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi Mushi — bugs, fixes, reports, integrations — belongs to a project.',
+        whatIsIt: 'Each app (one app or environment) holds its own bugs, fixes, reports and integrations in Mushi Mushi.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
           'Add a separate project for staging so test bugs don\'t mix with real ones',
@@ -475,7 +475,7 @@ const COPY: CopyRegistry = {
       },
       tabLabels: {
         overview: 'Summary',
-        reports: 'Reports',
+        reports: 'Digests',
         pipeline: 'Jobs',
       },
       help: {
@@ -608,8 +608,8 @@ const COPY: CopyRegistry = {
       },
       actionLabels: {
         setup: 'Go to Setup',
-        create: 'Create story',
-        newStory: '+ New story',
+        create: 'Create test',
+        newStory: '+ New test',
         failures: 'Review failures',
         stories: 'View stories',
         openStories: 'Open stories',
@@ -628,7 +628,7 @@ const COPY: CopyRegistry = {
           'Catch a broken flow before users report it',
           'See a screenshot of what the test saw when it failed',
         ],
-        howToUse: 'Click "New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
+        howToUse: 'Click "New test" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
       },
     },
     '/anti-gaming': {
@@ -897,8 +897,8 @@ const COPY: CopyRegistry = {
         day24h: 'Last 24 hours',
         month: 'This month',
         topDriver: 'Top driver',
-        operations: 'Operations',
-        models: 'Models',
+        // One cell holds both counts on AI spend (2026-11-19: steps and models share a cell).
+        operations: 'Steps · models',
         keySource: 'Key source · 24h',
       },
       actionLabels: {
@@ -988,7 +988,7 @@ const COPY: CopyRegistry = {
       },
       help: {
         title: 'About billing',
-        whatIsIt: 'Your plan and its usage. Free watches one app with 100 diagnoses a month; Builder ($29) watches three, Studio ($79) ten. Your own AI keys work on every plan.',
+        whatIsIt: 'Your plan and its usage. Free watches three apps with 300 diagnoses a month; Builder ($29) has 1,000 diagnoses and 90 days of history; Studio ($79) watches ten apps. Your own AI keys work on every plan.',
         useCases: [
           'See reports used vs quota before new reports start returning HTTP 402',
           'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',

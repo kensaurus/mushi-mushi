@@ -14,7 +14,7 @@
  * and on request. Selecting a card opens the side panel.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useMemo, useRef, useState } from 'react'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, Loading, SegmentedControl } from '../components/ui'
@@ -28,7 +28,7 @@ import { orderedRecipeElements } from '../components/recipe/recipeState'
 import { RecipeElementList } from '../components/recipe/RecipeElementList'
 import { RecipeSidePanel } from '../components/recipe/RecipeSidePanel'
 import { RecipeHeaderSummary } from '../components/recipe/RecipeHeaderSummary'
-import { usePrefersRecipeList } from '../components/recipe/useMediaQuery'
+import { useFitsRecipeDiagram, usePrefersRecipeList } from '../components/recipe/useMediaQuery'
 import { RadarPanel } from '../components/portfolio/RadarPanel'
 
 const RecipeFlow = lazy(() =>
@@ -74,8 +74,13 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
   const [view, setView] = useState<ViewMode>('auto')
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<RefreshNotice>(null)
+  // The worst risk check joins Overall: never amber above a red "Error" (round 3, 2026-11-19).
+  const [risk, setRisk] = useState<{ tone: 'danger' | 'warn'; label: string } | null>(null)
   const prefersList = usePrefersRecipeList()
-  const showList = view === 'list' || (view === 'auto' && prefersList)
+  // Auto shows the diagram only where every lane fits; an explicit Diagram choice still pans.
+  const columnRef = useRef<HTMLDivElement>(null)
+  const diagramFits = useFitsRecipeDiagram(columnRef)
+  const showList = view === 'list' || (view === 'auto' && (prefersList || !diagramFits))
 
   const elements = useMemo(() => orderedRecipeElements(data?.elements), [data])
   const selected = selectedKey ? elements.find((e) => e.key === selectedKey) ?? null : null
@@ -132,7 +137,7 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
           {
             priority: POSTURE_PRIORITY.status,
             show: data != null,
-            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} onSelect={(key) => setSelectedKey(key)} /> : null,
+            children: data ? <RecipeHeaderSummary recipe={data} elements={elements} risk={risk} onSelect={(key) => setSelectedKey(key)} /> : null,
           },
         ]}
       />
@@ -145,6 +150,9 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
         )}
         {error && <PageLoadError error={error} resource="the app recipe" endpoint={path} onRetry={reload} />}
         {loading && !data && <Loading text="Composing the recipe…" />}
+
+        {/* Problems first: Risk checks lead (at 390 px they sat about 3,000 px down, 2026-11-18). */}
+        <RadarPanel projectId={projectId} onOverall={setRisk} />
 
         {data && (
           <>
@@ -160,8 +168,11 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
                 size="sm"
               />
             </div>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              <div className="min-w-0 flex-1">
+            {/* The diagram gets the whole width: a 352 px "Pick a card…" column cut its Deploy lane and
+                hid Runtime (2026-11-18). A picked card opens its panel beside the list, or over the
+                diagram's right edge; nothing is reserved while no card is picked. */}
+            <div className={`relative flex flex-col gap-4 ${showList ? 'lg:flex-row lg:items-start' : ''}`}>
+              <div ref={columnRef} className="min-w-0 flex-1">
                 {showList ? (
                   <RecipeElementList elements={elements} selectedKey={selectedKey} onSelect={onSelect} />
                 ) : (
@@ -170,18 +181,17 @@ function ProjectRecipe({ projectId }: { projectId: string }) {
                   </Suspense>
                 )}
               </div>
-              <div className="w-full shrink-0 lg:w-88">
-                <RecipeSidePanel
-                  key={selected?.key ?? 'none'}
-                  projectId={projectId}
-                  element={selected}
-                  onClose={() => setSelectedKey(null)}
-                />
-              </div>
+              {selected && (
+                <div
+                  className={showList ? 'w-full shrink-0 lg:w-88' : 'w-full lg:absolute lg:top-8 lg:right-3 lg:z-10 lg:w-88 lg:shadow-lg'}
+                  data-testid="recipe-side-panel-slot"
+                >
+                  <RecipeSidePanel key={selected.key} projectId={projectId} element={selected} onClose={() => setSelectedKey(null)} />
+                </div>
+              )}
             </div>
           </>
         )}
-        <RadarPanel projectId={projectId} />
       </div>
     </div>
   )

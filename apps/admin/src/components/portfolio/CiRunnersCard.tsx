@@ -7,7 +7,8 @@
  * Data: GET /v1/admin/ci/overview?days=7 (no project_id: every readable project)
  */
 
-import { Btn, Card, Loading } from '../ui'
+import { Btn, Card } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import type { CiOverview } from '../../lib/ciTypes'
 import { formatSeconds, isCiOverviewEmpty } from '../../lib/ciView'
@@ -47,7 +48,7 @@ export function CiRunnersCard() {
       </div>
 
       {error && <PageLoadError error={error} resource="CI runners" endpoint={PATH} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading CI…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading CI…" what="CI runners" onRetry={reload} testId="portfolio-ci-runners-not-checked" />
       {data && isCiOverviewEmpty(data) && (
         <p className="text-xs text-fg-muted">No CI jobs seen yet across your apps.</p>
       )}

@@ -26,7 +26,7 @@ export interface PricingTier {
 }
 
 export const TIERS: PricingTier[] = [
-  { id: 'free_cloud', name: 'Free', apps: 1, baseUsd: 0, included: 100, overageUsd: null, capUsd: null },
+  { id: 'free_cloud', name: 'Free', apps: 3, baseUsd: 0, included: 300, overageUsd: null, capUsd: null },
   { id: 'indie', name: 'Builder', apps: 3, baseUsd: 29, included: 1000, overageUsd: 0.03, capUsd: 50 },
   { id: 'pro', name: 'Studio', apps: 10, baseUsd: 79, included: 3000, overageUsd: 0.03, capUsd: 200 },
 ]

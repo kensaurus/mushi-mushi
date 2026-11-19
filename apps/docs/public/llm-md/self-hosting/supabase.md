@@ -9,11 +9,14 @@ description: Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI
 
 # Supabase setup
 
+The one-command path, `mushi selfhost up --project-ref <your-ref>`, does all of
+this page ([Self-hosting](/self-hosting)). By hand:
+
 ```bash
 cd packages/server
 npx supabase login
 npx supabase link --project-ref <your-ref>
-npx supabase db push          # applies every migration in supabase/migrations/
+npx supabase db push --remote # every migration; CLI 2.x: --linked (3.x without it pushes to your LOCAL db)
 ```
 
   Run these commands from `packages/server/` — the Supabase CLI looks for `supabase/` relative to the current directory.
@@ -62,11 +65,24 @@ using (project_id in (
 
 Do **not** use bare `auth.uid()`: the subquery form is evaluated once per query instead of once per row, which matters on large tables.
 
-## Seed data
+## Seed data and runtime config
 
-There is no separate seed file. The migrations insert the lookup rows themselves
-(pricing plans, the plugin registry, the `mushi_runtime_config` defaults), so
-`db push` is enough.
+There is no separate seed file. The migrations insert the lookup rows
+themselves (pricing plans, the plugin registry, `mushi_runtime_config`
+defaults). **`db push` alone is not enough for a self-hosted project:**
+
+- The migrations seed `mushi_runtime_config.supabase_url` with the Mushi Mushi
+  Cloud URL, and leave `service_role_key` and `internal_caller_token` empty.
+  Until you overwrite them, every pg_cron job calls Mushi Mushi Cloud, or
+  fails.
+- New orgs land on a Free plan row (`free_cloud`, or the `hobby` default), shaped for Mushi
+  Mushi Cloud: on Free, 300 diagnoses a month (then reports stop at
+  `quota_exceeded`), 3 apps, 1 seat and 30-day retention.
+
+`mushi selfhost up` fixes both after every `db push`. It upserts the three
+runtime-config keys (the two tokens equal `MUSHI_INTERNAL_CALLER_SECRET`) and
+lifts the plan limits on your instance. `mushi selfhost up --print-commands`
+prints the SQL if you run it by hand.
 
 ## Verifying the setup
 

@@ -1,17 +1,45 @@
 # FILE: Dockerfile.admin
-# PURPOSE: Build and serve the admin console
+# PURPOSE: Build and serve the admin console (static Vite SPA behind nginx :3000)
+#
+# Build from the repo root: docker build -f deploy/Dockerfile.admin .
+# The context is filtered by deploy/Dockerfile.admin.dockerignore.
+#
+# Vite inlines VITE_* at BUILD time, so pass them as build args; setting them
+# on the running container does nothing. With no VITE_SUPABASE_URL (the
+# published image), the console opens a setup screen that asks for your
+# Supabase URL and anon key and keeps them in that browser.
 
 # Base images pinned by digest (OpenSSF Scorecard Pinned-Dependencies). Refresh
 # with `docker buildx imagetools inspect <image>` on upgrade.
 FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2 AS builder
 WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY packages/core/ packages/core/
-COPY apps/admin/ apps/admin/
-RUN corepack enable && pnpm install --frozen-lockfile
-RUN pnpm --filter @mushi-mushi/admin build
+RUN corepack enable
+
+# The console imports eight workspace packages (brand, core, marketing-ui, mcp,
+# web, eslint-config, tsconfig, eslint-plugin-mushi-mushi) and pnpm needs the
+# whole workspace manifest set plus patches/ to honour the frozen lockfile.
+COPY . .
+
+ARG VITE_SUPABASE_URL=""
+ARG VITE_SUPABASE_ANON_KEY=""
+ARG VITE_API_URL=""
+ARG VITE_INSTANCE_TYPE="self-hosted"
+ARG VITE_BASE_PATH="/"
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+    VITE_API_URL=$VITE_API_URL \
+    VITE_INSTANCE_TYPE=$VITE_INSTANCE_TYPE \
+    VITE_BASE_PATH=$VITE_BASE_PATH \
+    MUSHI_SKIP_GIT_HOOKS=1 \
+    NODE_OPTIONS=--max-old-space-size=6144
+
+# `admin...` = the console and every workspace package it depends on, built
+# in dependency order (the same filter apps/docs/content/self-hosting/admin-spa.mdx uses).
+RUN pnpm install --frozen-lockfile --filter "@mushi-mushi/admin..."
+RUN pnpm --filter "@mushi-mushi/admin..." build
 
 FROM nginx:alpine@sha256:54f2a904c251d5a34adf545a72d32515a15e08418dae0266e23be2e18c66fefa
+COPY deploy/nginx-admin.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/admin/dist /usr/share/nginx/html
 EXPOSE 3000
 CMD ["nginx", "-g", "daemon off;"]

@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { RECIPE_ELEMENT_KEYS } from '../../lib/recipeTypes'
+import { RECIPE_DIAGRAM_MIN_WIDTH } from './useMediaQuery'
 import {
   RECIPE_CARD_MAX_HEIGHT,
   RECIPE_LANE_HEADER_Y,
@@ -33,6 +34,10 @@ describe('recipe diagram readability', () => {
       expect(sorted[0]).toBeGreaterThan(RECIPE_LANE_HEADER_Y)
       for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThanOrEqual(RECIPE_CARD_MAX_HEIGHT)
     }
+  })
+
+  it('Auto switches to the list exactly when the diagram would not fit at 100%', () => {
+    expect(RECIPE_DIAGRAM_MIN_WIDTH).toBe(recipeDiagramBounds().width + 32)
   })
 
   it('the canvas (h-232, 928 px) holds the whole diagram height at 100%', () => {

@@ -148,10 +148,17 @@ describe('danger contrast', () => {
     }
   })
 
-  it('paints the active segment count with the full brand-foreground token', () => {
+  // 2026-11-18: a selected segment is a selection, so it takes the violet accent (red means a
+  // failure on this console, DESIGN-SYSTEM.md "Red means a failure, nothing else").
+  it('clears 4.5:1 for accent-foreground on the selected segment wash (light)', () => {
+    expect(contrastRatio(color(LIGHT, '--color-accent-foreground'), color(LIGHT, '--color-accent-muted'))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('paints the selected segment and its count with the full accent-foreground token', () => {
     const forms = readFileSync(segmentedControl, 'utf8')
-    expect(forms).toContain("active ? 'text-brand-foreground' : 'text-fg-faint'")
-    expect(forms).not.toMatch(/text-brand-foreground\/\d+/)
+    expect(forms).toContain("active ? 'text-accent-foreground' : 'text-fg-faint'")
+    expect(forms).toContain('bg-accent-muted text-accent-foreground')
+    expect(forms).not.toMatch(/text-accent-foreground\/\d+/)
   })
 
   it('is named from the admin danger token comments', () => {

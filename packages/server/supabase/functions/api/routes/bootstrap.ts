@@ -9,7 +9,8 @@
  *   if they don't exist. Fully idempotent.
  *
  * Env vars consumed:
- *   MUSHI_INIT_ORG_NAME       — org display name
+ *   MUSHI_INIT_OWNER_EMAIL    — required: an account that signed up in the console (owner of the org/project)
+ *   MUSHI_INIT_ORG_NAME       — org display name (optional: the owner's personal org otherwise)
  *   MUSHI_INIT_ORG_ID         — org UUID (optional; random UUID if omitted)
  *   MUSHI_INIT_PROJECT_NAME   — project display name
  *   MUSHI_INIT_PROJECT_ID     — project UUID (optional; random UUID if omitted)
@@ -19,6 +20,7 @@
 import { Hono } from 'npm:hono@4'
 import { requireServiceRoleAuth } from '../../_shared/auth.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { insertProjectWithFreeSlug } from '../../_shared/project-slug.ts'
 import type { Variables } from '../types.ts'
 
 export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
@@ -37,52 +39,109 @@ export function registerBootstrapRoutes(app: Hono<{ Variables: Variables }>) {
     const result: Record<string, string> = {}
     const skipped: string[] = []
 
-    // Org
+    // Owner: organizations.owner_id and projects.owner_id are required, so bootstrap acts for
+    // a real account. The owner signs up once in the console first (BL-172, 2026-11-19).
+    const ownerEmail = Deno.env.get('MUSHI_INIT_OWNER_EMAIL')?.trim().toLowerCase()
+    if ((orgName || projectName) && !ownerEmail) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'OWNER_REQUIRED',
+          message: 'Set MUSHI_INIT_OWNER_EMAIL to the email of an account that has signed up in the console.',
+        },
+      }, 400)
+    }
+    let ownerId: string | null = null
+    if (ownerEmail) {
+      for (let page = 1; page <= 20 && !ownerId; page++) {
+        const { data, error } = await db.auth.admin.listUsers({ page, perPage: 1000 })
+        if (error) return c.json({ ok: false, error: { code: 'OWNER_LOOKUP_FAILED', message: error.message } }, 500)
+        ownerId = data.users.find((u) => u.email?.toLowerCase() === ownerEmail)?.id ?? null
+        if (data.users.length < 1000) break
+      }
+      if (!ownerId) {
+        return c.json({
+          ok: false,
+          error: { code: 'OWNER_NOT_FOUND', message: `No account for ${ownerEmail}. Sign up in the console first, then call bootstrap again.` },
+        }, 400)
+      }
+    }
+
+    // Org: a named team org (slug rules as in routes/organizations.ts), else the owner's
+    // personal org.
     let resolvedOrgId = orgId ?? null
-    if (orgName) {
+    if (ownerId && orgName) {
       const { data: existingOrg } = orgId
         ? await db.from('organizations').select('id').eq('id', orgId).maybeSingle()
-        : await db.from('organizations').select('id').eq('name', orgName).maybeSingle()
+        : await db.from('organizations').select('id').eq('name', orgName).eq('owner_id', ownerId).maybeSingle()
 
       if (existingOrg) {
         skipped.push('org')
         resolvedOrgId = existingOrg.id as string
       } else {
-        const newId = orgId ?? crypto.randomUUID()
-        const { error } = await db.from('organizations').insert({
-          id: newId,
-          name: orgName,
-        })
-        if (error) {
-          return c.json({ ok: false, error: { code: 'ORG_CREATE_FAILED', message: error.message } }, 500)
+        const base = orgName.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'team'
+        const padded = base.length < 3 ? `${base}-team` : base
+        const tail = () => Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => b.toString(16).padStart(2, '0')).join('')
+        const candidates = [padded, `${padded.slice(0, 50)}-${tail()}`, `${padded.slice(0, 50)}-${tail()}`]
+        let created: { id: string } | null = null
+        let lastError: { message?: string; code?: string } | null = null
+        for (const slug of candidates) {
+          const { data, error } = await db
+            .from('organizations')
+            .insert({ ...(orgId ? { id: orgId } : {}), name: orgName, slug, owner_id: ownerId, is_personal: false })
+            .select('id')
+            .single()
+          if (data) { created = data as { id: string }; break }
+          lastError = error
+          if (!(error?.code === '23505' || /duplicate key|unique constraint/i.test(error?.message ?? ''))) break
         }
-        result.org_id = newId
-        resolvedOrgId = newId
+        if (!created) {
+          return c.json({ ok: false, error: { code: 'ORG_CREATE_FAILED', message: lastError?.message ?? 'no free slug' } }, 500)
+        }
+        const { error: memberErr } = await db.from('organization_members').insert({
+          organization_id: created.id,
+          user_id: ownerId,
+          role: 'owner',
+          joined_via: 'founding_owner',
+          last_active_at: new Date().toISOString(),
+        })
+        if (memberErr) {
+          await db.from('organizations').delete().eq('id', created.id)
+          return c.json({ ok: false, error: { code: 'ORG_CREATE_FAILED', message: memberErr.message } }, 500)
+        }
+        result.org_id = created.id
+        resolvedOrgId = created.id
       }
+    } else if (ownerId && projectName && !resolvedOrgId) {
+      const { data: personalOrgId, error } = await db.rpc('bootstrap_personal_org', { p_user_id: ownerId })
+      if (error || !personalOrgId) {
+        return c.json({ ok: false, error: { code: 'ORG_CREATE_FAILED', message: error?.message ?? 'no personal org' } }, 500)
+      }
+      resolvedOrgId = personalOrgId as string
     }
 
-    // Project
+    // Project: the console's own insert (free slug; the owner becomes a member by trigger).
     let resolvedProjectId = projectId ?? null
-    if (projectName && resolvedOrgId) {
+    if (ownerId && projectName && resolvedOrgId) {
       const { data: existingProject } = projectId
         ? await db.from('projects').select('id').eq('id', projectId).maybeSingle()
-        : await db.from('projects').select('id').eq('name', projectName).eq('org_id', resolvedOrgId).maybeSingle()
+        : await db.from('projects').select('id').eq('name', projectName).eq('organization_id', resolvedOrgId).maybeSingle()
 
       if (existingProject) {
         skipped.push('project')
         resolvedProjectId = existingProject.id as string
       } else {
-        const newId = projectId ?? crypto.randomUUID()
-        const { error } = await db.from('projects').insert({
-          id: newId,
-          org_id: resolvedOrgId,
+        const { data, error } = await insertProjectWithFreeSlug(db, {
           name: projectName,
+          owner_id: ownerId,
+          organization_id: resolvedOrgId,
         })
-        if (error) {
-          return c.json({ ok: false, error: { code: 'PROJECT_CREATE_FAILED', message: error.message } }, 500)
+        if (error || !data) {
+          return c.json({ ok: false, error: { code: 'PROJECT_CREATE_FAILED', message: error?.message ?? 'insert failed' } }, 500)
         }
-        result.project_id = newId
-        resolvedProjectId = newId
+        result.project_id = data.id
+        resolvedProjectId = data.id
       }
     }
 

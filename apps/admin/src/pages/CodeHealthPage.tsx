@@ -49,6 +49,7 @@ import { PageFirstStep } from '../components/ui/page-first-step'
 import { codeHealthErrorsHint, codeHealthNoDataHint, codeHealthWarningsHint } from '../lib/humanPageHints'
 import { pluralizeWithCount } from '../lib/format'
 import { CHIP_TONE, LINK_ACCENT } from '../lib/chipTone'
+import { StatusGlyph } from '../components/signal/StatusGlyph'
 
 // ── Types (mirrors code-health.ts response shapes) ────────────────────────────
 
@@ -120,20 +121,48 @@ export function codeSizeStatus(summary: CodeHealthSummary): { tone: PageStatusTo
   return { tone: 'ok', sentence: `Every file is under the 2,000-line budget.${bundle}` }
 }
 
+/**
+ * Exported for tests. The dependency-holes line: a problem (red, first on the page) when packages
+ * have open holes, otherwise a plain line. "3 packages … have known security holes" sat grey in
+ * the middle of the page, under an empty state (2026-11-18).
+ */
+export function dependencyHolesLine(view: Pick<KnownHolesView, 'available' | 'groups' | 'lastRun'> | null | undefined): { problem: boolean; text: string; link: string } | null {
+  if (!view?.available) return null
+  const open = view.groups.filter((g) => g.status === 'open').length
+  if (open > 0) {
+    return { problem: true, text: `${pluralizeWithCount(open, 'package')} in your dependencies ${open === 1 ? 'has' : 'have'} known security holes.`, link: 'Fix them on Full-stack audit' }
+  }
+  return {
+    problem: false,
+    text: view.lastRun ? 'No known security holes in your dependencies.' : 'Your dependencies have not been checked for known security holes yet.',
+    link: 'Open Full-stack audit',
+  }
+}
+
 /** One line to the audit, where the holes are listed and managed. */
-function DependencyHolesLink({ projectId }: { projectId: string }) {
+function DependencyHolesLink({ projectId, problemsOnly }: { projectId: string; problemsOnly: boolean }) {
   const { data } = usePageData<KnownHolesView>(`/v1/admin/projects/${projectId}/vulnerabilities`)
-  if (!data?.available) return null
-  const open = data.groups.filter((g) => g.status === 'open').length
+  const line = dependencyHolesLine(data)
+  if (!line || line.problem !== problemsOnly) return null
+  if (line.problem) {
+    return (
+      // The mark stays on the sentence's first line: at 390 it sat alone above it (round 3).
+      <p className="flex items-start gap-2 rounded-sm border-l-2 border-danger bg-danger-muted/40 px-2.5 py-1.5 text-xs font-medium text-fg" data-testid="code-size-holes-link" data-problem="true">
+        <StatusGlyph tone="danger" label="Problem" className="mt-0.5 shrink-0" />
+        <span className="min-w-0">
+          {line.text}{' '}
+          <Link to="/fullstack-audit#dependency-holes" className={LINK_ACCENT}>
+            {line.link} →
+          </Link>
+        </span>
+      </p>
+    )
+  }
   return (
     <p className="text-xs text-fg-secondary" data-testid="code-size-holes-link">
-      {open > 0
-        ? `${pluralizeWithCount(open, 'package')} in your dependencies ${open === 1 ? 'has' : 'have'} known security holes.`
-        : data.lastRun
-          ? 'No known security holes in your dependencies.'
-          : 'Your dependencies have not been checked for known security holes yet.'}{' '}
+      {line.text}{' '}
       <Link to="/fullstack-audit#dependency-holes" className={LINK_ACCENT}>
-        {open > 0 ? 'Fix them on Full-stack audit' : 'Open Full-stack audit'} →
+        {line.link} →
       </Link>
     </p>
   )
@@ -440,6 +469,9 @@ export function CodeHealthPage() {
 
       {error && <PageLoadError error={error} code={errorCode} resource="code-size data" onRetry={reload} />}
 
+      {/* Problems first: open dependency holes lead the page, above the empty state. */}
+      <DependencyHolesLink projectId={projectId} problemsOnly />
+
       {loading && !codeHealth && (
         <div className="flex items-center justify-center py-12">
           <p className="text-sm text-fg-muted">Loading code size…</p>
@@ -473,7 +505,7 @@ export function CodeHealthPage() {
         />
       )}
 
-      <DependencyHolesLink projectId={projectId} />
+      <DependencyHolesLink projectId={projectId} problemsOnly={false} />
 
       <div className="flex w-full min-w-0 flex-col gap-6">
         {codeHealth && hasAnyData && (

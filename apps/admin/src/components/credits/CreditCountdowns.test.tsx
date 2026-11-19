@@ -76,3 +76,25 @@ describe('CreditCountdowns', () => {
     expect(text).toContain('Turn it on so the credits fix bugs.')
   })
 })
+
+// Fresh-eyes 2026-11-18: an expired key led with "0 days", an empty bar and
+// "0 of 100 fixes sent today".
+describe('CreditCountdowns expired key', () => {
+  it('says Expired with a hatched bar, after the live keys', async () => {
+    const expired = { ...KEY, id: 'old', label: 'old-key', creditsExpireAt: '2026-10-27T00:00:00Z' } as SpendDownKeyStatus
+    const live = { ...KEY, id: 'live', label: 'live-key' } as SpendDownKeyStatus
+    await act(async () => {
+      root.render(
+        createElement(MemoryRouter, null, createElement(CreditCountdowns, { keys: [expired, live], balance: null, canManageOrg: true, now: NOW, onChanged: vi.fn() })),
+      )
+    })
+    const cards = Array.from(container.querySelectorAll('[aria-label="Credits by expiry date"] > li'))
+    expect(cards.length).toBe(2)
+    expect(cards[0].textContent).toContain('live-key')
+    const old = cards[1].querySelector('[data-testid="credit-countdown-expired"]')!
+    expect(old.textContent).toContain('Expired')
+    expect(old.textContent).not.toContain('fixes sent today')
+    expect(old.querySelector('.ci-nodata')).not.toBeNull()
+    expect(old.querySelector('[role="meter"]')).toBeNull()
+  })
+})

@@ -85,7 +85,7 @@ export function evaluateDeadApp(input: DeadAppInput, now: Date): DetectorResult 
   const ruleId = 'dead_app_live_spend' as const
   const lastSeen = latestIso([input.lastSdkHeartbeat, input.lastReport, input.lastPageView])
   if (!lastSeen) {
-    return { ruleId, state: 'unknown', reason: 'Mushi has never seen this app in use (no SDK heartbeat, report or page view), so it cannot tell whether it is still alive. Install the Mushi SDK to check this.', findings: [] }
+    return { ruleId, state: 'unknown', reason: 'Mushi Mushi has never seen this app in use (no SDK heartbeat, report or page view), so it cannot tell whether it is still alive. Install the Mushi Mushi SDK to check this.', findings: [] }
   }
   const idle = days(lastSeen, now)
   if (idle < DEAD_APP_DAYS) return { ruleId, state: 'ok', reason: `In use: last seen ${idle === 0 ? 'today' : `${plural(idle, 'day')} ago`}.`, findings: [] }
@@ -93,12 +93,12 @@ export function evaluateDeadApp(input: DeadAppInput, now: Date): DetectorResult 
   const live: string[] = []
   if (input.providerSpendUsd30d != null && input.providerSpendUsd30d > 0) live.push(`${usd(input.providerSpendUsd30d)} of ${input.providerSpendVendor ?? 'AI provider'} spend in the last 30 days`)
   if (input.liveFunctions != null && input.liveFunctions > 0) live.push(`${plural(input.liveFunctions, 'edge function')} still deployed`)
-  if (input.liveProviderKeys > 0) live.push(`${plural(input.liveProviderKeys, 'provider key')} still active in Mushi`)
+  if (input.liveProviderKeys > 0) live.push(`${plural(input.liveProviderKeys, 'provider key')} still active in Mushi Mushi`)
   if (live.length === 0) {
     if (input.providerSpendUsd30d == null && input.liveFunctions == null) {
-      return { ruleId, state: 'unknown', reason: `Nobody has used the app for ${idle} days, but no spend source is connected (AI provider spend or Supabase), so Mushi cannot tell whether it still costs money.`, findings: [] }
+      return { ruleId, state: 'unknown', reason: `Nobody has used the app for ${idle} days, but no spend source is connected (AI provider spend or Supabase), so Mushi Mushi cannot tell whether it still costs money.`, findings: [] }
     }
-    return { ruleId, state: 'ok', reason: `Nobody has used the app for ${idle} days, and nothing Mushi can see still spends.`, findings: [] }
+    return { ruleId, state: 'ok', reason: `Nobody has used the app for ${idle} days, and nothing Mushi Mushi can see still spends.`, findings: [] }
   }
   return {
     ruleId,
@@ -109,7 +109,7 @@ export function evaluateDeadApp(input: DeadAppInput, now: Date): DetectorResult 
       severity: 'warn',
       message: `Nobody has used this app for ${idle} days (no SDK heartbeat, report or page view since ${lastSeen.slice(0, 10)}), but it still has ${live.join(', ')}. If the app is retired, that is money and exposure for nothing.`,
       target: null,
-      fix: 'If the app is retired: 1) pause its Supabase project (Dashboard → Project settings → General → Pause project); 2) delete its edge functions (`supabase functions delete <name>`) and unschedule its cron jobs; 3) revoke its provider keys at each provider and remove them in Mushi (Settings → API Keys). If it is still meant to be live, check that the Mushi SDK still loads in it.',
+      fix: 'If the app is retired: 1) pause its Supabase project (Dashboard → Project settings → General → Pause project); 2) delete its edge functions (`supabase functions delete <name>`) and unschedule its cron jobs; 3) revoke its provider keys at each provider and remove them in Mushi Mushi (Settings → API Keys). If it is still meant to be live, check that the Mushi Mushi SDK still loads in it.',
       evidence: { lastSeen, idleDays: idle, providerSpendUsd30d: input.providerSpendUsd30d, liveFunctions: input.liveFunctions, liveProviderKeys: input.liveProviderKeys },
     }],
   }
@@ -247,34 +247,34 @@ const BYOK_VENDORS: Record<string, ByokVendor> = {
   browserbase: { vendor: 'Browserbase', keysAt: 'https://www.browserbase.com/settings' },
   cursor: { vendor: 'Cursor', keysAt: 'https://cursor.com/dashboard/integrations' },
   // A personal access token: the Schema-Repair diagnostic and backend-drift-scanner read the app's Supabase project with it.
-  supabase: { vendor: 'Supabase', keysAt: 'https://supabase.com/dashboard/account/tokens', impact: "Mushi's Supabase schema checks for this app (the Schema-Repair diagnostic and the daily backend drift scan) have stopped." },
+  supabase: { vendor: 'Supabase', keysAt: 'https://supabase.com/dashboard/account/tokens', impact: "Mushi Mushi's Supabase schema checks for this app (the Schema-Repair diagnostic and the daily backend drift scan) have stopped." },
 }
 
 /** Where the owner replaces a key, per connector kind. */
 export function credentialHelp(kind: string, provider: string | null): CredentialHelp {
   switch (kind) {
-    case 'github': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens (or reinstall the Mushi GitHub App), then save it in Mushi under Settings → Integrations → GitHub.' }
-    case 'supabase': return { vendor: 'Supabase', where: 'Create a new access token at https://supabase.com/dashboard/account/tokens, then save it in Mushi under Settings → API Keys → Supabase.' }
-    case 'sentry': return { vendor: 'Sentry', where: 'Create a new auth token at https://sentry.io/settings/account/api/auth-tokens/, then save it in Mushi under Settings → Integrations → Sentry.' }
+    case 'github': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens (or reinstall the Mushi Mushi GitHub App), then save it in Mushi Mushi under Settings → Integrations → GitHub.' }
+    case 'supabase': return { vendor: 'Supabase', where: 'Create a new access token at https://supabase.com/dashboard/account/tokens, then save it in Mushi Mushi under Settings → API Keys → Supabase.' }
+    case 'sentry': return { vendor: 'Sentry', where: 'Create a new auth token at https://sentry.io/settings/account/api/auth-tokens/, then save it in Mushi Mushi under Settings → Integrations → Sentry.' }
     case 'llm_usage': return provider === 'anthropic'
-      ? { vendor: 'Anthropic', where: 'Create a new admin key at https://console.anthropic.com/settings/admin-keys, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
-      : { vendor: 'OpenAI', where: 'Create a new admin key at https://platform.openai.com/settings/organization/admin-keys, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
-    case 'revenuecat': return { vendor: 'RevenueCat', where: 'Create a new secret API key (v2, read-only) in the RevenueCat project settings, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
-    case 'play_console': return { vendor: 'Google Play', where: 'Create a new JSON key for the service account in Google Cloud (IAM → Service accounts → Keys), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
-    case 'app_store_connect': return { vendor: 'App Store Connect', where: 'Create a new team API key in App Store Connect (Users and Access → Integrations), then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
+      ? { vendor: 'Anthropic', where: 'Create a new admin key at https://console.anthropic.com/settings/admin-keys, then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
+      : { vendor: 'OpenAI', where: 'Create a new admin key at https://platform.openai.com/settings/organization/admin-keys, then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
+    case 'revenuecat': return { vendor: 'RevenueCat', where: 'Create a new secret API key (v2, read-only) in the RevenueCat project settings, then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
+    case 'play_console': return { vendor: 'Google Play', where: 'Create a new JSON key for the service account in Google Cloud (IAM → Service accounts → Keys), then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
+    case 'app_store_connect': return { vendor: 'App Store Connect', where: 'Create a new team API key in App Store Connect (Users and Access → Integrations), then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
     case 'byok': {
       const v: ByokVendor = (provider ? BYOK_VENDORS[provider] : undefined) ?? { vendor: provider ?? 'the provider', keysAt: 'the provider dashboard' }
-      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi under Settings → API Keys, then remove the old one there.`, impact: v.impact ?? `Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
+      return { vendor: v.vendor, where: `Create a new key at ${v.keysAt}, add it in Mushi Mushi under Settings → API Keys, then remove the old one there.`, impact: v.impact ?? `Mushi Mushi's ${v.vendor} calls for this app can no longer use it (they fail, or fall back to another key).` }
     }
-    case 'langfuse': return { vendor: 'Langfuse', where: 'Create new API keys in your Langfuse project settings, then save them in Mushi under Settings → Integrations → Langfuse.', impact: "Mushi's Langfuse traces for this app have stopped." }
-    case 'linear': return { vendor: 'Linear', where: 'Reconnect Linear in Mushi under Settings → Integrations → Linear, or paste a new key from https://linear.app/settings/api.', impact: 'Mushi can no longer create or sync Linear issues for this app.' }
-    case 'cursor_cloud': return { vendor: 'Cursor', where: 'Create a new API key at https://cursor.com/dashboard/integrations, then save it in Mushi under Settings → Integrations → Cursor Cloud.', impact: 'Fixes dispatched to Cursor Cloud for this app fail.' }
-    case 'claude_code_agent': return { vendor: 'Anthropic', where: 'Create a new key at https://console.anthropic.com/settings/keys, then save it in Mushi under Settings → Integrations → Claude Code.', impact: 'Fixes dispatched to the Claude Code agent for this app fail.' }
-    case 'jira': return { vendor: 'Jira', where: 'Create a new API token at https://id.atlassian.com/manage-profile/security/api-tokens, then update the Jira routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer file Jira issues for this app.' }
-    case 'github_issues': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens, then update the GitHub Issues routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer file GitHub issues for this app.' }
-    case 'pagerduty': return { vendor: 'PagerDuty', where: 'Copy the integration (routing) key from the PagerDuty service, then update the PagerDuty routing in Mushi under Settings → Integrations.', impact: 'Mushi can no longer page you through PagerDuty for this app.' }
-    case 'slack': return { vendor: 'Slack', where: 'Reconnect Slack in Mushi under Settings → Integrations → Slack.', impact: "Mushi's Slack messages for this app have stopped." }
-    default: return { vendor: kind, where: 'Create a new key with the provider, then rotate it on the connector in Mushi (Portfolio → Connected sources).' }
+    case 'langfuse': return { vendor: 'Langfuse', where: 'Create new API keys in your Langfuse project settings, then save them in Mushi Mushi under Settings → Integrations → Langfuse.', impact: "Mushi Mushi's Langfuse traces for this app have stopped." }
+    case 'linear': return { vendor: 'Linear', where: 'Reconnect Linear in Mushi Mushi under Settings → Integrations → Linear, or paste a new key from https://linear.app/settings/api.', impact: 'Mushi Mushi can no longer create or sync Linear issues for this app.' }
+    case 'cursor_cloud': return { vendor: 'Cursor', where: 'Create a new API key at https://cursor.com/dashboard/integrations, then save it in Mushi Mushi under Settings → Integrations → Cursor Cloud.', impact: 'Fixes dispatched to Cursor Cloud for this app fail.' }
+    case 'claude_code_agent': return { vendor: 'Anthropic', where: 'Create a new key at https://console.anthropic.com/settings/keys, then save it in Mushi Mushi under Settings → Integrations → Claude Code.', impact: 'Fixes dispatched to the Claude Code agent for this app fail.' }
+    case 'jira': return { vendor: 'Jira', where: 'Create a new API token at https://id.atlassian.com/manage-profile/security/api-tokens, then update the Jira routing in Mushi Mushi under Settings → Integrations.', impact: 'Mushi Mushi can no longer file Jira issues for this app.' }
+    case 'github_issues': return { vendor: 'GitHub', where: 'Create a new token at https://github.com/settings/tokens, then update the GitHub Issues routing in Mushi Mushi under Settings → Integrations.', impact: 'Mushi Mushi can no longer file GitHub issues for this app.' }
+    case 'pagerduty': return { vendor: 'PagerDuty', where: 'Copy the integration (routing) key from the PagerDuty service, then update the PagerDuty routing in Mushi Mushi under Settings → Integrations.', impact: 'Mushi Mushi can no longer page you through PagerDuty for this app.' }
+    case 'slack': return { vendor: 'Slack', where: 'Reconnect Slack in Mushi Mushi under Settings → Integrations → Slack.', impact: "Mushi Mushi's Slack messages for this app have stopped." }
+    default: return { vendor: kind, where: 'Create a new key with the provider, then rotate it on the connector in Mushi Mushi (Portfolio → Connected sources).' }
   }
 }
 
@@ -307,14 +307,14 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
     const help = credentialHelp(o.kind, o.provider)
     const lastCheck = o.at == null ? 'It has no recorded test date.' : isFresh(o.at, now, CREDENTIAL_FRESH_DAYS) ? '' : `It was last tested ${o.at.slice(0, 10)} and stays marked rejected until a test passes.`
     // byok_key_invalid (Mushi's own setup check) flags every auth_failed key too: say so, so one key reads as one problem.
-    const sameAsSetup = o.kind === 'byok' && o.standing === true ? "Mushi's setup check (byok_key_invalid) reports the same key; replacing it clears both." : ''
+    const sameAsSetup = o.kind === 'byok' && o.standing === true ? "Mushi Mushi's setup check (byok_key_invalid) reports the same key; replacing it clears both." : ''
     findings.push({
       ruleId,
       severity: rejected ? 'error' : 'warn',
       message: [
         rejected
           ? `${help.vendor} rejects the key for "${o.name}" (it was revoked, rotated or mistyped). ${help.impact ?? `Everything Mushi reads from ${help.vendor} for this app has stopped.`}`
-          : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi does with it: the key lacks a permission.`,
+          : `${help.vendor} accepts the key for "${o.name}" but refuses what Mushi Mushi does with it: the key lacks a permission.`,
         lastCheck,
         sameAsSetup,
       ].filter(Boolean).join(' '),
@@ -326,7 +326,7 @@ export function evaluateProviderKeys(obs: readonly CredentialObservation[], now:
   if (findings.length > 0) return { ruleId, state: 'finding', reason: `${plural(findings.length, 'key')} ${findings.length === 1 ? 'does' : 'do'} not work.`, findings }
   const working = judged.filter((o) => o.ok).length
   const notRechecked = stale ? ` ${plural(stale, 'more key')} ${stale === 1 ? 'was' : 'were'} not re-checked in the last ${CREDENTIAL_FRESH_DAYS} days, so ${stale === 1 ? 'it is' : 'they are'} not judged.` : ''
-  if (working === 0) return { ruleId, state: 'unknown', reason: `Mushi could not reach the providers to check ${plural(judged.length, 'key')} (they failed for another reason than the key).${notRechecked}`, findings: [] }
+  if (working === 0) return { ruleId, state: 'unknown', reason: `Mushi Mushi could not reach the providers to check ${plural(judged.length, 'key')} (they failed for another reason than the key).${notRechecked}`, findings: [] }
   const undecided = judged.length - working
   return { ruleId, state: 'ok', reason: `${plural(working, 'key')} checked in the last ${CREDENTIAL_FRESH_DAYS} days; every provider accepted ${working === 1 ? 'it' : 'them'}${undecided ? ` (${undecided} could not be reached)` : ''}.${notRechecked}`, findings: [] }
 }
@@ -353,7 +353,7 @@ export type ScopeCatalog = Readonly<Record<string, Partial<Record<string, readon
 
 const STORE_GRANT_STEP: Record<StoreCredentialState['kind'], string> = {
   play_console: 'In Play Console → Users and permissions, open the service account, give it the permissions above for this app, then press Probe on the connector in Mushi.',
-  app_store_connect: 'An App Store Connect key cannot gain a role after it is made: create a new team key with the role above (Users and Access → Integrations), rotate it on the connector in Mushi, and revoke the old one.',
+  app_store_connect: 'An App Store Connect key cannot gain a role after it is made: create a new team key with the role above (Users and Access → Integrations), rotate it on the connector in Mushi Mushi, and revoke the old one.',
 }
 
 /** Scopes the enabled capabilities need (`drift` reads the same data as `snapshot`). */
@@ -419,22 +419,22 @@ export interface StoredKey {
 
 export function evaluateUnusedKeys(keys: readonly StoredKey[], untracked: number, now: Date): DetectorResult {
   const ruleId = 'key_unused_90d' as const
-  const skipped = untracked > 0 ? ` ${plural(untracked, 'console or MCP key')} ${untracked === 1 ? 'was' : 'were'} not judged: Mushi does not record every use of ${untracked === 1 ? 'it' : 'them'}.` : ''
-  if (keys.length === 0) return { ruleId, state: 'unknown', reason: `No stored key whose use Mushi records.${skipped}`, findings: [] }
+  const skipped = untracked > 0 ? ` ${plural(untracked, 'console or MCP key')} ${untracked === 1 ? 'was' : 'were'} not judged: Mushi Mushi does not record every use of ${untracked === 1 ? 'it' : 'them'}.` : ''
+  if (keys.length === 0) return { ruleId, state: 'unknown', reason: `No stored key whose use Mushi Mushi records.${skipped}`, findings: [] }
   const findings: RadarFinding[] = []
   for (const k of keys) {
     const since = k.lastUsedAt ?? latestIso([k.createdAt, k.trackedSince]) ?? k.createdAt
     const idle = days(since, now)
     if (idle < KEY_UNUSED_DAYS) continue
-    const what = k.kind === 'mushi_sdk' ? `The Mushi SDK key "${k.label}"` : `The ${k.provider ?? 'provider'} key "${k.label}"`
+    const what = k.kind === 'mushi_sdk' ? `The Mushi Mushi SDK key "${k.label}"` : `The ${k.provider ?? 'provider'} key "${k.label}"`
     findings.push({
       ruleId,
       severity: 'warn',
-      message: `${what} has not been used for ${idle} days${k.lastUsedAt ? ` (last used ${k.lastUsedAt.slice(0, 10)})` : ' (never used since Mushi started recording)'}. An unused key can still leak and be abused.`,
+      message: `${what} has not been used for ${idle} days${k.lastUsedAt ? ` (last used ${k.lastUsedAt.slice(0, 10)})` : ' (never used since Mushi Mushi started recording)'}. An unused key can still leak and be abused.`,
       target: k.label,
       fix: k.kind === 'mushi_sdk'
         ? 'If no build ships this key any more, revoke it in the console (Projects → API keys → Revoke). Keys that a live app still ships stay; their next use resets this.'
-        : `Remove it in Mushi (Settings → API Keys) and revoke it at ${k.provider ?? 'the provider'} too, so a copy elsewhere stops working.`,
+        : `Remove it in Mushi Mushi (Settings → API Keys) and revoke it at ${k.provider ?? 'the provider'} too, so a copy elsewhere stops working.`,
       evidence: { kind: k.kind, idleDays: idle, lastUsedAt: k.lastUsedAt, createdAt: k.createdAt },
     })
   }
@@ -496,7 +496,7 @@ export function evaluateKillSwitches(input: { manifestPresent: boolean; paidFeat
   const ruleId = 'paid_feature_no_kill_switch' as const
   const declareStep = 'Declare each feature that costs money per use in mushi.recipe.json, with the switch that turns it off without a new build: `"spend": { "paidFeatures": [{ "name": "AI tutor", "provider": "openai", "killSwitch": "env:AI_TUTOR_ENABLED" }] }`.'
   const spending = input.spend.filter((s) => s.usd > 0)
-  if (!input.manifestPresent) return { ruleId, state: 'unknown', reason: 'This app has no mushi.recipe.json yet, so Mushi does not know its paid features.', findings: [] }
+  if (!input.manifestPresent) return { ruleId, state: 'unknown', reason: 'This app has no mushi.recipe.json yet, so Mushi Mushi does not know its paid features.', findings: [] }
   const missing = input.paidFeatures.features.filter((f) => !f.killSwitch)
   if (missing.length > 0) {
     return {
@@ -572,9 +572,9 @@ export function evaluateProviderLimits(uses: readonly ProviderUse[], limits: Rea
       findings.push({
         ruleId,
         severity: 'warn',
-        message: `No monthly spending limit is declared for ${page.vendor}${u.spend != null ? ` (this app spent ${usd(u.spend)} there in 30 days)` : ''}. Mushi cannot cap what your own ${page.vendor} key spends; only ${page.vendor} can.`,
+        message: `No monthly spending limit is declared for ${page.vendor}${u.spend != null ? ` (this app spent ${usd(u.spend)} there in 30 days)` : ''}. Mushi Mushi cannot cap what your own ${page.vendor} key spends; only ${page.vendor} can.`,
         target: page.vendor,
-        fix: `Set a monthly limit at ${page.url}, then record it in mushi.recipe.json so Mushi can warn before you reach it: \`"spend": { "providerLimits": { "${p}": 50 } }\` (US dollars per month).`,
+        fix: `Set a monthly limit at ${page.url}, then record it in mushi.recipe.json so Mushi Mushi can warn before you reach it: \`"spend": { "providerLimits": { "${p}": 50 } }\` (US dollars per month).`,
         evidence: { provider: p, via: [...u.vias], spendUsd30d: u.spend },
       })
     } else if (u.spend != null && u.spend >= limit * LIMIT_ALERT_SHARE) {
@@ -589,7 +589,7 @@ export function evaluateProviderLimits(uses: readonly ProviderUse[], limits: Rea
     }
   }
   if (findings.length > 0) return { ruleId, state: 'finding', reason: `${plural(findings.length, 'provider')} without a declared limit or close to it.`, findings }
-  return { ruleId, state: 'ok', reason: `A monthly limit is declared for ${[...byProvider.keys()].map((p) => PROVIDER_LIMIT_PAGES[p].vendor).join(' and ')}, and spend is under ${Math.round(LIMIT_ALERT_SHARE * 100)}% of it where Mushi can see spend.`, findings: [] }
+  return { ruleId, state: 'ok', reason: `A monthly limit is declared for ${[...byProvider.keys()].map((p) => PROVIDER_LIMIT_PAGES[p].vendor).join(' and ')}, and spend is under ${Math.round(LIMIT_ALERT_SHARE * 100)}% of it where Mushi Mushi can see spend.`, findings: [] }
 }
 
 // ── spend_down_idle (ADR 0028) ───────────────────────────────────────────────
@@ -662,7 +662,7 @@ export function evaluateSpendDownIdle(keys: readonly SpendDownRadarKey[], now: D
   }
   if (active === 0) return { ruleId, state: 'ok', reason: 'Spend-down is on, and no such key is inside its window.', findings: [] }
   if (awaitingTick) {
-    return { ruleId, state: 'unknown', reason: 'Spend-down is inside its window, but the worker has not reported a tick yet, so Mushi cannot tell whether it dispatched.', findings: [] }
+    return { ruleId, state: 'unknown', reason: 'Spend-down is inside its window, but the worker has not reported a tick yet, so Mushi Mushi cannot tell whether it dispatched.', findings: [] }
   }
   return { ruleId, state: 'ok', reason: 'Every spend-down key inside its window dispatched today, or the last tick was waiting on a cap rather than sitting idle.', findings: [] }
 }

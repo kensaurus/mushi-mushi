@@ -5,7 +5,7 @@
 
 export type QaCoverageTabId = 'overview' | 'stories' | 'failing'
 
-export type QaCoverageTopPriority =
+type QaCoverageTopPriority =
   | 'no_project'
   | 'no_stories'
   | 'failing'

@@ -94,7 +94,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
       <div className="space-y-2">
         <p className="text-xs font-medium text-fg">Fastest: paste this prompt into {client.label}</p>
         <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
+          <code className="min-w-0 flex-1 break-words rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
             {agentPrompt}
           </code>
           <CopyButton value={agentPrompt} label="Copy" copiedLabel="Copied" size="sm" />
@@ -106,7 +106,7 @@ function SkillsLane({ client }: { client: McpClientDef }) {
       <div className="space-y-2">
         <p className="text-xs font-medium text-fg">Or install Mushi Mushi skills yourself</p>
         <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 break-all rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
+          <code className="min-w-0 flex-1 break-words rounded-md border border-edge-subtle bg-surface-raised px-2 py-1.5 font-mono text-xs text-fg-secondary">
             {skillsCmd}
           </code>
           <CopyButton value={skillsCmd} label="Copy" copiedLabel="Copied" size="sm" />
@@ -206,7 +206,8 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
         <div className="rounded-md border border-edge-subtle bg-surface-hover/30 px-3 py-2">
           <p className="text-2xs font-medium text-fg-muted mb-1">MCP endpoint for OAuth sign-in (manual setup)</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 break-all font-mono text-2xs text-fg-secondary">
+            {/* One line that scrolls: wrapping broke the URL at its hyphen ("mushi-/mushi") on a phone. */}
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-2xs text-fg-secondary">
               {RESOLVED_MCP_OAUTH_URL}
             </code>
             <CopyButton value={RESOLVED_MCP_OAUTH_URL} label="Copy endpoint" copiedLabel="Copied" size="sm" />
@@ -273,12 +274,10 @@ export function ConnectStudio({ projectId, projectName, connectedEditor }: Conne
 
       <div className="flex items-center gap-2 text-2xs text-fg-muted px-1">
         <IconTerminal size={12} aria-hidden />
-        <span>
-          Want the full manual setup?{' '}
-          <Link to="/mcp" className={LINK_ACCENT}>
-            Open MCP console →
-          </Link>
-        </span>
+        {/* A link, not a question over it (round-3 review, 2026-11-19: stacked instruction lines). */}
+        <Link to="/mcp" className={LINK_ACCENT}>
+          Manual MCP setup →
+        </Link>
       </div>
     </div>
   )

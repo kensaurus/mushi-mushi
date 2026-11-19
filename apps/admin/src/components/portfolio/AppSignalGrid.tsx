@@ -10,13 +10,21 @@
  *          carries the app's highlight key, so its alert card and app card
  *          light with it.
  *
+ * Round 2 (2026-11-18): a column that is unknown on (nearly) every app is not drawn; one
+ * line under the grid says so and names the apps that do have a value ("Release age: no
+ * release data for 8 of 9 apps · mushi-mushi 182d"). Below 672 px of room each app is a
+ * stacked block of labelled cells instead of a table that scrolls sideways and hides
+ * "CI fails today" and "Last check-in" off the right edge of a phone.
+ *
  * Data: the portfolio cards (lib/appSignals.ts ranks them) and the setup
  * list's SDK check-ins; nothing is read here.
  */
 
 import { Link } from 'react-router-dom'
-import { HeatGrid, type HeatCellValue, type HeatColumn, type HeatRow } from '../signal/HeatGrid'
-import type { SignalTone } from '../signal/StatusGlyph'
+import type { ReactNode } from 'react'
+import { HeatGrid, columnMax, heatCellClass, type HeatCellValue, type HeatColumn, type HeatRow } from '../signal/HeatGrid'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
+import { useLinked } from '../signal/linkedHighlight'
 import { appKey, shortAge, type AppSignals } from '../../lib/appSignals'
 import { appLink, openApp } from '../../lib/openApp'
 
@@ -70,6 +78,70 @@ function signalCells(r: AppSignals, now: number): Record<string, HeatCellValue> 
   return { bugs: { value: r.openBugs.value, display: bugs, title: `Open bugs: ${bugs}` }, risks, sdk, release, ci, checkin }
 }
 
+/** A column the grid leaves out because (nearly) no app has a value in it. */
+interface SparseColumn {
+  id: string
+  label: string
+  unknown: number
+  total: number
+  /** The few apps that do have a value: name and what the cell shows. */
+  known: Array<{ name: string; shown: string }>
+}
+
+const NO_DATA_WORD: Record<string, string> = { release: 'release data', ci: 'CI data', checkin: 'check-in data', sdk: 'SDK data', risks: 'risk data', bugs: 'bug data' }
+
+/**
+ * @internal Columns unknown on (nearly) every row: from three apps up, a column with a value
+ * on at most a fifth of them (8 of 9 "none" release ages). Exported for tests.
+ */
+export function sparseColumns(columns: readonly HeatColumn[], rows: readonly HeatRow[]): SparseColumn[] {
+  if (rows.length < 3) return []
+  const out: SparseColumn[] = []
+  for (const col of columns) {
+    const known = rows.filter((r) => r.cells[col.id]?.value != null)
+    if (known.length > Math.floor(rows.length / 5)) continue
+    out.push({
+      id: col.id,
+      label: col.label,
+      unknown: rows.length - known.length,
+      total: rows.length,
+      known: known.map((r) => ({ name: typeof r.label === 'string' ? r.label : r.id, shown: String(r.cells[col.id]?.display ?? r.cells[col.id]?.value ?? '') })),
+    })
+  }
+  return out
+}
+
+/** One app as a stacked block on a narrow screen: the name, then every signal as a labelled cell. */
+function StackedApp({ row, columns, maxes, renderLabel }: { row: HeatRow; columns: readonly HeatColumn[]; maxes: number[]; renderLabel: (row: HeatRow) => ReactNode }) {
+  const keys = row.keys ?? []
+  const link = useLinked(keys, keys[0] ?? row.id, keys.length > 0)
+  return (
+    <li {...link} className={`${link.className} py-1.5`} data-testid={`signal-stack-${row.id}`}>
+      <p className="truncate text-xs font-bold text-fg">{renderLabel(row)}</p>
+      {row.sub && <p className="truncate text-3xs text-fg-secondary">{row.sub}</p>}
+      <dl className="mt-1 grid grid-cols-3 gap-1">
+        {columns.map((col, ci) => {
+          const cell = row.cells[col.id]
+          const shown = cell?.display ?? (cell?.value == null ? '–' : String(cell.value))
+          return (
+            <div key={col.id} className="min-w-0">
+              <dt className="truncate text-3xs text-fg-secondary">{col.label}</dt>
+              <dd
+                className={`sig-cell flex h-6 items-center justify-center gap-1 rounded-xs px-1 font-mono text-2xs font-bold tabular-nums ${heatCellClass(col, cell, maxes[ci] ?? 0)}`}
+                title={cell?.title}
+                data-col={col.id}
+              >
+                {col.scale === 'state' && cell?.tone && <StatusGlyph tone={cell.tone} className="h-2.5 w-2.5" />}
+                {shown}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+    </li>
+  )
+}
+
 export function AppSignalGrid({ rows, now }: { rows: readonly AppSignals[]; now: number }) {
   const byId = new Map(rows.map((r) => [r.card.projectId, r]))
   const heatRows: HeatRow[] = rows.map((r) => ({
@@ -81,28 +153,52 @@ export function AppSignalGrid({ rows, now }: { rows: readonly AppSignals[]; now:
     keys: [appKey(r.card.projectId)],
     cells: signalCells(r, now),
   }))
+  const sparse = sparseColumns(COLUMNS, heatRows)
+  const hidden = new Set(sparse.map((c) => c.id))
+  const columns = COLUMNS.filter((c) => !hidden.has(c.id))
+  const maxes = columns.map((c) => columnMax(c, heatRows))
+  const renderLabel = (row: HeatRow) => {
+    const r = byId.get(row.id)
+    return (
+      <Link
+        to={appLink(r?.reasons[0]?.to ?? '/recipe', row.id)}
+        onClick={(e) => {
+          // Opening the app is the link's job; the row's click pins it.
+          e.stopPropagation()
+          openApp(row.id)
+        }}
+        className="hover:underline focus-visible:underline focus-visible:outline-none"
+      >
+        {row.label}
+      </Link>
+    )
+  }
   return (
-    <HeatGrid
-      caption="Apps by signal"
-      columns={COLUMNS}
-      rows={heatRows}
-      testId="portfolio-signal-grid"
-      renderLabel={(row) => {
-        const r = byId.get(row.id)
-        return (
-          <Link
-            to={appLink(r?.reasons[0]?.to ?? '/recipe', row.id)}
-            onClick={(e) => {
-              // Opening the app is the link's job; the row's click pins it.
-              e.stopPropagation()
-              openApp(row.id)
-            }}
-            className="hover:underline focus-visible:underline focus-visible:outline-none"
-          >
-            {row.label}
-          </Link>
-        )
-      }}
-    />
+    <div className="@container flex min-w-0 flex-col gap-1.5" data-testid="portfolio-signal">
+      <div className="hidden @2xl:block">
+        <HeatGrid caption="Apps by signal" columns={columns} rows={heatRows} testId="portfolio-signal-grid" renderLabel={renderLabel} />
+      </div>
+      <div className="@2xl:hidden">
+        <p className="pb-1 text-3xs font-bold tracking-wider text-fg uppercase">Apps by signal</p>
+        <ul className="divide-y divide-edge-subtle" data-testid="portfolio-signal-stack">
+          {heatRows.map((row) => (
+            <StackedApp key={row.id} row={row} columns={columns} maxes={maxes} renderLabel={renderLabel} />
+          ))}
+        </ul>
+      </div>
+      {sparse.map((c) => (
+        <p key={c.id} className="flex flex-wrap items-center gap-x-1.5 text-2xs text-fg-secondary" data-testid={`portfolio-signal-sparse-${c.id}`}>
+          <span className="ci-nodata inline-block h-2 w-3 rounded-xs border border-edge-subtle" aria-hidden="true" />
+          <span>
+            <span className="font-semibold text-fg">{c.label}:</span> no {NO_DATA_WORD[c.id] ?? 'data'} for {c.unknown} of {c.total} apps
+          </span>
+          {c.known.map((k) => (
+            <span key={k.name} className="font-mono tabular-nums">
+              · {k.name} {k.shown}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
   )
 }

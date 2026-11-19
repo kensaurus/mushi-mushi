@@ -24,6 +24,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import { reportHasCodeLocation } from '../../lib/reportCodeLocation'
 import { getMcpClient } from '@mushi-mushi/mcp/clients'
 import { Card } from '../../components/ui'
 import { Btn } from '../ui'
@@ -149,7 +150,9 @@ export function FixWithAgentPanel({ report, cursorWorkspace }: FixWithAgentPanel
       </details>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
-        <Btn variant="primary" size="sm" leadingIcon={<IconCopy />} onClick={() => void copy('fix')}>
+        {/* With no stack trace or file the triage bar leads with "Not a code
+            bug"; a red Copy fix prompt here argued with it (sweep 2026-11-18). */}
+        <Btn variant={reportHasCodeLocation(report) ? 'primary' : 'ghost'} size="sm" leadingIcon={<IconCopy />} onClick={() => void copy('fix')} data-testid="copy-fix-prompt">
           {copied === 'fix' ? 'Copied' : 'Copy fix prompt'}
         </Btn>
         <span className="text-2xs text-fg-faint">

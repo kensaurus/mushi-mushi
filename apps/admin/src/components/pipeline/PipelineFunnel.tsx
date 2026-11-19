@@ -31,17 +31,44 @@ const STUCK_BAR: Partial<Record<SignalTone, string>> = {
   warn: 'bg-warn',
 }
 
+/** Grid tracks by how many stages are drawn as boxes (static class names for Tailwind). */
+const GRID_COLS: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-2 @md:grid-cols-3',
+  4: 'grid-cols-2 @md:grid-cols-4',
+  5: 'grid-cols-2 @md:grid-cols-5',
+  6: 'grid-cols-2 @md:grid-cols-3 @4xl:grid-cols-6',
+  7: 'grid-cols-2 @md:grid-cols-4 @4xl:grid-cols-7',
+  8: 'grid-cols-2 @md:grid-cols-4 @4xl:grid-cols-8',
+}
+
+/**
+ * Which stages get a box. An empty stage was a full box reading "0 · empty" (7 of 8 on a quiet
+ * app, round-2 review 2026-11-18): when at least two stages are empty they fold into one line
+ * under the boxes. A selected stage keeps its box.
+ */
+function splitEmptyStages<T extends { id: string; count: number }>(stages: readonly T[], selected: string | null): { boxes: T[]; empty: T[] } {
+  const empty = stages.filter((s) => s.count === 0 && s.id !== selected)
+  if (empty.length < 2) return { boxes: [...stages], empty: [] }
+  return { boxes: stages.filter((s) => !empty.includes(s)), empty }
+}
+
 export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Props) {
   const max = Math.max(1, ...stages.map((s) => s.count))
   const tones = stageTones(stages)
+  const { boxes, empty } = splitEmptyStages(stages, selected)
+  const order = new Map(stages.map((s, i) => [s.id, i]))
   return (
-    <div className="@container">
+    <div className="@container space-y-1">
+      {boxes.length > 0 && (
       <ol
-        className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-edge bg-edge @md:grid-cols-4 @4xl:grid-cols-8"
+        className={`grid gap-px overflow-hidden rounded-md border border-edge bg-edge ${GRID_COLS[boxes.length] ?? GRID_COLS[8]}`}
         aria-label="Pipeline stages, left to right"
         data-testid="pipeline-funnel"
       >
-        {stages.map((s, i) => {
+        {boxes.map((s) => {
+          const i = order.get(s.id) ?? 0
           const tone = tones[s.id]
           const active = selected === s.id
           // Square-root width: one busy stage (the backlog) must not shrink every other bar to nothing.
@@ -62,11 +89,11 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
               >
                 <span className="flex min-w-0 items-center gap-1">
                   {tone && <StatusGlyph tone={tone} className="h-2.5 w-2.5" />}
-                  <span className={`truncate text-3xs font-bold tracking-wider uppercase ${tone ? TONE_INK[tone] : 'text-fg-secondary'}`}>
+                  <span className={`text-3xs leading-tight font-bold tracking-wider uppercase wrap-break-word ${tone ? TONE_INK[tone] : 'text-fg-secondary'}`}>
                     <span className="tabular-nums text-fg-faint">{i + 1}</span> {s.label}
                   </span>
                 </span>
-                <span className="truncate text-3xs text-fg-secondary" data-testid={`pipeline-stage-${s.id}-plain`}>
+                <span className="line-clamp-2 text-3xs leading-tight text-fg-secondary" data-testid={`pipeline-stage-${s.id}-plain`}>
                   {STAGE_PLAIN[s.id]}
                 </span>
                 <span className={`font-mono text-lg leading-none font-extrabold tabular-nums ${s.count === 0 ? 'text-fg-faint' : 'text-fg'}`} data-testid={`pipeline-stage-${s.id}-count`}>
@@ -106,7 +133,7 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
                     <span className="font-semibold text-fg">
                       {openers.total - openers.nobody} of {openers.total}
                     </span>{' '}
-                    (cloud <span className={openers.server === 0 ? 'font-bold text-danger-foreground' : 'font-semibold text-fg'}>{openers.server}</span>, your worker{' '}
+                    (cloud <span className="font-semibold text-fg">{openers.server}</span>, your worker{' '}
                     <span className="font-semibold text-fg">{openers.local}</span>)
                   </span>
                 )}
@@ -115,28 +142,53 @@ export function PipelineFunnel({ stages, openers, selected, onSelect, now }: Pro
           )
         })}
       </ol>
+      )}
+      {empty.length > 0 && (
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-1 text-2xs text-fg-muted" data-testid="pipeline-stages-empty">
+          <span className="font-semibold text-fg-secondary">Empty now:</span>
+          {empty.map((s) => (
+            <span key={s.id} className="whitespace-nowrap" data-testid={`pipeline-stage-${s.id}-empty`} title={STAGE_PLAIN[s.id]}>
+              <span className="tabular-nums text-fg-faint">{(order.get(s.id) ?? 0) + 1}</span> {s.label}
+            </span>
+          ))}
+        </p>
+      )}
     </div>
   )
 }
 
-/** The bar's key, once under the stages. */
-export function FunnelLegend() {
+/**
+ * The bar's key, once under the stages: only the marks on screen. It explained ▲ and ◆ and a
+ * square-root scale beside one stage box with neither mark (round-3 review, 2026-11-19); with one
+ * box or none there is nothing to compare, so no key.
+ */
+export function FunnelLegend({ stages, selected = null }: { stages: PipelineStage[]; selected?: string | null }) {
+  const { boxes } = splitEmptyStages(stages, selected)
+  if (boxes.length < 2) return null
+  const tones = Object.values(stageTones(stages))
+  const anyStuck = boxes.some((s) => s.stuck > 0)
   return (
-    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary">
-      <span className="inline-flex items-center gap-1">
-        <StatusGlyph tone="danger" />
-        the bottleneck
-      </span>
-      <span className="inline-flex items-center gap-1">
-        <StatusGlyph tone="warn" />
-        nearly as stuck
-      </span>
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-secondary" data-testid="pipeline-funnel-legend">
+      {tones.includes('danger') && (
+        <span className="inline-flex items-center gap-1">
+          <StatusGlyph tone="danger" />
+          the bottleneck
+        </span>
+      )}
+      {tones.includes('warn') && (
+        <span className="inline-flex items-center gap-1">
+          <StatusGlyph tone="warn" />
+          nearly as stuck
+        </span>
+      )}
+      {anyStuck && (
       <span className="inline-flex items-center gap-1">
         <span className="inline-flex h-1.5 w-6 overflow-hidden rounded-full bg-fg-faint" aria-hidden="true">
           <span className="h-full w-1/2 bg-fg-secondary" />
         </span>
         darker part = stuck
       </span>
+      )}
       <span>Bar width: items in the stage (square-root scale). Click a stage to see only its groups.</span>
     </p>
   )

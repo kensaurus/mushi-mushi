@@ -8,7 +8,8 @@
  *       POST /v1/ingest/recipe/csv (ResourceCsvImport)
  */
 
-import { ErrorAlert, Loading, Section } from '../ui'
+import { ErrorAlert, Section } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { ResourceCsvImport } from './ResourceCsvImport'
 import { AppIconChips, type IconFor } from './AppIconChips'
@@ -32,7 +33,7 @@ export function SharedResourcesCard({ orgId, iconFor }: { orgId: string; iconFor
   return (
     <Section title="Shared between apps">
       {error && <ErrorAlert message={error} endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading shared resources…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading shared resources…" what="Shared resources" onRetry={reload} testId="portfolio-shared-not-checked" />
       {data && (shared.length === 0 ? (
         <p className="text-sm text-fg-muted">No resource is used by two or more apps yet. {data.canImport ? 'Declare links in mushi.recipe.json, connect a source, or import a CSV below to see them.' : 'Declare links in mushi.recipe.json or connect a source to see them.'}</p>
       ) : (

@@ -21,10 +21,12 @@ import { NOT_FOUND_GUIDE } from './lib/fieldGuide'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
+import { mcpManualRedirectTarget } from './lib/mcpManualRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
 import { NewVersionBanner } from './components/NewVersionBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 import { initMushiSelf } from './lib/mushi-self'
+import { setupCopilotRedirectTarget } from './lib/setupCopilotView'
 
 // SentryRoutes = Routes (no wrapper).
 //
@@ -178,18 +180,17 @@ function NotFoundPage() {
 
 function SetupCopilotRedirect() {
   const { search } = useLocation()
-  const params = new URLSearchParams(search)
-  params.set('tab', 'diagnose')
-  return <Navigate to={`/onboarding?${params.toString()}`} replace />
+  return <Navigate to={setupCopilotRedirectTarget(search)} replace />
 }
 
 /**
  * McpManualRedirect — legacy alias from Connect unification; canonical MCP
- * console lives at /mcp (sidebar "Agent help").
+ * console lives at /mcp (sidebar "Agent help"). "Manual" is the copy-paste
+ * config, so it opens the Setup tab, not Summary.
  */
 function McpManualRedirect() {
   const { search } = useLocation()
-  return <Navigate to={`/mcp${search}`} replace />
+  return <Navigate to={mcpManualRedirectTarget(search)} replace />
 }
 /**
  * QaCoverageRedirect — handles legacy Slack notification URLs that used the
@@ -426,7 +427,7 @@ export function App() {
                   <Route path="/journeys" element={<JourneysPage />} />
                   <Route path="/portfolio" element={<PortfolioPage />} />
                   <Route path="/prompt-lab" element={<OperatorRoute><PromptLabPage /></OperatorRoute>} />
-                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
+                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab?tab=fine-tuning" replace />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />

@@ -50,7 +50,7 @@ import {
   type RoutingProviderDef,
 } from '../components/integrations/types'
 import { CONNECTION_WORD, ConnectionGrid, tileRunStatus, useConnectionTiles } from '../components/integrations/ConnectionGrid'
-import type { GridToolId } from '../components/integrations/connectionGridModel'
+import { alertChannelGap, type GridToolId } from '../components/integrations/connectionGridModel'
 import { integrationToolForHash } from '../lib/integrationAnchors'
 import { Drawer } from '../components/Drawer'
 import { BrandIcon } from '../components/ui/BrandIcon'
@@ -452,6 +452,10 @@ export function IntegrationsPage() {
     github: githubAccess,
   })
   const [openTool, setOpenTool] = useState<GridToolId | null>(null)
+  // Alert events switched on (from the matrix's own load): with no channel they go nowhere.
+  const [alertEventsOn, setAlertEventsOn] = useState<number | null>(null)
+  // One rule for both: the grid's "No alert channel" row and the matrix's disabled toggles.
+  const alertChannelConnected = !alertChannelGap(tiles, 1)
   // A check running from a tile's "Check now" or its card's Test button.
   const checkingTool =
     tiles.find((t) => t.checkKind != null && (t.checkKind === testingRouting || t.checkKind === testing))?.id ?? null
@@ -738,6 +742,7 @@ export function IntegrationsPage() {
                     if (tile.checkKind) void testRoutingKind(tile.checkKind, tile.label)
                   }}
                   checkingId={checkingTool}
+                  alertEventsOn={alertEventsOn}
                   groups={[
                     {
                       id: 'integrations-required',
@@ -808,7 +813,11 @@ export function IntegrationsPage() {
             <p className="mb-3 text-2xs leading-snug text-fg-secondary">
               Choose which events send an alert to every connected channel for this project.
             </p>
-            <NotificationPrefsMatrix projectId={activeProjectId} />
+            <NotificationPrefsMatrix
+              projectId={activeProjectId}
+              channelConnected={alertChannelConnected}
+              onEventsOnChange={setAlertEventsOn}
+            />
           </div>
         </Panel>
       )}
@@ -857,16 +866,7 @@ export function IntegrationsPage() {
         />
       ) : null}
 
-      <p className="text-2xs text-fg-muted">
-        Related:{' '}
-        <Link to="/mcp" className="text-accent-foreground hover:underline">Editor agents</Link>
-        {' · '}
-        <Link to="/skills" className="text-accent-foreground hover:underline">Agent skills</Link>
-        {' · '}
-        <Link to="/notifications" className="text-accent-foreground hover:underline">Reporter updates</Link>
-        {' · '}
-        <Link to="/marketplace" className="text-accent-foreground hover:underline">Plugins</Link>
-      </p>
+      {/* Related links: the page-help row (lib/pageLinks.ts) is the one row. */}
 
       {pendingDeleteRouting && (
         <ConfirmDialog

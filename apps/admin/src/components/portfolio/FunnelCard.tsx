@@ -9,7 +9,8 @@
  */
 
 import { useState } from 'react'
-import { Badge, Btn, Callout, Input, Loading, Section, SelectField, type BadgeTone } from '../ui'
+import { Badge, Btn, Callout, Input, Section, SelectField, type BadgeTone } from '../ui'
+import { TimedLoading } from './TimedLoading'
 import { usePageData } from '../../lib/usePageData'
 import { apiFetchMutate } from '../../lib/supabase'
 import { actionErrorText } from '../../lib/actionErrorText'
@@ -72,7 +73,7 @@ export function FunnelCard({ orgId }: { orgId: string }) {
   return (
     <Section title="Funnel across apps" action={data && !editing && canManage !== false ? <Btn size="sm" variant="ghost" onClick={startEdit}>{data.definition ? 'Change steps' : 'Set up'}</Btn> : undefined}>
       {error && <PageLoadError error={error} resource="the funnel across apps" endpoint={path} onRetry={reload} />}
-      {loading && !data && <Loading text="Reading the funnel…" />}
+      <TimedLoading waiting={loading && !data && !error} text="Reading the funnel…" what="Funnel" onRetry={reload} testId="portfolio-funnel-not-checked" />
       {editing && (
         <div className="mb-3 flex flex-col gap-2">
           <Input label="Steps, in order (event names, comma separated)" value={steps} onChange={(e) => setSteps(e.target.value)} placeholder="signup_completed, first_lesson, day7_return" />

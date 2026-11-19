@@ -13,13 +13,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
-import { IconAlertTriangle, IconCheck, IconChevronDown, IconChevronRight, IconClock, IconExternalLink } from '../icons'
+import { IconChevronDown, IconChevronRight, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
-import { offeredActions, primaryAction } from '../../lib/pipelineSignals'
+import { groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
+import { StatusGlyph, type SignalTone } from '../signal/StatusGlyph'
 import { VitalText } from '../signal/VitalText'
 import { SendToWorkerButton } from './SendToWorkerButton'
 import type { WorkerLane } from '../../lib/workers'
@@ -37,21 +38,37 @@ interface Props {
   workerLanes?: WorkerLane[]
   /** A group to open and scroll to (`/pipeline?group=<id>`, Home's Needs you buttons). */
   focusGroupId?: string | null
+  /**
+   * The one group to start with (the status line's "biggest"): the only row that takes ▲.
+   * Unset: the first failed group. ▲ sat on ~18 rows beside a legend calling it "the
+   * bottleneck" (round-2 review, 2026-11-18); a failed row keeps its red edge.
+   */
+  topGroupId?: string | null
 }
 
 /** Stages whose reports have no fix to keep yet: a local worker may take them. */
 const SENDABLE_STAGES = new Set(['reported', 'triaged', 'pr'])
 
-const TONE_ICON = {
-  stuck: <span className="text-danger-foreground"><IconAlertTriangle size={14} /></span>,
-  moving: <span className="text-info-foreground"><IconClock size={14} /></span>,
-  done: <span className="text-ok-foreground"><IconCheck size={14} /></span>,
+/**
+ * Stuck groups that are slow or waiting, not failed (2026-11-18): an agent or CI still running,
+ * a conflict agent not started, a PR waiting on its base or a later train, a backlog report, a
+ * merged fix with no deploy yet. They take ◆; ▲ is only for what failed or needs a decision.
+ */
+const SLOW_GROUP_IDS: ReadonlySet<string> = new Set(['agent_slow', 'ci_slow', 'conflict_stuck', 'base_red', 'after_red_train', 'no_fix_old', 'not_deployed'])
+
+/** The signal tone of a group's mark: ▲ failed, ◆ slow or waiting, ■ moving, ● done. @internal Exported for tests. */
+export function groupSignalTone(group: Pick<PipelineGroup, 'id' | 'tone'>): SignalTone {
+  if (group.tone === 'done') return 'ok'
+  if (group.tone === 'moving') return 'info'
+  return SLOW_GROUP_IDS.has(group.id) ? 'warn' : 'danger'
 }
 
-const TONE_BORDER = {
-  stuck: 'border-l-danger',
-  moving: 'border-l-info',
-  done: 'border-l-ok',
+const TONE_BORDER: Record<SignalTone, string> = {
+  danger: 'border-l-danger',
+  warn: 'border-l-warn',
+  info: 'border-l-info',
+  ok: 'border-l-ok',
+  off: 'border-l-edge',
 }
 
 const VERDICT_STATUS: Record<string, RunStatus> = { merge: 'passed', fix_first: 'slow', hold: 'failed' }
@@ -82,6 +99,7 @@ export function ActionButtons({
   onAction,
   testIdPrefix,
   split = false,
+  omitPrimary = false,
 }: {
   actions: PipelineAction[]
   items: PipelineItem[]
@@ -91,6 +109,8 @@ export function ActionButtons({
   onAction: Props['onAction']
   testIdPrefix: string
   split?: boolean
+  /** The group sits under a heading whose one button runs this primary for every group: show only More. */
+  omitPrimary?: boolean
 }) {
   const shown = offeredActions(actions, items)
   if (shown.length === 0) return null
@@ -133,7 +153,7 @@ export function ActionButtons({
   const rest = shown.filter((a) => a !== primary)
   return (
     <span className="flex flex-wrap items-center gap-1">
-      {primary && button(primary)}
+      {primary && !omitPrimary && button(primary)}
       <MoreActionsMenu
         label={target}
         testId={`${testIdPrefix}-more-actions`}
@@ -303,7 +323,7 @@ const GROUP_HEAD = 'grid grid-cols-1 items-center gap-x-3 gap-y-1.5 p-2.5 sm:gri
 /** Items shown per group before "Show more": the page scrolls, the group does not (2375c9c5). */
 const ITEMS_STEP = 20
 
-function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
+function GroupCard({ group, props, marked, inSection = false }: { group: PipelineGroup; props: Props; marked: boolean; inSection?: boolean }) {
   const focused = props.focusGroupId === group.id
   const [open, setOpen] = useState(focused)
   const ref = useRef<HTMLLIElement>(null)
@@ -314,11 +334,12 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   const apps = new Set(group.items.map((i) => i.projectId))
   const appId = apps.size === 1 ? [...apps][0]! : null
   const sendIds = [...new Set(group.items.map((i) => i.reportId).filter((x): x is string => !!x))]
+  const signal = groupSignalTone(group)
   const lanes = appId && SENDABLE_STAGES.has(group.stage) ? (props.workerLanes ?? []).filter((l) => l.projectId === appId) : []
   return (
     // On a phone the title takes its own line and the age + actions a row beneath, never a
     // one-letter-wide column (GROUP_HEAD, 2026-11-18).
-    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[group.tone]}`} data-testid={`pipeline-group-${group.id}`}>
+    <li ref={ref} className={`scroll-mt-20 rounded-md border border-edge-subtle border-l-4 bg-surface-raised ${TONE_BORDER[signal]}`} data-testid={`pipeline-group-${group.id}`} data-tone={signal}>
       <div className={GROUP_HEAD} data-testid={`pipeline-group-${group.id}-head`}>
         <button
           type="button"
@@ -328,7 +349,8 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
           data-testid={`pipeline-group-${group.id}-toggle`}
         >
           {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-          {TONE_ICON[group.tone]}
+          {/* ▲ once per list (the group to start with); ◆ slow and ■/● stay on every row. */}
+          {(signal !== 'danger' || marked) && <StatusGlyph tone={signal} label={marked ? 'Start here' : undefined} />}
           <span className="min-w-0 text-xs font-medium text-fg wrap-break-word">{group.label}</span>
         </button>
         <span className="flex flex-wrap items-center gap-2 pl-5.5 sm:justify-end sm:pl-0" data-testid={`pipeline-group-${group.id}-side`}>
@@ -354,6 +376,7 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
             onAction={props.onAction}
             testIdPrefix={`pipeline-group-${group.id}`}
             split
+            omitPrimary={inSection}
           />
           {appId && lanes.length > 0 && sendIds.length > 0 && (
             <SendToWorkerButton projectId={appId} reportIds={sendIds} lanes={lanes} data-testid={`pipeline-group-${group.id}-send-to-worker`} />
@@ -386,15 +409,125 @@ function GroupCard({ group, props }: { group: PipelineGroup; props: Props }) {
   )
 }
 
+/**
+ * Groups whose one fix is the same action, under one heading with one button for all of them
+ * (round-2 review, 2026-11-18: "Update branch" ×4, "Re-run review" ×3, "Not a code bug" ×3 as
+ * separate rows). Only a primary the server would take counts; a group alone keeps its own
+ * button. Order is the list's order (biggest first). @internal Exported for tests.
+ */
+export function actionSections(groups: readonly PipelineGroup[]): Array<{ action: PipelineAction | null; groups: PipelineGroup[] }> {
+  const primaries = new Map(groups.map((g) => [g, groupPrimary(g)]))
+  const byAction = new Map<PipelineAction, PipelineGroup[]>()
+  for (const g of groups) {
+    const p = primaries.get(g)
+    if (p) byAction.set(p.action, [...(byAction.get(p.action) ?? []), g])
+  }
+  const out: Array<{ action: PipelineAction | null; groups: PipelineGroup[] }> = []
+  const placed = new Set<PipelineAction>()
+  for (const g of groups) {
+    const p = primaries.get(g)
+    const same = p ? (byAction.get(p.action) ?? []) : []
+    if (p && same.length > 1) {
+      if (placed.has(p.action)) continue
+      placed.add(p.action)
+      out.push({ action: p.action, groups: same })
+    } else out.push({ action: null, groups: [g] })
+  }
+  return out
+}
+
+/**
+ * The list as drawn: action sections, and every run of lone groups that follows a section under
+ * its own "Other" heading. Lone rows ("8 apps: auto-fix is on…", "5 reports: rejected at intake")
+ * sat right under "Send to CI repair: 2 groups" and read as part of it (round-3 review,
+ * 2026-11-19). Lone groups before the first section need no heading. @internal Exported for tests.
+ */
+export function sectionBlocks(groups: readonly PipelineGroup[]): Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> {
+  const out: Array<{ kind: 'action'; action: PipelineAction; groups: PipelineGroup[] } | { kind: 'other'; groups: PipelineGroup[]; headed: boolean }> = []
+  let seenSection = false
+  for (const sec of actionSections(groups)) {
+    if (sec.action) {
+      seenSection = true
+      out.push({ kind: 'action', action: sec.action, groups: sec.groups })
+      continue
+    }
+    const last = out[out.length - 1]
+    if (last && last.kind === 'other' && last.headed === seenSection) last.groups.push(...sec.groups)
+    else out.push({ kind: 'other', groups: [...sec.groups], headed: seenSection })
+  }
+  return out
+}
+
+/** A heading for groups that take the same fix, and the one button that runs it on all of them. */
+function ActionSection({ action, groups, props, markId }: { action: PipelineAction; groups: PipelineGroup[]; props: Props; markId: string | null }) {
+  const ids: string[] = []
+  const reportIds: Array<string | null> = []
+  for (const g of groups) {
+    const byId = new Map(g.items.map((i) => [i.id, i]))
+    for (const id of groupPrimary(g)?.ids ?? []) {
+      ids.push(id)
+      reportIds.push(byId.get(id)?.reportId ?? null)
+    }
+  }
+  const total = groups.reduce((n, g) => n + g.count, 0)
+  const key = `${action}:section`
+  const label = ACTION_META[action].label
+  // The heading counts what the button runs on ("14 items" over "Send to CI repair (13)",
+  // round-3 review 2026-11-19); the rest are named as such.
+  const left = Math.max(0, total - ids.length)
+  return (
+    <li className="space-y-1" data-testid={`pipeline-action-section-${action}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pt-1">
+        <p className="text-2xs font-semibold text-fg-secondary" data-testid={`pipeline-action-section-${action}-head`}>
+          {label}:{' '}
+          <span className="font-normal text-fg-muted">
+            {groups.length} groups, {ids.length} {ids.length === 1 ? 'item' : 'items'}
+            {left > 0 && ` (${left} more can't take it now)`}
+          </span>
+        </p>
+        <Btn
+          size="sm"
+          variant={ACTION_META[action].variant === 'primary' ? 'primary' : 'ghost'}
+          loading={props.busyKey === key}
+          disabled={ids.length === 0 || (props.busyKey != null && props.busyKey !== key)}
+          onClick={() => props.onAction({ action, fixIds: ids, reportIds, target: `${groups.length} groups: ${label}` }, key)}
+          data-testid={`pipeline-action-section-${action}-run`}
+        >
+          {label}
+          {ids.length > 1 ? ` (${ids.length})` : ''}
+        </Btn>
+      </div>
+      <ul className="space-y-1">
+        {groups.map((g) => (
+          <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} marked={g.id === markId} inSection />
+        ))}
+      </ul>
+    </li>
+  )
+}
+
 export function PipelineGroups(props: Props) {
   if (props.groups.length === 0) {
     return <p className="text-xs text-fg-muted" data-testid="pipeline-groups-empty">Nothing here right now.</p>
   }
+  const markId = props.topGroupId ?? props.groups.find((g) => groupSignalTone(g) === 'danger')?.id ?? null
+  const card = (g: PipelineGroup) => <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} marked={g.id === markId} />
   return (
     <ul className="space-y-2" data-testid="pipeline-groups">
-      {props.groups.map((g) => (
-        <GroupCard key={`${g.stage}:${g.id}`} group={g} props={props} />
-      ))}
+      {sectionBlocks(props.groups).map((b, i) =>
+        b.kind === 'action' ? (
+          <ActionSection key={`section:${b.action}`} action={b.action} groups={b.groups} props={props} markId={markId} />
+        ) : b.headed ? (
+          <li key={`other:${i}`} className="space-y-1" data-testid="pipeline-other-section">
+            <p className="px-1 pt-1 text-2xs font-semibold text-fg-secondary">
+              Other: <span className="font-normal text-fg-muted">{b.groups.length} {b.groups.length === 1 ? 'group' : 'groups'}, {b.groups.reduce((n, g) => n + g.count, 0)} items</span>
+            </p>
+            <ul className="space-y-1">{b.groups.map(card)}</ul>
+          </li>
+        ) : (
+          b.groups.map(card)
+        ),
+      )}
     </ul>
   )
 }

@@ -150,7 +150,7 @@ function cap(text: string | null | undefined, max: number): string {
 }
 
 /**
- * @internal Exported for tests only. The END of a failed command's output: a
+ * The END of a failed command's output: a
  * hook prints its passing checks first and the failure last (a pre-commit
  * failure read as "✓ check-no-secrets … [cut]", 2026-10-24).
  */
@@ -426,7 +426,6 @@ export function commitBody(...paragraphs: string[]): string {
  * it is signed in to). The credential helper list is emptied too: Git for
  * Windows' system config names `manager`, which can hand git a stored
  * GitHub login without any environment variable.
- * @internal Exported for tests only.
  */
 export function agentEnv(base: NodeJS.ProcessEnv, emptyDir: string): NodeJS.ProcessEnv {
   const keep = ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TERM', 'SHELL', 'TMPDIR', 'TZ', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'NODE_OPTIONS']
@@ -614,8 +613,8 @@ export async function defaultBranch(repoDir: string): Promise<string> {
 /** Used by the local worker (worker/daemon.ts). */
 export type Api = <T>(path: string, init?: RequestInit) => Promise<T>
 
-/** @internal Exported for the daemon. */
-export function apiFor(cfg: CliConfig): Api {
+/** The API caller for one CLI config. */
+function apiFor(cfg: CliConfig): Api {
   return async <T>(path: string, init: RequestInit = {}) => {
     const res = await apiCall<T>(path, cfg, init)
     if (!res.ok) throw new MushiCliError('E_API_ERROR', `${path}: ${res.error.code} ${res.error.message}`)
@@ -1115,7 +1114,7 @@ export async function followUpOne(api: Api, f: LocalFollowupCandidate, o: WorkOp
 }
 
 /**
- * @internal Exported for tests only. The install command for the worktree's
+ * The install command for the worktree's
  * lockfile, or null when it has none. Without dependencies the agent cannot
  * run the project's tests, and commit hooks that import a package fail
  * (`check-config-docs.mjs` needs `jiti`: a commit failed with
@@ -1261,8 +1260,8 @@ export function checkCursorSignIn(
   return checkAgentSignIn('cursor', run, wait)
 }
 
-/** @internal Exported for the daemon. */
-export async function preflight(repoDir: string, warn: (line: string) => void, agent: LocalAgent = 'cursor'): Promise<void> {
+/** The API caller for one CLI config. */
+async function preflight(repoDir: string, warn: (line: string) => void, agent: LocalAgent = 'cursor'): Promise<void> {
   const spec = agentSpec(agent)
   const signIn = await checkAgentSignIn(agent)
   if (signIn.state === 'missing') {

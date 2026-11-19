@@ -21,9 +21,27 @@ import {
   type JourneysData,
 } from '../../lib/journeys'
 
-export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; projectId: string; onStarted: () => void }) {
+export function ScanBar({
+  data,
+  projectId,
+  onStarted,
+  fallbackUrl = null,
+}: {
+  data: JourneysData
+  projectId: string
+  onStarted: () => void
+  /**
+   * The address the app's SDK last checked in from, for an app with no live
+   * address on file: the field started empty although Mushi Mushi knew where
+   * the app runs (round-2 review). Arrives after the first render, so the
+   * field reads it until the user types.
+   */
+  fallbackUrl?: string | null
+}) {
   const toast = useToast()
-  const [url, setUrl] = useState(data.liveUrl ?? '')
+  const [typed, setTyped] = useState<string | null>(null)
+  const url = typed ?? data.liveUrl ?? fallbackUrl ?? ''
+  const setUrl = setTyped
   const [busy, setBusy] = useState(false)
   const scan = data.scan
   const running = scan?.status === 'running'
@@ -45,7 +63,7 @@ export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; pr
   }, [url, projectId, data.liveUrl, toast, onStarted])
 
   return (
-    <Card className="p-3">
+    <Card className="min-w-0 p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex min-w-0 flex-1 flex-col gap-1 text-2xs text-fg-muted">
           Your live site
@@ -58,13 +76,28 @@ export function ScanBar({ data, projectId, onStarted }: { data: JourneysData; pr
             aria-label="Your live site address"
           />
         </label>
-        <Btn onClick={start} loading={busy || running} disabled={!url.trim() || running} data-testid="journey-scan">
+        <Btn
+          onClick={start}
+          loading={busy || running}
+          disabled={!url.trim() || running}
+          title={!url.trim() ? SCAN_NEEDS_URL : undefined}
+          className="whitespace-nowrap"
+          data-testid="journey-scan"
+        >
           {running ? 'Scanning…' : scan ? 'Scan again' : 'Scan my site'}
         </Btn>
       </div>
-      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-fg-faint" aria-live="polite" data-testid="journey-scan-state">
+      {/* A disabled button says why (fresh-eyes sweep 2026-11-18): this app has
+          no live address on file, so the field starts empty. */}
+      {!url.trim() && !running && (
+        // A reason, not a warning: neutral ink (round-2 review).
+        <p className="mt-1 text-2xs text-fg-muted" data-testid="journey-scan-why">
+          {SCAN_NEEDS_URL}
+        </p>
+      )}
+      <p className="mt-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-fg-faint" aria-live="polite" data-testid="journey-scan-state">
         {scan ? <StatusPill status={SCAN_STATUS[scan.status]} label={SCAN_WORD[scan.status]} /> : null}
-        <span className="min-w-0">{scanStatusText(scan, data.mapScan)}</span>
+        <span className="min-w-0 wrap-anywhere">{scanStatusText(scan, data.mapScan)}</span>
       </p>
       {scan?.status === 'failed' && scan.error && (
         <Callout tone="danger" className="mt-2" label="The last scan failed">
@@ -110,22 +143,41 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
     [projectId, sample, toast, onChanged],
   )
 
+  // Only an SDK on trackSessions: 'on-demand' uses this window, and the
+  // default records every visit: folded to one row unless a window is on
+  // (round-2 review).
   return (
-    <Card className="p-3" data-testid="journey-recording">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-medium text-fg">Record visits on demand</p>
+    <Card className="min-w-0 p-3" data-testid="journey-recording">
+      <details open={until != null} className="group min-w-0">
+      <summary className="flex min-w-0 cursor-pointer select-none list-none flex-wrap items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg">
+          <span aria-hidden className="text-fg-faint group-open:rotate-90 motion-safe:transition-transform">▸</span>
+          Record visits on demand
+        </span>
         {until ? (
           <StatusPill status="running" label={`Recording until ${new Date(until).toLocaleString()}`} />
         ) : (
           <StatusPill status="idle" label="Off" />
         )}
-      </div>
-      <p className="mt-1 text-2xs text-fg-muted">
-        For apps that run the SDK with <code className="font-mono">trackSessions: &apos;on-demand&apos;</code>: nobody is recorded until you start, so real visitors pay nothing the rest of the time. Apps on the default already record every visit.
+      </summary>
+      {/* One line (sweep 2026-11-18); the longer story stays on hover. */}
+      <p
+        className="mt-1 truncate text-2xs text-fg-muted"
+        title="Nobody is recorded until you start, so real visitors pay nothing the rest of the time. Apps on the default already record every visit."
+        data-testid="journey-recording-hint"
+      >
+        Only for SDKs on <code className="font-mono">trackSessions: &apos;on-demand&apos;</code>; the default records every visit.
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <SegmentedControl size="sm" value={hours} onChange={setHours} ariaLabel="How long" options={RECORDING_HOURS.map((o) => ({ id: o.id, label: o.label }))} />
-        <SegmentedControl size="sm" value={sample} onChange={setSample} ariaLabel="Share of visitors" options={RECORDING_SAMPLES.map((o) => ({ id: o.id, label: o.label }))} />
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        {/* Each choice is named: "1 hour / 1 day / 1 week" and "10% / 50% / Everyone" sat unlabeled. */}
+        <div className="flex flex-col gap-0.5" data-testid="journey-recording-duration">
+          <span className="text-3xs font-medium text-fg-muted">Duration</span>
+          <SegmentedControl size="sm" value={hours} onChange={setHours} ariaLabel="Duration" options={RECORDING_HOURS.map((o) => ({ id: o.id, label: o.label }))} />
+        </div>
+        <div className="flex flex-col gap-0.5" data-testid="journey-recording-sample">
+          <span className="text-3xs font-medium text-fg-muted">Sample of visitors</span>
+          <SegmentedControl size="sm" value={sample} onChange={setSample} ariaLabel="Sample of visitors" options={RECORDING_SAMPLES.map((o) => ({ id: o.id, label: o.label }))} />
+        </div>
         <Btn size="sm" onClick={() => save(Number(hours))} loading={busy}>
           {until ? 'Restart' : 'Start'}
         </Btn>
@@ -142,9 +194,13 @@ export function RecordingCard({ data, projectId, onChanged }: { data: JourneysDa
           <CopyButton value={link} label="Copy test link" copiedLabel="Copied" />
         </div>
       )}
+      </details>
     </Card>
   )
 }
+
+/** @internal Exported for tests. Why Scan my site is disabled. */
+export const SCAN_NEEDS_URL = "Enter your live site's address to scan it."
 
 /** The latest scan's state as a mark: scanning pulses, done is ✓, failed ✕. */
 const SCAN_STATUS: Record<JourneyScan['status'], RunStatus> = { running: 'running', done: 'passed', failed: 'failed' }

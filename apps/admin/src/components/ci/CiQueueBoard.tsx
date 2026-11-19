@@ -35,12 +35,18 @@ import { IconArrowRight, IconClock, IconCloud, IconExternalLink, IconGit, IconPl
 import { Btn, RelativeTime, SegmentedControl } from '../ui'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { CI_OUTCOME_STYLE } from './ciOutcome'
+import { StatusPill } from '../signal/StatusMark'
 
 interface Props {
   jobs: CiJob[]
   fixLinks?: CiFixLinks
   /** Job to highlight and scroll to (from `/ci?job=`). */
   focusJobId?: string | null
+  /**
+   * Draw the Waiting and Running columns. Off on the Now view, where "Running now" right above
+   * already lists every running and waiting job (the queue repeated all five, 2026-11-18).
+   */
+  showLive?: boolean
 }
 
 type Column = 'waiting' | 'running' | 'finished'
@@ -51,14 +57,71 @@ const COLUMN_META: Record<Column, { title: string; hint: string; empty: string; 
   finished: { title: 'Finished', hint: 'in the last 2 hours', empty: 'Nothing finished in the last 2 hours.', Icon: IconCheck, tone: CI_OUTCOME_STYLE.passed.chip },
 }
 
-type FinishedFilter = 'all' | 'code_failure' | 'infra' | 'passed'
+type FinishedFilter = 'all' | 'code_failure' | 'infra' | 'cancelled' | 'passed'
 
+// Every finished outcome has a filter, so the parts add up to "All" (2026-11-18: 2 + 0 + 13 of
+// "All 30"; the 15 cancelled or skipped jobs had none).
 const FILTERS: Array<{ id: FinishedFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'code_failure', label: CI_OUTCOME_STYLE.code_failure.label },
   { id: 'infra', label: CI_OUTCOME_STYLE.infra.label },
+  { id: 'cancelled', label: 'Cancelled or skipped' },
   { id: 'passed', label: CI_OUTCOME_STYLE.passed.label },
 ]
+
+/** Which filter a finished job counts under: anything not passed, failed or stopped is cancelled or skipped. */
+function filterOf(j: CiJob): Exclude<FinishedFilter, 'all'> {
+  const o = jobOutcome(j)
+  return o === 'code_failure' || o === 'infra' || o === 'passed' ? o : 'cancelled'
+}
+
+/** @internal Exported for tests. Finished counts per filter; the parts always add up to `all`. */
+export function finishedFilterCounts(finished: readonly CiJob[]): Record<FinishedFilter, number> {
+  const c: Record<FinishedFilter, number> = { all: finished.length, code_failure: 0, infra: 0, cancelled: 0, passed: 0 }
+  for (const j of finished) c[filterOf(j)]++
+  return c
+}
+
+/** One pull request's jobs (same repo, workflow and PR), in the order given. */
+export interface CiJobPrGroup {
+  key: string
+  repo: string
+  workflowName: string | null
+  prNumber: number | null
+  jobs: CiJob[]
+}
+
+/**
+ * Jobs of the same repo, workflow and PR under one header, groups in the order their first job
+ * appears (worst first stays worst first). "tsumagoi · CI — PR Smoke Test · PR 1292" repeated
+ * on every card (2026-11-18).
+ *
+ * @internal Exported for tests.
+ */
+export function groupJobsByPr(jobs: readonly CiJob[]): CiJobPrGroup[] {
+  const by = new Map<string, CiJobPrGroup>()
+  for (const j of jobs) {
+    const key = `${j.repo}|${j.workflowName ?? ''}|${j.prNumber ?? ''}`
+    const g = by.get(key) ?? { key, repo: j.repo, workflowName: j.workflowName ?? null, prNumber: j.prNumber ?? null, jobs: [] }
+    g.jobs.push(j)
+    by.set(key, g)
+  }
+  return [...by.values()]
+}
+
+/**
+ * Finished jobs worst first: failed on the code, then stopped by the machine, then cancelled, and
+ * passes last (2026-11-18: six identical "Passed" cards led the queue).
+ *
+ * @internal Exported for tests.
+ */
+export function finishedWorstFirst(jobs: readonly CiJob[]): CiJob[] {
+  const rank: Partial<Record<CiJobOutcome, number>> = { code_failure: 0, infra: 1, cancelled: 2, passed: 3 }
+  return jobs
+    .map((j, i) => ({ j, i, r: rank[jobOutcome(j)] ?? 2 }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.j)
+}
 
 /** Cards a column shows before "Show N more": the page scrolls, never a column (no inner scrollbars). */
 const COLUMN_SHOWN = 6
@@ -103,7 +166,7 @@ function RerunButton({ fixId }: { fixId: string }) {
   )
 }
 
-function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: Column; now: number; fixLinks?: CiFixLinks; focused: boolean }) {
+function JobCard({ job, column, now, fixLinks, focused, grouped = false }: { job: CiJob; column: Column; now: number; fixLinks?: CiFixLinks; focused: boolean; grouped?: boolean }) {
   const transition = useMotionTransition()
   const ref = useRef<HTMLLIElement>(null)
   useEffect(() => {
@@ -150,16 +213,19 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
         {column === 'waiting' && <> · {formatSeconds(elapsed)} so far</>}
         {column === 'running' && <> · {formatSeconds(elapsed)} so far</>}
         {column === 'finished' && job.durationSeconds != null && <> · ran {formatSeconds(job.durationSeconds)}</>}
-        {job.prNumber ? <span className="tabular-nums"> · PR #{job.prNumber}</span> : null}
+        {job.prNumber && !grouped ? <span className="tabular-nums"> · PR #{job.prNumber}</span> : null}
       </p>
       <p className={`flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 ${CARD_META}`}>
-        <span className="inline-flex min-w-0 items-center gap-1" title={job.repo}>
-          <IconGit size={11} className="shrink-0" />
-          <span className="truncate">
-            {repoName(job.repo)}
-            {job.workflowName ? ` · ${job.workflowName}` : ''}
+        {/* Under a PR header the repo, workflow and PR are the header's, not every card's. */}
+        {!grouped && (
+          <span className="inline-flex min-w-0 items-center gap-1" title={job.repo}>
+            <IconGit size={11} className="shrink-0" />
+            <span className="truncate">
+              {repoName(job.repo)}
+              {job.workflowName ? ` · ${job.workflowName}` : ''}
+            </span>
           </span>
-        </span>
+        )}
         {runner && column !== 'waiting' && (
           <span className="inline-flex min-w-0 items-center gap-1">
             <RunnerIcon size={11} className="shrink-0" />
@@ -195,35 +261,32 @@ function JobCard({ job, column, now, fixLinks, focused }: { job: CiJob; column: 
   )
 }
 
-export function CiQueueBoard({ jobs, fixLinks, focusJobId }: Props) {
+export function CiQueueBoard({ jobs, fixLinks, focusJobId, showLive = true }: Props) {
   const live = jobs.some((j) => j.status === 'queued' || j.status === 'in_progress' || j.status === 'waiting' || j.status === 'pending')
   const now = useNow(1000, live)
   // Columns re-sort on new data, not on every tick.
   const queue = useMemo(() => buildCiQueue(jobs, Date.now()), [jobs])
   const [filter, setFilter] = useState<FinishedFilter>('all')
-  const finishedCounts = useMemo(() => {
-    const c: Record<FinishedFilter, number> = { all: queue.finished.length, code_failure: 0, infra: 0, passed: 0 }
-    for (const j of queue.finished) {
-      const o = jobOutcome(j)
-      if (o === 'code_failure' || o === 'infra' || o === 'passed') c[o]++
-    }
-    return c
-  }, [queue.finished])
+  const finishedCounts = useMemo(() => finishedFilterCounts(queue.finished), [queue.finished])
   const [expanded, setExpanded] = useState<Record<Column, boolean>>({ waiting: false, running: false, finished: false })
-  // An empty column takes one share of five, so the busy ones get the room. Three columns from
-  // lg up: at 768 each was about 230 px and every title cut off.
-  const spans = (['waiting', 'running', 'finished'] as const).map((col) => (queue[col].length === 0 ? 1 : 2))
-  const total = spans.reduce((a, b) => a + b, 0)
-  const gridCols = total === 6 ? 'lg:grid-cols-3' : total === 5 ? 'lg:grid-cols-5' : total === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'
-  const span = (n: number) => (total === 6 || total === 3 ? '' : n === 2 ? 'lg:col-span-2' : 'lg:col-span-1')
+  // Passes fold into one row under the problems; "Passed" in the filter shows them as cards.
+  const [showPassed, setShowPassed] = useState(false)
+  // Cancelled and skipped jobs fold the same way: "Skipped" cards sat in the failures-first grid (round 3).
+  const [showSkipped, setShowSkipped] = useState(false)
+  // An empty column is not drawn ("Waiting 0", "Running 0" boxes said nothing, 2026-11-18). Three
+  // columns from lg up: at 768 each was about 230 px and every title cut off.
+  const columns = (showLive ? (['waiting', 'running', 'finished'] as const) : (['finished'] as const)).filter((col) => queue[col].length > 0)
+  const gridCols = columns.length === 3 ? 'lg:grid-cols-3' : columns.length === 2 ? 'lg:grid-cols-2' : ''
+  // One column alone gets the full width: its cards flow in a grid instead of one long stack.
+  const single = columns.length === 1
 
   return (
     <LayoutGroup id="ci-queue">
       {queue.finished.length > 0 && (
         // Above the columns, not inside Finished: a third of the board is too narrow for the four
         // outcomes, which wrapped to two rows as chips at 1280 (owner, 2026-11-14).
+        // The window is named once, in the column header; "All N" is the count (round 3: "2 hours" ×3, "42" ×2).
         <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end">
-          <span className="text-2xs text-fg-muted">Finished jobs</span>
           <SegmentedControl<FinishedFilter>
             value={filter}
             options={FILTERS.map((f) => ({ id: f.id, label: f.label, count: finishedCounts[f.id] }))}
@@ -236,17 +299,28 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId }: Props) {
       )}
       {/* items-start: a short column stays short instead of stretching to the longest one. */}
       <div className={`grid items-start gap-3 ${gridCols}`} data-testid="ci-queue">
-        {(['waiting', 'running', 'finished'] as const).map((col, i) => {
+        {columns.length === 0 && (
+          <p className="text-2xs text-fg-muted">{showLive ? 'Nothing waiting, running or finished in the last 2 hours.' : 'Nothing finished in the last 2 hours.'}</p>
+        )}
+        {columns.map((col) => {
           const meta = COLUMN_META[col]
           const all = queue[col]
-          const list = col === 'finished' && filter !== 'all' ? all.filter((j) => jobOutcome(j) === filter) : all
+          const sorted = col === 'finished' ? finishedWorstFirst(all) : all
+          const passed = col === 'finished' && filter === 'all' ? sorted.filter((j) => jobOutcome(j) === 'passed') : []
+          const skipped = col === 'finished' && filter === 'all' ? sorted.filter((j) => filterOf(j) === 'cancelled') : []
+          const foldPassed = passed.length > 0 && !showPassed && !passed.some((j) => j.id === focusJobId)
+          const foldSkipped = skipped.length > 0 && !showSkipped && !skipped.some((j) => j.id === focusJobId)
+          const list =
+            col === 'finished' && filter !== 'all'
+              ? sorted.filter((j) => filterOf(j) === filter)
+              : sorted.filter((j) => !(foldPassed && jobOutcome(j) === 'passed') && !(foldSkipped && filterOf(j) === 'cancelled'))
           // The page scrolls, not the column: an inner scrollbar sat on the cards' right edge
           // (owner, 2026-11-14). A `?job=` deep link past the cap opens the column in full.
           const focusAt = focusJobId ? list.findIndex((j) => j.id === focusJobId) : -1
           const shown = expanded[col] || focusAt >= COLUMN_SHOWN ? list : list.slice(0, COLUMN_SHOWN)
           const hidden = list.length - shown.length
           return (
-            <section key={col} aria-labelledby={`ci-queue-${col}`} className={`flex min-w-0 flex-col gap-2 rounded-md bg-surface-overlay/40 p-2 ${span(spans[i])}`}>
+            <section key={col} aria-labelledby={`ci-queue-${col}`} className="flex min-w-0 flex-col gap-2">
               <div className="flex items-center gap-2 px-0.5">
                 <span className={`inline-flex h-5 w-5 items-center justify-center rounded-sm ${meta.tone}`}>
                   <meta.Icon size={11} />
@@ -254,27 +328,77 @@ export function CiQueueBoard({ jobs, fixLinks, focusJobId }: Props) {
                 <h3 id={`ci-queue-${col}`} className="text-xs font-semibold text-fg">
                   {meta.title}
                 </h3>
-                <span className="rounded-full bg-surface-raised px-1.5 text-3xs font-medium tabular-nums text-fg-secondary" data-testid={`ci-queue-count-${col}`}>
+                {/* The filter's "All N" shows the finished count; here it stays for screen readers only. */}
+                <span
+                  className={`rounded-full bg-surface-raised px-1.5 text-3xs font-medium tabular-nums text-fg-secondary ${col === 'finished' ? 'sr-only' : ''}`}
+                  data-testid={`ci-queue-count-${col}`}
+                >
                   {all.length}
                 </span>
                 {all.length > 0 && <span className="min-w-0 truncate text-3xs text-fg-muted">{meta.hint}</span>}
               </div>
               {list.length === 0 ? (
-                <p className="px-0.5 text-2xs text-fg-muted">{all.length === 0 ? meta.empty : 'No finished jobs with this outcome.'}</p>
+                passed.length > 0 || skipped.length > 0 ? null : <p className="px-0.5 text-2xs text-fg-muted">{all.length === 0 ? meta.empty : 'No finished jobs with this outcome.'}</p>
               ) : (
-                <ul className="relative flex flex-col gap-1.5" data-testid={`ci-queue-list-${col}`}>
+                <ul className={`relative ${single ? 'grid gap-1.5 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col gap-1.5'}`} data-testid={`ci-queue-list-${col}`}>
                   {/* `relative` makes this list the containing block of the cards' sr-only (absolute) labels.
                       Without it they anchored to <main>: 60 waiting jobs once added about 12,000 px of
                       empty page scroll under the queue (2026-11-06). */}
-                  {shown.map((job) => (
-                    <JobCard key={job.id} job={job} column={col} now={now} fixLinks={fixLinks} focused={job.id === focusJobId} />
-                  ))}
+                  {groupJobsByPr(shown).map((g) =>
+                    g.jobs.length === 1 ? (
+                      <JobCard key={g.jobs[0].id} job={g.jobs[0]} column={col} now={now} fixLinks={fixLinks} focused={g.jobs[0].id === focusJobId} />
+                    ) : (
+                      // One header for the PR's jobs; the cards under it name only the job and how it ended.
+                      <li key={g.key} className={`flex flex-col gap-1.5 ${single ? 'md:col-span-2 xl:col-span-3' : ''}`} data-testid="ci-queue-pr-group">
+                        <p className={`flex min-w-0 flex-wrap items-center gap-x-1.5 px-0.5 ${CARD_META}`} title={g.repo}>
+                          <IconGit size={11} className="shrink-0" />
+                          <span className="font-semibold text-fg-secondary">{repoName(g.repo)}</span>
+                          {g.workflowName && <span>· {g.workflowName}</span>}
+                          {g.prNumber != null && <span className="tabular-nums">· PR #{g.prNumber}</span>}
+                          <span className="tabular-nums">· {g.jobs.length} jobs</span>
+                        </p>
+                        <ul className={single ? 'grid gap-1.5 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col gap-1.5'}>
+                          {g.jobs.map((job) => (
+                            <JobCard key={job.id} job={job} column={col} now={now} fixLinks={fixLinks} focused={job.id === focusJobId} grouped />
+                          ))}
+                        </ul>
+                      </li>
+                    ),
+                  )}
                 </ul>
               )}
               {hidden > 0 && (
                 <Btn type="button" variant="ghost" size="sm" className="self-start" onClick={() => setExpanded((e) => ({ ...e, [col]: true }))}>
                   Show {hidden} more
                 </Btn>
+              )}
+              {(passed.length > 0 || skipped.length > 0) && (
+                <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  {skipped.length > 0 && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 self-start rounded-sm px-0.5 text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                      aria-expanded={showSkipped}
+                      onClick={() => setShowSkipped((v) => !v)}
+                      data-testid="ci-queue-skipped-toggle"
+                    >
+                      <StatusPill status="cancelled" label={`${skipped.length} cancelled or skipped`} />
+                      {showSkipped ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                  {passed.length > 0 && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-2 self-start rounded-sm px-0.5 text-2xs whitespace-nowrap text-fg-secondary hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                      aria-expanded={showPassed}
+                      onClick={() => setShowPassed((v) => !v)}
+                      data-testid="ci-queue-passed-toggle"
+                    >
+                      <StatusPill status="passed" label={`${passed.length} passed`} />
+                      {showPassed ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                </span>
               )}
             </section>
           )

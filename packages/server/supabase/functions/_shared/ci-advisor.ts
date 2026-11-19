@@ -41,7 +41,7 @@
  * Pure apart from the workflow parser (recipe-drift.ts, npm:yaml).
  */
 
-import { parse as parseYaml } from 'npm:yaml@2'
+import { parseWorkflowYaml as parseYaml } from './workflow-yaml.ts'
 import { ciWorkflowDrift } from './recipe-drift.ts'
 import type { CiOverviewAdvice } from './ci-overview-types.ts'
 import { runnerBaseName, runnerNameMatches } from './ci-infra.ts'

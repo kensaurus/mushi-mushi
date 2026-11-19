@@ -224,14 +224,16 @@ describe('Apps signals', () => {
     expect(action.getAttribute('href')).toMatch(/^\/reports\?.*project=yen/)
     expect(container.textContent).toContain('Worst first: glot.it (4 CI jobs failed today, 3 open bugs) · yen-yen (12 open bugs, 2 serious risks) · twm (2 open bugs) · 1 more needs you.')
     expect(container.textContent).not.toMatch(/All \d+ apps need you/)
-    // The headline is chips (icon, name, open bugs) and "+1 more"; the sentence is for screen readers only.
+    // The headline is chips (icon and name) and "+1 more"; the sentence is for screen readers only.
+    // No bug count on a chip: the alert card and the grid already say 12 (round 2: 453 three times).
     const head = container.querySelector('[data-testid="portfolio-worst-first"]')!
     expect(head.querySelector('.sr-only')!.textContent).toContain('Worst first: glot.it (4 CI jobs failed today')
     const chips = head.querySelector('[aria-hidden="true"]')!
     expect([...chips.querySelectorAll('[data-testid^="worst-chip-"]')].map((c) => c.getAttribute('data-testid'))).toEqual(['worst-chip-glot', 'worst-chip-yen', 'worst-chip-twm'])
     const yen = chips.querySelector('[data-testid="worst-chip-yen"]')!
     expect(yen.querySelector('.truncate')!.textContent).toBe('yen-yen')
-    expect(yen.querySelector('.font-mono')!.textContent).toBe('12')
+    expect(yen.querySelector('.font-mono')).toBeNull()
+    expect(yen.textContent).not.toMatch(/\d/)
     expect(chips.textContent).toContain('+1 more')
     expect(chips.textContent).not.toContain('open bugs')
   })
@@ -304,12 +306,14 @@ describe('the public demo (keep-but-hide)', () => {
     expect(container.querySelector('[data-app="demo"]')).toBeNull()
     expect(container.querySelector('[data-testid="fix-once-item-key_unused_90d"]')).toBeNull()
     expect(container.querySelector('[data-testid="fix-once-item-spend_cap_unset"]')).not.toBeNull()
-    // SDK versions and Missing setups: no row that only the demo had.
-    expect(container.querySelector('[data-testid="sdk-row-unknown"]')).toBeNull()
-    expect(container.querySelector('[data-testid="hole-row-github"]')).toBeNull()
-    expect(container.querySelector('[data-testid="hole-row-sentry"] [data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('1')
-    // The header's Fix once count follows what the page shows, not the server's raw count.
-    expect(container.querySelector('[data-testid="page-status"]')!.textContent).toContain('Fix once1')
+    // SDK versions and Missing setups are rows of the same list: none that only the demo had.
+    const items = [...container.querySelectorAll('[data-testid^="fix-once-item-"]')].map((el) => el.getAttribute('data-testid')!)
+    expect(items.some((id) => id.startsWith('fix-once-item-sdk:') && id.includes('unknown'))).toBe(false)
+    expect(container.querySelector('[data-testid="fix-once-item-hole:github"]')).toBeNull()
+    expect(container.querySelector('[data-testid="fix-once-item-hole:sentry"] [data-testid="app-icon-chips"]')!.getAttribute('data-count')).toBe('1')
+    // The header's Fix once count is the number of rows the list draws (budget, SDK behind, no Sentry).
+    expect(items).toHaveLength(3)
+    expect(container.querySelector('[data-testid="page-status"]')!.textContent).toContain('Fix once3')
   })
 })
 
@@ -334,8 +338,9 @@ describe('Apps tabs', () => {
     expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="mock-MonetizationCard"]')).toBeNull()
     expect(tabLink('Apps').getAttribute('aria-selected')).toBe('true')
-    // The alerts and the ranking stay above the tabs.
-    expect(container.querySelector('[data-testid="portfolio-alert-glot"]')).not.toBeNull()
+    // The alerts lead the Apps tab (the ranking chips stay above the tabs).
+    expect(container.querySelector('[data-testid="portfolio-tab-apps"] [data-testid="portfolio-alert-glot"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="portfolio-worst-first"]')).not.toBeNull()
   })
 
   it('?tab=payments shows only Payments, and every tab keeps the other params', async () => {
@@ -344,6 +349,8 @@ describe('Apps tabs', () => {
     expect(container.querySelector('[data-testid="mock-MonetizationCard"]')).not.toBeNull()
     expect(container.querySelector('[data-testid="portfolio-signal-grid"]')).toBeNull()
     expect(container.querySelector('[data-testid="mock-SpendLedgerCard"]')).toBeNull()
+    // Another tab starts right under the status strip: no alert cards between them.
+    expect(container.querySelector('[data-testid^="portfolio-alert-"]')).toBeNull()
     expect(tabLink('Payments').getAttribute('aria-selected')).toBe('true')
     expect(tabLink('Releases').getAttribute('href')).toBe('/portfolio?group=work&tab=releases')
     // Apps is the default: its link drops the param instead of spelling it.
@@ -358,7 +365,7 @@ describe('Apps tabs', () => {
 
   it('clicking a tab updates the URL, and back returns to the tab before', async () => {
     await render()
-    await act(async () => tabLink('Spend & accounts').click())
+    await act(async () => tabLink('Spend').click())
     expect(location()).toBe('/portfolio?tab=spend')
     expect(shown()).toEqual(['portfolio-tab-spend'])
     expect(container.querySelector('[data-testid="mock-SpendLedgerCard"]')).not.toBeNull()

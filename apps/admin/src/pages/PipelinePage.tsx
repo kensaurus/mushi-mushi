@@ -34,7 +34,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { Btn, Callout, Loading, PageStatus, Section, SegmentedControl } from '../components/ui'
+import { Btn, Callout, Loading, PageStatus, Section, SegmentedControl, type PageStatusMetrics } from '../components/ui'
 import { StackedShareBar } from '../components/charts/StackedShareBar'
 import { IconAlertTriangle, IconBolt, IconNetwork, IconReleases, IconShieldCheck } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -52,7 +52,7 @@ import { FixOpeners } from '../components/pipeline/FixOpeners'
 import { WorkersPanel } from '../components/pipeline/WorkersPanel'
 import { WorkerFlagsStrip } from '../components/pipeline/WorkerFlags'
 import { LANES_PATH, type WorkLanesData } from '../lib/workers'
-import { groupPrimary, stuckAges } from '../lib/pipelineSignals'
+import { groupPrimary, needYouAges, needsYouCount, stuckAges } from '../lib/pipelineSignals'
 import { StuckAgeBar } from '../components/signal/StuckAgeBar'
 import {
   ACTION_META,
@@ -60,16 +60,16 @@ import {
   openerSplit,
   openerSummary,
   outcomeSummary,
-  pipelinePace,
+  pipelinePaceFigures,
   retryTrains,
   runPipelineAction,
   type ActionOutcome,
   type PipelineAction,
   type PipelineData,
+  type PaceFigures,
   type PipelineGroup,
 } from '../lib/pipeline'
 import { COUNT_HINTS } from '../lib/countDefinitions'
-import { pluralize } from '../lib/format'
 
 type Scope = 'project' | 'all'
 const SCOPE_OPTIONS = [
@@ -102,8 +102,12 @@ export function PipelinePage() {
   const path = scope === 'project' && projectId ? `/v1/admin/pipeline?projectId=${encodeURIComponent(projectId)}` : '/v1/admin/pipeline'
   const page = usePageData<PipelineData>(tab === 'pipeline' ? path : null, { scope: scope === 'all' ? 'enumeration' : 'project' })
   const { data, reload } = page
-  // Your own worker lanes, for "Send to my local worker" on report groups.
-  const lanesPage = usePageData<WorkLanesData>(tab === 'pipeline' ? LANES_PATH : null, { scope: 'enumeration' })
+  // Your own worker lanes, for "Send to my local worker" on report groups, and the Workers tab's
+  // problem count on both tabs. The same path the Workers tab body reads (This app: that app's),
+  // so the tab's count and the body come from one response: the tab said "Workers (2 problems)"
+  // over an empty This-app body (round-3 review, 2026-11-19).
+  const lanesPath = scope === 'project' && projectId ? `${LANES_PATH}?projectId=${encodeURIComponent(projectId)}` : LANES_PATH
+  const lanesPage = usePageData<WorkLanesData>(lanesPath, { scope: scope === 'project' ? 'project' : 'enumeration' })
   const workerLanes = useMemo(() => {
     const d = lanesPage.data
     if (!d || !Array.isArray(d.hosts) || !Array.isArray(d.lanes)) return []
@@ -128,42 +132,65 @@ export function PipelinePage() {
   const [pending, setPending] = useState<{ action: PendingAction; key: string } | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [results, setResults] = useState<Map<string, ActionOutcome>>(new Map())
-  const [trainAsk, setTrainAsk] = useState<{ projectId: string; repo: string } | null>(null)
+  // One app's queue, or every app with a train (`projectIds` holds all of them, `repo` the summary).
+  const [trainAsk, setTrainAsk] = useState<{ projectIds: string[]; repo: string } | null>(null)
   const [trainBusy, setTrainBusy] = useState<string | null>(null)
   const [trainResults, setTrainResults] = useState<Map<string, ActionOutcome>>(new Map())
 
   const projectNames = useMemo(() => new Map((data?.projects ?? []).map((p) => [p.id, p.name])), [data])
   const stages = data?.stages ?? []
-  const stuckTotal = stages.reduce((n, s) => n + s.stuck, 0)
-  // The triaged stage's stuck items are bugs no fix has started on yet: the backlog, with no
-  // action for a person. Counted as "stuck", 1013 of 1013 read the same and every stage was
-  // red (owner's fresh-user review, 2026-11-16). The server's "stuck" is unchanged; this
-  // page separates what needs you from what waits for a fix (the pace line counts that).
-  const backlogStuck = stages.find((s) => s.id === 'triaged')?.stuck ?? 0
-  const needYou = stuckTotal - backlogStuck
+  // One count with Home's "Needs you" (lib/pipelineSignals.ts needsYouCount, the server's
+  // buildNeedsYou rule): every stuck group, the backlog "triaged over 3 days ago, no fix
+  // started" included. This page said "Nothing needs you now" (0) while it listed that group
+  // and Home said 2 (round-2 review, 2026-11-18). The backlog stays uncoloured on the stage bar
+  // and only makes the status amber; red is for work that failed.
+  const counted = useMemo(() => needsYouCount(stages), [stages])
+  const needYou = counted.total
+  const stuckTotal = needYou
   const groups = useMemo(() => {
     if (stage) return stages.find((s) => s.id === stage)?.groups ?? []
     return stages.flatMap((s) => s.groups.filter((g) => g.tone === 'stuck')).sort((a, b) => b.count - a.count)
   }, [stages, stage])
   const showApp = scope === 'all'
   // The biggest stuck group and the first of its actions the server would take.
-  const top = useMemo(() => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)), [stages])
+  // Failed work first; the backlog's group only when nothing else is stuck.
+  const top = useMemo(
+    () => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)) ?? topStuck(stages.flatMap((s) => s.groups)),
+    [stages],
+  )
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
   const openerParts = useMemo(() => (data?.dispatchers ? openerSplit(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
-  const pace = useMemo(() => (data ? pipelinePace(data.stages, data.dispatchers) : null), [data])
+  const pace = useMemo(() => (data ? pipelinePaceFigures(data.stages, data.dispatchers) : null), [data])
   // How long the stuck work has waited; "Need you" adds up to the status line's count.
-  const ages = useMemo(() => stuckAges(stages, now), [stages, now])
+  const ages = useMemo(() => needYouAges(stuckAges(stages, now)), [stages, now])
+  const stuckGroupCount = useMemo(() => stages.reduce((n, s) => n + s.groups.filter((g) => g.tone === 'stuck').length, 0), [stages])
   // "Nothing is stuck" was false while no agent could open a fix (audit
   // 2026-11-11: next to "Who opens fixes: nobody" and "credits idle").
   const agentCredits = useAgentCredits()
   // Only when bugs wait for a fix: a quiet app with no bugs opens nothing, and that is fine.
   const autofixApps = (data?.dispatchers ?? []).filter((d) => d.autofixOn)
   const waitingForFix = (data?.stages ?? []).find((s) => s.id === 'triaged')?.count ?? 0
+  // Reports the API refused (400) in 7 days: lost data, so it leads the status, not the page's last card.
+  const rejectedTotal = (data?.intake?.apps ?? []).reduce((n, a) => n + a.rejected, 0)
   const nothingOpens =
     waitingForFix > 0 &&
     (agentCredits.state?.out === true ||
       (autofixApps.length > 0 && autofixApps.every((d) => d.server.dispatches24h === 0 && d.local.runs24h === 0)))
+
+  // Each number once: "Waiting for a fix" is the Triaged stage's count and "Merged, 7 days" the
+  // pace row's, so the status does not repeat them. Who opens fixes and intake rejections were calm
+  // cards at the bottom; they need you, so they lead, and only when they are not zero (2026-11-18).
+  const nobodyApps = waitingForFix > 0 ? (openers?.nobody ?? 0) : 0
+  const statusMetrics = [
+    { label: 'Need you', value: needYou, tone: counted.failing > 0 ? 'danger' : needYou > 0 ? 'warn' : 'neutral', hint: `${COUNT_HINTS.stuck} Includes bugs triaged over 3 days ago with no fix started, as Home counts them.` },
+    ...(nobodyApps > 0
+      ? [{ label: 'Apps no one fixes, 24 h', value: nobodyApps, tone: 'warn', to: '#pipeline-openers', hint: 'Apps where neither the cloud agent nor your local worker started a fix in the last 24 hours, while bugs wait for one. Who opens fixes, below, has each app.' }]
+      : []),
+    ...(rejectedTotal > 0
+      ? [{ label: 'Rejected at intake, 7 d', value: rejectedTotal, tone: 'danger', hint: 'Reports your app sent that the API refused (HTTP 400): they never reached the queue.' }]
+      : []),
+  ] as unknown as PageStatusMetrics
 
   usePublishPageContext({
     route: '/pipeline',
@@ -206,22 +233,60 @@ export function PipelinePage() {
 
   const confirmTrain = useCallback(async () => {
     if (!trainAsk) return
-    setTrainBusy(trainAsk.projectId)
+    const all = trainAsk.projectIds.length > 1
+    setTrainBusy(all ? 'all' : trainAsk.projectIds[0]!)
     try {
-      const out = await retryTrains(trainAsk.projectId)
+      const out: ActionOutcome[] = []
+      for (const pid of trainAsk.projectIds) out.push(...(await retryTrains(pid)))
       setTrainResults((prev) => {
         const next = new Map(prev)
         for (const r of out) next.set(r.id, r)
         return next
       })
-      const mine = out.find((r) => r.id === trainAsk.repo) ?? out[0]
-      if (mine) (mine.ok ? toast.success : toast.info)(mine.message)
+      if (all) {
+        const left = out.filter((r) => r.ok).length
+        ;(left > 0 ? toast.success : toast.info)(`${left} of ${out.length} queues sent a train; each row says why the others did not.`)
+      } else {
+        const mine = out.find((r) => r.id === trainAsk.repo) ?? out[0]
+        if (mine) (mine.ok ? toast.success : toast.info)(mine.message)
+      }
     } finally {
       setTrainBusy(null)
       setTrainAsk(null)
       reload()
     }
   }, [trainAsk, reload, toast])
+
+  const rejectedOf = (projectId: string) => data?.intake?.apps.find((a) => a.projectId === projectId)?.rejected ?? 0
+  const sinceLabel = (since: string) => new Date(`${since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const intakeRow = (p: PipelineData['projects'][number]) => {
+    if (!data) return null
+    const rej = data.intake?.apps.find((a) => a.projectId === p.id)
+    return (
+      <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted" data-testid={`pipeline-intake-${p.id}`}>
+        <span className="text-fg-secondary">{p.name}:</span>
+        {data.intake &&
+          (rej && rej.rejected > 0 ? (
+            <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+              {rej.rejected} rejected ({rej.byReason.slice(0, 3).map((r) => `${r.reason} ×${r.count}`).join(', ')}
+              {rej.sdkPackages.length > 0 && `; sent by ${rej.sdkPackages.join(', ')}`}) ·
+            </span>
+          ) : (
+            <span className="text-ok-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
+              0 rejected since {sinceLabel(data.intake.since)} ·
+            </span>
+          ))}
+        {p.lastDeploy ? (
+          <span>
+            last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
+            {!p.lastDeploy.ok && ' and it failed'}
+          </span>
+        ) : (
+          <span>no deploy recorded in 14 days</span>
+        )}
+      </li>
+    )
+  }
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-pipeline">
@@ -231,12 +296,15 @@ export function PipelinePage() {
         description="Every bug from report to deploy, where it is stuck, and the fix."
         helpTitle="About the pipeline"
         helpWhatIsIt="Each bug moves from a report to a fix PR, an Opus review, CI, a release train, a merge and a deploy. This page shows how many are in each step now, which are stuck, and why."
-        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. Open a stuck group to see its PRs with the failing checks or review findings; each group has one main fix, and More holds the rest (re-run, close with a reason). Every action asks first."
+        helpHowToUse="Start with the coloured stage: ▲ red is the bottleneck, ◆ amber is nearly as stuck; the rest show their stuck count in plain ink. The age bar shows how long stuck work has waited. In the stuck groups, ▲ marks the one to start with, a red edge means something failed and ◆ means it is slow or waiting. Groups that take the same fix sit under one heading with one button for all of them. Open a group to see its PRs with the failing checks or review findings; More holds the rest (re-run, close with a reason). Every action asks first."
       >
         {tab === 'workers' ? null : page.isValidating && !page.loading ? (
           <span className="text-2xs text-fg-muted">Updating…</span>
         ) : data ? (
-          <span className="text-2xs tabular-nums text-fg-muted" data-testid="pipeline-updated">Updated {ageLabel(data.generatedAt, now)} ago</span>
+          <span className="text-2xs tabular-nums text-fg-muted" data-testid="pipeline-updated">
+            {/* Under a minute reads "just now", never "0 min ago" (2026-11-18). */}
+            {now - Date.parse(data.generatedAt) < 60_000 ? 'Updated just now' : `Updated ${ageLabel(data.generatedAt, now)} ago`}
+          </span>
         ) : null}
         {tab === 'pipeline' && (
           <Btn size="sm" variant="ghost" onClick={reload} disabled={page.isValidating} data-testid="pipeline-refresh">
@@ -249,7 +317,7 @@ export function PipelinePage() {
       {/* A local worker that stopped doing useful work is loud here too: the Workers tab is not the default. */}
       {tab === 'pipeline' && <WorkerFlagsStrip flags={workerFlags} workersHref={workersHref} />}
 
-      <SegmentedControl<Tab> value={tab} options={tabOptions} onChange={setTab} ariaLabel="Pipeline or local workers" size="md" />
+      <SegmentedControl<Tab> value={tab} options={tabOptions} onChange={setTab} ariaLabel="Pipeline or local workers" size="md" className="self-start" />
 
       {tab === 'workers' && <WorkersPanel projectId={scope === 'project' ? projectId : null} now={now} />}
 
@@ -260,10 +328,13 @@ export function PipelinePage() {
         <>
           <PageStatus
             ariaLabel="Pipeline status"
-            tone={needYou > 0 || nothingOpens ? 'danger' : waitingForFix > 0 ? 'warn' : 'ok'}
+            // Red only for work that failed (or nothing can open a fix, or reports are lost at
+            // intake); stuck backlog alone is a warning (2026-11-18).
+            tone={counted.failing > 0 || nothingOpens || rejectedTotal > 0 ? 'danger' : needYou > 0 || waitingForFix > 0 ? 'warn' : 'ok'}
             sentence={
               top
-                ? <>{needYou} {pluralize(needYou, 'item')} {needYou === 1 ? 'needs' : 'need'} you. The biggest: <span className="font-medium">{top.group.label}</span>.</>
+                ? // "Start here", not "the biggest": failed work leads, so a 42-report group led a 773-report backlog (round-3 review, 2026-11-19).
+                  <>Start here: <span className="font-medium">{top.group.label}</span>.</>
                 : nothingOpens
                   ? agentCredits.state?.out
                     ? `${agentCreditsTitle(agentCredits.state)}, so nothing opens fixes. Nothing already open is stuck.`
@@ -272,11 +343,10 @@ export function PipelinePage() {
                     ? 'Nothing needs you now. Bugs wait for a fix: see the pace below.'
                     : 'Nothing is stuck. Every fix is moving.'
             }
-            metrics={[
-              { label: 'Need you', value: needYou, tone: needYou > 0 ? 'danger' : 'ok', hint: `${COUNT_HINTS.stuck} Bugs that only wait for a fix are not counted here.` },
-              { label: 'Waiting for a fix', value: waitingForFix, tone: waitingForFix > 0 ? 'warn' : 'ok', hint: 'Bugs triaged and understood, with no fix started yet.' },
-              { label: 'Merged, 7 days', value: (stages.find((s) => s.id === 'merged')?.count ?? 0) + (stages.find((s) => s.id === 'deployed')?.count ?? 0), tone: 'ok', hint: 'Fixes merged in the last 7 days, deployed or not.' },
-            ]}
+            // Each number once: "Waiting for a fix" is the Triaged stage's count and "Merged, 7 days"
+            // the pace row's, so they are not repeated here. Who opens fixes and intake rejections
+            // were calm cards at the bottom; they need you, so they lead (2026-11-18).
+            metrics={statusMetrics}
             action={
               top?.action ? (
                 <Btn
@@ -306,16 +376,15 @@ export function PipelinePage() {
             }
             data-testid="pipeline-status"
           />
-          {pace && (
-            <p className="-mt-1 px-1 text-xs text-fg-secondary" data-testid="pipeline-pace">
-              {pace}
-            </p>
-          )}
+          {/* Who opens fixes is said once: while the "Apps no one fixes" tile shows, the pace row,
+              the Fix PR box and the card below don't repeat it (round-3 review, 2026-11-19). */}
+          {pace && <PaceRow pace={pace} openersInTile={nobodyApps > 0} />}
 
           <section className="space-y-2" aria-label="Stages">
-            <PipelineFunnel stages={stages} openers={openers} selected={stage} onSelect={setStage} now={now} />
-            <FunnelLegend />
-            <StuckAgeBar ages={ages} />
+            <PipelineFunnel stages={stages} openers={nobodyApps > 0 ? null : openers} selected={stage} onSelect={setStage} now={now} />
+            <FunnelLegend stages={stages} selected={stage} />
+            {/* One stuck group already shows its count and oldest age: the bar would say the same number again. */}
+            {stuckGroupCount > 1 && <StuckAgeBar ages={ages} />}
           </section>
 
           {!data.ciReadable && (
@@ -325,7 +394,8 @@ export function PipelinePage() {
           )}
 
           <Section
-            title={stage ? `${stages.find((s) => s.id === stage)?.label ?? 'Stage'}: every group` : stuckTotal > 0 ? `Stuck: ${stuckTotal}` : 'Stuck'}
+            // The count is the status line's "Need you"; the heading does not say it a third time (round-3 review, 2026-11-19).
+            title={stage ? `${stages.find((s) => s.id === stage)?.label ?? 'Stage'}: every group` : 'Stuck groups'}
             id="pipeline-stuck"
             icon={<IconAlertTriangle />}
             action={
@@ -351,11 +421,30 @@ export function PipelinePage() {
                 onAction={(action, key) => setPending({ action, key })}
                 workerLanes={workerLanes}
                 focusGroupId={stage ? null : searchParams.get('group')}
+                topGroupId={stage ? null : (top?.group.id ?? null)}
               />
             )}
           </Section>
 
-          <Section title="Release trains, last 7 days" id="pipeline-trains" icon={<IconReleases />}>
+          <Section
+            title="Release trains, last 7 days"
+            id="pipeline-trains"
+            icon={<IconReleases />}
+            action={
+              data.trains.length > 1 ? (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  loading={trainBusy === 'all'}
+                  disabled={trainBusy != null}
+                  onClick={() => setTrainAsk({ projectIds: [...new Set(data.trains.map((t) => t.projectId))], repo: `${data.trains.length} repos` })}
+                  data-testid="pipeline-trains-retry-all"
+                >
+                  Run every merge queue now
+                </Btn>
+              ) : undefined
+            }
+          >
             <TrainHistory
               trains={data.trains}
               projectNames={projectNames}
@@ -363,7 +452,7 @@ export function PipelinePage() {
               now={now}
               busyProjectId={trainBusy}
               results={trainResults}
-              onRetry={(pid, repo) => setTrainAsk({ projectId: pid, repo })}
+              onRetry={(pid, repo) => setTrainAsk({ projectIds: [pid], repo })}
             />
           </Section>
 
@@ -374,7 +463,8 @@ export function PipelinePage() {
                 Who opens fixes
                 {openers && (
                   <span className="font-normal text-fg-muted">
-                    server {openers.server} · local {openers.local} · nobody {openers.nobody}
+                    server {openers.server} · local {openers.local}
+                    {nobodyApps > 0 ? '' : ` · nobody ${openers.nobody}`}
                     {data.dispatchers.some((d) => d.problem) ? ' · auto-fix cannot dispatch on some apps' : ''}
                   </span>
                 )}
@@ -415,33 +505,29 @@ export function PipelinePage() {
                   SDK health →
                 </Link>
               </li>
-              {data.projects.map((p) => {
-                const rej = data.intake?.apps.find((a) => a.projectId === p.id)
+              {(() => {
+                // Only apps with something to say get their own line (2026-11-18): a rejection or a
+                // failed deploy. The quiet rest fold into one "N apps: 0 rejected" line.
+                const loud = data.intake ? data.projects.filter((p) => rejectedOf(p.id) > 0 || (p.lastDeploy != null && !p.lastDeploy.ok)) : data.projects
+                const quiet = data.intake ? data.projects.filter((p) => !loud.includes(p)) : []
+                if (quiet.length < 2) return data.projects.map(intakeRow)
+                const seen = quiet.filter((p) => p.lastDeploy).length
                 return (
-                <li key={p.id} className="flex flex-wrap items-baseline gap-x-2 text-fg-muted" data-testid={`pipeline-intake-${p.id}`}>
-                  <span className="text-fg-secondary">{p.name}:</span>
-                  {data.intake &&
-                    (rej && rej.rejected > 0 ? (
-                      <span className="font-medium text-danger-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
-                        {rej.rejected} rejected ({rej.byReason.slice(0, 3).map((r) => `${r.reason} ×${r.count}`).join(', ')}
-                        {rej.sdkPackages.length > 0 && `; sent by ${rej.sdkPackages.join(', ')}`}) ·
-                      </span>
-                    ) : (
-                      <span className="text-ok-foreground" data-testid={`pipeline-intake-${p.id}-rejected`}>
-                        0 rejected since {new Date(`${data.intake.since}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })} ·
-                      </span>
-                    ))}
-                  {p.lastDeploy ? (
-                    <span>
-                      last deploy seen {ageLabel(p.lastDeploy.at, now)} ago{p.lastDeploy.version ? ` (${p.lastDeploy.version})` : ''}
-                      {!p.lastDeploy.ok && ' and it failed'}
-                    </span>
-                  ) : (
-                    <span>no deploy recorded in 14 days</span>
-                  )}
-                </li>
+                  <>
+                    {loud.map(intakeRow)}
+                    <li>
+                      <details className="group" data-testid="pipeline-intake-quiet">
+                        <summary className="cursor-pointer list-none text-fg-secondary hover:text-fg">
+                          <span className="inline-block transition-transform group-open:rotate-90" aria-hidden="true">▸</span>{' '}
+                          {quiet.length} apps: 0 rejected since {sinceLabel(data.intake!.since)}
+                          <span className="text-fg-muted"> · {seen === 0 ? 'no deploy recorded in 14 days' : `${seen} with a deploy seen`}</span>
+                        </summary>
+                        <ul className="mt-1 space-y-1.5 pl-4">{quiet.map(intakeRow)}</ul>
+                      </details>
+                    </li>
+                  </>
                 )
-              })}
+              })()}
             </ul>
           </Section>
         </>
@@ -452,8 +538,8 @@ export function PipelinePage() {
       )}
       {trainAsk && (
         <ConfirmDialog
-          title="Run the merge queue now"
-          body="Mushi Mushi checks this app's queue now: a release train leaves if its interval is up and approved, green PRs are ready. Otherwise it says when the next one may leave."
+          title={trainAsk.projectIds.length > 1 ? 'Run every merge queue now' : 'Run the merge queue now'}
+          body={`Mushi Mushi checks ${trainAsk.projectIds.length > 1 ? 'each app’s queue' : 'this app’s queue'} now: a release train leaves if its interval is up and approved, green PRs are ready. Otherwise it says when the next one may leave.`}
           details={<span className="font-mono">{trainAsk.repo}</span>}
           confirmLabel="Run now"
           loading={trainBusy != null}
@@ -472,4 +558,38 @@ function topStuck(groups: PipelineGroup[]): { group: PipelineGroup; action: Pipe
   if (!group) return null
   const primary = groupPrimary(group)
   return primary ? { group, action: primary.action, ids: primary.ids } : { group, action: null, ids: [] }
+}
+
+/** One labelled figure in the pace row: a muted label, the number in mono, a short note. */
+function PaceFigure({ label, value, note, testId }: { label: string; value: string | number; note?: string | null; testId: string }) {
+  return (
+    <span className="inline-flex items-baseline gap-1 whitespace-nowrap" data-testid={testId}>
+      <span className="text-fg-muted">{label}</span>
+      <span className="font-mono font-bold tabular-nums text-fg">{value}</span>
+      {note && <span className="text-fg-muted">({note})</span>}
+    </span>
+  )
+}
+
+/**
+ * The pace as a short row of labelled figures, not a paragraph (2026-11-18). `openersInTile`: the
+ * status's "Apps no one fixes" tile counts the apps with no fix, so the row drops its "none for …"
+ * list and a "Fixes started 0" that only restates it (round-3 review, 2026-11-19).
+ */
+function PaceRow({ pace, openersInTile = false }: { pace: PaceFigures; openersInTile?: boolean }) {
+  const quiet = openersInTile ? [] : pace.quietApps
+  const started = pace.started24h != null && !(openersInTile && pace.started24h === 0)
+  return (
+    <p className="-mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1 text-xs" data-testid="pipeline-pace">
+      <span className="text-3xs font-bold tracking-wider text-fg-secondary uppercase">Pace</span>
+      <PaceFigure label="Merged, 7 d" value={pace.merged7} note={pace.rate} testId="pipeline-pace-merged" />
+      {pace.clears && <PaceFigure label="Backlog clears in" value={`~${pace.clears}`} testId="pipeline-pace-clears" />}
+      {started && <PaceFigure label="Fixes started, 24 h" value={pace.started24h!} note={pace.startedBy} testId="pipeline-pace-started" />}
+      {quiet.length > 0 && (
+        <span className="text-fg-muted" title={quiet.join(', ')} data-testid="pipeline-pace-quiet">
+          none for {quiet.length > 3 ? `${quiet.slice(0, 3).join(', ')} +${quiet.length - 3}` : quiet.join(', ')}
+        </span>
+      )}
+    </p>
+  )
 }

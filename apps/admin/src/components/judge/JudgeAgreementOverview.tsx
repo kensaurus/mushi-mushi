@@ -67,9 +67,17 @@ export function JudgeAgreementOverview({
   )
   const points = agreementPoints(weeks)
   const rows = worst.data?.evaluations ?? []
+  // One graded week is one number: it used to fill a whole card ("0% agreed (0 of 2 grades)")
+  // beside the list (round-2 review, 2026-11-18). It becomes a line above the list, which then
+  // takes the full width.
+  const single = points.length === 1
 
   return (
-    <div className="grid min-w-0 gap-3 lg:grid-cols-2 [&>*]:min-w-0" data-testid="judge-agreement-overview">
+    <div className={`grid min-w-0 gap-3 [&>*]:min-w-0 ${single ? '' : 'lg:grid-cols-2'}`} data-testid="judge-agreement-overview">
+      {/* One graded week is already the status line's "Disagreed" number: a third line saying
+          "0% agreed (0 of 2 grades)" repeated it (2026-11-19), so it shows nothing until the
+          trend has two weeks. */}
+      {single ? null : (
       <Section title="How often the grader agrees">
         {points.length > 0 ? (
           <>
@@ -80,6 +88,7 @@ export function JudgeAgreementOverview({
           <p className="text-xs text-fg-muted">No grades in the last 12 weeks.</p>
         )}
       </Section>
+      )}
       <Section title={`Worst disagreements, last ${windowDays} days`}>
         {worst.loading && !worst.data ? (
           <Loading text="Reading the disagreements…" />
@@ -90,11 +99,16 @@ export function JudgeAgreementOverview({
             {rows.map((r) => (
               <li key={r.id} className="min-w-0 rounded-sm border border-edge-subtle px-2.5 py-2">
                 <div className="flex min-w-0 items-baseline justify-between gap-2">
-                  <Link to={`/reports/${r.report_id}`} className={`min-w-0 truncate text-xs font-medium ${LINK_ACCENT}`}>
+                  {/* Wraps to two lines, then clamps: one truncated line cut titles mid-word. */}
+                  <Link to={`/reports/${r.report_id}`} className={`min-w-0 line-clamp-2 break-words text-xs font-medium ${LINK_ACCENT}`} title={r.report_summary ?? undefined}>
                     {r.report_summary ?? 'Untitled report'}
                   </Link>
                   {r.judge_score != null ? (
-                    <span className="shrink-0 text-2xs tabular-nums text-danger">{Math.round(r.judge_score * 100)}%</span>
+                    // Labelled, and not red: a disagreement can still earn a high
+                    // grade (87%), so the number alone isn't a failure.
+                    <span className="shrink-0 whitespace-nowrap text-2xs tabular-nums text-fg-secondary">
+                      grade {Math.round(r.judge_score * 100)}%
+                    </span>
                   ) : null}
                 </div>
                 {firstSentence(r.judge_reasoning) ? (

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 240 pages, generated from llms.txt. */
+/** 243 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -742,7 +742,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "cloud.md",
     keywords: ["cloud"],
     headings: ["Plans", "Sign-up flow", "Why metered on diagnoses", "Spend controls", "Self-hosting"],
-    excerpt: "Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for one app with 100 diagnoses a month.",
+    excerpt: "Hosted Mushi Mushi. Bug reports, plain-English diagnoses, and fix dispatch without running servers. Free for three apps with 300 diagnoses a month.",
   },
   {
     title: "Compare",
@@ -796,7 +796,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "compare/sentry-vs-mushi.md",
     keywords: ["compare", "sentry-vs-mushi", "sentry"],
     headings: ["What each one is", "Side by side", "Where they overlap, and where they do not", "Running Mushi Mushi alongside Sentry [#running-mushi-alongside-sentry]", "Pick Sentry if", "Pick Mushi Mushi if [#pick-mushi-if]", "Frequently asked questions"],
-    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing next to Mushi Mushi's free plan (1 app, 100 diagnoses), and running both.",
+    excerpt: "Sentry vs Mushi Mushi in 2026. What each captures, Sentry's free tier and Seer pricing beside Mushi Mushi's free plan (3 apps, 300 diagnoses), and running both.",
   },
   {
     title: "Concepts",
@@ -1084,7 +1084,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "ja.md",
     keywords: ["ja"],
     headings: ["まず無料で試す：公開中のサイトをチェック", "できること", "報告ボタンは日本語で表示されます", "始め方：Lovable・Bolt の場合", "始め方：Cursor・Claude Code の場合", "運営者情報", "英語のドキュメント"],
-    excerpt: "Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 1 本・月 100 件の診断まで。",
+    excerpt: "Mushi Mushi は、アプリに「問題を報告」ボタンを追加し、届いた不具合の原因と直し方を AI が説明するオープンソースのツールです。無料プランはアプリ 3 本・月 300 件の診断まで。",
   },
   {
     title: "Launch Week",
@@ -1480,7 +1480,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     markdown: "pricing.md",
     keywords: ["pricing", "free", "builder", "studio", "self-host"],
     headings: ["All plans", "What counts as a diagnosis", "Pricing estimator", "Example bills", "Why apps, not reports?", "Why diagnoses, not events", "Your own AI key and the self-host path", "Compared to Sentry + Seer"],
-    excerpt: "Mushi Mushi pricing. Free for one app and 100 AI bug diagnoses a month. Builder $29/mo for 3 apps, Studio $79/mo for 10. Free to self-host.",
+    excerpt: "Mushi Mushi pricing. Free for three apps and 300 AI bug diagnoses a month. Builder $29/mo for 1,000 diagnoses, Studio $79/mo for 10 apps. Free to self-host.",
   },
   {
     title: "Quickstart: install, first report, first fix",
@@ -1510,6 +1510,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Free, open-source bug report widget for Angular 17+: one provideMushi() call registers the service and error handler, so errors and reports reach your queue.",
   },
   {
+    title: "Ask Bolt why it broke",
+    url: docUrl("/quickstart/bolt-mcp"),
+    route: "/quickstart/bolt-mcp",
+    markdown: "quickstart/bolt-mcp.md",
+    keywords: ["quickstart", "bolt-mcp", "bolt", "mcp", "ask", "broke"],
+    headings: ["Open your connectors", "Add Mushi Mushi as a custom MCP server", "Sign in and approve", "Turn it on in your project", "Ask Bolt", "Which tools Bolt gets", "If it does not connect"],
+    excerpt: "Add Mushi Mushi to Bolt as a custom MCP connector, sign in once, and ask Bolt what users reported. Bolt reads the plain-English diagnosis and fixes the bug.",
+  },
+  {
     title: "Bug report widget for Capacitor and Ionic",
     url: docUrl("/quickstart/capacitor"),
     route: "/quickstart/capacitor",
@@ -1535,6 +1544,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "flutter", "bug", "report", "widget"],
     headings: ["Get your project ID and API key", "Install", "Initialize", "Open the widget or submit a report"],
     excerpt: "Free, open-source bug report widget for Flutter (preview): shake-to-report, a Material bottom sheet and an offline queue. A git dependency, not on pub.dev yet.",
+  },
+  {
+    title: "HTTP API: file a bug report with one curl",
+    url: docUrl("/quickstart/http-api"),
+    route: "/quickstart/http-api",
+    markdown: "quickstart/http-api.md",
+    keywords: ["quickstart", "http-api", "http", "api", "file", "bug", "report", "one", "curl"],
+    headings: ["Get your project ID and key", "Send a report", "Check it", "The fields", "Keys and scopes", "Rate limits", "More than one report", "OpenAPI spec"],
+    excerpt: "Send a bug report to Mushi Mushi with one HTTP call, no SDK. How to get a key, the scopes, the rate limits, and the OpenAPI 3.1 spec for code generators.",
   },
   {
     title: "Incident loop: from bug report to fix prompt",
@@ -1607,6 +1625,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["quickstart", "react-native", "react", "native", "bug", "report", "widget", "expo"],
     headings: ["Get your project ID and API key", "1. Install", "2. Mount the provider", "Optional native modules", "3. Verify"],
     excerpt: "Free, open-source bug report widget for React Native and Expo: shake to report, a floating bug button, then a plain-English diagnosis of each report.",
+  },
+  {
+    title: "Mushi Mushi in Replit",
+    url: docUrl("/quickstart/replit"),
+    route: "/quickstart/replit",
+    markdown: "quickstart/replit.md",
+    keywords: ["quickstart", "replit"],
+    headings: ["Add the report button", "Connect Replit Agent", "Add the server", "Sign in and approve", "Ask Agent", "If it does not connect"],
+    excerpt: "Add the Mushi Mushi report button to a Replit app with one prompt, then connect Replit Agent over MCP so it reads the plain-English diagnosis and fixes the bug.",
   },
   {
     title: "Bug report widget for Svelte and SvelteKit",
@@ -2028,8 +2055,8 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting",
     markdown: "self-hosting/index.md",
     keywords: ["self-hosting", "self", "hosting"],
-    headings: ["What you'll deploy", "Fastest path — Docker Compose", "Managed-Supabase path"],
-    excerpt: "Run the whole Mushi Mushi stack yourself with Docker Compose. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
+    headings: ["What you'll deploy", "Quickstart: your own Supabase project", "Docker Compose (experimental)"],
+    excerpt: "Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
   },
   {
     title: "Admin SPA deploy",
@@ -2041,13 +2068,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Build and deploy the Mushi Mushi admin console yourself. A static Vite and React app that talks to your Supabase project, and the env vars it needs.",
   },
   {
-    title: "Self-host in minutes (Docker Compose)",
+    title: "Docker Compose (experimental)",
     url: docUrl("/self-hosting/docker-compose"),
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
-    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "self-host", "minutes"],
-    headings: ["One command", "Clone and configure", "Bring the stack up", "Open the console", "What's running", "Production notes", "Managed Supabase instead"],
-    excerpt: "Self-host the whole Mushi Mushi stack with one Docker Compose file. Postgres, auth, storage, edge functions, the admin console and a Caddy reverse proxy.",
+    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "experimental"],
+    headings: ["Generate the secrets", "Bring the stack up", "Open the console", "What's running", "Not included", "Production notes"],
+    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.",
   },
   {
     title: "Edge Functions deploy",
@@ -2073,7 +2100,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/supabase",
     markdown: "self-hosting/supabase.md",
     keywords: ["self-hosting", "self", "hosting", "supabase", "setup"],
-    headings: ["Required extensions", "Required custom functions", "RLS pattern", "Seed data", "Verifying the setup"],
+    headings: ["Required extensions", "Required custom functions", "RLS pattern", "Seed data and runtime config", "Verifying the setup"],
     excerpt: "Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI, push every migration, and check the Postgres extensions the server needs.",
   },
   {

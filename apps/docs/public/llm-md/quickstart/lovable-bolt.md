@@ -92,7 +92,7 @@ button also checks in with Mushi Mushi when a page loads, which records your
 site's address (not the page) and the browser type.
 
 **How long it is kept.** On the free plan, reports and everything attached to
-them are deleted after 14 days. Paid plans keep them longer:
+them are deleted after 30 days. Paid plans keep them longer:
 [the privacy policy](/legal/privacy#7-retention) has the table.
 
 **Tell your users.** You must tell them that reports can include a

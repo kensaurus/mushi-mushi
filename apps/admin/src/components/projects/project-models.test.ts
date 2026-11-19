@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { SCOPE_PRESETS, canDeleteProject, canManageProject, isScopePresetId, projectKeyCounts, scopeBadgeTone, type Project } from './project-models'
+import { SCOPE_PRESETS, canDeleteProject, canManageProject, installGuideOpenByDefault, isScopePresetId, projectKeyCounts, scopeBadgeTone, trendLabel, type Project } from './project-models'
+
+describe('round 2 (2026-11-18) list-tab helpers', () => {
+  it('labels the 7-day trend with its unit and sign', () => {
+    expect(trendLabel({ direction: 'up', delta: 2 })).toBe('+2 reports, 7d')
+    expect(trendLabel({ direction: 'down', delta: -3 })).toBe('−3 reports, 7d')
+    expect(trendLabel({ direction: 'up', delta: 1 })).toBe('+1 report, 7d')
+  })
+
+  it('collapses the install guide only for an app whose SDK is up to date', () => {
+    expect(installGuideOpenByDefault({ sdk_status: 'up-to-date' })).toBe(false)
+    expect(installGuideOpenByDefault({ sdk_status: 'outdated' })).toBe(true)
+    expect(installGuideOpenByDefault({ sdk_status: 'unknown' })).toBe(true)
+    expect(installGuideOpenByDefault({})).toBe(true)
+  })
+})
 
 const base = { organization_id: 'org1', organization_role: null } as unknown as Project
 

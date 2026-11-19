@@ -20,9 +20,9 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 vi.mock('../../lib/supabase', () => ({ apiFetch: api.fetch }))
 vi.mock('../../lib/toast', () => ({ useToast: () => toast }))
 
-import { HealthStrip } from './HealthStrip'
+import { HealthStrip, showHealthDetail } from './HealthStrip'
 import { NeedsYouCard } from './NeedsYouCard'
-import { ReleaseCard } from './ReleaseCard'
+import { ReleaseCard, releaseIsEmpty } from './ReleaseCard'
 import { SitemapCard } from './SitemapCard'
 import { WeekCard } from './WeekCard'
 import { ActivityCard } from './ActivityCard'
@@ -87,13 +87,31 @@ describe('HealthStrip', () => {
         ]),
       }),
     )
-    expect(byTestId('home-health-site')!.textContent).toContain('Problem')
+    // The state is the value's mark (named for screen readers), not a second
+    // word pill beside it (round-2 sweep 2026-11-18: "Good" + "Passing").
+    expect(byTestId('home-health-site')!.querySelector('svg[aria-label="Problem"]')).toBeTruthy()
     expect(byTestId('home-health-site')!.textContent).toContain('2 pages broken')
-    expect(byTestId('home-health-errors')!.textContent).toContain('Good')
+    expect(byTestId('home-health-site')!.textContent).not.toContain('Problem')
+    // An incoming bug is information, never a green "Good" (round-2 sweep).
+    expect(byTestId('home-health-errors')!.querySelector('svg[data-tone="info"]')).toBeTruthy()
+    expect(byTestId('home-health-errors')!.textContent).not.toContain('Good')
     // Plain words over the server's "Set up the SDK" (audit 2026-11-11).
     expect(byTestId('home-health-sdk')!.textContent).toContain('Add the report button')
-    expect(byTestId('home-health-ci')!.textContent).toContain('Unknown')
+    expect(byTestId('home-health-ci')!.querySelector('svg[aria-label="Unknown"]')).toBeTruthy()
     expect(hrefs()).toEqual(expect.arrayContaining(['/inventory?tab=discovery', '/reports?days=1', '/connect', '/ci']))
+  })
+
+  // Fresh-eyes sweep 2026-11-18: "Passing / 4 checks green on the latest commit" said one state twice.
+  it('keeps the detail sentence only for a light that shows a problem, with a shape for every light', async () => {
+    expect(showHealthDetail({ light: 'good', detail: '4 checks green on the latest commit.' })).toBe(false)
+    expect(showHealthDetail({ light: 'off', detail: 'Mushi is not checking your live site yet.' })).toBe(false)
+    expect(showHealthDetail({ light: 'bad', detail: '2 pages return 500.' })).toBe(true)
+    await render(createElement(HealthStrip, { section: ok([signal({ id: 'ci', light: 'good', headline: 'Passing', detail: '4 checks green on the latest commit.' }), signal({ id: 'site', light: 'bad', headline: '2 pages broken', detail: '2 pages return 500.' })]) }))
+    expect(byTestId('home-health-ci')!.textContent).not.toContain('4 checks green')
+    expect(byTestId('home-health-ci')!.querySelector('a[title="4 checks green on the latest commit."]')).toBeTruthy()
+    expect(byTestId('home-health-site')!.textContent).toContain('2 pages return 500.')
+    expect(byTestId('home-health-site')!.querySelector('svg[data-tone="danger"]')).toBeTruthy()
+    expect(byTestId('home-health-ci')!.querySelector('svg[data-tone="ok"]')).toBeTruthy()
   })
 
   it('says it could not read when the section failed', async () => {
@@ -223,7 +241,20 @@ describe('ReleaseCard', () => {
     const waiting = byTestId('home-release-waiting')!
     expect(waiting.textContent).toContain('10 bugs waiting for a fix')
     expect(waiting.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('Critical 1, High 2, Low 3, Not rated yet 4')
+    // The legend names only severities with bugs: no "Medium 0" chip (round-2 sweep 2026-11-18).
+    expect(waiting.querySelector('ul')!.textContent).not.toContain('Medium')
     expect(hrefs()).toEqual(expect.arrayContaining(['/reports?status=open&severity=critical', '/reports?status=open&severity=low', '/reports?status=open']))
+  })
+
+  // Fresh-eyes sweep 2026-11-18: five "0" chips said one fact five times.
+  it('collapses an untouched release to one "No fix PRs yet" line', async () => {
+    const zero = release({ stations: release().stations.map((s) => ({ ...s, count: 0, stuck: 0 })), train: null })
+    expect(releaseIsEmpty(zero)).toBe(true)
+    expect(releaseIsEmpty(release())).toBe(false)
+    await render(createElement(ReleaseCard, { section: ok(zero), projectId: P }))
+    expect(byTestId('home-release-stations')).toBeNull()
+    expect(byTestId('home-release-empty')!.textContent).toBe('No fix PRs yet')
+    expect(byTestId('home-release-waiting')).toBeTruthy()
   })
 
   it('says how to connect, or that it could not read', async () => {
@@ -264,6 +295,8 @@ describe('SitemapCard', () => {
   it('says what fills the map when nothing has', async () => {
     await render(createElement(SitemapCard, { section: notConnected<HomeSitemap>('Install the SDK', '/connect') }))
     expect(text()).toContain('No page visits, bug reports or site checks yet')
+    // One plain line, not a dashed box inside the card (sweep 2026-11-18).
+    expect(container.querySelector('[class*="border-dashed"]')).toBeNull()
   })
 })
 
@@ -283,7 +316,10 @@ describe('WeekCard', () => {
     expect(rows[0].querySelector('span')!.className).toContain('warn')
     expect(rows[1].textContent).toContain('−2')
     expect(rows[1].querySelector('span')!.className).toContain('warn')
-    expect(rows[2].textContent).toContain('same')
+    // A row that was 0 both weeks folds to one line (round-2 sweep 2026-11-18).
+    expect(rows).toHaveLength(2)
+    expect(byTestId('home-week-quiet')!.textContent).toBe('None either week: critical bugs')
+    expect(text()).not.toContain('same')
     expect(hrefs()).toEqual(['/reports?days=7', '/fixes', '/reports?days=7&severity=critical'])
   })
 })
@@ -346,7 +382,7 @@ describe('AccessCard', () => {
     expect(t).toContain('latest 1.33.0')
     expect(t).toContain('Update available')
     expect(t).toContain('Web SDK')
-    expect(t).toContain('never used')
+    expect(byTestId('home-keys-unused')!.textContent).toBe('1 never used: Web SDK')
     expect(t).toContain('All 3 keys')
     expect(hrefs()).not.toContain('/team?view=audit')
   })
@@ -391,6 +427,13 @@ describe('AppCard', () => {
   it('falls back to the icon and says why there is no screenshot', async () => {
     await render(createElement(AppCard, { section: ok(app({ thumbnailState: { available: true, canRefresh: false, reason: 'Add a Firecrawl key in Settings to take a screenshot.', lastError: null, lastAttemptAt: null } })), projectId: P, canEdit: true, onRefreshed: () => {} }))
     expect(text()).toContain('Add a Firecrawl key')
+    // No picture: one icon row at every width, no 16:9 grey box (round-2 sweep 2026-11-18).
+    const picture = byTestId('home-app-picture')!
+    expect(picture.className).not.toContain('aspect-video')
+    expect(picture.className).not.toContain('bg-surface-overlay')
+    // "No deploy seen yet" lives on the Release card only.
+    await render(createElement(AppCard, { section: ok(app({ version: null })), projectId: P, canEdit: false, onRefreshed: () => {} }))
+    expect(text()).not.toContain('No deploy seen yet')
     expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent?.includes('Refresh picture'))).toBe(false)
   })
 

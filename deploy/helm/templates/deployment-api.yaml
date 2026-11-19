@@ -26,11 +26,28 @@ spec:
           ports:
             - containerPort: 8000
           env:
+            - name: SUPABASE_URL
+              value: {{ required "global.supabaseUrl is required (the Supabase API gateway URL)" .Values.global.supabaseUrl | quote }}
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Release.Name }}-secrets
                   key: anthropic-api-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: openai-api-key
+            - name: MUSHI_INTERNAL_CALLER_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: internal-caller-secret
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: jwt-secret
             - name: SUPABASE_SERVICE_ROLE_KEY
               valueFrom:
                 secretKeyRef:

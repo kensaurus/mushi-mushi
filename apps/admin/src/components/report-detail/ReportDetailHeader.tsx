@@ -1,19 +1,11 @@
-import { useState } from 'react'
-import { Badge, Breadcrumbs, Btn, RelativeTime } from '../ui'
+import { Badge, RelativeTime } from '../ui'
 import { ReportSourceTag } from '../reports/ReportSourceTag'
-import { REPORT_SOURCE_META, reportSourceKind, showsSeverity } from '../../lib/reportSourceKind'
+import { REPORT_SOURCE_META, reportSourceKind } from '../../lib/reportSourceKind'
 import { DEPLOY_LIVE_TONE, deployLiveLabel, deployLiveTitle } from './deployLive'
-import { ContainedBlock, MetaChip } from './ReportSurface'
+import { MetaChip } from './ReportSurface'
 import { StatusPill } from '../signal/StatusMark'
 import { reportRunStatus } from '../reports/reportRunStatus'
-import {
-  SEVERITY,
-  CATEGORY_BADGE,
-  CATEGORY_LABELS,
-  statusLabel,
-  severityLabel,
-  severityGlowClass,
-} from '../../lib/tokens'
+import { statusLabel, severityGlowClass } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import { reportHeading } from '../../lib/clipText'
 import { reporterLabel } from '../../lib/reporterLabel'
@@ -36,9 +28,6 @@ export function ReportDetailHeader({
   // headline), fall back to technical summary, then raw description. Never
   // cut mid-word; the full text is on hover and behind "Show full".
   const heading = reportHeading(report)
-  const [headingExpanded, setHeadingExpanded] = useState(false)
-  // Breadcrumb still uses a compact technical summary (shorter context)
-  const breadcrumbLabel = (report.summary ?? report.title ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   // Provenance: page route where the bug was felt, path only (no query/fragment)
   const pageRoute = routePathname(
     (report.environment as { route?: string } | null)?.route
@@ -57,29 +46,20 @@ export function ReportDetailHeader({
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
       className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised p-3 ${glow} ${glow ? 'motion-safe:transition-[transform,opacity]' : ''}`}
     >
-      <Breadcrumbs
-        items={[
-          { label: 'Reports', to: '/reports' },
-          { label: breadcrumbLabel, hint: report.id },
-        ]}
-      />
+      {/* No crumb in the card: the console's own crumb already reads
+          "Bugs › …", and a second "Reports › …" named the page twice, with
+          a different word (R2 sweep 2026-11-18). */}
       <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <ReportSourceTag report={sourceRow} />
           <StatusPill status={reportRunStatus(report.status)} label={statusLabel(report.status)} />
-          {report.severity && showsSeverity(sourceKind) && (
-            <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
-          )}
-          {report.category && (
-            <Badge
-              className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
-            >
-              {CATEGORY_LABELS[report.category] ?? report.category}
-            </Badge>
-          )}
+          {/* Source and status only: severity and category are set in the
+              triage bar and read in the classification card. "Medium" and
+              "Bug" were on the page five times each (round-3 sweep 2026-11-19). */}
           {report.deploy_live && <DeployLiveBadge deployLive={report.deploy_live} />}
-          {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && (
+          {/* "◆ Sentry" already leads the row; "via Sentry" said it again. */}
+          {(report.custom_metadata as { source?: string } | null)?.source === 'sentry_webhook' && sourceKind !== 'sentry' && (
             <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Ingested from a Sentry webhook — errors and user feedback routed into Mushi Mushi">
               via Sentry
             </Badge>
@@ -90,26 +70,19 @@ export function ReportDetailHeader({
             </Badge>
           )}
         </div>
-        <ContainedBlock tone="info" className="mt-2">
-          <h2
-            className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl"
-            title={heading.truncated ? heading.full : undefined}
-          >
-            {headingExpanded ? heading.full : heading.text}
-          </h2>
-          {heading.truncated && (
-            <Btn
-              variant="ghost"
-              size="sm"
-              className="mt-1"
-              aria-expanded={headingExpanded}
-              onClick={() => setHeadingExpanded((v) => !v)}
-            >
-              {headingExpanded ? 'Show less' : 'Show full'}
-            </Btn>
-          )}
-        </ContainedBlock>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {/* The headline, as page text (no cut-off box, R2 sweep 2026-11-18).
+            The short summary, not the full text: a clipped summary fell back
+            to the raw Sentry dump, 3 lines at 1440 and 6 at 390, repeated word
+            for word in User report > Description (round-3 sweep 2026-11-19).
+            The full text is on hover and in Description. */}
+        <h2
+          className="mt-2 max-w-4xl text-lg font-semibold leading-snug text-balance text-fg wrap-break-word"
+          title={heading.full !== heading.text ? heading.full : undefined}
+          data-testid="report-detail-title"
+        >
+          {heading.text}
+        </h2>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
           <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />
           </MetaChip>
@@ -145,7 +118,7 @@ export function ReportDetailHeader({
                 readers read "Signed-in user b850e61a · view all", not
                 "userb850e61a·" (report 1a629775). Whitespace between flex
                 items takes no room, so the layout is unchanged. */}
-            {reporter.shortId ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
+            {reporter.shortId && !filedBy ? <>{' '}<span className="font-mono text-3xs text-fg-faint">{reporter.shortId}</span></> : null}
             {(report.reporter_identity?.jwt_verified_at || report.reporter_jwt_verified) && (
               <span
                 className="text-3xs text-ok font-semibold"
@@ -154,7 +127,7 @@ export function ReportDetailHeader({
                 ✓ verified
               </span>
             )}
-            {reporterReportsHref(report) ? <>{' '}<span className="text-fg-faint">· view all</span></> : null}
+            {reporterReportsHref(report) && !filedBy ? <>{' '}<span className="text-fg-faint">· view all</span></> : null}
           </MetaChip>
           {report.session_id && (
             <MetaChip

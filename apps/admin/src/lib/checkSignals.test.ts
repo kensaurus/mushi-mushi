@@ -28,7 +28,9 @@ describe('staleness', () => {
     expect(fresh).toMatchObject({ short: 'now', cellClass: 'ci-cell-0', tone: 'ok', stale: false })
     expect(old).toMatchObject({ short: '14d', cellClass: 'ci-fail-5', tone: 'danger', stale: true })
     expect(staleness(ago(5), NOW)).toMatchObject({ short: '5h', tone: 'ok' })
-    expect(staleness(ago(3 * 24), NOW)).toMatchObject({ short: '3d', tone: 'warn', stale: false })
+    // An age under a week is not a failure: neutral, no warning shape (2026-11-18).
+    expect(staleness(ago(3 * 24), NOW)).toMatchObject({ short: '3d', tone: 'ok', cellClass: 'ci-cell-0', stale: false })
+    expect(staleness(ago(4 * 24), NOW)).toMatchObject({ short: '4d', tone: 'ok', cellClass: 'ci-cell-0' })
     expect(staleness(ago(STALE_DAYS * 24), NOW)?.stale).toBe(true)
   })
 
@@ -84,7 +86,7 @@ describe('checkAlerts', () => {
       NOW,
     )
     expect(alerts.map((a) => a.id)).toEqual(['red', 'five', 'two', 'older', 'stale'])
-    expect(alerts[0]).toMatchObject({ severity: 'critical', title: 'RED failed', action: { to: '/red' } })
+    expect(alerts[0]).toMatchObject({ severity: 'critical', label: 'Failed', title: 'RED', action: { to: '/red' } })
     expect(alerts[1]).toMatchObject({ severity: 'serious', label: 'Getting worse', metric: { value: '5', unit: 'findings · ▲ +3' } })
     expect(alerts[2]?.metric).toEqual({ value: '2', unit: 'findings' })
     expect(alerts[3]).toMatchObject({ label: 'Stale 20d', metric: { value: '20d', unit: 'since last run' } })

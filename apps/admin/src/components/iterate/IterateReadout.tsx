@@ -59,14 +59,15 @@ export function IterateReadout({ stats, fetchedAt, isValidating }: Props) {
     },
     {
       label: 'Last failure',
-      value: stats.lastFailedAt ? `${stats.lastFailedUrl ?? 'unknown URL'}` : 'None',
-      tone: stats.lastFailedAt ? 'danger' : 'ok',
+      // Never run is not "no failures": no green until a run has happened.
+      value: stats.lastFailedAt ? `${stats.lastFailedUrl ?? 'unknown URL'}` : stats.lastRunAt ? 'None' : 'No runs yet',
+      tone: stats.lastFailedAt ? 'danger' : stats.lastRunAt ? 'ok' : 'muted',
       wrap: true,
     },
   ]
 
   return (
-    <ReadoutPanel title="Iterate readout" freshness={{ at: fetchedAt, isValidating }}>
+    <ReadoutPanel title="Improvement runs readout" freshness={{ at: fetchedAt, isValidating }}>
       <div className="grid gap-4 lg:grid-cols-2">
         <ReadoutSection title="Endpoints" icon={<IconGlobe size={14} aria-hidden />}>
           <EndpointCodeRow label="PDCA stats API" url={statsApi} />

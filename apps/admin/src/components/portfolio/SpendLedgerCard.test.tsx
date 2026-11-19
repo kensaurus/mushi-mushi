@@ -52,26 +52,27 @@ const DIGEST: DigestPreviewResponse = {
   preview: { title: 'Mushi daily digest for A', lines: ['This week, glot.it: 40 did signed_up, 9 reached activated (22.5%).'], text: '', hasContent: true },
 }
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' }, ledger: { value: null as unknown } }))
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), reload: vi.fn(), role: { value: 'owner' }, ledger: { value: null as unknown }, spendLoading: { value: false } }))
 
 vi.mock('../../lib/supabase', () => ({ apiFetch: mocks.apiFetch, apiFetchMutate: mocks.apiFetch }))
 vi.mock('../../lib/usePageData', () => ({
   usePageData: (path: string | null) => ({
     data: path?.endsWith('/spend')
-      ? mocks.ledger.value ?? LEDGER
+      ? mocks.spendLoading.value ? null : mocks.ledger.value ?? LEDGER
       : path?.endsWith('/digest')
         ? DIGEST
         : path === '/v1/org'
           ? { organizations: [{ id: ORG, slug: 'a', name: 'A', plan_id: 'free', role: mocks.role.value }] }
           : null,
-    loading: false,
+    loading: path?.endsWith('/spend') ? mocks.spendLoading.value : false,
     error: null,
     reload: mocks.reload,
   }),
 }))
 
 import { SpendLedgerCard } from './SpendLedgerCard'
-import { DigestCard } from './DigestCard'
+import { DigestCard, sendNowBlocker } from './DigestCard'
+import { CI_READ_TIMEOUT_MS } from '../../lib/ciReadTimeout'
 
 async function flush(): Promise<void> {
   for (let i = 0; i < 8; i += 1) await Promise.resolve()
@@ -178,7 +179,7 @@ describe('SpendLedgerCard', () => {
   it('the digest card saves a Teams channel and the weekly day with the rest of the settings', async () => {
     await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     expect(container.textContent).toContain('This week, glot.it')
-    const teams = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.closest('label')?.textContent?.includes('Teams webhook of'))!
+    const teams = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.getAttribute('aria-label') === "Teams: which app's Teams webhook")!
     await act(async () => {
       teams.value = P1
       teams.dispatchEvent(new Event('change', { bubbles: true }))
@@ -195,6 +196,23 @@ describe('SpendLedgerCard', () => {
       await flush()
     })
     expect(calls('PUT')[1].body).toMatchObject({ gtmWeekday: null })
+  })
+
+  it('the digest says what each channel picker sends to, and shows the preview as a quote, not a card', async () => {
+    await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
+    const slack = Array.from(container.querySelectorAll<HTMLSelectElement>('select')).find((s) => s.getAttribute('aria-label') === "Slack: which app's Slack channel")!
+    expect(Array.from(slack.options).map((o) => o.textContent)).toEqual(['Off', "glot.it's Slack channel"])
+    expect(container.textContent).not.toContain('Slack channel of')
+    const preview = container.querySelector('[data-testid="digest-preview"]')!
+    expect(preview.className).not.toMatch(/rounded|shadow/)
+    expect(preview.textContent).toContain('This week, glot.it')
+    // Send now can run: no reason shown.
+    expect(container.querySelector('[data-testid="digest-send-blocker"]')).toBeNull()
+  })
+
+  it('says inline why Send now is off', () => {
+    expect(sendNowBlocker({ enabled: false })).toBe('Turn on "Send the digest every day" first.')
+    expect(sendNowBlocker({ enabled: true })).toBeNull()
   })
 })
 
@@ -307,5 +325,37 @@ describe('portfolio cards for a member (QA 177)', () => {
     await render(createElement(DigestCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))
     expect(container.querySelector('fieldset')?.disabled).toBe(true)
     expect(Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim())).not.toContain('Send now')
+  })
+})
+
+// Round 3 (2026-11-19): Spend sat on "Adding up what each app costs…". A read that never
+// answers turns into "not checked" with one Retry after the timeout.
+describe('SpendLedgerCard read that never answers', () => {
+  let container: HTMLDivElement
+  let root: Root
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.spendLoading.value = true
+    mocks.reload.mockClear()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+  afterEach(() => {
+    act(() => root.unmount())
+    container.remove()
+    mocks.spendLoading.value = false
+    vi.useRealTimers()
+  })
+
+  it('shows the loading line, then "Spend per app: not checked" with Retry', () => {
+    act(() => root.render(createElement(MemoryRouter, null, createElement(SpendLedgerCard, { orgId: ORG, projects: [{ projectId: P1, name: 'glot.it' }] }))))
+    expect(container.textContent).toContain('Adding up what each app costs…')
+    act(() => vi.advanceTimersByTime(CI_READ_TIMEOUT_MS))
+    const row = container.querySelector('[data-testid="portfolio-spend-not-checked"]')!
+    expect(row.textContent).toContain('Spend per app: not checked')
+    expect(container.textContent).not.toContain('Adding up what each app costs…')
+    act(() => Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Retry')!.click())
+    expect(mocks.reload).toHaveBeenCalled()
   })
 })

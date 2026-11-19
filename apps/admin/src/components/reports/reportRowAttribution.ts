@@ -3,6 +3,7 @@
  */
 
 import { shortReporterKey } from '../../lib/reporterKey'
+import { isReporterKeyHash } from '../report-detail/reporterPresence'
 import type { ReportRow } from './types'
 
 export type ReportLayer = 'frontend' | 'backend' | 'server' | 'mobile'
@@ -159,6 +160,19 @@ export function captureMode(
   }
 }
 
+/**
+ * True when the capture chip only repeats the source tag in front of the
+ * title: "◆ Sentry" + "sentry", "● User report" + "user", "◎ Mushi Mushi
+ * check" + "mushi" sat on every row of the Bugs list (R2 sweep 2026-11-18).
+ * The chip stays when it adds something (auto, server, shake, a trigger).
+ */
+export function captureRestatesSource(captureLabel: string, sourceKind: string): boolean {
+  if (captureLabel === 'sentry') return sourceKind === 'sentry'
+  if (captureLabel === 'user') return sourceKind === 'user'
+  if (captureLabel === 'mushi') return sourceKind === 'check'
+  return false
+}
+
 export function reporterWho(row: ReportRow): { label: string; tooltip: string; verified?: boolean } {
   const job = mushiJobFiler(row)
   if (job) return { label: job.label, tooltip: `Mushi Mushi's ${job.label} (${job.job}) filed this report.` }
@@ -175,6 +189,12 @@ export function reporterWho(row: ReportRow): { label: string; tooltip: string; v
     const id = row.reporter_user_id
     const short = id.length > 20 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
     return { label: short, tooltip: `Identified user: ${id}` }
+  }
+  // An intake name ("site-audit", "cloudwatch", "sentry-webhook") is not a
+  // key: cutting it to 6 characters read "anon·cloudw" (round-3 sweep
+  // 2026-11-19). It shows whole, as what filed the report.
+  if (row.reporter_token_hash && !isReporterKeyHash(row.reporter_token_hash)) {
+    return { label: row.reporter_token_hash, tooltip: `Filed by the ${row.reporter_token_hash} intake, not a person` }
   }
   if (row.reporter_token_hash) {
     const hex = shortReporterKey(row.reporter_token_hash, 6)

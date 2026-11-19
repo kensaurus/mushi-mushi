@@ -160,9 +160,11 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
     if (drift.length > 0) {
       reasons.push({
         id: 'fix',
-        short: drift.length === 1 ? `${drift[0].label} to fix` : `${drift.length} parts to fix`,
-        title: drift.length === 1 ? `${drift[0].label} to fix` : 'Parts to fix',
-        metric: { value: String(drift.length), unit: drift.length === 1 ? 'part to fix' : 'parts to fix' },
+        // Scoped by name (round 3): "2 parts to fix" beside the grid's "Risks 8" read as one count
+        // with two values. These are App blueprint parts, not risks.
+        short: drift.length === 1 ? `${drift[0].label} to fix` : `${drift.length} blueprint parts to fix`,
+        title: drift.length === 1 ? `${drift[0].label} to fix` : 'Blueprint parts to fix',
+        metric: { value: String(drift.length), unit: drift.length === 1 ? 'blueprint part' : 'blueprint parts' },
         to: urgency.level === 'fix' && urgency.next ? urgency.next.to : '/recipe',
         weight: 6 * drift.length,
       })
@@ -170,7 +172,9 @@ export function appSignals(card: PortfolioCard, checkIns: ReadonlyMap<string, st
   }
 
   if (risks && risks.warn > 0) {
-    reasons.push({ id: 'watch', title: 'Risks to look at', short: plural(risks.warn, 'risk to look at', 'risks to look at'), metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
+    // "7 risks to look at" beside the grid's "Risks 9" (2 serious + 7): the total ties them (round 3).
+    const watchShort = risks.error > 0 ? `${risks.warn} of ${risks.error + risks.warn} risks to look at` : plural(risks.warn, 'risk to look at', 'risks to look at')
+    reasons.push({ id: 'watch', title: 'Risks to look at', short: watchShort, metric: { value: String(risks.warn), unit: 'to look at' }, to: '/recipe', weight: 2 * Math.min(risks.warn, 5) })
   }
   if (freshness === 'stale' && seenAt) {
     reasons.push({ id: 'quiet', title: 'SDK gone quiet', short: `SDK quiet ${shortAge(seenAt, now)}`, metric: { value: shortAge(seenAt, now), unit: 'quiet' }, to: '/connect', weight: 2 })
@@ -291,19 +295,24 @@ const ACTION_LABEL: Record<AppReasonId, string> = {
  * Critical (red, pulsing) when the app is broken or its CI failed today.
  */
 export function appAlerts(ranked: readonly AppSignals[], onOpen: (projectId: string) => void, max = 3): SignalAlert[] {
-  return appsNeedingYou(ranked)
-    .slice(0, max)
-    .map((r) => {
+  const shown = appsNeedingYou(ranked).slice(0, max)
+  const rests = shown.map((r) => r.reasons.slice(1, 4).map((x) => x.short))
+  // A detail every card carries word for word ("2 serious risks" on all three, round 2
+  // 2026-11-18) tells the cards apart by nothing: it is left out; the grid below has it per app.
+  const onEvery = shown.length > 1 ? new Set(rests[0]!.filter((x) => rests.every((rest) => rest.includes(x)))) : new Set<string>()
+  return shown
+    .map((r, i) => {
       const top = r.reasons[0]
       const id = r.card.projectId
-      const rest = r.reasons.slice(1, 4).map((x) => x.short)
+      const all = rests[i]!
+      const rest = all.filter((x) => !onEvery.has(x))
       return {
         id,
         severity: r.tier === 0 || (r.ciFailsToday?.value ?? 0) > 0 ? 'critical' : 'serious',
         label: ALERT_LABEL[top.id],
         app: r.card.name,
         title: top.title,
-        detail: rest.length > 0 ? rest.join(' · ') : 'Nothing else open.',
+        detail: rest.length > 0 ? rest.join(' · ') : all.length > 0 ? '' : 'Nothing else open.',
         metric: top.metric,
         keys: [appKey(id)],
         action: { label: ACTION_LABEL[top.id], to: appLink(top.to, id), onClick: () => onOpen(id) },

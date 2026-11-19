@@ -4,10 +4,9 @@
  *          tested, and the best grade so far (PageStatus, P1).
  */
 
-import { PageStatus } from '../ui'
+import { Btn, PageStatus, type PageStatusTone } from '../ui'
 import type { PromptLabStats } from './PromptLabStatsTypes'
 import { bestScoreSource } from './types'
-import { pluralizeWithCount } from '../../lib/format'
 
 const promptLabLinks = {
   active: '/prompt-lab?tab=prompts',
@@ -22,22 +21,39 @@ interface Props {
   /** The best score belongs to a global default, scored on other projects. */
   bestIsBuiltIn?: boolean
   statLabels?: Record<string, string>
+  /** "1 test running · 1 not started", from the prompt list (promptTestSummary). */
+  testSummary?: { text: string; testing: number } | null
+  /** Where the step tables are, for the line's one action ("Set traffic %" / "Open prompts"). */
+  promptsHref?: string
 }
 
-export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels }: Props) {
+/**
+ * @internal Exported for tests. The line's tone and action once it carries the test state (the
+ * banner that used to say it is gone): every test at 0% of traffic is a warning with "Set
+ * traffic %"; a test that gets traffic is work in progress with "Open prompts".
+ */
+export function promptLabLineState(testSummary: { testing: number } | null | undefined): { tone: PageStatusTone; action: string | null } {
+  if (!testSummary) return { tone: 'neutral', action: null }
+  return testSummary.testing === 0 ? { tone: 'warn', action: 'Set traffic %' } : { tone: 'info', action: 'Open prompts' }
+}
+
+export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating, bestIsBuiltIn = false, statLabels, testSummary = null, promptsHref = promptLabLinks.candidates }: Props) {
+  const line = promptLabLineState(testSummary)
+  // No grade is a dash in the tile: the sentence says "no grades" once (2026-11-19: 4 times).
   const best = stats.bestScore != null ? `${Math.round(stats.bestScore * 100)}%` : '—'
   const source = bestScoreSource(stats) ?? (stats.bestScore != null ? 'grade' : null)
-  const testing =
-    stats.candidatePrompts > 0
-      ? `${pluralizeWithCount(stats.candidatePrompts, 'prompt')} being tested${stats.untestedAbCount > 0 ? `, ${stats.untestedAbCount} with no grades yet` : ''}`
-      : 'none being tested'
-  const bestPart =
-    stats.bestScore != null ? `; best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}` : ''
+  // One status line for tests and grades: the page no longer stacks a test banner over it.
+  const grades =
+    stats.bestScore != null
+      ? `Best grade ${best}${source ? ` (${source}${bestIsBuiltIn ? ', built-in default' : ''})` : ''}.`
+      : 'No version has a grade yet. Grades come from Triage grading.'
+  const sentence = testSummary ? `${testSummary.text}. ${grades}` : grades
   return (
     <PageStatus
       ariaLabel="AI prompts status"
-      tone={stats.untestedAbCount > 0 ? 'info' : 'ok'}
-      sentence={`${pluralizeWithCount(stats.activePrompts, 'prompt')} in use, ${testing}${bestPart}.`}
+      tone={line.tone}
+      sentence={sentence}
+      action={line.action ? <Btn to={promptsHref} size="sm" variant={line.tone === 'warn' ? 'primary' : 'ghost'}>{line.action}</Btn> : undefined}
       freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       metrics={[
         {
@@ -47,9 +63,11 @@ export function PromptLabSnapshotStrip({ stats, statsFetchedAt, statsValidating,
           to: promptLabLinks.active,
         },
         {
-          label: statLabels?.candidates ?? 'Being tested',
-          value: stats.candidatePrompts,
-          hint: 'Copies of a prompt collecting grades before they replace it.',
+          // Steps whose test gets traffic: "2 steps with a test" beside one running read as two
+          // running (2026-11-19).
+          label: statLabels?.candidates ?? 'Steps testing',
+          value: testSummary ? testSummary.testing : stats.candidatePrompts,
+          hint: 'Steps whose test version gets a share of reports and collects grades before it can replace the one in use.',
           to: promptLabLinks.candidates,
         },
         {

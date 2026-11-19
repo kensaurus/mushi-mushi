@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -16,7 +16,6 @@ import { useAdminMode } from '../lib/mode'
 import {
   SegmentedControl,
   Btn,
-  Card,
   ErrorAlert,
   Loading,
 } from '../components/ui'
@@ -39,11 +38,15 @@ import { CrawlerSettingsCard } from '../components/inventory/CrawlerSettingsCard
 import { DiscoveryTab } from '../components/inventory/DiscoveryTab'
 import { SyntheticTimeline } from '../components/inventory/SyntheticTimeline'
 import { DriftDiffPanel } from '../components/inventory/DriftDiffPanel'
+import { codeCheckGroups, gateStatusLine } from '../components/inventory/inventoryView'
 import { InventoryWorkspaceReadout } from '../components/inventory/InventoryWorkspaceReadout'
 import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
+
+/** The app-map checks: the only findings the Code checks tab lists (round 3). */
+const APP_MAP_GATES: ReadonlySet<string> = new Set(['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'])
 
 // One tab row: the page is already Advanced-only, so a second
 // "Primary / Advanced" toggle above it only hid half the tabs.
@@ -390,6 +393,25 @@ export function InventoryPage() {
 
   const gateCards = ['dead_handler', 'mock_leak', 'api_contract', 'crawl', 'status_claim'] as const
   const runs = findingsQuery.data?.runs ?? []
+  const [showAllFindings, setShowAllFindings] = useState(false)
+  // Only the app-map checks (stories, routes, handlers) belong on User stories. The risk checks
+  // and Mushi Mushi's setup checks were a third verbatim copy of Full-stack audit and App
+  // blueprint here (round 3): they get one line pointing there instead.
+  const withGate = useMemo(() => findings.map((f) => ({ ...f, gate: runs.find((r) => r.id === f.gate_run_id)?.gate })), [findings, runs])
+  const codeGroups = useMemo(
+    () => codeCheckGroups(withGate.filter((f) => f.gate != null && APP_MAP_GATES.has(f.gate))),
+    [withGate],
+  )
+  const otherFindings = withGate.filter((f) => !(f.gate != null && APP_MAP_GATES.has(f.gate))).length
+  const gateLine = gateStatusLine(
+    gateCards,
+    (g) => {
+      const latest = runs.find((r) => r.gate === g)
+      // findings_count is stored when the run ends; a dismissal never lowers it.
+      return latest ? { word: gateRunWord(latest.status), open: Math.max(0, (latest.findings_count ?? 0) - (dismissedPerRun.get(latest.id) ?? 0)) } : null
+    },
+    gateLabel,
+  )
 
   const driftFromFindings = useMemo(() => {
     const crawl = findings.filter(
@@ -442,6 +464,7 @@ export function InventoryPage() {
   const stub = Number(summary.stub ?? 0)
   const broken = regressed + stub
   const hasInventory = snapshot != null
+  const showInventoryTabs = hasInventory || tab !== 'stories' || findings.length > 0
 
   return (
     <div className="space-y-3" data-testid="mushi-page-inventory">
@@ -524,14 +547,34 @@ export function InventoryPage() {
           }
           data-testid="inventory-status"
         />
-      ) : tab === 'stories' && waitingDrafts > 0 ? (
+      ) : null}
+
+      {/* Seven empty tabs under the first step read as seven more things to
+          set up (2026-11-18 sweep). They appear once there is something to
+          show; the first step's links still open Discovery and the map file. */}
+      {showInventoryTabs ? (
+      <SegmentedControl<Tab>
+        size="sm"
+        // Wraps onto a second row at 390 instead of scrolling "Out of sy" off the edge (2026-11-18).
+        wrap
+        ariaLabel="Inventory sections"
+        value={tab}
+        onChange={setTab}
+        options={INVENTORY_TABS}
+        className="w-full sm:w-auto"
+      />
+      ) : null}
+
+      {/* The stories tab's first step comes after the tab bar, like every other tab's content:
+          above it, the layout jumped between tabs (round 3). */}
+      {!hasInventory && tab === 'stories' && (waitingDrafts > 0 ? (
         <PageFirstStep
           title={waitingDrafts === 1 ? 'Your user stories are drafted' : `${waitingDrafts} drafts of your user stories are waiting`}
           sentence="Mushi Mushi drafted your user stories. Review the draft in Discovery and accept it to see them here."
           action={{ label: 'Review the draft', to: '/inventory?tab=discovery' }}
           data-testid="inventory-first-step"
         />
-      ) : tab === 'stories' ? (
+      ) : (
         <PageFirstStep
           title="No user stories yet"
           sentence="Mushi Mushi crawls your live site and drafts your user stories for you to accept. Nothing to write by hand, and no SDK change. Later, turn on discovery in the SDK to learn from real visits too."
@@ -539,17 +582,7 @@ export function InventoryPage() {
           learnMore={{ label: 'Or write the map file yourself', to: '/inventory?tab=yaml' }}
           data-testid="inventory-first-step"
         />
-      ) : null}
-
-      <SegmentedControl<Tab>
-        size="sm"
-        scrollable
-        ariaLabel="Inventory sections"
-        value={tab}
-        onChange={setTab}
-        options={INVENTORY_TABS}
-        className="w-full sm:w-auto"
-      />
+      ))}
 
       {tab === 'stories' && (
         hasInventory ? (
@@ -578,40 +611,63 @@ export function InventoryPage() {
 
       {tab === 'gates' && (
         <div className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
-            {gateCards.map((g) => {
-              const latest = runs.find((r) => r.gate === g)
-              // findings_count is stored when the run ends; a dismissal never lowers it.
-              const open = latest ? Math.max(0, (latest.findings_count ?? 0) - (dismissedPerRun.get(latest.id) ?? 0)) : 0
-              return (
-                <Card key={g} className="p-3">
-                  <p className="text-2xs text-fg-faint">{gateLabel(g)}</p>
-                  <p className="text-sm font-semibold">{latest ? gateRunWord(latest.status) : 'Not run yet'}</p>
-                  <p className="text-2xs text-fg-muted">{open} open {pluralize(open, 'finding')}</p>
-                </Card>
-              )
-            })}
-          </div>
-          {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-          <div className="space-y-2 max-h-[28rem] overflow-auto">
-            {findings.slice(0, 80).map((f) => (
-              <GateFindingCard
-                key={f.id}
-                f={{ ...f, gate: runs.find((r) => r.id === f.gate_run_id)?.gate }}
-                onOpenFile={(path, line) => {
-                  // GitHub's code search expects /search?q=... (the bare /?q= URL renders the homepage).
-                  // `noopener,noreferrer` so a malicious finding can't reach back into window.opener.
-                  const q = encodeURIComponent(`${path}${line ? ` line ${line}` : ''}`)
-                  window.open(`https://github.com/search?q=${q}&type=code`, '_blank', 'noopener,noreferrer')
-                }}
-                action={
-                  projectId ? (
-                    <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={findingsQuery.reload} />
-                  ) : undefined
-                }
-              />
+          {/* The findings first, worst first, one group per check; the page scrolls, not a box
+              (2026-11-18: five "Not run yet · 0 open findings" tiles sat above a list of findings
+              from other checks, WARN before ERROR, in a 28rem inner scroll). */}
+          {otherFindings > 0 && (
+            <p className="text-xs text-fg-secondary" data-testid="inventory-other-findings">
+              {otherFindings} more {otherFindings === 1 ? 'finding' : 'findings'} from the risk and setup checks{' '}
+              <Link to="/fullstack-audit" className="font-medium text-brand hover:underline">
+                are on Full-stack audit →
+              </Link>
+            </p>
+          )}
+          {codeGroups.length === 0 ? (
+            <p className="text-xs text-fg-muted">No open findings from the user-story and route checks.</p>
+          ) : (
+            <div className="space-y-3" data-testid="inventory-code-groups">
+              {codeGroups.map((g) => (
+                <section key={g.gate} aria-label={gateLabel(g.gate)} className="space-y-1">
+                  <h3 className="flex items-baseline gap-2 text-xs font-semibold text-fg">
+                    {gateLabel(g.gate)}
+                    <span className="font-mono text-2xs font-normal text-fg-muted tabular-nums">{g.findings.length}</span>
+                  </h3>
+                  <div className="divide-y divide-edge-subtle">
+                    {g.findings.slice(0, showAllFindings ? undefined : 40).map((f) => (
+                      <GateFindingCard
+                        key={f.id}
+                        inGroup
+                        f={f}
+                        onOpenFile={(path, line) => {
+                          // GitHub's code search expects /search?q=... (the bare /?q= URL renders the homepage).
+                          // `noopener,noreferrer` so a malicious finding can't reach back into window.opener.
+                          const q = encodeURIComponent(`${path}${line ? ` line ${line}` : ''}`)
+                          window.open(`https://github.com/search?q=${q}&type=code`, '_blank', 'noopener,noreferrer')
+                        }}
+                        action={
+                          projectId ? (
+                            <DismissFindingButton projectId={projectId} findingId={f.id} onDismissed={findingsQuery.reload} />
+                          ) : undefined
+                        }
+                      />
+                    ))}
+                  </div>
+                  {!showAllFindings && g.findings.length > 40 && (
+                    <Btn type="button" size="sm" variant="ghost" onClick={() => setShowAllFindings(true)}>
+                      Show {g.findings.length - 40} more
+                    </Btn>
+                  )}
+                </section>
+              ))}
+            </div>
+          )}
+          {/* The app-map checks in one line: those that ran with their result, the rest named once. */}
+          <p className="text-2xs text-fg-muted" data-dav-anchor="inventory:verify" data-testid="inventory-gate-status">
+            {gateLine.ran.map((r) => (
+              <span key={r.gate} className="mr-3 whitespace-nowrap text-fg-secondary">{r.text}</span>
             ))}
-          </div>
+            {gateLine.notRun.length > 0 && <span>Not run yet: {gateLine.notRun.join(', ')}.</span>}
+          </p>
         </div>
       )}
 
@@ -629,6 +685,7 @@ export function InventoryPage() {
 
       {tab === 'drift' && (
         <DriftDiffPanel
+          hasInventory={hasInventory}
           missingInInventory={driftFromFindings.missingInv}
           missingInApp={driftFromFindings.missingApp}
           mismatches={driftFromFindings.mismatch}
@@ -644,15 +701,23 @@ export function InventoryPage() {
           <CrawlerSettingsCard projectId={projectId} />
           <div className="space-y-3">
             <InventoryYamlDropzone onParsed={(y) => setYamlDraft(y)} onCleared={() => setYamlDraft(null)} />
-            <div className="flex gap-2">
-              <Btn type="button" size="sm" onClick={() => yamlDraft && ingestYaml(yamlDraft)} disabled={!yamlDraft}>
-                Save this map file
-              </Btn>
-            </div>
-            {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
-            <pre className="mushi-code-block mushi-code-body text-2xs p-3 rounded-md overflow-auto max-h-[32rem] font-mono">
-              {yamlDraft ?? snapshot?.raw_yaml ?? '—'}
-            </pre>
+            {/* Save and the file's text appear once there is a file: a black box holding "—" and a
+                disabled Save with no reason said nothing (2026-11-18). */}
+            {yamlDraft && (
+              <div className="flex gap-2">
+                <Btn type="button" size="sm" onClick={() => ingestYaml(yamlDraft)}>
+                  Save this map file
+                </Btn>
+              </div>
+            )}
+            {(yamlDraft ?? snapshot?.raw_yaml) ? (
+              // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
+              <pre className="mushi-code-block mushi-code-body text-2xs p-3 rounded-md overflow-auto max-h-[32rem] font-mono" data-testid="inventory-yaml-text">
+                {yamlDraft ?? snapshot?.raw_yaml}
+              </pre>
+            ) : (
+              <p className="text-xs text-fg-muted" data-testid="inventory-yaml-none">No map file saved yet.</p>
+            )}
             {snapshot?.validation_errors && Array.isArray(snapshot.validation_errors) && snapshot.validation_errors.length > 0 && (
               <ErrorAlert message={JSON.stringify(snapshot.validation_errors)} />
             )}

@@ -17,7 +17,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts';
 import { withLlmUsage } from '../_shared/llm-usage.ts';
 import { withSentry, tagLangfuseTrace, reportError } from '../_shared/sentry.ts';
 import { GENERIC_ERROR_MESSAGE } from '../_shared/safe-error.ts';
-import { resolveLlmKey } from '../_shared/byok.ts';
+import { projectHasOwnLlmKey, resolveLlmKey } from '../_shared/byok.ts';
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
 import { awardPointsForEndUser } from '../_shared/reputation.ts';
 import { dispatchPluginEventDetached } from '../_shared/plugins.ts';
@@ -31,7 +31,7 @@ import { resolveClaudeModel } from '../_shared/claude-request.ts';
 import { childTraceparent } from '../_shared/trace.ts';
 import { otlpSpan, setGenAiAttributes } from '../_shared/otlp-exporter.ts';
 import { estimateCallCostUsd } from '../_shared/pricing.ts';
-import { checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
+import { byokLiftsFreeCap, checkDiagnosisQuota, invalidateDiagnosisCache } from '../_shared/quota.ts';
 import { emitProductEvent } from '../_shared/product-events.ts';
 import { keepAlive } from '../_shared/background.ts';
 import { isNonRealReport, isNotFirstReportSource, type OldestReportRow } from '../_shared/first-report.ts';
@@ -319,7 +319,11 @@ Deno.serve(
       // Must run BEFORE the Sonnet call so we never spend LLM budget over cap.
       // On deny we mark the report `quota_exceeded` (caller sees HTTP 402 from
       // the API layer; the report is preserved and can be promoted on upgrade).
-      const diagnosisVerdict = await checkDiagnosisQuota(db, projectId);
+      let diagnosisVerdict = await checkDiagnosisQuota(db, projectId);
+      if (diagnosisVerdict.reason === 'NO_SUBSCRIPTION_OVER_FREE') {
+        diagnosisVerdict = byokLiftsFreeCap(diagnosisVerdict, await projectHasOwnLlmKey(db, projectId));
+        if (diagnosisVerdict.allowed) log.info('Free diagnosis cap lifted: the project brings its own LLM key', { projectId });
+      }
       if (!diagnosisVerdict.allowed) {
         // Transient quota-check failure (DB count error) is NOT a billing quota
         // breach: never mark the report quota_exceeded and never call the LLM.

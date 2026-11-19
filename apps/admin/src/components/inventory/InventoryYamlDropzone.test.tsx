@@ -32,6 +32,17 @@ describe('InventoryYamlDropzone', () => {
     const onCleared = vi.fn()
     act(() => root.render(createElement(InventoryYamlDropzone, { onParsed: vi.fn(), onCleared })))
     const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Clear')!
+    // Round 3: nothing picked, nothing to clear.
+    expect(clear.disabled).toBe(true)
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File(['schema_version: 2\n'], 'inventory.yaml', { type: 'text/yaml' })
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+    })
+    expect(container.querySelector('[data-testid="inventory-yaml-file"]')?.textContent).toBe('inventory.yaml')
+    expect(clear.disabled).toBe(false)
     await act(async () => clear.click())
     expect(onCleared).toHaveBeenCalledTimes(1)
     expect((container.querySelector('input[type="file"]') as HTMLInputElement).value).toBe('')

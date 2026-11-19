@@ -13,11 +13,15 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. mistake_clusters
 -- ─────────────────────────────────────────────────────────────────────────────
-create type if not exists mistake_cluster_status as enum (
+-- 2026-11-19: Postgres has no CREATE TYPE IF NOT EXISTS; idempotent form for fresh installs.
+do $type$ begin
+create type mistake_cluster_status as enum (
   'candidate',   -- not yet coherent or large enough for promotion
   'promoted',    -- ≥ 3 reports, coherence ≥ 0.75, lesson row created
   'retired'      -- superseded by a newer cluster or manually archived
 );
+exception when duplicate_object then null;
+end $type$;
 
 create table if not exists mistake_clusters (
   id                     uuid primary key default gen_random_uuid(),
@@ -67,7 +71,7 @@ create policy "org_members_read_mistake_clusters"
 
 create trigger trg_mistake_clusters_updated_at
   before update on mistake_clusters
-  for each row execute function private.set_updated_at();
+  for each row execute function public.set_updated_at(); -- 2026-11-19: as on hosted (private.set_updated_at never existed)
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -106,9 +110,13 @@ create policy "org_members_read_rcm"
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. lessons
 -- ─────────────────────────────────────────────────────────────────────────────
-create type if not exists lesson_severity as enum (
+-- 2026-11-19: Postgres has no CREATE TYPE IF NOT EXISTS; idempotent form for fresh installs.
+do $type$ begin
+create type lesson_severity as enum (
   'info', 'warn', 'critical'
 );
+exception when duplicate_object then null;
+end $type$;
 
 create table if not exists lessons (
   id                  uuid primary key default gen_random_uuid(),
@@ -161,7 +169,7 @@ create policy "org_members_read_lessons"
 
 create trigger trg_lessons_updated_at
   before update on lessons
-  for each row execute function private.set_updated_at();
+  for each row execute function public.set_updated_at(); -- 2026-11-19: as on hosted (private.set_updated_at never existed)
 
 
 -- ─────────────────────────────────────────────────────────────────────────────

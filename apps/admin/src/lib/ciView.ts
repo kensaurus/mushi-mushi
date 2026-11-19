@@ -586,7 +586,10 @@ export function permissionsNotice(p: CiOverview['permissions']): string | null {
     return 'Mushi Mushi cannot read your GitHub Actions jobs. Give the GitHub token Actions: read so Mushi Mushi can see where tests run and why they wait.'
   }
   if (p.runners === 'missing') {
-    return 'Mushi Mushi can only see a machine while it runs a job, so idle or switched-off machines are missing here. To see them too, give the GitHub token the “Administration: read” permission.'
+    // The machines that report in are listed (their own heartbeat); only GitHub's list of runners
+    // that are idle or offline right now is out of reach (2026-11-18: the old line said "idle
+    // machines are missing" right above two idle machines).
+    return 'GitHub lists a runner to Mushi Mushi only while it runs a job. Machines that report in show below either way; to also see idle or offline runners on GitHub, give the GitHub token “Administration: read”.'
   }
   return null
 }
@@ -607,6 +610,7 @@ export interface CiOutcomeCounts {
  * Outcome counts for the summary bar. `passed` is jobs that finished testing
  * and passed. Machine stops stay in `infra`: they never finished testing, so
  * they are not folded into the pass rate.
+ * @internal Exported for tests.
  */
 export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures'>): CiOutcomeCounts {
   const failed = stats.codeFailures + stats.infraFailures
@@ -618,6 +622,23 @@ export function ciOutcomeCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passe
     other: Math.max(0, stats.jobs - passed - failed),
     total: stats.jobs,
   }
+}
+
+/**
+ * The window's outcome counts, from ONE source (2026-11-18: the headline said "777 jobs failed on
+ * the code in 7 days" from the whole window while the bar beside it said "Tests failed 67" from
+ * the newest 1,005 jobs read). When the server counted the whole window (stats.windowJobs and
+ * stats.hourly) every number comes from there; otherwise from the jobs read, flagged `sampled`.
+ */
+export function ciWindowCounts(stats: Pick<CiOverview['stats'], 'jobs' | 'passed' | 'infraFailures' | 'codeFailures' | 'hourly' | 'windowJobs'>): CiOutcomeCounts & { sampled: boolean } {
+  const read = ciOutcomeCounts(stats)
+  if (stats.windowJobs == null || !stats.hourly) return { ...read, sampled: false }
+  const sum = (k: 'passed' | 'codeFailures' | 'infraFailures') => stats.hourly!.reduce((n, h) => n + h[k], 0)
+  const codeFailures = sum('codeFailures')
+  const infra = sum('infraFailures')
+  const total = Math.max(stats.windowJobs, codeFailures + infra)
+  const passed = Math.min(sum('passed'), total - codeFailures - infra)
+  return { passed, codeFailures, infra, other: Math.max(0, total - passed - codeFailures - infra), total, sampled: false }
 }
 
 export interface CiVerdict {
@@ -632,18 +653,8 @@ export interface CiVerdict {
  * "3 jobs are waiting" here said the same thing twice (2026-11-16).
  */
 export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
-  const sampled = ciOutcomeCounts(o.stats)
-  // The whole window when the server counted it in the database (stats.windowJobs, stats.hourly);
-  // the newest jobs read otherwise, which a busy day fills in hours.
-  const hours = o.stats.windowJobs != null ? o.stats.hourly : undefined
-  const c = hours
-    ? {
-        ...sampled,
-        total: o.stats.windowJobs ?? sampled.total,
-        codeFailures: hours.reduce((n, h) => n + h.codeFailures, 0),
-        infra: hours.reduce((n, h) => n + h.infraFailures, 0),
-      }
-    : sampled
+  // The same counts the bar under it draws (ciWindowCounts), so the two never disagree.
+  const c = ciWindowCounts(o.stats)
   const days = `${o.window.days} day${o.window.days === 1 ? '' : 's'}`
 
   if (c.infra > 0 && c.infra >= c.codeFailures) {
@@ -657,12 +668,137 @@ export function ciVerdict(o: Pick<CiOverview, 'stats' | 'window'>): CiVerdict {
     return {
       tone: 'neutral',
       headline: `${c.codeFailures} job${c.codeFailures === 1 ? '' : 's'} failed on the code in ${days}.`,
-      detail: `${c.infra ? `${c.infra} more stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
+      detail: `${c.infra ? `${c.infra} more in ${days} stopped because of the test machine. ` : ''}Open a failed job's logs, or its fix to send it back.`,
     }
   }
   return {
     tone: 'ok',
     headline: c.total ? `CI is healthy: every finished job passed in ${days}.` : `No jobs in ${days}.`,
     detail: `${c.total ? `${c.total} job${c.total === 1 ? '' : 's'}.` : ''}`.trim(),
+  }
+}
+
+// ── Grouping helpers (fresh-eyes pass, 2026-11-18) ──────────────────────────
+
+/** "Browser gates (2/4)" → "Browser gates": the shard suffix GitHub adds to a matrix job. */
+function shardBase(job: string): string {
+  return job.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/, '')
+}
+
+/** One slow step, with the matrix shards of one job folded into one row. */
+export interface CiSlowStepGroup {
+  repo: string
+  /** The job without its shard suffix. */
+  job: string
+  step: string
+  /** The slowest shard's typical time. */
+  p50s: number
+  /** Runs across every shard. */
+  runs: number
+  /** How many shards share this row (1 = not a matrix job). */
+  shards: number
+}
+
+/**
+ * Folds the shards of a matrix job ("Browser gates (1/4)" … "(4/4)") that share a step into one
+ * row: the slowest shard's time, every shard's runs. Slowest first.
+ */
+export function groupSlowSteps(steps: ReadonlyArray<{ repo: string; job: string; step: string; p50s: number; runs: number }>): CiSlowStepGroup[] {
+  const out = new Map<string, CiSlowStepGroup>()
+  for (const s of steps) {
+    const job = shardBase(s.job)
+    const key = `${s.repo}|${job}|${s.step}`
+    const cur = out.get(key)
+    if (cur) {
+      cur.p50s = Math.max(cur.p50s, s.p50s)
+      cur.runs += s.runs
+      cur.shards += 1
+    } else out.set(key, { repo: s.repo, job, step: s.step, p50s: s.p50s, runs: s.runs, shards: 1 })
+  }
+  return [...out.values()].sort((a, b) => b.p50s - a.p50s)
+}
+
+/**
+ * GitHub's machines are packed into lanes "GitHub-hosted 1 … 10" that read as near-identical rows.
+ * The first GitHub lane and every one with a failure stay; the other clean ones fold into one
+ * summary row (`rest`) once that saves at least two rows. Order is kept.
+ */
+export function foldGithubLanes<L extends Pick<CiTimelineLane, 'kind' | 'bars'>>(lanes: readonly L[]): { shown: L[]; rest: L[] } {
+  const failed = (l: L) => l.bars.some((b) => b.outcome === 'code_failure' || b.outcome === 'infra')
+  const clean = lanes.filter((l) => l.kind === 'github' && !failed(l))
+  if (clean.length < 3) return { shown: [...lanes], rest: [] }
+  const rest = new Set(clean.slice(1))
+  return { shown: lanes.filter((l) => !rest.has(l)), rest: clean.slice(1) }
+}
+
+/** Where an app's jobs ran in the window: your machines, GitHub's, both, or no job seen. */
+export type CiRunsOn = 'own' | 'github' | 'both' | null
+
+export function appRunsOn(jobs: ReadonlyArray<Pick<CiJob, 'projectId' | 'runnerKind'>>): Map<string, CiRunsOn> {
+  const seen = new Map<string, { own: boolean; github: boolean }>()
+  for (const j of jobs) {
+    if (j.runnerKind === 'unknown') continue
+    const s = seen.get(j.projectId) ?? { own: false, github: false }
+    if (j.runnerKind === 'self_hosted') s.own = true
+    else s.github = true
+    seen.set(j.projectId, s)
+  }
+  const out = new Map<string, CiRunsOn>()
+  for (const [id, s] of seen) out.set(id, s.own && s.github ? 'both' : s.own ? 'own' : 'github')
+  return out
+}
+
+/** Jobs the test machine stopped, grouped by app and PR (or branch), newest group first. */
+export interface CiInfraGroup {
+  key: string
+  repo: string
+  prNumber: number | null
+  jobs: CiJob[]
+}
+
+export function groupInfraFailures(jobs: readonly CiJob[]): CiInfraGroup[] {
+  const out = new Map<string, CiInfraGroup>()
+  for (const j of jobs) {
+    const key = `${j.repo}|${j.prNumber ?? 'none'}`
+    const g = out.get(key)
+    if (g) g.jobs.push(j)
+    else out.set(key, { key, repo: j.repo, prNumber: j.prNumber ?? null, jobs: [j] })
+  }
+  return [...out.values()]
+}
+
+/**
+ * A job name without the workflow expression GitHub left unresolved (round 3, 2026-11-19: "Publish
+ * OTA (${{ (((inputs.track == 'beta') && 'beta') || 'production') }})"). A bracketed expression goes
+ * with its brackets; one inside the name becomes "…". The real name is never lost: an all-expression
+ * name stays as it was.
+ * @internal Exported for tests.
+ */
+export function cleanJobName(name: string): string {
+  if (!name.includes('${{')) return name
+  const out = name
+    .replace(/\s*\(\s*\$\{\{[\s\S]*?\}\}\s*\)/g, '')
+    .replace(/\$\{\{[\s\S]*?\}\}/g, '…')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return out || name
+}
+
+/** The overview with every job name cleaned (cleanJobName), once, where the page reads it. */
+export function cleanCiOverview(o: CiOverview): CiOverview {
+  const dirty = (n: string | null | undefined) => typeof n === 'string' && n.includes('${{')
+  const hasDirty =
+    o.jobs.some((j) => dirty(j.jobName)) ||
+    (o.stats.byJob ?? []).some((t) => dirty(t.job)) ||
+    o.stats.slowSteps.some((s) => dirty(s.job))
+  if (!hasDirty) return o
+  return {
+    ...o,
+    jobs: o.jobs.map((j) => (dirty(j.jobName) ? { ...j, jobName: cleanJobName(j.jobName) } : j)),
+    stats: {
+      ...o.stats,
+      slowSteps: o.stats.slowSteps.map((s) => (dirty(s.job) ? { ...s, job: cleanJobName(s.job) } : s)),
+      ...(o.stats.byJob ? { byJob: o.stats.byJob.map((t) => (dirty(t.job) ? { ...t, job: cleanJobName(t.job) } : t)) } : {}),
+    },
   }
 }

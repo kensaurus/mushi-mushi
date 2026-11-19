@@ -78,11 +78,11 @@ From the Show HN rules and the general guidelines
 
 ### "What does it cost?"
 
-From https://kensaur.us/mushi-mushi/docs/pricing (read 2026-11-14):
+From https://kensaur.us/mushi-mushi/docs/pricing (Free changed 2026-11-19; re-read before posting):
 
 | Plan      | Price  | What you get                                  |
 | --------- | ------ | --------------------------------------------- |
-| Free      | $0     | One app, up to 100 diagnoses a month, no card |
+| Free      | $0     | 3 apps, up to 300 diagnoses a month, no card  |
 | Builder   | $29/mo | 3 apps, 1,000 diagnoses                       |
 | Studio    | $79/mo | 10 apps                                       |
 | Self-host | free   | bring your own model keys                     |

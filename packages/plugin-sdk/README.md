@@ -163,7 +163,7 @@ use at I/O boundaries.
 The console's **Marketplace** page lists only reviewed plugins. Mushi Mushi sends
 events to a plugin once it is installed there with your server's public
 HTTPS URL and a signing secret. On Mushi Mushi Cloud, installing a plugin
-needs a paid plan (Builder or above, see
+works on every plan, Free included (see
 [pricing](https://kensaur.us/mushi-mushi/docs/pricing)). To get a listing, submit it with
 `POST /v1/marketplace/submissions`; a reviewer checks the manifest, the
 callback URL and the requested permissions.
@@ -209,4 +209,4 @@ MIT
 <!-- mushi-readme-stats-footer -->
 ---
 
-<sub>Monorepo scale (July 2026): 78 edge functions · 575 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>
+<sub>Monorepo scale (July 2026): 78 edge functions · 578 SQL migrations · 13 outbound plugins · 11 inbound adapters · 19 pipeline agents. Canonical counts: <a href="https://github.com/kensaurus/mushi-mushi/blob/master/docs/stats.md">docs/stats.md</a> · <code>pnpm docs-stats</code></sub>

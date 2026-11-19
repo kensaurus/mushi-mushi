@@ -4,8 +4,9 @@
  * Every app's operational events in one place: payments, releases and
  * alerts, whether an app sent them (POST /v1/ops/events with its ops key)
  * or Mushi Mushi saw them itself (production deploys, Sentry, edge
- * canaries). Worst first: today's counts with open alerts, then which app
- * is silent (the coverage matrix), then the feed with its threads.
+ * canaries). Worst first: what needs a look (failures, then warnings), then
+ * today's counts, then which app is silent (the coverage matrix), then the
+ * feed with its threads.
  * Slack is the alert; this page is the record (Slack's free plan keeps 90
  * days).
  *
@@ -22,9 +23,9 @@ import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PageLoadError } from '../components/PageLoadError'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Btn, Callout, EmptyState, FilterSelect, Loading, Section, Toggle } from '../components/ui'
-import { IconAlertTriangle, IconBell, IconGauge, IconRefresh } from '../components/icons'
+import { IconAlertTriangle, IconBell, IconClock, IconGauge, IconRefresh } from '../components/icons'
 import { OpsCoverageMatrix, OpsTodayStrip } from '../components/ops/OpsCoverage'
-import { OpsFeed } from '../components/ops/OpsFeed'
+import { OpsFeed, OpsNeedsLook } from '../components/ops/OpsFeed'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { apiFetch, apiFetchMutate } from '../lib/supabase'
@@ -34,7 +35,7 @@ import { docsUrl } from '../lib/docsUrl'
 import { LINK_ACCENT } from '../lib/chipTone'
 import { useNow } from '../lib/useNow'
 import { useToast } from '../lib/toast'
-import { opsAppName, paymentsToday } from '../lib/opsView'
+import { needsLookView, opsAppName, paymentsToday } from '../lib/opsView'
 import type { OpsCoverageResponse, OpsEvent, OpsFeedResponse } from '../lib/opsTypes'
 
 const CATEGORY_OPTIONS = ['payments', 'releases', 'alerts'] as const
@@ -63,6 +64,11 @@ export function OpsPage() {
   const coverage = usePageData<OpsCoverageResponse>(orgId ? `/v1/admin/ops/coverage?org=${encodeURIComponent(orgId)}` : null, { scope: 'enumeration' })
   const feedPath = orgId ? opsFeedPath(orgId, params) : null
   const feed = usePageData<OpsFeedResponse>(feedPath, { scope: 'enumeration' })
+  // "Needs a look" always reads the unfiltered newest page, so a filter never hides a failure from
+  // the top of the page. With no filter it is the same request as the feed, so it is not sent twice.
+  const basePath = orgId ? opsFeedPath(orgId, new URLSearchParams()) : null
+  const filtered = basePath !== feedPath
+  const base = usePageData<OpsFeedResponse>(filtered ? basePath : null, { scope: 'enumeration' })
   const [older, setOlder] = useState<{ path: string | null; events: OpsEvent[]; next: string | null }>({ path: null, events: [], next: null })
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [acking, setAcking] = useState<ReadonlySet<string>>(new Set())
@@ -72,6 +78,9 @@ export function OpsPage() {
   const nextBefore = older.path === feedPath && older.events.length > 0 ? older.next : (feed.data?.nextBefore ?? null)
   const events = useMemo(() => [...(feed.data?.events ?? []), ...olderEvents], [feed.data, olderEvents])
   const apps = feed.data?.apps ?? coverage.data?.apps ?? []
+  const lookEvents = useMemo(() => (filtered ? (base.data?.events ?? []) : events), [filtered, base.data, events])
+  const look = useMemo(() => needsLookView(lookEvents), [lookEvents])
+  const lookReady = filtered ? Boolean(base.data) : Boolean(feed.data)
 
   const setFilter = useCallback(
     (key: string, value: string) =>
@@ -98,36 +107,43 @@ export function OpsPage() {
     setOlder((cur) => ({ path: feedPath, events: [...(cur.path === feedPath ? cur.events : []), ...page.events], next: page.nextBefore }))
   }, [orgId, nextBefore, feedPath, params, toast])
 
-  const ack = useCallback(
-    async (id: string) => {
-      setAcking((cur) => new Set(cur).add(id))
-      const res = await apiFetchMutate<{ id: string }>(`/v1/admin/ops/events/${encodeURIComponent(id)}/ack`, { method: 'POST', scope: 'enumeration' })
+  const ackMany = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return
+      setAcking((cur) => new Set([...cur, ...ids]))
+      const results = await Promise.all(
+        ids.map((id) => apiFetchMutate<{ id: string }>(`/v1/admin/ops/events/${encodeURIComponent(id)}/ack`, { method: 'POST', scope: 'enumeration' }).then((res) => ({ id, res }))),
+      )
       setAcking((cur) => {
         const next = new Set(cur)
-        next.delete(id)
+        for (const id of ids) next.delete(id)
         return next
       })
-      if (!res.ok) {
-        toast.error(res.error?.message ?? 'Could not acknowledge that event.')
-        return
-      }
-      setOlder((cur) => ({ ...cur, events: cur.events.map((e) => (e.id === id ? { ...e, acked_at: new Date().toISOString() } : e)) }))
+      const done = new Set(results.filter((r) => r.res.ok).map((r) => r.id))
+      const failed = results.find((r) => !r.res.ok)
+      if (failed) toast.error(failed.res.error?.message ?? (ids.length > 1 ? 'Could not acknowledge every event.' : 'Could not acknowledge that event.'))
+      if (done.size === 0) return
+      const at = new Date().toISOString()
+      setOlder((cur) => ({ ...cur, events: cur.events.map((e) => (done.has(e.id) ? { ...e, acked_at: at } : e)) }))
       feed.reload()
+      base.reload()
       coverage.reload()
     },
-    [feed, coverage, toast],
+    [feed, base, coverage, toast],
   )
+  const ack = useCallback((id: string) => ackMany([id]), [ackMany])
 
   const reloadAll = useCallback(() => {
     feed.reload()
+    base.reload()
     coverage.reload()
-  }, [feed, coverage])
+  }, [feed, base, coverage])
 
   usePublishPageContext({
     route: '/ops',
     title: 'Ops',
     summary: coverage.data
-      ? `Today: payments ${paymentsToday(coverage.data.today.payments)}, ${coverage.data.today.releases} releases, ${coverage.data.today.openAlerts} open alerts`
+      ? `Today: payments ${paymentsToday(coverage.data.today.payments)}, ${coverage.data.today.releases} releases, ${look.count} need a look`
       : coverage.error
         ? "Ops couldn't load"
         : 'Loading Ops',
@@ -146,7 +162,7 @@ export function OpsPage() {
         description="Payments, releases and alerts from every app, in one place, and in your team's Slack."
         helpTitle="About Ops"
         helpWhatIsIt="Each app sends its payments, releases and alerts to Mushi Mushi with its own ops key; Mushi Mushi also adds production deploys, Sentry errors and site checks it already sees. Everything is kept here and posted to your team's Slack with your own bot, which threads follow-ups and answers a slash command."
-        helpHowToUse="Start at the top: open alerts, then the apps that never reported (hatched). Acknowledge an alert here or in Slack; both show it as seen."
+        helpHowToUse="Start at the top: failures, then warnings, then the apps that never reported (hatched). Acknowledge an event here or in Slack; both show it as seen."
       >
         <Btn size="sm" variant="ghost" onClick={reloadAll} aria-label="Refresh" title="Read the latest events now" aria-busy={(feed.isValidating && !feed.loading) || undefined}>
           <IconRefresh size={14} className={feed.isValidating && !feed.loading ? 'motion-safe:animate-spin' : ''} />
@@ -188,10 +204,16 @@ export function OpsPage() {
       {!pending && coverage.error && <PageLoadError error={coverage.error} resource="Ops" endpoint="/v1/admin/ops/coverage" onRetry={coverage.reload} />}
       {orgId && coverage.loading && !coverage.data && <Loading text="Reading your apps…" />}
 
+      {orgId && !pending && look.count > 0 && (
+        <Section title="Needs a look" id="ops-needs-look-section" icon={<IconAlertTriangle />}>
+          <OpsNeedsLook view={look} apps={apps} now={now} canAck={(filtered ? base.data?.canAck : feed.data?.canAck) ?? false} acking={acking} onAck={(id) => void ack(id)} onAckMany={(ids) => void ackMany(ids)} focusId={params.get('event')} slackEnabled={coverage.data?.slack.enabled ?? true} />
+        </Section>
+      )}
+
       {coverage.data && (
         <>
-          <Section title="Today" id="ops-today" icon={<IconAlertTriangle />}>
-            <OpsTodayStrip data={coverage.data} />
+          <Section title="Today" id="ops-today" icon={<IconClock />}>
+            <OpsTodayStrip data={coverage.data} needsLook={lookReady ? look.count : null} />
           </Section>
           <Section title="Is every app reporting?" id="ops-coverage" icon={<IconGauge />}>
             <p className={HINT}>When each app last sent each kind of event. A hatched row has never sent one: give that app its ops key.</p>
@@ -222,7 +244,7 @@ export function OpsPage() {
             />
           )}
           {events.length > 0 && (
-            <OpsFeed events={events} apps={apps} now={now} canAck={feed.data?.canAck ?? false} acking={acking} onAck={(id) => void ack(id)} focusId={params.get('event')} />
+            <OpsFeed events={events} apps={apps} now={now} canAck={feed.data?.canAck ?? false} acking={acking} onAck={(id) => void ack(id)} onAckMany={(ids) => void ackMany(ids)} focusId={params.get('event')} slackEnabled={coverage.data?.slack.enabled ?? true} pinnedAbove={!filtered} />
           )}
           {nextBefore && (
             <div className="mt-2 flex justify-center">

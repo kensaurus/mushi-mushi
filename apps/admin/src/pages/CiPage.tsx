@@ -42,7 +42,9 @@ import { PageLoadError } from '../components/PageLoadError'
 import { PanelErrorBoundary } from '../components/PanelErrorBoundary'
 import { Btn, Callout, EmptyState, Loading, Section, SegmentedControl } from '../components/ui'
 import { IconAlertTriangle, IconBolt, IconClock, IconCost, IconGauge, IconNetwork, IconQueue, IconRefresh, IconServerOff, IconSliders } from '../components/icons'
-import { CiStatusBoard, MACHINE_GRID, MachineCard } from '../components/ci/CiStatusBoard'
+import { CiStatusBoard, MACHINE_GRID, MachineCard, MissingLabelsLine, sharedMissingLabels } from '../components/ci/CiStatusBoard'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { buildCiStatus } from '../lib/ciStatus'
 import { CiJobTimes } from '../components/ci/CiJobTimes'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -68,7 +70,7 @@ import { useNow } from '../lib/useNow'
 import type { CiOverview } from '../lib/ciTypes'
 import { groupCiAdvice } from '../lib/ciAdvice'
 import type { FixAttempt } from '../components/fixes/types'
-import { buildCiQueue, buildFixLinks, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
+import { appRunsOn, buildCiQueue, buildFixLinks, cleanCiOverview, formatSeconds, isCiOverviewEmpty, permissionsNotice } from '../lib/ciView'
 import { useScrollToHash } from '../lib/useScrollToHash'
 
 const CiRunnerMap = lazy(() => import('../components/ci/CiRunnerMap').then((m) => ({ default: m.CiRunnerMap })))
@@ -228,9 +230,13 @@ export function CiPage() {
       : '/v1/admin/ci/overview?days=7&refresh=1'
   const fetchScope = scope === 'all' ? 'enumeration' : 'project'
   const page = usePageData<CiOverview>(path, { scope: fetchScope })
-  const { data, reload } = page
+  const { reload } = page
+  // Job names without unresolved `${{ }}` expressions, once for every panel (round 3).
+  const data = useMemo(() => (page.data ? cleanCiOverview(page.data) : page.data), [page.data])
   const live = useBackgroundLiveSync(livePath, fetchScope, reload)
   useVisiblePolling(live.sync, POLL_MS)
+  // Never an endless "Reading your CI…" (390 All apps, 2026-11-18): after 10 s, "not checked" + Retry.
+  const firstRead = useReadTimedOut(page.loading && !data && !page.error)
 
   // "Mushi fix" links for jobs on a fix's PR (this app only).
   const fixes = usePageData<{ fixes: FixAttempt[] }>(scope === 'project' && projectId ? '/v1/admin/fixes?limit=100' : null)
@@ -257,14 +263,19 @@ export function CiPage() {
   const empty = data ? isCiOverviewEmpty(data) : false
   // Every machine, busy first, for the Machines view (same placement as the Now board).
   const machinesAll = useMemo(() => (data ? buildCiStatus(data, Date.now()).allMachines : []), [data])
+  const machinesMissing = useMemo(() => sharedMissingLabels(machinesAll), [machinesAll])
   // The "What's wrong" strip ranks from the same status the board shows, refreshed with the clock.
   const now = useNow(30_000)
   const status = useMemo(() => (data ? buildCiStatus(data, now) : null), [data, now])
   const placementApps = useMemo(() => {
     const byId = new Map<string, string>()
     for (const r of data?.repos ?? []) if (!byId.has(r.projectId)) byId.set(r.projectId, r.projectName)
-    return [...byId].map(([id, name]) => ({ id, name })).sort((x, y) => x.name.localeCompare(y.name))
+    // Where each app's jobs ran this window, for the mark on its chip.
+    const runsOn = appRunsOn(data?.jobs ?? [])
+    return [...byId].map(([id, name]) => ({ id, name, runsOn: runsOn.get(id) ?? null })).sort((x, y) => x.name.localeCompare(y.name))
   }, [data])
+  // App names for repo slugs on Speed and cost ("help-her-take-photo" read as a repo, not an app; round 3).
+  const repoNames = useMemo(() => new Map((data?.repos ?? []).map((r) => [r.repo.toLowerCase(), r.projectName] as const)), [data])
   // /ci#ci-placement (Connect's "CI settings" link) opens Settings, then scrolls there.
   useScrollToHash(!!data && !empty)
 
@@ -272,19 +283,30 @@ export function CiPage() {
   // test machine stopped, changes that would speed CI up.
   // Counts match what the view shows: advice as its grouped cards, not raw items.
   const waitingNow = useMemo(() => (data ? buildCiQueue(data.jobs, Date.now()).waiting.length : 0), [data])
+  // Waiting and running jobs are listed once, under "Right now"; the queue holds the finished ones.
+  // A `?job=` deep link to a live job still opens it as a card in the queue.
+  const focusLive = useMemo(
+    () => !!focusJobId && !!data && (() => {
+      const q = buildCiQueue(data.jobs, Date.now())
+      return [...q.waiting, ...q.running].some((j) => j.id === focusJobId)
+    })(),
+    [focusJobId, data],
+  )
   const adviceCards = useMemo(() => (data ? groupCiAdvice(data.advice).length : 0), [data])
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
   const tabs = CI_VIEWS.map((v) => {
     const stopped = data?.stats.infraFailures ?? 0
-    const [badge, badgeLabel] =
+    const [badge, badgeLabel]: [number | string, string] =
       v.id === 'now'
         ? [waitingNow, plural(waitingNow, 'job waiting for a test machine', 'jobs waiting for a test machine')]
         : v.id === 'machines'
-          ? [stopped, plural(stopped, 'job the test machine stopped', 'jobs the test machine stopped')]
+          ? // "7" beside "Machines" read as seven machines while three were listed (2026-11-18): say what it counts.
+            [stopped > 0 ? `${stopped} stopped` : 0, plural(stopped, 'job the test machine stopped', 'jobs the test machine stopped')]
           : v.id === 'cost'
             ? [adviceCards, plural(adviceCards, 'change that would speed CI up', 'changes that would speed CI up')]
             : [0, '']
-    return { to: viewHref(v.id), label: v.label, badge: badge > 0 ? badge : undefined, badgeLabel, match: () => view === v.id }
+    const shown = typeof badge === 'string' ? badge : badge > 0 ? badge : undefined
+    return { to: viewHref(v.id), label: v.label, badge: shown, badgeLabel, match: () => view === v.id }
   })
 
   return (
@@ -328,9 +350,26 @@ export function CiPage() {
       </PageHeaderBar>
 
       {page.error && <PageLoadError error={page.error} resource="CI runners" endpoint={path} onRetry={reload} />}
-      {page.loading && !data && <Loading text="Reading your CI…" />}
+      {page.loading && !data && !page.error && !firstRead.timedOut && <Loading text="Reading your CI…" />}
+      {!data && !page.error && firstRead.timedOut && (
+        <CiNotChecked
+          what="CI runners"
+          testId="ci-not-checked"
+          onRetry={() => {
+            firstRead.restart()
+            reload()
+          }}
+        />
+      )}
 
       {data && !empty && <TabbedSubNav ariaLabel="CI runners views" tabs={tabs} />}
+
+      {/* Problems first: the jobs the test machine stopped sit above the GitHub-access banner (2026-11-18). */}
+      {data && !empty && view === 'machines' && (
+        <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
+          <CiInfraFailures jobs={data.jobs} />
+        </Section>
+      )}
 
       <PagePosture
         slots={[
@@ -340,11 +379,11 @@ export function CiPage() {
             // Without Actions: read nothing here works, so that one shows everywhere. Without
             // Administration: read only idle and offline runners are missing, so it shows
             // where runners are (Machines, Settings), not on top of Now (2026-11-06).
-            show:
-              notice != null &&
-              (empty || data?.permissions.jobs === 'missing' || view === 'machines' || view === 'settings'),
+            // Once, on Machines (round 3: it sat on Settings too, saying "machines show below" over
+            // a page without them). Neutral: a missing read is a gap to close, not a failure.
+            show: notice != null && (empty || data?.permissions.jobs === 'missing' || view === 'machines'),
             children: (
-              <Callout tone="warn" label="GitHub access">
+              <Callout tone={data?.permissions.jobs === 'missing' ? 'warn' : 'neutral'} label="GitHub access">
                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>{notice}</span>
                   <a href={docsUrl('/operating/ci-runners#github-permissions')} target="_blank" rel="noopener noreferrer" className={`font-medium ${LINK_ACCENT}`}>
@@ -383,25 +422,24 @@ export function CiPage() {
         <div className="@container">
         <div className={`grid items-start gap-4 ${NOW_GRID}`} data-testid="ci-now-grid">
           <Section title="Right now" id="ci-attention" icon={<IconAlertTriangle />} className={`ci-rise ${NOW_MAIN}`}>
-            <CiStatusBoard overview={data} />
+            <CiStatusBoard overview={data} fixLinks={fixLinks} />
           </Section>
 
           <Section title="Last 7 days" id="ci-week" icon={<IconGauge />} className={`ci-rise ${NOW_SIDE}`}>
             <CiSummary overview={data} />
           </Section>
 
-          <Section title="Queue" id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>Every job for your fixes, from waiting for a machine to finished. Re-run a job the test machine stopped; open the fix for one that failed.</p>
-            <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} />
+          <Section title={focusLive ? 'Queue' : 'Finished jobs'} id="ci-queue" icon={<IconQueue />} className={`ci-rise ${NOW_FULL}`}>
+            {/* The header, the filter and the cards say what this is; no intro restating them (round 3). */}
+            {focusLive && <p className={HINT}>Every job for your fixes, from waiting for a machine to finished.</p>}
+            <CiQueueBoard jobs={data.jobs} fixLinks={fixLinks} focusJobId={focusJobId} showLive={focusLive} />
           </Section>
 
           <Section title="Timeline" id="ci-timeline" icon={<IconClock />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>One row per test machine, machines with failures first. Gaps are idle time; striped bars are jobs waiting for a machine.</p>
             <CiTimeline jobs={data.jobs} />
           </Section>
 
           <Section title="Job times" id="ci-job-times" icon={<IconGauge />} className={`ci-rise ${NOW_FULL}`}>
-            <p className={HINT}>Each job over the last {data.window.days} days, most failing first, then slowest: how long it usually runs, its slow runs, the longest, how long it waits for a machine and how often it fails.</p>
             <CiJobTimes byJob={data.stats.byJob} days={data.window.days} />
           </Section>
         </div>
@@ -412,13 +450,13 @@ export function CiPage() {
       {data && !empty && view === 'machines' && (
         <>
           <Section title="Machines" id="ci-machines" icon={<IconNetwork />}>
-            <p className={HINT}>Every machine that runs your checks, what it is running now and how busy it is.</p>
             <div className="@container">
               <ul className={`grid gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-all">
                 {machinesAll.map((m) => (
-                  <MachineCard key={m.id} m={m} />
+                  <MachineCard key={m.id} m={m} sharedMissing={machinesMissing} />
                 ))}
               </ul>
+              <MissingLabelsLine shared={machinesMissing} />
             </div>
           </Section>
 
@@ -439,10 +477,6 @@ export function CiPage() {
             </details>
           </Section>
 
-          <Section title="Stopped by the test machine" id="ci-infra" icon={<IconServerOff />}>
-            <p className={HINT}>These jobs never finished testing. They are not code failures: re-run them.</p>
-            <CiInfraFailures jobs={data.jobs} />
-          </Section>
         </>
       )}
 
@@ -459,12 +493,12 @@ export function CiPage() {
           </Section>
 
           <Section title="Slow jobs" id="ci-slow" icon={<IconGauge />}>
-            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} />
+            <CiSlowJobs jobs={data.jobs} slowSteps={data.stats.slowSteps} repoNames={repoNames} />
           </Section>
 
           <Section title="Cost and speed" id="ci-cost" icon={<IconCost />}>
             <PanelErrorBoundary label="Cost and speed">
-              <CiCostSection projectId={projectId} scope={scope} />
+              <CiCostSection projectId={projectId} scope={scope} machines={machinesAll} repoNames={repoNames} />
             </PanelErrorBoundary>
           </Section>
         </>
@@ -474,7 +508,7 @@ export function CiPage() {
         <Section title="Where CI runs" id="ci-placement" icon={<IconSliders />}>
           <p className={HINT}>Move a repo's jobs between GitHub-hosted runners and your own machines through the one runner variable its workflows read. Every change is previewed, approved and watched.</p>
           <PanelErrorBoundary label="Where CI runs">
-            <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} />
+            <CiPlacementSection projectId={projectId} scope={scope} apps={placementApps} onPickApp={pickApp} machines={machinesAll} />
           </PanelErrorBoundary>
         </Section>
       )}

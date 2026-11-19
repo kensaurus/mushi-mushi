@@ -13,7 +13,7 @@ description: The terms for Mushi Mushi Cloud, the admin console, the SDKs and th
   draft. Operator details and governing law are set; a lawyer's review is
   pending. Questions: kensaurus@gmail.com.
 
-**Effective date:** 2026-11-11 · **Version:** 3 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3 sets the governing law and court in section 14 and adds the operator's address and responsible person in section 17). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
+**Effective date:** 2026-11-19 · **Version:** 4 (version 1, 2026-09-21, described the Indie and Pro plans; version 2, 2026-10-28, described Free, Builder, Studio and Enterprise, each limited by apps watched and diagnoses a month, and lengthened Free history from 7 to 14 days; version 3, 2026-11-11, set the governing law and court in section 14 and added the operator's address and responsible person in section 17; version 4 raises Free in section 7 to three apps, 300 diagnoses a month and 30 days of history, with no diagnosis cap for a project that uses its own AI key). For accounts that existed before 2026-11-11, the section 14 change takes effect on 2026-12-11, 30 days after notice, as section 16 promises; everything else in version 3 takes effect on 2026-11-11.
 
 These terms are between you and **Kensaurus 合同会社** (Japan,
 "Mushi Mushi", "we") and cover **Mushi Mushi Cloud** at `kensaur.us/mushi-mushi`,
@@ -102,10 +102,11 @@ users, or your app.
 
 ## 7. Free tier
 
-The **Free** plan includes **one app and 100 diagnoses per month**, one seat, and
-14-day report retention. At 100, the pipeline **stops** for the rest of the
+The **Free** plan includes **three apps and 300 diagnoses per month**, one seat,
+and 30-day report retention. At 300, the pipeline **stops** for the rest of the
 calendar month: reports are still accepted and stored, but no new diagnoses
-run until the counter resets or you upgrade. We do not silently bill overage
+run until the counter resets or you upgrade. A project that uses its own
+Anthropic or OpenAI key is not stopped. We do not silently bill overage
 on Free. We may change Free limits with 30 days' notice on the pricing page.
 
 ## 8. Paid plans and billing

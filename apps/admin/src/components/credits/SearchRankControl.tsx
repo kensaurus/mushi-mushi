@@ -28,6 +28,8 @@ interface Props {
   target: string | null
   firecrawlReady: boolean
   onChanged: (message: { ok: boolean; message: string }) => void
+  /** False when the app's status row above already draws the chips (Firecrawl table). */
+  showChips?: boolean
 }
 
 /** "#2", "#2 (was #5)", "not in the top 20", "not checked yet". */
@@ -40,11 +42,80 @@ function rankLabel(k: RankKeyword): string {
   return prev.rank === k.last_rank ? now : `${now} (was ${prev.rank == null ? 'not ranked' : `#${prev.rank}`})`
 }
 
+/**
+ * @internal Exported for tests. A keyword's rank as a chip: the number (or
+ * "20+" / not checked) and its move since the last check, so the ranks read
+ * at a glance instead of as "…: not in the top 20" sentences.
+ */
+function rankChip(k: RankKeyword): { value: string; move: string | null; tone: 'ok' | 'off' | 'warn' | 'neutral' } {
+  if (!k.last_checked_at) return { value: 'not checked', move: null, tone: 'off' }
+  if (k.last_error) return { value: 'could not check', move: null, tone: 'warn' }
+  const value = k.last_rank == null ? '20+' : `#${k.last_rank}`
+  const prev = k.history?.[1]
+  if (!prev || prev.rank === k.last_rank) return { value, move: null, tone: k.last_rank != null && k.last_rank <= 10 ? 'ok' : 'neutral' }
+  // A smaller number is a better rank; unranked counts as below 20.
+  const before = prev.rank ?? 21
+  const after = k.last_rank ?? 21
+  const move = after < before ? `↑${before - after}` : `↓${after - before}`
+  return { value, move, tone: k.last_rank != null && k.last_rank <= 10 ? 'ok' : 'neutral' }
+}
+
+const RANK_TONE: Record<ReturnType<typeof rankChip>['tone'], string> = {
+  ok: 'text-ok-foreground',
+  warn: 'text-warn-foreground',
+  off: 'text-fg-muted',
+  neutral: 'text-fg',
+}
+
 function lines(keywords: RankKeyword[]): string {
   return keywords.map((k) => (k.country === 'US' ? k.query : `${k.query} @${k.country}`)).join('\n')
 }
 
-export function SearchRankControl({ projectId, name, keywords, target, firecrawlReady, onChanged }: Props) {
+/**
+ * One chip per keyword: the words (wrapping, never cut mid-word), the rank and
+ * its move. "20+" means not in the top 20; the chip's label says so.
+ */
+export function RankChips({ name, keywords, inline = false }: { name: string; keywords: RankKeyword[]; inline?: boolean }) {
+  if (keywords.length === 0) return null
+  // Inside a <summary> (phrasing content only) the list is spans with list roles.
+  const List = inline ? 'span' : 'ul'
+  const Item = inline ? 'span' : 'li'
+  return (
+    <List
+      className="flex flex-wrap gap-1.5 text-xs text-fg-secondary"
+      aria-label={`Search ranks for ${name}`}
+      {...(inline ? { role: 'list' } : {})}
+    >
+      {keywords.map((k) => {
+        const chip = rankChip(k)
+        const label = `${k.query}${k.country !== 'US' ? ` (${k.country})` : ''}: ${rankLabel(k)}`
+        return (
+          <Item
+            key={k.id}
+            {...(inline ? { role: 'listitem' } : {})}
+            className="inline-flex max-w-full items-baseline gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5"
+            title={k.last_top?.length ? `${label}. Top results: ${k.last_top.join(', ')}` : label}
+            aria-label={label}
+            data-testid="search-rank-chip"
+          >
+            <span className="min-w-0 [overflow-wrap:anywhere]">
+              {k.query}
+              {k.country !== 'US' && <span className="text-fg-muted"> {k.country}</span>}
+            </span>
+            <span className={`shrink-0 whitespace-nowrap font-semibold tabular-nums ${RANK_TONE[chip.tone]}`}>{chip.value}</span>
+            {chip.move && (
+              <span className={`shrink-0 text-2xs tabular-nums ${chip.move.startsWith('↑') ? 'text-ok-foreground' : 'text-danger-foreground'}`}>
+                {chip.move}
+              </span>
+            )}
+          </Item>
+        )
+      })}
+    </List>
+  )
+}
+
+export function SearchRankControl({ projectId, name, keywords, target, firecrawlReady, onChanged, showChips = true }: Props) {
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -84,16 +155,7 @@ export function SearchRankControl({ projectId, name, keywords, target, firecrawl
         </div>
       </div>
       {!target && <p className="text-xs text-fg-muted">Watch or audit the live site first, so Mushi Mushi knows which address to look for.</p>}
-      {keywords.length > 0 && draft == null && (
-        <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-fg-secondary" aria-label={`Search ranks for ${name}`}>
-          {keywords.map((k) => (
-            <li key={k.id} title={k.last_top?.length ? `Top results: ${k.last_top.join(', ')}` : undefined}>
-              {k.query}
-              {k.country !== 'US' && <span className="text-fg-muted"> ({k.country})</span>}: <span className="tabular-nums">{rankLabel(k)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {showChips && keywords.length > 0 && draft == null && <RankChips name={name} keywords={keywords} />}
       {draft != null && (
         <form
           className="space-y-1.5"

@@ -27,7 +27,7 @@ import { UpgradePrompt } from '../billing/UpgradePrompt';
 import { describeByokError } from '../../lib/byokErrors';
 import { providerPoolKeys, selectPrimaryProviderKey } from './byokPool';
 import { useByokPool } from './ByokPoolContext';
-import { providerStatusView } from './keyStatus';
+import { duplicateKeyCopies, providerStatusView } from './keyStatus';
 import { SettingsList, SettingsRow } from './SettingsRow';
 
 interface FirecrawlConfig {
@@ -147,6 +147,10 @@ export function FirecrawlPanel() {
     emptyDetail: "No key of your own. Web tools use Mushi Mushi's shared key when the server has one.",
   });
   const keyHint = poolKey?.key_hint ?? legacyKey?.key_hint ?? cfg?.keyHint ?? null;
+  // A second copy of the same key is not a backup: AI keys calls it "Same
+  // key twice", so the count here leaves it out (round-3 review 2026-11-19).
+  const copies = duplicateKeyCopies(poolKeys);
+  const backups = poolKeys.filter((k) => !copies.has(k.id)).length - 1;
 
   return (
     <>
@@ -159,7 +163,7 @@ export function FirecrawlPanel() {
           title="Firecrawl key"
           purpose={
             keyHint
-              ? <>Your key <span className="font-mono">{keyHint}</span>{poolKeys.length > 1 ? `, plus ${poolKeys.length - 1} backup${poolKeys.length > 2 ? 's' : ''}` : ''}.</>
+              ? <>Your key <span className="font-mono">{keyHint}</span>{backups > 0 ? `, plus ${backups} backup${backups > 1 ? 's' : ''}` : ''}.</>
               : 'Use your own Firecrawl account instead of the shared one.'
           }
           status={status}
@@ -194,7 +198,7 @@ export function FirecrawlPanel() {
           purpose="The most pages one lookup may read. Lower keeps costs down; higher finds more."
           status={
             <span className="flex items-center gap-1 text-sm text-fg-secondary">
-              <span className="font-mono">{pages}</span> {pages === 1 ? 'page' : 'pages'}
+              <span className="font-medium tabular-nums">{pages}</span> {pages === 1 ? 'page' : 'pages'}
               <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
             </span>
           }
@@ -205,7 +209,7 @@ export function FirecrawlPanel() {
             max="50"
             step="1"
             aria-label="Pages per lookup"
-            className="w-full accent-brand"
+            className="w-full max-w-sm accent-brand"
             value={pages}
             onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
           />

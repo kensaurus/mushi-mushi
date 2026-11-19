@@ -45,9 +45,14 @@ function Stage({ stage, index }: { stage: TrainStage; index: number }) {
       {stage.note && <span className="truncate text-3xs text-fg-secondary">{stage.note}</span>}
     </>
   )
-  const cls = `flex min-w-0 flex-col gap-0.5 rounded-md border px-2 py-1.5 ${box}`
+  // An empty, untoned stage keeps its place in the flow but not a full box: a row of "0" boxes
+  // read as missing data (fresh-eyes 2026-11-18). It shrinks to a faint dashed step.
+  const empty = stage.count === 0 && !stage.tone && !stage.note
+  const cls = empty
+    ? 'flex min-w-0 flex-col gap-0.5 rounded-md border border-dashed border-edge-subtle px-2 py-1.5 opacity-70'
+    : `flex min-w-0 flex-col gap-0.5 rounded-md border px-2 py-1.5 ${box}`
   return (
-    <li {...link} className={`${link.className} ci-rise flex min-w-0 flex-1 items-center gap-1`} style={{ animationDelay: `${index * 50}ms` }} data-testid={`train-stage-${stage.id}`} data-tone={stage.tone ?? 'neutral'}>
+    <li {...link} className={`${link.className} ci-rise flex min-w-0 ${empty ? 'flex-none' : 'flex-1'} items-center gap-1`} data-empty={empty || undefined} style={{ animationDelay: `${index * 50}ms` }} data-testid={`train-stage-${stage.id}`} data-tone={stage.tone ?? 'neutral'}>
       {index > 0 && (
         <span className="shrink-0 text-fg-faint" aria-hidden="true">
           →

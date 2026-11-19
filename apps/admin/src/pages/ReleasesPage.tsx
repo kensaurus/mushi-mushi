@@ -35,7 +35,7 @@ import {
   SegmentedControl,
 } from '../components/ui'
 import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
-import { ReleasesSnapshotStrip } from '../components/releases/ReleasesSnapshotStrip'
+import { ReleasesSnapshotStrip, releasesFirstStep } from '../components/releases/ReleasesSnapshotStrip'
 import { ReleasesProvenanceReadout } from '../components/releases/ReleasesProvenanceReadout'
 import { AutoReleaseCard } from '../components/releases/AutoReleaseCard'
 import { ReleaseBatchTab } from '../components/releases/ReleaseBatchTab'
@@ -466,6 +466,7 @@ function ReleasesList({
   projectName,
   onReload,
   canEdit,
+  hideEmpty = false,
 }: {
   status: 'draft' | 'published'
   releases: Release[]
@@ -474,6 +475,8 @@ function ReleasesList({
   projectName: string | null
   onReload: () => void
   canEdit: boolean
+  /** The status block above is already the empty state with the one Draft button. */
+  hideEmpty?: boolean
 }) {
   const [selected, setSelected] = useState<Release | null>(null)
 
@@ -481,6 +484,7 @@ function ReleasesList({
   if (loading) return <TableSkeleton rows={5} />
 
   if (releases.length === 0) {
+    if (hideEmpty) return null
     return (
       <NextStep
         variant="inline"
@@ -489,7 +493,7 @@ function ReleasesList({
         emptyDescription={
           status === 'draft'
             ? projectName
-              ? `No drafts for ${projectName} yet. Generate one from the Draft tab.`
+              ? `No drafts for ${projectName} yet. Write one on the New draft tab.`
               : 'Generate a changelog draft from recent fixed reports.'
             : projectName
               ? `Nothing published for ${projectName} yet. Publish a draft to notify credited reporters.`
@@ -573,6 +577,11 @@ function ReleasesList({
   )
 }
 
+/** The tabs whose empty state is the snapshot's "No releases yet" first step. */
+export function releasesListTab(tab: ReleasesTabId): boolean {
+  return tab === 'drafts' || tab === 'published'
+}
+
 export function ReleasesPage() {
   const copy = usePageCopy('/releases')
   const ux = useReleasesUx()
@@ -591,6 +600,8 @@ export function ReleasesPage() {
     isValidating: statsValidating,
   } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
   const stats = statsWithProjectPresence(statsData, EMPTY_RELEASES_STATS)
+  // All zeros: the status block is the one empty state with the one Draft button.
+  const emptyFirstStep = !ux.hideReleasesSnapshot && Boolean(statsData) && releasesFirstStep(stats)
   // Every mode lands on the work tab that matches the posture; the URL wins.
   const postureTab = resolveQuickReleasesTab(stats)
   const activeTab: ReleasesTabId = explicitReleasesTab(searchParams.get('tab')) ?? (postureTab === 'overview' ? 'drafts' : postureTab)
@@ -704,9 +715,12 @@ export function ReleasesPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || listValidating}>
           Refresh
         </Btn>
-        <Btn size="sm" variant="primary" onClick={() => setActiveTab('draft')}>
-          + Draft
-        </Btn>
+        {/* One Draft action per view: the empty snapshot's own button on the lists, none on the draft form itself. */}
+        {activeTab !== 'draft' && !(emptyFirstStep && releasesListTab(activeTab)) && (
+          <Btn size="sm" variant="primary" className="whitespace-nowrap" onClick={() => setActiveTab('draft')}>
+            + Draft
+          </Btn>
+        )}
       </PageHeaderBar>
 
       <PagePosture
@@ -732,7 +746,11 @@ export function ReleasesPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
-            show: !ux.hideReleasesSnapshot,
+            // With no releases the snapshot is the drafts/published lists' one first step; it is
+            // not drawn above the Batch, App stores or draft-form tabs, which have their own content.
+            // The empty first step renders under the tab bar (below), so Drafts and Published start with the
+            // tabs like every other tab (round 3: the layout jumped between tabs).
+            show: !ux.hideReleasesSnapshot && !emptyFirstStep,
             children: (
               <ReleasesSnapshotStrip
                 stats={stats}
@@ -767,6 +785,16 @@ export function ReleasesPage() {
       />
       )}
 
+      {!ux.hideReleasesSnapshot && emptyFirstStep && releasesListTab(activeTab) && (
+        <ReleasesSnapshotStrip
+          stats={stats}
+          statsFetchedAt={statsFetchedAt}
+          statsValidating={statsValidating}
+          statLabels={copy?.statLabels}
+          onDraft={() => setActiveTab('draft')}
+        />
+      )}
+
       {activeTab === 'draft' && (
         !activeProjectId ? (
           <NextStep
@@ -797,6 +825,7 @@ export function ReleasesPage() {
             projectName={projectName}
             onReload={reloadAll}
             canEdit={canEditProject}
+            hideEmpty={emptyFirstStep}
           />
         )
       )}

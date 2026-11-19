@@ -18,7 +18,9 @@ import {
   Btn,
   FilterSelect,
   Input,
+  RelativeTime,
 } from '../components/ui'
+import { StatusGlyph } from '../components/signal/StatusGlyph'
 import {
   IconCamera,
   IconCatalog,
@@ -207,6 +209,11 @@ export function ContentQualityPage() {
     reload: reloadStats,
   } = usePageData<ContentQualityStats>(statsPath, { deps: [activeProjectId] })
   const contentStats = statsData ?? EMPTY_CONTENT_QUALITY_STATS
+  // When nothing is open: what was ever reported, and when the last one came in. "checked
+  // 1 second ago" was the page's own load time, and nothing is scanned on a schedule: issues
+  // arrive as the scores, flags and ratings your apps send (2026-11-18).
+  const historyPath = activeProjectId ? `/v1/admin/content-quality?project_id=${activeProjectId}&status=all&limit=1&page=0` : null
+  const history = usePageData<ListResponse>(historyPath, { deps: [activeProjectId] })
   const pageItems = data?.items ?? []
   const total = data?.total ?? 0
   // The list route has no text search, so search filters the loaded page.
@@ -354,7 +361,32 @@ export function ContentQualityPage() {
         {error && <PageLoadError error={error} resource="content issues" />}
         {loading && <TableSkeleton rows={8} />}
 
-        {!loading && items.length === 0 && (
+        {/* All clear is a state: the ok mark and when it was checked, on one
+            line (2026-11-18 sweep: a bare "No content issues" card). */}
+        {nothingOpen && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs" data-testid="content-quality-all-clear">
+            {/* Green only when issues came in and every one was dealt with; grey while none ever arrived. */}
+            <StatusGlyph tone={(history.data?.total ?? 0) > 0 ? 'ok' : 'off'} />
+            <span className={`font-medium ${(history.data?.total ?? 0) > 0 ? 'text-ok-foreground' : 'text-fg'}`}>No open content issues</span>
+            <span className="text-fg-muted" data-testid="content-quality-scope">
+              {history.data == null
+                ? null
+                : history.data.total > 0 && history.data.items[0]
+                  ? <>· {history.data.total.toLocaleString()} reported so far, the last <RelativeTime value={history.data.items[0].created_at} /></>
+                  : '· none reported yet'}
+              {/* The separator ends this line's part, so a wrap never starts the next line with "·" (round 3, 390). */}
+              {history.data == null ? null : <span className="text-fg-faint"> ·</span>}
+            </span>
+            <span className="text-fg-faint">{history.data == null ? '· ' : ''}from the scores, flags and ratings your apps send</span>
+            {(history.data?.total ?? 0) > 0 && (
+              <Btn size="sm" variant="ghost" className="whitespace-nowrap" onClick={() => changeFilter(() => setStatus('all'))}>
+                Show past issues
+              </Btn>
+            )}
+          </div>
+        )}
+
+        {!loading && items.length === 0 && !nothingOpen && (
           <EmptyState
             title={needle ? 'No matches on this page' : 'No content issues'}
             description={
@@ -363,13 +395,6 @@ export function ContentQualityPage() {
                 : status === 'open'
                 ? 'No open issues. Mushi Mushi looks for new ones every 15 minutes.'
                 : `No issues with status "${status}".`
-            }
-            action={
-              nothingOpen ? (
-                <Btn size="sm" variant="ghost" onClick={() => changeFilter(() => setStatus('all'))}>
-                  Show past issues
-                </Btn>
-              ) : undefined
             }
           />
         )}

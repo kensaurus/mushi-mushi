@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
-import { DisclosurePanel, SegmentedControl } from '../components/ui'
+import { DisclosurePanel } from '../components/ui'
 import { PageLoadError } from '../components/PageLoadError'
 import { describeApiError } from '../lib/humanizeApiError'
 import { PageHeaderBar } from '../components/PageHeaderBar'
@@ -24,7 +24,7 @@ import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { STAGE_LABELS, type PromptLabData, type PromptVersion } from '../components/prompt-lab/types'
+import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
 import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
@@ -38,7 +38,12 @@ import { PromptLabGuide } from '../components/prompt-lab/PromptLabGuide'
 import { PromptLabSnapshotStrip } from '../components/prompt-lab/PromptLabSnapshotStrip'
 import { PromptLabReadout } from '../components/prompt-lab/PromptLabReadout'
 import { PromptScoreboard } from '../components/prompt-lab/PromptScoreboard'
-import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
+import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats, type PromptLabTopPriority } from '../components/prompt-lab/PromptLabStatsTypes'
+import { promptTestSummary, reconcilePromptLabStats } from '../components/prompt-lab/promptLabCounts'
+import { opensFineTuning } from '../components/prompt-lab/fineTuneActions'
+
+/** Postures the status line states from the prompt list, so no banner repeats them. */
+const TEST_STATE_PRIORITIES: ReadonlySet<PromptLabTopPriority> = new Set(['untested_ab', 'candidates_idle', 'ab_running'])
 
 export function PromptLabPage() {
   const { data, loading, error, errorCode, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -49,7 +54,12 @@ export function PromptLabPage() {
     reload: reloadStats,
   } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
   const [searchParams] = useSearchParams()
-  const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
+  // One source: once the prompt list loads, the banner and status line count the same
+  // steps the scoreboard draws (the stats endpoint counted every candidate row).
+  const promptLabStats = useMemo(
+    () => reconcilePromptLabStats(statsData ?? EMPTY_PROMPT_LAB_STATS, data?.prompts),
+    [statsData, data?.prompts],
+  )
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -104,6 +114,8 @@ export function PromptLabPage() {
   // dataset tile) scrolls to the dataset card.
   const tabParam = searchParams.get('tab')
   const stageParam = searchParams.get('stage')
+  const fineTuningLink = opensFineTuning(tabParam)
+  const [advancedOpen, setAdvancedOpen] = useState(fineTuningLink)
   // Applied once per link, so a background reload does not scroll again.
   const appliedLinkRef = useRef<string | null>(null)
   useEffect(() => {
@@ -116,6 +128,9 @@ export function PromptLabPage() {
       document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } else if (tabParam === 'dataset') {
       document.getElementById('prompt-lab-dataset')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else if (opensFineTuning(tabParam)) {
+      setAdvancedOpen(true)
+      document.getElementById('prompt-lab-fine-tuning')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [data, grouped, tabParam, stageParam])
 
@@ -242,13 +257,27 @@ export function PromptLabPage() {
         : `${activePrompts} active · ${candidatePrompts} candidate${candidatePrompts === 1 ? '' : 's'}`,
   })
 
-  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading AI prompts" />
   if (error) return <PageLoadError error={error} code={errorCode} onRetry={reload} />
   if (!data) return null
 
   const parentForDiff = diffing
     ? data.prompts.find((p) => p.id === diffing.parent_version_id)
     : undefined
+  const testSummary = promptTestSummary(data.prompts)
+
+  // Rare-use tools. Opened from a fine-tuning link they render first, under the status, instead
+  // of at the foot of the page under the eval dataset (2026-11-19: y about 3,300 at 390).
+  const advanced = (
+    <div id="prompt-lab-fine-tuning" className="scroll-mt-4">
+      <DisclosurePanel title="Advanced: fine-tuning & synthetic" open={advancedOpen} onOpenChange={setAdvancedOpen}>
+        <div className="space-y-4">
+          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+          <SyntheticReportsCard />
+        </div>
+      </DisclosurePanel>
+    </div>
+  )
 
   return (
     <div className={PAGE_CONTENT_STACK} data-testid="mushi-page-prompt-lab">
@@ -270,6 +299,8 @@ export function PromptLabPage() {
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            // Test states ride in the status line below; a second card said them again.
+            show: !TEST_STATE_PRIORITIES.has(promptLabStats.topPriority) || testSummary == null,
             children: (
               <PromptLabStatusBanner
                 stats={promptLabStats}
@@ -288,6 +319,8 @@ export function PromptLabPage() {
                 stats={promptLabStats}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
+                testSummary={testSummary}
+                promptsHref={promptLabStats.topPriorityTo ?? '/prompt-lab?tab=prompts'}
                 bestIsBuiltIn={data.prompts.some(
                   (p) =>
                     p.project_id == null &&
@@ -309,35 +342,23 @@ export function PromptLabPage() {
         ]}
       />
 
+      {fineTuningLink && advanced}
+
       <PromptScoreboard
         stages={orderedStages}
         grouped={grouped}
         selected={visibleStage}
+        headingExtra={<ConfigHelp helpId="prompt-lab.stage" />}
         onOpen={(stage) => {
           setActiveStage(stage)
           document.getElementById('prompt-lab-stages')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }}
       />
 
-      {orderedStages.length > 0 && visibleStage && (
-        <div id="prompt-lab-stages" className="flex min-w-0 items-center gap-1.5 scroll-mt-4">
-          <ConfigHelp helpId="prompt-lab.stage" />
-          <SegmentedControl<string>
-            size="sm"
-            scrollable
-            ariaLabel="Prompt stage"
-            value={visibleStage}
-            options={orderedStages.map((stage) => ({
-              id: stage,
-              label: STAGE_LABELS[stage] ?? stage,
-              count: grouped[stage]?.length ?? 0,
-            }))}
-            onChange={setActiveStage}
-          />
-        </div>
-      )}
-
+      {/* The scoreboard rows above pick the step; a second strip of twelve stage tabs
+          repeated them (2026-11-18). The anchor stays for ?tab=prompts&stage= links. */}
       {visibleStage && (
+        <div id="prompt-lab-stages" className="min-w-0 scroll-mt-4">
         <PromptStageTable
           key={visibleStage}
           stage={visibleStage}
@@ -350,6 +371,7 @@ export function PromptLabPage() {
           onTraffic={setTraffic}
           onDelete={deletePrompt}
         />
+        </div>
       )}
 
       <EvalDatasetCard
@@ -359,12 +381,7 @@ export function PromptLabPage() {
       />
 
       {/* Rare-use tools: vendor fine-tuning jobs and synthetic test reports. */}
-      <DisclosurePanel title="Advanced: fine-tuning & synthetic">
-        <div className="space-y-4">
-          <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
-          <SyntheticReportsCard />
-        </div>
-      </DisclosurePanel>
+      {!fineTuningLink && advanced}
 
       {/* Endpoints and raw counts: developer detail, at the foot of the page. */}
       <PromptLabReadout

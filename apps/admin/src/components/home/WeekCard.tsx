@@ -12,6 +12,7 @@
 import { Link } from 'react-router-dom'
 import { Badge, Section, Skeleton } from '../ui'
 import { weekDelta, type HomeSection, type WeekRow } from '../../lib/projectHome'
+import { splitWeekRows } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 
 const DELTA_TONE = { ok: 'okSubtle', warn: 'warnSubtle', neutral: 'neutral' } as const
@@ -47,7 +48,27 @@ export function WeekCard({ section }: { section: HomeSection<WeekRow[]> }) {
   return (
     <Section title="This week vs last week" id="home-week">
       <HomeSectionBody section={section} what="this week's numbers" notConnectedText="No numbers yet.">
-        {(rows) => (
+        {(all) => {
+          // Rows that were 0 both weeks fold to one line: two "0 / 0 / same"
+          // rows with flat dashed charts said nothing (round-2 sweep 2026-11-18).
+          const { active: rows, quiet } = splitWeekRows(all)
+          const quietLine =
+            quiet.length > 0 ? (
+              <p className="pt-1.5 text-xs text-fg-muted" data-testid="home-week-quiet">
+                None either week:{' '}
+                {quiet.map((r, i) => (
+                  <span key={r.id}>
+                    {i > 0 && ', '}
+                    <Link to={r.href} className="hover:underline">
+                      {r.label.toLowerCase()}
+                    </Link>
+                  </span>
+                ))}
+              </p>
+            ) : null
+          if (rows.length === 0) return quietLine
+          return (
+          <>
           <table className="w-full text-sm" data-testid="home-week">
             <thead>
               <tr className="text-left text-2xs text-fg-secondary font-semibold">
@@ -81,7 +102,10 @@ export function WeekCard({ section }: { section: HomeSection<WeekRow[]> }) {
               })}
             </tbody>
           </table>
-        )}
+          {quietLine}
+          </>
+          )
+        }}
       </HomeSectionBody>
     </Section>
   )

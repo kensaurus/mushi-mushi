@@ -545,3 +545,34 @@ export function estimateLine(r: Pick<RunningNow, 'elapsedS' | 'usualS' | 'slow' 
 }
 
 export { minutes as durationWords }
+
+// ── One machine status for every tab (2026-11-18) ───────────────────────────
+// Now said overseas-ci "idle", Speed and cost said "offline" (GitHub's runner list: a one-job
+// runner is deregistered between jobs) and Settings said "0 of 7 online". The machine's own
+// heartbeat is the truth; GitHub's runner list is only the fallback when no machine reported.
+
+export type MachinePresence = 'running' | 'idle' | 'offline'
+
+/** What a reporting machine is doing: offline when its heartbeat went stale. */
+export function machinePresence(m: Pick<MachineNow, 'stale' | 'running'>): MachinePresence {
+  if (m.stale) return 'offline'
+  return m.running > 0 ? 'running' : 'idle'
+}
+
+/** "running 3", "idle", "offline". */
+export function machinePresenceWord(m: Pick<MachineNow, 'stale' | 'running'>): string {
+  const p = machinePresence(m)
+  return p === 'running' ? `running ${m.running}` : p
+}
+
+/** The reporting machine with this name (case-insensitive), if any. */
+export function machineByName(machines: readonly MachineNow[], name: string): MachineNow | null {
+  const n = name.toLowerCase()
+  return machines.find((m) => m.kind === 'self' && m.name.toLowerCase() === n) ?? null
+}
+
+/** Reporting machines whose runners carry this runs-on label. */
+export function machinesWithLabel(machines: readonly MachineNow[], label: string): MachineNow[] {
+  const l = label.toLowerCase()
+  return machines.filter((m) => m.kind === 'self' && (m.labels ?? []).some((x) => x.toLowerCase() === l))
+}

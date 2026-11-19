@@ -18,12 +18,47 @@ export function isInboxStatusBannerCritical(stats: InboxStats): boolean {
   return false
 }
 
+/**
+ * The "N things need you" banner only repeats the list when there is one
+ * open card: the same sentence twice and two buttons ("Take action",
+ * "Review & fix") for one action (fresh-eyes sweep 2026-11-18). Then the card
+ * is the banner.
+ */
+export function inboxBannerRepeatsCards(stats: InboxStats, openCards: number): boolean {
+  return stats.topPriority === 'actions' && openCards <= 1
+}
+
+/**
+ * The banner counts the cards the page lists, not /inbox/stats: the server said "1 thing needs
+ * you" while three cards (a critical, a stuck pipeline group, two worker problems) were open
+ * below it (round-3 review, 2026-11-19). Setup and no-project states stay the server's.
+ */
+export function reconcileInboxStats(
+  stats: InboxStats,
+  counts: { open: number; settled: number; total: number },
+): InboxStats {
+  if (stats.topPriority !== 'actions' && stats.topPriority !== 'clear') return stats
+  return {
+    ...stats,
+    openActions: counts.open,
+    clearStages: counts.settled,
+    totalSurfaces: counts.total,
+    topPriority: counts.open > 0 ? 'actions' : 'clear',
+  }
+}
+
 interface Props {
   stats: InboxStats
   onTab?: (tab: InboxTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
   plainBanner?: boolean
+  /**
+   * The open cards are on screen below the banner. Then the banner is only the count: its
+   * sentence and "Take action" repeated the first card's text and its "Review & fix" button
+   * (round-3 review, 2026-11-19).
+   */
+  cardsShown?: boolean
 }
 
 export function InboxStatusBanner({
@@ -32,6 +67,7 @@ export function InboxStatusBanner({
   onRefresh,
   refreshing,
   plainBanner = false,
+  cardsShown = false,
 }: Props) {
   const copy = usePageCopy('/inbox')
   const actions = copy?.actionLabels ?? {}
@@ -87,32 +123,35 @@ export function InboxStatusBanner({
   }
 
   if (stats.topPriority === 'actions') {
+    // Open work is a to-do, not a failure: amber, never red.
     return (
       <StatusBannerShell
-        tone="danger"
+        tone="warn"
         title={
           plainBanner
             ? `${stats.openActions} thing${stats.openActions === 1 ? ' needs' : 's need'} you`
             : `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — start with: ${stats.topPriorityTitle ?? stats.topPriorityStage ?? 'Plan'}`
         }
         subtitle={
-          stats.topPriorityLabel ??
-          // The advanced title already names the action; don't repeat it.
-          (plainBanner ? stats.topPriorityTitle : null) ??
-          'Work the queue top to bottom — each item links to the page that clears it.'
+          cardsShown
+            ? null
+            : (stats.topPriorityLabel ??
+              // The advanced title already names the action; don't repeat it.
+              (plainBanner ? stats.topPriorityTitle : null) ??
+              'Work the queue top to bottom — each item links to the page that clears it.')
         }
         action={
-          stats.topPriorityTo ? (
+          cardsShown ? null : onTab ? (
+            <StatusBannerAction
+              label={actions.queue ?? 'View the list'}
+              onClick={() => onTab('overview')}
+              tone="warn"
+            />
+          ) : stats.topPriorityTo ? (
             <StatusBannerAction
               label={actions.takeAction ?? 'Take action'}
               to={stats.topPriorityTo}
-              tone="danger"
-            />
-          ) : onTab ? (
-            <StatusBannerAction
-              label={actions.queue ?? 'View queue'}
-              onClick={() => onTab('overview')}
-              tone="danger"
+              tone="warn"
             />
           ) : null
         }

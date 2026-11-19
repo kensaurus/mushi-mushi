@@ -1,268 +1,216 @@
 # Self-Hosted Deployment Guide
 
-Minimal guide to get Mushi Mushi running on your own Supabase project.
+Run Mushi Mushi on your own Supabase project. The free tier is enough.
 
-> **Fastest path:** from a clone of this repo, run
-> `npx mushi-mushi@latest selfhost up --project-ref <your-ref>` — it wraps
-> every step below (link → db push → secrets → function deploys → bucket →
-> bootstrap) and ends with a health-check proof step. No Supabase CLI?
-> Pass `--print-commands` to get the exact commands to copy-paste.
-> Afterwards, `mushi selfhost doctor` verifies the deployment end to end.
-> The manual steps below remain the reference for what "up" does.
+**Supported path:** your own Supabase project + `mushi selfhost up` (below).
+**Experimental:** [Docker Compose](#docker-compose-experimental) and the
+[Helm chart](../deploy/helm/README.md). Nobody has run either end to end yet.
 
-## Prerequisites
+## What you need
 
-- [Supabase CLI](https://supabase.com/docs/guides/cli) installed
-- A Supabase project (free tier works)
-- An [Anthropic API key](https://console.anthropic.com/)
-- (Optional) An [OpenAI API key](https://platform.openai.com/) for LLM failover
+| | Required? | What it is for |
+| --- | --- | --- |
+| A [Supabase](https://supabase.com) project | Required | Database, auth, storage, edge functions |
+| [Supabase CLI](https://supabase.com/docs/guides/cli), logged in (`supabase login` or `SUPABASE_ACCESS_TOKEN`) | Required | `selfhost up` drives it |
+| Node.js 22+ and a clone of this repo | Required | The migrations and functions ship from the clone |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Required, **generated for you** | Lets pg_cron call your functions. `up` creates it, sets it as a function secret, and writes the same value into the database |
+| An LLM key: Anthropic **or** OpenAI | Optional | The plain-English diagnosis (Stage 2) and fix drafts. Either provider works |
+| An OpenAI key specifically | Optional | Duplicate detection, semantic search and voice transcription (they use OpenAI embeddings / speech-to-text) |
+| `--console-url` (where you serve the console) | Optional, recommended | Report links in Slack/Discord (`ADMIN_BASE_URL`), and `mushi login` signing in on **your** console instead of Mushi Mushi Cloud |
 
-## 1. Clone and configure
+### Without an LLM key
 
-```bash
-git clone https://github.com/kensaurus/mushi-mushi.git
-cd mushi-mushi/packages/server/supabase
-```
+Mushi Mushi still runs. Reports are ingested with their screenshots and
+context, stored, and shown in the console. Stage 1 falls back to rule-based
+triage (`fast-filter` → heuristic category and severity, status `classified`).
+You do not get the plain-English diagnosis, fix drafts, or duplicate detection.
+Add a key later with `supabase secrets set ANTHROPIC_API_KEY=…` (or
+`OPENAI_API_KEY=…`), or per app in the console under **Settings → API Keys**.
 
-Link to your Supabase project:
-
-```bash
-npx supabase link --project-ref YOUR_PROJECT_REF
-```
-
-## 2. Run database migrations
+## Quickstart (5 commands)
 
 ```bash
-npx supabase db push
+git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
+supabase login                                   # once per machine
+npx mushi-mushi@latest selfhost up --project-ref <your-ref> \
+  --console-url https://mushi.example.com        # optional; where you'll serve the console
 ```
 
-This creates all tables, RLS policies, indexes, and RPCs.
+`selfhost up` asks you to confirm, then asks for an Anthropic or OpenAI key
+(press Enter to skip; `--anthropic-key`, `--openai-key`, `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` skip the prompt). It then:
 
-## 3. Set secrets
+1. links the project (`supabase link --project-ref`),
+2. applies every migration (`supabase db push`),
+3. sets the function secrets: `MUSHI_INTERNAL_CALLER_SECRET`, your LLM key, `ADMIN_BASE_URL`,
+4. points the database at your project: `mushi_runtime_config.supabase_url`,
+   `service_role_key` and `internal_caller_token`. The migrations seed the
+   Mushi Mushi Cloud URL there; until this step, your cron jobs call Cloud,
+5. lifts the Mushi Mushi Cloud free-plan limits on your instance (300 diagnoses
+   a month, 3 apps, 1 seat, 30-day retention), since there is nothing to bill,
+6. deploys every edge function (`verify_jwt` comes from `config.toml`),
+7. saves the endpoint and console URL to the CLI config, and checks `GET /health`.
+
+Re-running `up` is safe: it re-applies only new migrations and rotates the
+internal secret in both places. To keep the secret, export
+`MUSHI_INTERNAL_CALLER_SECRET` before you run it. CI: add `--yes`.
+No Supabase CLI, or want to see everything first? `--print-commands` prints
+each command with placeholders for every secret.
+
+Then:
 
 ```bash
-npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-# Optional: failover provider
-npx supabase secrets set OPENAI_API_KEY=sk-...
-
-# Required for report deep-links in Slack / Discord notifications.
-# Set this to the base URL of your deployed admin console (no trailing slash).
-# Example: https://your-domain.example.com/admin
-# On kensaur.us this is: https://kensaur.us/mushi-mushi/admin
-# When unset, notification buttons degrade gracefully (no URL, no crash).
-npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
+# 4. Serve the console (next section), sign up there: the first account owns the instance.
+# 5. Sign the CLI in. This mints your key in the browser; no SQL needed.
+mushi login --endpoint https://<your-ref>.supabase.co/functions/v1/api
+mushi selfhost doctor
 ```
 
-## 4. Deploy Edge Functions
+`mushi login` opens the console saved by `--console-url`. If you skipped it,
+run `mushi config consoleUrl <url>` first, or the CLI opens the Mushi Mushi
+Cloud console.
 
-Three functions are required for the core ingest + classification pipeline:
+## Serve the admin console
+
+The console is a static Vite app. Vite inlines its settings at **build** time,
+so pass them when you build:
 
 ```bash
-npx supabase functions deploy api --no-verify-jwt
-npx supabase functions deploy fast-filter --no-verify-jwt
-npx supabase functions deploy classify-report --no-verify-jwt
+VITE_SUPABASE_URL=https://<your-ref>.supabase.co \
+VITE_SUPABASE_ANON_KEY=<anon key from Supabase → Settings → API> \
+VITE_API_URL=https://<your-ref>.supabase.co/functions/v1/api \
+VITE_INSTANCE_TYPE=self-hosted \
+pnpm --filter "@mushi-mushi/admin..." build      # output: apps/admin/dist
 ```
 
-Also deploy **`mcp`** if you use the hosted MCP transport:
+Serve `apps/admin/dist` from any static host that falls back to `index.html`
+(see [Admin SPA deploy](../apps/docs/content/self-hosting/admin-spa.mdx)), or
+run it locally with `pnpm --filter @mushi-mushi/admin dev` (http://localhost:6464).
+A console built without `VITE_SUPABASE_URL` asks for the URL and anon key on
+first open and keeps them in that browser.
 
-```bash
-npx supabase functions deploy mcp --no-verify-jwt
-# Voice loop + cloud agents (2026-09-12): all authenticate inside the handler
-npx supabase functions deploy telegram-webhook --no-verify-jwt
-npx supabase functions deploy cursor-webhook --no-verify-jwt
-npx supabase functions deploy agent-status-poll --no-verify-jwt
-# Agent PR review gate (ADR 0030): Opus review of every cloud-agent PR
-npx supabase functions deploy agent-pr-review --no-verify-jwt
-```
+## Connect your app
 
-Deploy every directory under `packages/server/supabase/functions/` except `_shared`, or mirror [`.github/workflows/deploy-edge-functions.yml`](../.github/workflows/deploy-edge-functions.yml). Run `pnpm docs-stats` for the current function count.
-
-Optional functions:
-
-```bash
-npx supabase functions deploy judge-batch --no-verify-jwt
-npx supabase functions deploy intelligence-report --no-verify-jwt
-npx supabase functions deploy generate-synthetic --no-verify-jwt
-```
-
-### Closed-loop evolution functions (Phase 1–6)
-
-All six phases of the closed-loop pipeline have self-hosted parity. Deploy them with:
-
-```bash
-# Phase 1 — Mistake clustering + lessons
-npx supabase functions deploy mistake-clusterer --no-verify-jwt
-npx supabase functions deploy mistake-summarizer --no-verify-jwt
-
-# Phase 2 — Release builder
-npx supabase functions deploy release-builder --no-verify-jwt
-
-# Phase 3 — PDCA autonomous iteration
-npx supabase functions deploy pdca-runner --no-verify-jwt
-
-# Phase 4 — Contract drift detection
-npx supabase functions deploy contract-graph-builder --no-verify-jwt
-npx supabase functions deploy drift-walker --no-verify-jwt
-
-# Phase 5 — A/B experiment analyzer
-npx supabase functions deploy experiment-analyzer --no-verify-jwt
-
-# Phase 6 — Anomaly detection
-npx supabase functions deploy anomaly-detector --no-verify-jwt
-
-# App recipe / design plane (Plan 019): daily mushi.recipe.json + token refresh and deviance scan
-npx supabase functions deploy recipe-collector --no-verify-jwt
-npx supabase functions deploy radar-scan --no-verify-jwt
-npx supabase functions deploy operator-digest --no-verify-jwt
-```
-
-#### Voice intake, Telegram and cloud agents
-
-- `POST /v1/intake/voice` (in `api`) takes a project API key with the `voice:write` scope; enable `voice_intake_enabled` per project in the console first. Transcription uses the project's OpenAI key (`gpt-transcribe`, then `gpt-4o-mini-transcribe`); audio is deleted after transcription unless `voice_audio_retention_days` is set.
-- Telegram: create a bot with @BotFather, paste the token in the project's Voice intake settings (stored as a vault reference), call `POST /v1/admin/telegram/setup` (registers the webhook at `<SUPABASE_URL>/functions/v1/telegram-webhook?project=<id>` with a secret token), mint a bind code with `POST /v1/admin/telegram/bind-code`, then send `/start <code>` to the bot.
-- Slack: re-install the app from `packages/plugin-slack-app/manifest.json` (new scopes `files:read`, `commands`, history events) after deploying `api`; Slack verifies the Events URL on save.
-- Cursor Cloud: `autofix_agent = 'cursor_cloud'` or `mushi fix --agent cursor_cloud`; uses the v1 API with the project's Cursor key. Completion is polled by `agent-status-poll` (cron `5-55/5`); set `CURSOR_USE_V0_WEBHOOK=1` to use the v0 callback into `cursor-webhook` instead (secret derived from `MUSHI_INTERNAL_CALLER_SECRET`).
-- GitHub cloud agent: `autofix_agent = 'github_cloud_agent'`; needs a user-to-server token (fine-grained PAT with "Agent tasks" read+write plus Contents and Pull requests, or a GitHub App user token) stored as `project_settings.github_user_token_ref` or `GITHUB_TOKEN`, and a Copilot plan with the coding-agent policy enabled. Installation tokens are rejected by GitHub.
-- Web Push: set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:) as edge secrets; the installed console PWA subscribes devices.
-
-#### Required secrets for closed-loop functions
-
-```bash
-# Already required for classify-report:
-npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-npx supabase secrets set OPENAI_API_KEY=sk-...
-
-# Required for mistake-clusterer + pdca-runner (OpenAI embeddings):
-npx supabase secrets set OPENAI_API_KEY=sk-...
-```
-
-#### Recommended pg_cron schedules
-
-Use `mushi.edge_function_post(fn_name, body)` — the same helper every
-healthy cron job on the hosted project uses. **Do not** use
-`current_setting('app.settings.supabase_url')` / `service_role_key`; those
-GUCs return NULL on hosted Supabase and pg_cron will fail silently every
-tick with `null value in column "url" of relation "http_request_queue"`.
-
-Prerequisites (once per project):
-
-```sql
--- Mirror the internal caller token + project URL into mushi_runtime_config
--- (the hosted project already has these; self-hosted operators set them once):
-INSERT INTO public.mushi_runtime_config (key, value) VALUES
-  ('supabase_url', 'https://YOUR_PROJECT_REF.supabase.co'),
-  ('service_role_key', 'YOUR_INTERNAL_CALLER_SECRET'),
-  -- Required by the pipeline-recovery cron (recover_stranded_pipeline):
-  -- generate one secret (e.g. `openssl rand -hex 32`) and use the SAME value
-  -- for this row and the MUSHI_INTERNAL_CALLER_SECRET function secret below.
-  -- If this row is missing, recovery runs log status='skipped' in cron_runs
-  -- and stranded reports are never retried.
-  ('internal_caller_token', 'YOUR_INTERNAL_CALLER_SECRET')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
-```
-
-```bash
-# The matching function secret (edge functions verify recovery calls with it):
-npx supabase secrets set MUSHI_INTERNAL_CALLER_SECRET=YOUR_INTERNAL_CALLER_SECRET
-```
-
-Verify recovery is healthy after setup (should show `success`/`degraded`, not
-`skipped`, and `responses_failed: 0` once reconciled):
-
-```sql
-SELECT status, metadata FROM cron_runs
- WHERE job_name = 'pipeline-recovery'
- ORDER BY finished_at DESC LIMIT 3;
-```
-
-Schedules:
-
-```sql
--- Mistake clusterer: every 6 hours
-SELECT cron.schedule(
-  'mushi-mistake-clusterer',
-  '0 */6 * * *',
-  $$ SELECT mushi.edge_function_post('mistake-clusterer', '{}'::jsonb); $$
-);
-
--- Drift walker: daily at 03:00 UTC (per project — adapt body)
-SELECT cron.schedule(
-  'mushi-drift-walker',
-  '0 3 * * *',
-  $$ SELECT mushi.edge_function_post('drift-walker', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$
-);
-
--- Anomaly detector: hourly
-SELECT cron.schedule(
-  'mushi-anomaly-detector',
-  '0 * * * *',
-  $$ SELECT mushi.edge_function_post('anomaly-detector', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$
-);
-```
-
-> **Re-deploys overwrite source.** Supabase keeps the file bundle as the source
-> of truth; if a deploy uploads a stale `index.ts` (e.g. you forgot to save before
-> deploying) the function will silently miss new routes. After deploying, smoke
-> the endpoints with `curl` to catch this. We hit it during initial admin route
-> rollout — see commit history for the affected revision.
-
-## 5. Create a Supabase storage bucket
-
-In your Supabase dashboard, create a storage bucket named `screenshots` with public access.
-
-## 6. Verify the deployment
-
-```bash
-# API liveness (process up — does not prove DB)
-curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health
-# Should return: {"status":"ok","version":"1.0.0",…}
-
-# API readiness (fails when Postgres is unreachable)
-curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health/ready
-
-# Standalone healthz edge function (no JWT; cheap DB probe)
-curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/healthz
-# Should return: {"status":"ok","db":"ok","version":"…"}  (or status "degraded" if DB probe fails)
-```
-
-## 7. Connect the SDK
+`mushi init` in your app repo installs the SDK and writes the project id and
+key. By hand:
 
 ```tsx
 import { MushiProvider } from 'mushi-mushi/react'
 
-function App() {
-  return (
-    <MushiProvider config={{
-      projectId: 'YOUR_PROJECT_ID',
-      apiKey: 'YOUR_API_KEY',
-      apiEndpoint: 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/api'
-    }}>
-      <YourApp />
-    </MushiProvider>
-  )
-}
+<MushiProvider config={{
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_API_KEY',
+  apiEndpoint: 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/api',
+}}>
+  <YourApp />
+</MushiProvider>
 ```
 
-To get `projectId` and `apiKey`, sign in to the admin console or create them via SQL:
+Get both from your console: **Projects** → create a project → copy the id and
+generate an SDK key (`report:write`).
 
-```sql
--- Create a project
-INSERT INTO projects (name, slug)
-VALUES ('My App', 'my-app')
-RETURNING id;
-
--- Create an API key (save the raw key — it's shown only once)
--- Use the CLI: mushi login --api-key <key> --endpoint <url>
-```
-
-## 8. Run the Admin Console (optional)
+## Verify
 
 ```bash
-cd apps/admin
-cp .env.example .env
-# Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-pnpm install && pnpm dev
+curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health        # process up
+curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/api/health/ready  # database reachable
+curl https://YOUR_PROJECT_REF.supabase.co/functions/v1/healthz           # {"status":"ok","db":"ok",…}
+mushi selfhost doctor
 ```
+
+Cron jobs should reach your project, not Mushi Mushi Cloud:
+
+```sql
+select key, case when key = 'supabase_url' then value else '(set)' end
+  from mushi_runtime_config
+ where key in ('supabase_url', 'service_role_key', 'internal_caller_token');
+
+-- Pipeline recovery: success/degraded, not skipped
+select status, metadata from cron_runs
+ where job_name = 'pipeline-recovery' order by finished_at desc limit 3;
+```
+
+Screenshots go to the private `screenshots` bucket the first migration
+creates (service-role only). Do
+not make it public.
+
+## Doing it by hand
+
+`--print-commands` prints the exact sequence. In short, from `packages/server/`:
+
+```bash
+supabase link --project-ref <ref>
+supabase db push --remote                # CLI 2.x: --linked. Without it, 3.x pushes to your LOCAL db
+supabase secrets set --env-file mushi-secrets.env   # MUSHI_INTERNAL_CALLER_SECRET, LLM key, ADMIN_BASE_URL
+supabase db query --remote --file mushi-runtime-config.sql
+supabase functions deploy                # every function; verify_jwt from config.toml
+```
+
+If one function's upload is rejected as too large (the deploy endpoint caps a
+request at about 5 MB; `api` is the biggest), deploy it with the repo's
+compacting uploader:
+`SUPABASE_PROJECT_REF=<your-ref> SUPABASE_ACCESS_TOKEN=sbp_… node scripts/deploy-edge-function.mjs api`.
+Always set `SUPABASE_PROJECT_REF`: without it the script targets Mushi Mushi Cloud.
+
+`mushi-runtime-config.sql` must upsert `supabase_url` (your project URL),
+`service_role_key` and `internal_caller_token` (both the same value as
+`MUSHI_INTERNAL_CALLER_SECRET`) into `public.mushi_runtime_config`, and lift
+the Mushi Mushi Cloud plan limits on every `pricing_plans` row. `--print-commands` prints the full file.
+`mushi.edge_function_post` (every cron job) reads `supabase_url` and
+`service_role_key`; pipeline recovery reads `internal_caller_token`.
+
+### Optional cron schedules
+
+The migrations schedule the core jobs. These are extra; they use the same
+`mushi.edge_function_post` helper. Do **not** use
+`current_setting('app.settings.…')`: it returns NULL on hosted Supabase and the
+job fails silently every tick.
+
+```sql
+SELECT cron.schedule('mushi-mistake-clusterer', '0 */6 * * *',
+  $$ SELECT mushi.edge_function_post('mistake-clusterer', '{}'::jsonb); $$);
+SELECT cron.schedule('mushi-drift-walker', '0 3 * * *',
+  $$ SELECT mushi.edge_function_post('drift-walker', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$);
+SELECT cron.schedule('mushi-anomaly-detector', '0 * * * *',
+  $$ SELECT mushi.edge_function_post('anomaly-detector', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$);
+```
+
+### Other integrations
+
+- `POST /v1/intake/voice` (in `api`) takes a project API key with the `voice:write` scope; enable `voice_intake_enabled` per project in the console first. Transcription uses the project's OpenAI key (`gpt-transcribe`, then `gpt-4o-mini-transcribe`); audio is deleted after transcription unless `voice_audio_retention_days` is set.
+- Telegram: create a bot with @BotFather, paste the token in the project's Voice intake settings (stored as a vault reference), call `POST /v1/admin/telegram/setup` (registers the webhook at `<SUPABASE_URL>/functions/v1/telegram-webhook?project=<id>` with a secret token), mint a bind code with `POST /v1/admin/telegram/bind-code`, then send `/start <code>` to the bot.
+- Slack: re-install the app from `packages/plugin-slack-app/manifest.json` (scopes `files:read`, `commands`, history events) after deploying `api`; Slack verifies the Events URL on save.
+- Cursor Cloud: `autofix_agent = 'cursor_cloud'` or `mushi fix --agent cursor_cloud`; uses the v1 API with the project's Cursor key. Completion is polled by `agent-status-poll` (cron `5-55/5`); set `CURSOR_USE_V0_WEBHOOK=1` to use the v0 callback into `cursor-webhook` instead (secret derived from `MUSHI_INTERNAL_CALLER_SECRET`).
+- GitHub cloud agent: `autofix_agent = 'github_cloud_agent'`; needs a user-to-server token (fine-grained PAT with "Agent tasks" read+write plus Contents and Pull requests, or a GitHub App user token) stored as `project_settings.github_user_token_ref` or `GITHUB_TOKEN`, and a Copilot plan with the coding-agent policy enabled. Installation tokens are rejected by GitHub.
+- Web Push: set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:) as edge secrets; the installed console PWA subscribes devices.
+
+> **Re-deploys overwrite source.** Supabase keeps the uploaded bundle as the
+> source of truth; a deploy of a stale `index.ts` silently drops new routes.
+> After deploying, check `GET /v1/health`: its `version` is the deployed commit.
+
+## Docker Compose (experimental)
+
+`deploy/docker-compose.yml` runs the whole stack without a Supabase account:
+Postgres, Auth, PostgREST, Storage (Supabase's images), every edge function in
+one `supabase/edge-runtime` container, the console, and Caddy as the gateway.
+It has not been run end to end yet; expect to fix things.
+
+```bash
+./deploy/generate-secrets.sh          # or: npx mushi-mushi selfhost secrets
+# optional: add ANTHROPIC_API_KEY or OPENAI_API_KEY to deploy/.env
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# console + API: http://localhost  (MUSHI_PUBLIC_URL; a domain gets TLS)
+```
+
+The secrets script writes a random Postgres password, JWT secret and internal
+caller secret, and signs the anon and service_role JWTs with that JWT secret,
+so you never mint JWTs by hand. Compose refuses to start without them. The
+`migrate` service applies the migrations after Auth and Storage create their
+schemas, then points `mushi_runtime_config` at the internal gateway
+(`http://caddy:8000`) and lifts the plan limits. Not included: Realtime (the
+console's live updates need a reload), SMTP (sign-up is auto-confirmed), Studio.
+Known gap: signed Storage URLs are built from the internal gateway, so
+screenshot links handed to the browser may not load yet.
 
 ## Pipeline Flow
 
@@ -274,7 +222,7 @@ SDK → api (ingestion) → fast-filter (Haiku Stage 1)
 
 ## Scheduling judge-batch
 
-The `judge-batch` function runs nightly LLM-as-Judge quality evaluation. Schedule it with `pg_cron`, using the same `mushi.edge_function_post` helper as the other schedules above (requires the [prerequisites](#recommended-pg_cron-schedules) — do **not** use `current_setting('app.settings.…')`, which returns NULL on hosted Supabase and fails silently):
+The `judge-batch` function runs nightly LLM-as-Judge quality evaluation. Schedule it with `pg_cron`, using the same `mushi.edge_function_post` helper as the [other schedules](#optional-cron-schedules) (it needs the runtime config `selfhost up` writes) — do **not** use `current_setting('app.settings.…')`, which returns NULL on hosted Supabase and fails silently):
 
 ```sql
 SELECT cron.schedule(
@@ -382,21 +330,28 @@ target) and DNS configuration details, see
 
 ## Headless bootstrap (`MUSHI_INIT_*`)
 
+> Fixed 2026-11-19. The owner signs up once in the console first: an organisation
+> and a project each need a real owner account. Bootstrap then creates the team
+> org (or uses the owner's personal org), the project and the reporter key.
+
 Mirror of [Langfuse's `LANGFUSE_INIT_*`](https://langfuse.com/docs/self-hosting) pattern.
 When these environment variables are set, the Mushi API bootstraps an initial
 organisation, project, and reporter API key on the first authenticated request
 — useful for IaC, Docker Compose, CI seeds, and one-click deploys.
 
-Set the following Supabase secrets (all optional; omit any you don't need):
+Set the following Supabase secrets (only the owner is required once you set an org or project):
 
 ```bash
-# Org
+# Owner: an account that has signed up in the console
+npx supabase secrets set MUSHI_INIT_OWNER_EMAIL="you@example.com"
+
+# Org (optional: the owner's personal org otherwise)
 npx supabase secrets set MUSHI_INIT_ORG_NAME="My Team"
 npx supabase secrets set MUSHI_INIT_ORG_ID="00000000-0000-0000-0000-000000000001"   # optional, makes idempotent
 
 # Project
 npx supabase secrets set MUSHI_INIT_PROJECT_NAME="Production"
-npx supabase secrets set MUSHI_INIT_PROJECT_ID="00000000-0000-0000-0000-000000000002"  # optional, makes idempotent
+npx supabase secrets set MUSHI_INIT_PROJECT_ID="00000000-0000-0000-0000-000000000002"  # optional: reuse this existing project
 
 # First reporter key (mushi_... format); written as a pre-hashed key
 npx supabase secrets set MUSHI_INIT_REPORTER_KEY="mushi_mystaticreporterkey123"

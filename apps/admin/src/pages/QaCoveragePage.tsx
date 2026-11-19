@@ -52,7 +52,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { Drawer } from '../components/Drawer'
 import { CreateStoryModal } from '../components/qa-coverage/CreateStoryModal'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
-import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp, IconQaCoverage } from '../components/icons'
+import { IconPlay, IconExternalLink, IconClock, IconChevronDown, IconChevronUp, IconQaCoverage } from '../components/icons'
 import {
   QaCoverageStatusBanner,
 } from '../components/qa-coverage/QaCoverageStatusBanner'
@@ -172,7 +172,7 @@ const ACTIVE_STATUSES = new Set(['pending', 'running'])
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
-/** @internal Exported for the nested-control test. */
+/** Exported for the nested-control test. */
 export function StoryCard({
   coverage,
   isQueued,
@@ -933,6 +933,10 @@ export function QaCoveragePage() {
   const pendingReview = (pendingData?.stories ?? []).filter((s) => !optimisticHiddenIds.has(s.id))
 
   const coverage = data?.coverage ?? []
+  // No tests at all: the page is one empty state with one "+ New story"
+  // (2026-11-18 sweep: banner, a snapshot of zeros and the empty card said
+  // it three times, with three buttons).
+  const noStories = !loading && !error && data != null && coverage.length === 0 && pendingReview.length === 0
   const visibleCoverage = coverage.filter((c) => matchesQaCoverageFilter(c, filter))
 
   // A highlighted card (stat link, banner, dashboard tile) can be far below
@@ -1002,11 +1006,13 @@ export function QaCoveragePage() {
           'Run a test on demand after a deploy to verify the fix landed',
           'Use Browserbase for CI-like confidence without managing infrastructure',
         ]}
-        helpHowToUse="Click + New story to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
+        helpHowToUse="Click + New test to add a test. Click a story card to open the run history drawer. Click Run now to trigger an immediate run."
       >
-        <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-          + New story
+        {!noStories && (
+        <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
+          + New test
         </Btn>
+        )}
       </PageHeaderBar>
 
       {!qaStatsLoading && (
@@ -1014,6 +1020,7 @@ export function QaCoveragePage() {
           slots={[
             {
               priority: POSTURE_PRIORITY.status,
+              show: !noStories,
               children: (
                 <QaCoverageStatusBanner
                   stats={qaStats}
@@ -1025,7 +1032,7 @@ export function QaCoveragePage() {
             },
             {
               priority: POSTURE_PRIORITY.heroOrSnapshot,
-              show: !qaUx.hideQaSnapshot,
+              show: !qaUx.hideQaSnapshot && !noStories,
               children: (
                 <QaCoverageSnapshotStrip
                   stats={qaStats}
@@ -1034,11 +1041,6 @@ export function QaCoveragePage() {
                   hideLinks={qaUx.hideSnapshotLinks}
                 />
               ),
-            },
-            {
-              priority: POSTURE_PRIORITY.guide,
-              show: (data?.coverage?.length ?? 0) === 0,
-              children: <QaProviderGuideCard topPriority={qaStats.topPriority} stats={qaStats} />,
             },
           ]}
         />
@@ -1100,21 +1102,25 @@ export function QaCoveragePage() {
 
       {/* Story grid */}
       {loading && (
-        <PanelSkeleton rows={4} label="Loading QA stories" inCard={false} />
+        <PanelSkeleton rows={4} label="Loading scheduled tests" inCard={false} />
       )}
 
       {!loading && !error && coverage.length === 0 && (
         <EmptyState
-          icon={<IconHealth className="h-8 w-8 text-fg-faint" />}
-          title="No QA stories yet"
-          description="Create your first automated user-story test. Start with a Firecrawl story — no setup needed."
+          title="No scheduled tests yet"
+          description="A scheduled test walks through one user flow on a timer and sends screenshots when it fails. Start with a Firecrawl story: no setup needed."
           action={
-            <Btn size="sm" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
-              + New story
+            <Btn size="sm" className="whitespace-nowrap" disabled={!canEditProject} title={canEditProject ? undefined : 'Viewers have read-only access. Ask a team owner or admin.'} onClick={() => setShowCreate(true)}>
+              + New test
             </Btn>
           }
         />
       )}
+
+      {/* The runner guide sits under the call to action, collapsed: it answers
+          "which runner?" once someone is about to add a story, and never pushes
+          "+ New story" below the fold (round-2 sweep 2026-11-18). */}
+      {!loading && !error && coverage.length === 0 && <QaProviderGuideCard />}
 
       {!loading && coverage.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter stories">

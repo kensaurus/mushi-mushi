@@ -37,7 +37,7 @@ afterEach(() => {
 
 describe('ProjectsCreatePanel at the plan app limit', () => {
   it('shows the limit message and sends "See plans" to the Plans tab', () => {
-    const message = 'Free watches 1 app, and this team has 1. Move to Builder (3 apps) to add another, or remove an app you no longer use.'
+    const message = 'Free watches 3 apps, and this team has 3. Move to Studio (10 apps) to add another, or remove an app you no longer use.'
     const panel = createElement(ProjectsCreatePanel, {
       createdProject: null,
       onDismissCreated: vi.fn(),

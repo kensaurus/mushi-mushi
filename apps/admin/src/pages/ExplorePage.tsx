@@ -35,7 +35,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useTheme } from '../lib/useTheme'
 import { SnapshotSectionHint,
   SegmentedControl,
-  Section,
   StatCard,
   StatGrid,
   FreshnessPill,
@@ -66,6 +65,7 @@ import { ExploreUnderstandEmpty } from '../components/explore/ExploreUnderstandE
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
 import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
+import { layerTileText } from '../lib/exploreCounts'
 import { ExploreAtlasGuide } from '../components/explore/ExploreAtlasGuide'
 import { PageLoadError } from '../components/PageLoadError'
 import { apiFetch } from '../lib/supabase'
@@ -180,6 +180,9 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
       : []),
   ]
 }
+
+/** The second tab row (Ask, Tour… under Understand) reads as a sub-level: no frame, indented under the first. */
+const INNER_TABS = 'w-full sm:w-auto sm:ml-2 border-transparent! bg-transparent!'
 
 export function ExplorePage() {
   const copy = usePageCopy('/explore')
@@ -500,14 +503,10 @@ export function ExplorePage() {
       EXPLORE_PRIMARY_TABS.filter((t) => !(ux.hideIndexTab && t.id === 'index')).map((t) => ({
         id: t.id,
         label: copy?.tabLabels?.[t.id] ?? t.label,
-        count:
-          t.id === 'map' && stats.indexedFiles > 0
-            ? stats.indexedFiles
-            : t.id === 'search' && stats.withEmbeddings > 0
-              ? stats.withEmbeddings
-              : undefined,
+        // No count badges: the file and chunk counts were on the banner, the tabs and the
+        // tiles at once (fresh-eyes 2026-11-18). The tiles and the banner carry them.
       })),
-    [copy?.tabLabels, stats.indexedFiles, stats.withEmbeddings, ux.hideIndexTab],
+    [copy?.tabLabels, ux.hideIndexTab],
   )
 
   const understandViewOptions = useMemo(
@@ -537,6 +536,9 @@ export function ExplorePage() {
     activeTab === 'layers' ||
     activeTab === 'diagram' ||
     activeTab === 'search'
+
+  const uiTile = layerTileText(stats.layers?.ui, stats.indexedFiles, uiLayerDetail())
+  const backendTile = layerTileText(stats.layers?.backend, stats.indexedFiles, backendLayerDetail())
 
   usePublishPageContext({
     route: '/explore',
@@ -649,15 +651,21 @@ export function ExplorePage() {
     activeTab === 'graph' || activeTab === 'layers' ? (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
+          {/* Files / Symbols sits in the Map views row above (round 3: three stacked tab bars); with
+              the tabs hidden it stays here. */}
           <div className="flex items-center gap-2">
-            <SegmentedControl
-              value={density}
-              onChange={(v) => setDensity(v as DensityMode)}
-              options={[
-                { id: 'files', label: 'Files' },
-                { id: 'symbols', label: 'Symbols' },
-              ]}
-            />
+            {ux.hideTabs && (
+              <SegmentedControl
+                size="sm"
+                ariaLabel="Show files or symbols"
+                value={density}
+                onChange={(v) => setDensity(v as DensityMode)}
+                options={[
+                  { id: 'files', label: 'Files' },
+                  { id: 'symbols', label: 'Symbols' },
+                ]}
+              />
+            )}
             {(loading || exploreQuery.isValidating) && (
               <SignalChip tone="info" className="animate-pulse font-normal">
                 Loading…
@@ -846,7 +854,7 @@ export function ExplorePage() {
             isValidating={statsValidating || exploreQuery.isValidating}
           />
         )}
-        {projectId && <CopyRepoDigestButton projectId={projectId} />}
+        {projectId && <CopyRepoDigestButton projectId={projectId} fill />}
       </PageHeaderBar>
 
       <PagePosture
@@ -860,6 +868,7 @@ export function ExplorePage() {
                 onRefresh={reloadAll}
                 refreshing={statsValidating || loading}
                 plainBanner={ux.plainBanner}
+                hideCounts={activeTab === 'overview' && !ux.hideExploreSnapshot}
               />
             ),
           },
@@ -894,29 +903,43 @@ export function ExplorePage() {
               value={activeTab}
               options={understandViewOptions}
               onChange={setActiveTab}
-              className="w-full sm:w-auto"
+              className={INNER_TABS}
             />
           )}
           {primaryTab === 'map' && isMapView(activeTab) && (
-            <SegmentedControl<ExploreMapView>
-              size="sm"
-              scrollable
-              ariaLabel="Map views"
-              value={activeTab}
-              options={mapViewOptions}
-              onChange={setActiveTab}
-              className="w-full sm:w-auto"
-            />
+            // Views and Files / Symbols on one row: two levels of control, not three bars (round 3).
+            <div className="flex flex-wrap items-center gap-2" data-testid="explore-map-controls">
+              <SegmentedControl<ExploreMapView>
+                size="sm"
+                scrollable
+                ariaLabel="Map views"
+                value={activeTab}
+                options={mapViewOptions}
+                onChange={setActiveTab}
+                className={INNER_TABS}
+              />
+              {(activeTab === 'graph' || activeTab === 'layers') && (
+                <SegmentedControl
+                  size="sm"
+                  ariaLabel="Show files or symbols"
+                  value={density}
+                  onChange={(v) => setDensity(v as DensityMode)}
+                  options={[
+                    { id: 'files', label: 'Files' },
+                    { id: 'symbols', label: 'Symbols' },
+                  ]}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
 
       {!ux.hideExploreSnapshot && activeTab === 'overview' && (
-      <Section
-        title={copy?.sections?.snapshot ?? (isWorkbenchTab ? 'At a glance' : 'EXPLORE SNAPSHOT')}
-        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
-        className={isWorkbenchTab ? 'xl:py-2.5' : undefined}
-      >
+      // One level of box: the four tiles under a plain heading, not tiles in a card; no second time
+      // beside the status's "indexed 14 hours ago" (round 3).
+      <section aria-label="Code map at a glance" data-testid="explore-snapshot">
+        <h2 className="mb-1.5 text-xs font-semibold text-fg">{copy?.sections?.snapshot ?? 'At a glance'}</h2>
         {!isWorkbenchTab && <SnapshotSectionHint text={activeTabMeta.description} />}
         <StatGrid minCol={isWorkbenchTab ? '8.5rem' : '10.5rem'}>
           <StatCard
@@ -927,20 +950,21 @@ export function ExplorePage() {
             detail={indexedFilesDetail(stats)}
             to={exploreLinks.files}
           />
+          {/* A layer of 0 says whether the index was read (none found) or not built (not checked). */}
           <StatCard
             label={copy?.statLabels?.uiLayer ?? 'UI layer'}
-            value={stats.layers?.ui ?? 0}
-            accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
+            value={uiTile.value}
+            accent={uiTile.hasCount ? 'text-fg' : 'text-fg-muted'}
             tooltip={uiLayerTooltip(stats)}
-            detail={uiLayerDetail()}
+            detail={uiTile.detail}
             to={exploreLinks.uiLayer}
           />
           <StatCard
             label={copy?.statLabels?.backend ?? 'Backend'}
-            value={stats.layers?.backend ?? 0}
-            accent={stats.layers.backend > 0 ? 'text-info' : undefined}
+            value={backendTile.value}
+            accent={backendTile.hasCount ? 'text-fg' : 'text-fg-muted'}
             tooltip={backendLayerTooltip(stats)}
-            detail={backendLayerDetail()}
+            detail={backendTile.detail}
             to={exploreLinks.backend}
           />
           <StatCard
@@ -952,7 +976,7 @@ export function ExplorePage() {
             to={exploreLinks.embedded}
           />
         </StatGrid>
-      </Section>
+      </section>
       )}
 
       {activeTab === 'overview' && (

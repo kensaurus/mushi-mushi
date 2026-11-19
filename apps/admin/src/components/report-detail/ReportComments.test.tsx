@@ -73,9 +73,9 @@ afterEach(() => {
   container.remove()
 })
 
-async function render(t: ReportCommentsThread, onPosted = vi.fn()) {
+async function render(t: ReportCommentsThread, onPosted = vi.fn(), canReachReporter = true) {
   await act(async () => {
-    root.render(createElement(ReportComments, { thread: t, onPosted }))
+    root.render(createElement(ReportComments, { thread: t, onPosted, canReachReporter }))
   })
   return { onPosted }
 }
@@ -124,6 +124,17 @@ describe('ReportComments post (item 239)', () => {
 
   it('reports an internal note as not visible to the reporter', async () => {
     const { onPosted } = await render(thread())
+    await type('internal note')
+    await act(async () => button('Post')?.click())
+    expect(onPosted).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('ReportComments with no reporter (R2 sweep 2026-11-18)', () => {
+  it('offers no reporter message on a report no person filed', async () => {
+    const { onPosted } = await render(thread(), vi.fn(), false)
+    expect(button('Message reporter')).toBeUndefined()
+    expect(container.textContent).not.toContain('Reply to reporter')
     await type('internal note')
     await act(async () => button('Post')?.click())
     expect(onPosted).toHaveBeenCalledWith(false)

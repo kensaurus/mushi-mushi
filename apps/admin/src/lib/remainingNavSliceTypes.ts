@@ -21,6 +21,8 @@ export interface MarketplaceNavSlice {
 
 export interface SettingsNavSlice {
   byokKeysFailing: number
+  /** Keys the Settings page asks you to act on (servers before 2026-11-19 omit it). */
+  byokKeysNeedingAction?: number
   byokKeysUntested: number
   /** Keys that stop working within 7 days (servers before 2026-10-25 omit it). */
   byokKeysExpiring?: number

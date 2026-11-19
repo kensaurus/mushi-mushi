@@ -19,6 +19,7 @@ const turnOn = vi.hoisted(() => vi.fn())
 vi.mock('../../lib/useTurnOnAutofix', () => ({ useTurnOnAutofix: () => ({ turnOn, saving: false }) }))
 
 import { FixesStartCard, WORST_BUG_HREF } from './FixesStartCard'
+import { FixesPipelineGuide } from './FixesPipelineGuide'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,5 +63,28 @@ describe('FixesStartCard', () => {
     render(false)
     expect(host.querySelector('[data-testid="fixes-turn-on-autofix"]')).toBeNull()
     expect(host.textContent).toContain('Connect GitHub')
+  })
+
+  // Round-2 review: a separate "How Autofix works (optional)" panel under the
+  // card repeated its "Turn on Autofix" step. It is one disclosure inside now.
+  it('carries How Autofix works as one flat disclosure inside the card', () => {
+    preflight.checks = [{ key: 'github', ready: true }, { key: 'autofix', ready: false }]
+    act(() =>
+      root.render(
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(FixesStartCard, {
+            githubConnected: true,
+            projectId: 'p1',
+            autofixGuide: createElement(FixesPipelineGuide, { flat: true, topPriority: 'healthy' }),
+          }),
+        ),
+      ),
+    )
+    const how = host.querySelector('[data-testid="fixes-start"] [data-testid="fixes-autofix-how"]')
+    expect(how?.tagName).toBe('DETAILS')
+    expect(how?.textContent).toContain('How Autofix works')
+    expect(host.textContent).not.toContain('(optional)')
   })
 })

@@ -73,7 +73,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
         </SettingsRow>
       </SettingsList>
 
-      <SettingsList title="Install the bug widget" description="The install lives on one page so the snippet, the keys and the preview never drift.">
+      <SettingsList title="Install the bug widget">
         <SettingsRow
           icon={<IconTerminal size={16} />}
           title="Install command and setup code"
@@ -111,7 +111,8 @@ function QuickTestRow({ project }: { project: { id: string; name: string } }) {
   const status: RowStatusValue = running
     ? { state: 'checking', label: 'Sending…', detail: 'Sending a test report.' }
     : !result
-      ? { state: 'checking', detail: 'Send one to see the whole path work.' }
+      ? // One "Not checked yet" pill; the button beside it does the rest (round-3 review 2026-11-19).
+        { state: 'checking', label: 'Not checked yet' }
       : result.ok
         ? { state: 'working', detail: `${result.detail} Checked ${relativeTime(result.at) ?? 'just now'}.` }
         : { state: 'attention', detail: result.detail }

@@ -51,6 +51,8 @@ interface Props {
   reportStatus?: string | null
   /** Called after Sentry issues were closed, so the page reads the report again. */
   onSentryClosed?: () => void
+  /** The page lists missing breadcrumbs on its one "Not captured" line. */
+  hideNoBreadcrumbsNote?: boolean
 }
 
 /** What closing a report's open Sentry issues does: mirrors sentryCloseKind in api/routes/report-sentry.ts. */
@@ -220,6 +222,7 @@ export function SentryContextPanel({
   reportId,
   reportStatus,
   onSentryClosed,
+  hideNoBreadcrumbsNote = false,
 }: Props) {
   const toast = useToast()
   const [closing, setClosing] = useState(false)
@@ -478,18 +481,21 @@ export function SentryContextPanel({
         </div>
       )}
 
-      {!unified.length && !hasTags && hasSentry && (
+      {!unified.length && !hasTags && hasSentry && !hideNoBreadcrumbsNote && (
         <p className="text-2xs text-fg-faint italic mt-1">
           No breadcrumbs were captured for this report — Sentry IDs only.
         </p>
       )}
 
       {issueUrl && (
-        <p className="mt-3 text-2xs text-fg-muted inline-flex items-start gap-1">
-          <IconLink className="size-3 mt-0.5" />
-          Bidirectional link: this report's id is also tagged on the
-          Sentry scope as <code className="mx-1 px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">mushi.report_id</code>,
-          so subsequent Sentry events backlink to this report.
+        // One text run beside the icon: as an inline-flex row each text node
+        // became its own squeezed column at 390px (sweep 2026-11-18).
+        <p className="mt-3 flex items-start gap-1 text-2xs text-fg-muted" data-testid="sentry-backlink-note">
+          <IconLink className="size-3 mt-0.5 shrink-0" />
+          <span className="min-w-0">
+            Bidirectional link: this report's id is also tagged on the Sentry scope as{' '}
+            <code className="rounded-sm bg-surface-overlay px-1 py-0.5 font-mono">mushi.report_id</code>, so later Sentry events link back to this report.
+          </span>
         </p>
       )}
     </Section>

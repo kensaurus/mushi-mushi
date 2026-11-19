@@ -55,6 +55,10 @@ create unique index if not exists quest_progress_one_completed
   where status = 'completed';
 
 -- ── 2. call log + helpers ───────────────────────────────────────────────────
+-- 2026-11-19: hosted has schema mushi (owner postgres, default privileges) from outside the
+-- migrations; a fresh install needs it before this table.
+create schema if not exists mushi;
+
 create table if not exists mushi.edge_function_calls (
   request_id bigint      primary key,
   fn_name    text        not null,

@@ -69,17 +69,10 @@ export function McpAccountKeyCard({ accountLabel = 'account', compact = false }:
 
   const size = compact ? ('sm' as const) : ('md' as const)
 
+  // Just the two install buttons: the section around it names and explains the
+  // account key once (round-3 review 2026-11-19: it was explained three times).
   return (
-    <div className="rounded-lg border border-edge-subtle p-4 space-y-3">
-      <div>
-        <p className="text-sm font-medium text-fg">Account key (all projects)</p>
-        <p className="text-xs text-fg-muted mt-0.5">
-          One server entry that covers every project you can open. Use this when you work across multiple apps.
-          Run{' '}
-          <code className="font-mono bg-surface-raised text-fg px-1 rounded">get_account_overview</code>
-          {' '}in the MCP chat to see all projects at a glance.
-        </p>
-      </div>
+    <div>
       <div className="flex flex-wrap items-center gap-2">
         <Tooltip content="Creates one read-only account key (no MUSHI_PROJECT_ID) that reaches every project you can open" side="top">
           <Btn

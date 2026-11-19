@@ -97,7 +97,7 @@ function lineFor(p: DigestProjectLine): { text: string; weight: number } | null 
   if (p.publishedReleases24h > 0) parts.push(`${p.publishedReleases24h} release${p.publishedReleases24h === 1 ? '' : 's'} shipped`)
   if (p.draftReleases > 0) parts.push(`${p.draftReleases} release${p.draftReleases === 1 ? '' : 's'} in draft`)
   if (spendJumped(p.spend)) {
-    parts.push(`Mushi AI spend $${p.spend.last24hUsd.toFixed(2)} today vs about $${p.spend.avgPrior7dUsd.toFixed(2)} a day before`)
+    parts.push(`Mushi Mushi AI spend $${p.spend.last24hUsd.toFixed(2)} today vs about $${p.spend.avgPrior7dUsd.toFixed(2)} a day before`)
     weight += 5
   }
   if (parts.length === 0) return null
@@ -129,7 +129,7 @@ export function composeDigest(data: DigestData, consoleUrl: string): ComposedDig
   // A read cut short is said out loud: its counts are at least what is shown, never exact.
   if (data.truncated.length > 0) lines.push(`Some numbers are lower bounds: there were more ${data.truncated.join(', ')} than the digest reads.`)
   const org = data.organizationName ?? 'your apps'
-  const title = `Mushi daily digest for ${org}`
+  const title = `Mushi Mushi daily digest for ${org}`
   const body = lines.length ? lines.map((l) => `• ${l}`).join('\n') : 'Nothing new across your apps today.'
   return {
     title,

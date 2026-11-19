@@ -29,7 +29,7 @@ export interface ProjectNextStep {
 
 export type ProjectVerdictTone = 'ok' | 'attention' | 'inactive' | 'sample'
 
-export interface ProjectPlainStatus {
+interface ProjectPlainStatus {
   tone: ProjectVerdictTone
   /** One plain-English sentence: how this project is doing. */
   verdict: string
@@ -115,7 +115,7 @@ export function deriveProjectNextSteps(p: Project): ProjectNextStep[] {
   return steps.slice(0, MAX_STEPS)
 }
 
-/** One-sentence layman verdict + the steps, for a project card. */
+/** One-sentence layman verdict + the steps, for a project card. @internal Exported for tests. */
 export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
   // A demo has no repo or real users on purpose: never "Needs you" (2026-11-16, the owner: "what is it about?").
   if (isPublicDemo(p)) {
@@ -154,4 +154,44 @@ export function deriveProjectPlainStatus(p: Project): ProjectPlainStatus {
     verdict: `${p.name} is healthy — bugs flow in, nothing is waiting on you.`,
     steps,
   }
+}
+
+/** One row of "What needs you, per project": the verdict, the stuck count and the SDK drift. */
+export interface ProjectNeedsRow {
+  project: Project
+  status: ProjectPlainStatus
+  /** Items stuck in the loop's waiting stage; null when the app sends nothing yet (unknown, never 0). */
+  stuck: number | null
+}
+
+/**
+ * Worst first (fresh-eyes review 2026-11-18: lets-talk with 9 stuck sat above solo-boss-cloud
+ * with 129): the most stuck first, then the most steps, then by name; the demo app last.
+ */
+export function rankProjectNeeds(projects: readonly Project[]): ProjectNeedsRow[] {
+  return projects
+    .map((project): ProjectNeedsRow => {
+      const status = deriveProjectPlainStatus(project)
+      const connected = status.tone !== 'inactive' && status.tone !== 'sample'
+      const stuck = connected ? (project.pdca_bottleneck_label ? Math.max(0, project.pdca_bottleneck_count ?? 0) : 0) : null
+      return { project, status, stuck }
+    })
+    .sort(
+      (a, b) =>
+        Number(a.status.tone === 'sample') - Number(b.status.tone === 'sample') ||
+        (b.stuck ?? 0) - (a.stuck ?? 0) ||
+        b.status.steps.length - a.status.steps.length ||
+        a.project.name.localeCompare(b.project.name),
+    )
+}
+
+/**
+ * How many apps have reports stuck in the loop, and the worst one. The overview banner reads
+ * this, so it can never say "All apps ingesting" in green above a table of 129 stuck reports
+ * (2026-11-18 round 2). Reads the same rows as the table, so the two always agree.
+ */
+export function stuckAppsSummary(rows: readonly ProjectNeedsRow[]): { apps: number; reports: number; worst: ProjectNeedsRow | null } {
+  const stuck = rows.filter((r) => (r.stuck ?? 0) > 0)
+  const worst = stuck.reduce<ProjectNeedsRow | null>((w, r) => (!w || (r.stuck ?? 0) > (w.stuck ?? 0) ? r : w), null)
+  return { apps: stuck.length, reports: stuck.reduce((n, r) => n + (r.stuck ?? 0), 0), worst }
 }

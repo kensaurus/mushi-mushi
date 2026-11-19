@@ -37,6 +37,10 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { useNow } from '../lib/useNow'
 import { useKensaurusOps } from '../lib/useKensaurusOps'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 import type { AiRoute, OpsAction, ProviderAccount } from '../lib/kensaurusOpsTypes'
 import {
   PROVIDERS_TABS,
@@ -54,6 +58,7 @@ import {
   type FeatureChain,
   type OptimisticPatch,
   type ProvidersTab,
+  makeAppNamer,
 } from '../lib/providersView'
 
 export function ProvidersPage() {
@@ -82,6 +87,11 @@ export function ProvidersPage() {
   )
 
   const ops = useKensaurusOps()
+  // Never an endless "Loading providers…": 10 s, then "not checked" with Retry.
+  const firstRead = useReadTimedOut(ops.loading && !ops.data && !ops.error)
+  // The ops registry names apps by repo slug; the console names them as every other page does.
+  const setup = useSetupStatus(useActiveProjectId())
+  const appName = useMemo(() => makeAppNamer(setup.data?.projects ?? []), [setup.data?.projects])
   const toast = useToast()
   const now = useNow(30_000)
   const [snapshot, addPatch] = useOptimistic(ops.data?.snapshot ?? null, applyOptimistic)
@@ -217,7 +227,17 @@ export function ProvidersPage() {
         </Btn>
       </PageHeaderBar>
 
-      {ops.loading && !snapshot && <Loading text="Loading providers…" />}
+      {ops.loading && !snapshot && !firstRead.timedOut && <Loading text="Loading providers…" />}
+      {ops.loading && !snapshot && firstRead.timedOut && (
+        <CiNotChecked
+          what="Providers"
+          testId="providers-not-checked"
+          onRetry={() => {
+            firstRead.restart()
+            void ops.load(true)
+          }}
+        />
+      )}
       {notConfigured && (
         <EmptyState
           title="Not connected"
@@ -233,9 +253,9 @@ export function ProvidersPage() {
           <ProvidersAlerts alerts={alerts} onOpen={openTab} />
           <TabbedSubNav ariaLabel="Providers views" tabs={tabs} />
           {tab === 'providers' && (
-            <ProvidersTable providers={providers} incidents={incidents} now={now} pending={pending} onToggle={onProviderToggle} onEditThresholds={setEditing} />
+            <ProvidersTable providers={providers} incidents={incidents} now={now} pending={pending} onToggle={onProviderToggle} onEditThresholds={setEditing} appName={appName} />
           )}
-          {tab === 'spend' && <SpendPanel snapshot={snapshot} />}
+          {tab === 'spend' && <SpendPanel snapshot={snapshot} appName={appName} />}
           {tab === 'routes' && (
             <RoutesPanel
               routes={snapshot.routes}
@@ -247,6 +267,7 @@ export function ProvidersPage() {
               onDelete={onDelete}
               onSwitchModel={onSwitchModel}
               onAdd={onAdd}
+              appName={appName}
             />
           )}
           {tab === 'history' && <HistoryPanel rows={history} now={now} />}

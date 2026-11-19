@@ -57,7 +57,7 @@ To let a client see only their own app, put that app in **its own team**:
    **Team → Team members**. Invitations need Studio; a team on Free or Builder
    has one seat, yours.
 
-A new team starts on the Free plan (one app, 100 diagnoses a month). A plan is
+A new team starts on the Free plan (three apps, 300 diagnoses a month). A plan is
 bought per team (see [What it costs](#what-it-costs)), so a separate team for a
 client is a separate plan: it costs more than keeping their app in your main
 team, where one plan covers every app.
@@ -82,7 +82,7 @@ A few minutes per app. A test report gets its diagnosis in about 10 seconds.
 
 | Plan | Apps in a team | People | Diagnoses a month | Price |
 | --- | --- | --- | --- | --- |
-| Free | 1 | 1 | 100 | $0 |
+| Free | 3 | 1 | 300 | $0 |
 | Builder | 3 | 1 | 1,000 | $29 a month, or $290 a year |
 | Studio | 10 | 5 | 3,000 | $79 a month, or $790 a year |
 
@@ -131,7 +131,7 @@ Details on [pricing](/pricing).
   screenshot and code snippets. Mushi Mushi does not train models on reports or
   code. The full list of companies is in the
   [Privacy Policy, section 5](/legal/privacy#5-sub-processors).
-- **How long it is kept.** Reports are deleted after 14 days on Free, 90 on
+- **How long it is kept.** Reports are deleted after 30 days on Free, 90 on
   Builder and 180 on Studio. You can set a shorter time per app under
   **Team → Compliance**.
 - **Who is responsible.** For the reports from a client's app, you or your

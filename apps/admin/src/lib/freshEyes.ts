@@ -169,7 +169,31 @@ export function runnerMessage(r: FreshEyesRunner | null | undefined, now: number
     case 'offline':
       return { tone: 'warn', text: `${host} is offline${r.lastSeenAt ? ` (last seen ${agoText(r.lastSeenAt, now)})` : ''}. Turn it on, or start the worker on it, to run the test.`, canRun: false, setup: 'workers' }
     case 'none':
-      return { tone: 'warn', text: 'The test runs on your computer, where its browser and AI run. Set up Mushi Mushi on your computer once, then press Run now.', canRun: false, setup: 'install' }
+      // Never set up is a first step, not a warning (round-2 sweep 2026-11-18).
+      return { tone: 'info', text: 'The test runs on your computer, where its browser and AI run. Install the Mushi Mushi worker there once:', canRun: false, setup: 'install' }
+  }
+}
+
+/**
+ * Step 1's state as a mark, so "Finish step 1 first." points at something that says done or
+ * not done (2026-11-19: the step had no mark while Run now was greyed out for it).
+ */
+export function runnerMark(r: FreshEyesRunner | null | undefined): { status: 'passed' | 'running' | 'waiting' | 'idle'; label: string } {
+  const host = r?.hostname ? r.hostname : 'Your computer'
+  if (r == null) return { status: 'idle', label: 'Not checked' }
+  switch (r.state) {
+    case 'ready':
+      return { status: 'passed', label: `${host} online` }
+    case 'busy':
+      return { status: 'running', label: `${host} busy` }
+    case 'paused':
+      return { status: 'waiting', label: 'Lanes paused' }
+    case 'outdated':
+      return { status: 'waiting', label: 'Worker out of date' }
+    case 'offline':
+      return { status: 'waiting', label: `${host} offline` }
+    case 'none':
+      return { status: 'idle', label: 'No worker online' }
   }
 }
 
@@ -179,6 +203,24 @@ function agoText(iso: string, now: number): string {
   if (min < 60) return `${min} min ago`
   const h = Math.round(min / 60)
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`
+}
+
+/**
+ * Why Run now is off, in one short line, or null when it can run (2026-11-18
+ * sweep: the button was disabled with no reason). The computer comes first:
+ * without one, fixing the fields would not help.
+ */
+export function runNowBlocker(input: { runnerCanRun: boolean; runnerSetup: 'install' | 'workers' | 'update' | null; url: string; goal: string }): string | null {
+  // The computer step is drawn as step 1 above the form and says what to do;
+  // the button only points at it, so the instruction is not said twice
+  // (round-2 sweep 2026-11-18).
+  if (!input.runnerCanRun) return 'Finish step 1 first.'
+  if (!input.url.trim()) return 'Add a start page.'
+  if (!isStartUrl(input.url)) return 'Use a start page that starts with https://'
+  const goal = input.goal.trim()
+  if (!goal) return 'Say what a new visitor came to do.'
+  if (goal.length > 300) return 'Keep the goal under 300 characters.'
+  return null
 }
 
 /** True for an http(s) address the server will take as a start page. */

@@ -8,7 +8,9 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, Card, PanelHeader, RelativeTime, Skeleton } from '../ui'
-import { LIGHT_DOT, LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
+import { LIGHT_WORD, type HealthSignal, type HomeSection } from '../../lib/projectHome'
+import { StatusGlyph, TONE_INK } from '../signal/StatusGlyph'
+import { healthDisplayTone } from '../../lib/homeView'
 import { HomeSectionBody } from './HomeSectionBody'
 import { homeConnectHref } from '../../lib/homeConnectHref'
 
@@ -46,12 +48,24 @@ const PLAIN_CONNECT: Record<string, string> = {
   'Set up the SDK': 'Add the report button',
 }
 
+/**
+ * @internal Exported for tests.
+ * The detail line only when it adds something the mark does not: a problem
+ * to read. "Passing / 4 checks green on the latest commit" said one state
+ * twice (fresh-eyes sweep 2026-11-18); a good or unconnected light keeps the
+ * mark and the number, with the sentence as a tooltip.
+ */
+export function showHealthDetail(s: Pick<HealthSignal, 'light' | 'detail'>): boolean {
+  return !!s.detail && (s.light === 'bad' || s.light === 'warn')
+}
+
 function HealthTile({ signal: server }: { signal: HealthSignal }) {
   const s: HealthSignal = {
     ...server,
     label: PLAIN_LABEL[server.id] ?? server.label,
     ...(server.connect ? { connect: { ...server.connect, label: PLAIN_CONNECT[server.connect.label] ?? server.connect.label } } : {}),
   }
+  const tone = healthDisplayTone(s)
   return (
     <Card className="flex h-full min-w-0 flex-col gap-1 p-3" data-testid={`home-health-${s.id}`}>
       <PanelHeader
@@ -61,17 +75,20 @@ function HealthTile({ signal: server }: { signal: HealthSignal }) {
             {s.label}
           </Link>
         }
-        action={
-          <span className="inline-flex items-center gap-1.5 text-2xs text-fg-secondary">
-            <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${LIGHT_DOT[s.light]}`} />
-            <span>{s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]}</span>
-          </span>
-        }
       />
-      <Link to={s.href} className="text-base font-semibold leading-tight text-fg hover:underline">
-        {s.headline}
+      {/* The state is the value's mark and colour: a "Good" pill beside
+          "Passing" said it twice (round-2 sweep 2026-11-18). The word stays
+          for screen readers on the mark. */}
+      <Link
+        to={s.href}
+        className={`inline-flex min-w-0 items-center gap-1.5 text-base font-semibold leading-tight hover:underline ${TONE_INK[tone]}`}
+        title={s.detail ?? undefined}
+        data-tone={tone}
+      >
+        <StatusGlyph tone={tone} label={s.status === 'error' ? 'Unknown' : LIGHT_WORD[s.light]} />
+        <span className="min-w-0">{s.headline}</span>
       </Link>
-      {s.detail && <p className="line-clamp-2 text-xs leading-snug text-fg-muted">{s.detail}</p>}
+      {showHealthDetail(s) && <p className="line-clamp-2 text-xs leading-snug text-fg-muted">{s.detail}</p>}
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-1">
         {s.at ? (
           <span className="text-2xs text-fg-faint">

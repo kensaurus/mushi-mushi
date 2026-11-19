@@ -19,21 +19,18 @@ import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { ReporterNotificationsToggle } from '../components/notifications/ReporterNotificationsToggle'
 import {
   Section,
-  Card,
   Badge,
   Btn,
   EmptyState,
   FilterSelect,
-  SelectField,
   LogBlock,
+  RelativeTime,
   SegmentedControl,
   FreshnessPill,
 } from '../components/ui'
-import {
-  ActionPill,
-  SignalChip,
-  InlineProof,
-} from '../components/report-detail/ReportSurface'
+import { ActionPill } from '../components/report-detail/ReportSurface'
+import { StatusPill } from '../components/signal/StatusMark'
+import { reporterLabel, reporterSetupChecks, sentRowTitle } from '../lib/notificationsView'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
@@ -55,7 +52,6 @@ import {
   type ReporterNotification,
 } from '../components/notifications/types'
 import { CHIP_TONE, HEADER_BADGE_TONE } from '../lib/chipTone'
-import { shortReporterKey } from '../lib/reporterKey'
 import { PageLoadError } from '../components/PageLoadError'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
@@ -327,42 +323,15 @@ export function NotificationsPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
           Refresh
         </Btn>
-        {activeTab === 'inbox' && (
-              <>
-                <SelectField
-                  label="Show"
-                  helpId="notifications.show_filter"
-                  value={filter}
-                  onChange={(e) => updateParam('show', e.currentTarget.value)}
-                  className="w-32"
-                >
-                  <option value="all">All</option>
-                  <option value="unread">Unread{unreadCount > 0 ? ` (${unreadCount})` : ''}</option>
-                </SelectField>
-                <FilterSelect
-                  label="Type"
-                  value={type}
-                  options={TYPE_OPTIONS}
-                  onChange={(e) => updateParam('type', e.currentTarget.value)}
-                />
-                <ConfigHelp helpId="notifications.type_filter" />
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={markAllRead}
-                  disabled={bulking || unreadCount === 0}
-                  loading={bulking}
-                >
-                  {`Mark all read${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
-                </Btn>
-              </>
-            )}
       </PageHeaderBar>
 
       <PagePosture
         slots={[
           {
+            // One status row: the summary below carries the count and the action.
+            // The banner only speaks when that row is hidden (quick mode) or there is no app.
             priority: POSTURE_PRIORITY.status,
+            show: !stats.hasAnyProject || ux.hideNotificationsSnapshot,
             children: (
               <NotificationsStatusBanner
                 stats={stats}
@@ -380,16 +349,14 @@ export function NotificationsPage() {
                 fetchedAt={fetchedAt}
                 isValidating={validating}
                 statLabels={copy?.statLabels}
+                onTab={setTab}
               />
             ),
           },
         ]}
       />
 
-      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
-        <ReporterUpdateFunnel funnel={stats.funnel} />
-      ) : null}
-
+      {/* Tabs above the summary: they sat under the funnel, so the page read as content first, then its own tabs. */}
       {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
@@ -401,23 +368,50 @@ export function NotificationsPage() {
       />
       )}
 
+      {stats.notificationsEnabled && stats.funnel && stats.funnel.told > 0 && activeTab === 'overview' ? (
+        <ReporterUpdateFunnel funnel={stats.funnel} totalUpdates={stats.total} unopenedShownAbove={stats.unread > 0} />
+      ) : null}
+
       {activeTab === 'overview' && stats.projectId ? (
         <NotificationsReadout stats={stats} fetchedAt={fetchedAt} isValidating={validating} />
       ) : null}
 
-      {activeTab === 'overview' && (
-        <p className="text-xs text-fg-muted">
-          This page is about messages your bug reporters see in the widget. Team alerts in Slack,
-          Discord or Teams are set under{' '}
-          <Link to="/integrations/config#alerts" className="text-accent-foreground hover:text-accent underline underline-offset-2">
-            Alerts on Integrations
-          </Link>
-          .
-        </p>
-      )}
-
       {activeTab === 'inbox' && (
-        <Section title="Reporter inbox">
+        // Filters ride in the inbox card's header at its size: in the page header they added two
+        // rows of larger chrome above the status at 390 (2026-11-19). One row of same-height
+        // filters, each named inside its select; the unread count is the status row's number.
+        <Section
+          title="Reporter inbox"
+          action={
+            <div className="flex flex-wrap items-center gap-1.5" data-testid="notifications-inbox-filters">
+              <FilterSelect
+                id="filter-show"
+                label="updates"
+                value={filter === 'unread' ? 'unread' : ''}
+                options={['unread']}
+                optionLabel={() => 'Unread only'}
+                onChange={(e) => updateParam('show', e.currentTarget.value)}
+              />
+              <FilterSelect
+                id="filter-type"
+                label="types"
+                value={type}
+                options={TYPE_OPTIONS}
+                onChange={(e) => updateParam('type', e.currentTarget.value)}
+              />
+              <ConfigHelp helpId="notifications.type_filter" />
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={markAllRead}
+                disabled={bulking || unreadCount === 0}
+                loading={bulking}
+              >
+                Mark all read
+              </Btn>
+            </div>
+          }
+        >
           <div data-dav-anchor="notifications:decide">
             {notifications.length === 0 ? (
               filter === 'unread' || type ? (
@@ -458,34 +452,35 @@ export function NotificationsPage() {
                 />
               )
             ) : (
-              <div className="space-y-1">
+              // Rows in the section's card, not a card per row (card in card).
+              <ul className="divide-y divide-edge-subtle" data-testid="notifications-sent-rows">
                 {notifications.map((n) => {
                   const isExpanded = expanded === n.id
                   const hasPayload = n.payload && Object.keys(n.payload).length > 0
                   return (
-                    <Card key={n.id} className={`p-3 ${n.read_at ? 'opacity-70' : ''}`}>
-                      <div className="flex items-start gap-3">
-                        <Badge
-                          className={`${TYPE_BADGE[n.notification_type] ?? 'bg-surface-overlay text-fg-muted border border-edge-subtle'} shrink-0`}
-                        >
-                          {n.notification_type}
-                        </Badge>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs text-fg">{n.message ?? '—'}</p>
-                          <InlineProof className="mt-1 flex flex-wrap gap-1 font-mono text-3xs border-0 bg-transparent px-0 py-0">
-                            <SignalChip tone="neutral">{new Date(n.created_at).toLocaleString()}</SignalChip>
-                            <SignalChip tone="neutral">
-                              {n.read_at
-                                ? `read ${new Date(n.read_at).toLocaleString()}`
-                                : 'unread'}
-                            </SignalChip>
-                            <SignalChip tone="neutral">tok:{shortReporterKey(n.reporter_token_hash)}…</SignalChip>
+                    <li key={n.id} className={`py-2.5 ${n.read_at ? 'opacity-70' : ''}`} data-testid="notifications-sent-row">
+                      {/* Actions wrap under the text on a phone, so the meta line keeps its width
+                          (it stacked one clipped chip per line at 390: "11… / un… / to…"). */}
+                      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                        {/* No "classified" chip: the title already says "Bug diagnosed" (2026-11-19). */}
+                        <div className="min-w-0 flex-1 basis-48">
+                          <p className="text-xs font-medium text-fg">{sentRowTitle(n)}</p>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary">
+                            <span className="whitespace-nowrap">
+                              <RelativeTime value={n.created_at} />
+                            </span>
+                            {n.read_at ? (
+                              <span className="whitespace-nowrap">
+                                opened <RelativeTime value={n.read_at} />
+                              </span>
+                            ) : null}
+                            <span className="whitespace-nowrap" title={n.reporter_token_hash}>reporter · {reporterLabel(n.reporter_token_hash)}</span>
                             {n.report_id ? (
                               <ActionPill to={`/reports/${n.report_id}`} tone="brand">
-                                report:{n.report_id.slice(0, 8)}…
+                                report {n.report_id.slice(0, 8)}
                               </ActionPill>
                             ) : null}
-                          </InlineProof>
+                          </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           {hasPayload && (
@@ -515,10 +510,10 @@ export function NotificationsPage() {
                           />
                         </div>
                       )}
-                    </Card>
+                    </li>
                   )
                 })}
-              </div>
+              </ul>
             )}
           </div>
         </Section>
@@ -536,37 +531,35 @@ export function NotificationsPage() {
       {activeTab === 'setup' && (
         <Section title="Pipeline checklist">
           <div className="space-y-3" data-dav-anchor="notifications:verify">
-            <Card className="p-4 space-y-3">
+            <div className="space-y-3">
               <h3 className="text-sm font-semibold text-fg">Reporter loop prerequisites</h3>
               <ReporterNotificationsToggle enabled={stats.notificationsEnabled} onChanged={reloadAll} />
-              <ul className="space-y-2 text-xs text-fg-muted">
-                <li className="flex items-start gap-2">
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-                  <span>
-                    SDK must poll <span className="font-mono text-fg-secondary">GET /v1/notifications</span> with the
-                    reporter token after ingest
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-                  <span>
-                    Team alerts (Slack, Discord, Teams) are set under{' '}
-                    <Link to="/integrations/config#alerts" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
-                      Alerts on Integrations
-                    </Link>{' '}
-                    — separate from reporter widget messages
-                  </span>
-                </li>
+              {/* Each prerequisite carries its state: met, off, or not seen yet (hollow). */}
+              <ul className="space-y-2 text-xs text-fg-secondary" data-testid="notifications-setup-checks">
+                {reporterSetupChecks(stats).map((check) => (
+                  <li key={check.id} className="flex items-start gap-2" data-status={check.status}>
+                    <StatusPill status={check.status} label={check.word} className="mt-px" />
+                    <span className="min-w-0">{check.text}</span>
+                  </li>
+                ))}
               </ul>
+              <p className="text-2xs text-fg-secondary">
+                Team alerts (Slack, Discord, Teams) are separate:{' '}
+                <Link to="/integrations/config#alerts" className="text-accent-foreground hover:text-accent underline underline-offset-2 motion-safe:transition-opacity">
+                  Alerts on Integrations
+                </Link>
+                .
+              </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Btn variant="ghost" size="sm" onClick={() => navigate('/reports')}>
                   View bug queue
                 </Btn>
               </div>
-            </Card>
+            </div>
 
-            {Object.keys(stats.byType).length > 0 && (
-              <Card className="p-4 space-y-2">
+            {/* One type is just the total again ("classified: 2"); the breakdown shows from two. */}
+            {Object.keys(stats.byType).length > 1 && (
+              <div className="space-y-2 border-t border-edge-subtle pt-3">
                 <h3 className="text-sm font-semibold text-fg">Messages by type</h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(stats.byType).map(([t, count]) => (
@@ -575,7 +568,7 @@ export function NotificationsPage() {
                     </Badge>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
           </div>
         </Section>

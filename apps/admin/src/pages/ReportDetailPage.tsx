@@ -34,7 +34,8 @@ import {
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { EditorialErrorState } from '../components/EditorialErrorState'
-import { statusLabel, severityLabel, categoryLabel, categoryBadge } from '../lib/tokens'
+import { statusLabel, severityLabel, categoryLabel } from '../lib/tokens'
+import { CATEGORY_NEUTRAL } from '../components/report-detail/categoryTone'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { useDispatchTargetRepo } from '../lib/useDispatchTargetRepo'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -82,7 +83,7 @@ import { ReportComments } from '../components/report-detail/ReportComments'
 import { KnownIssuesSection } from '../components/report-detail/KnownIssuesSection'
 import { ReporterViewPanel } from '../components/report-detail/ReporterViewPanel'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
-import { screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
+import { CAPTURE_LABEL, missingCaptures, screenshotEmptyText } from '../components/report-detail/reportCaptureHints'
 import { UnifiedTimelineCard } from '../components/report-detail/UnifiedTimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { RegressionChain } from '../components/report-detail/RegressionChain'
@@ -114,6 +115,7 @@ import { PageLoadError } from '../components/PageLoadError'
 import { humanizeApiError } from '../lib/humanizeApiError'
 import { reportHasCodeLocation } from '../lib/reportCodeLocation'
 import { useConfirmedDispatch } from '../components/report-detail/useConfirmedDispatch'
+import { isReporterKeyHash, reportHasReporter } from '../components/report-detail/reporterPresence'
 
 // Same shape the API accepts (api/ids.ts isUuid): RFC 4122, version 1-5.
 const REPORT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -543,6 +545,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
     dispatchState.status !== 'completed'
 
   const reporterShort = report.reporter_token_hash ? shortReporterKey(report.reporter_token_hash) : 'unknown'
+  // Evidence panels with nothing in them collapse into one "Not captured" line.
+  const missing = missingCaptures(report)
   // Pipeline internals (model names, latency, stored field names, reporter
   // ids) are for the team running Mushi Mushi; a builder gets plain words.
   const entitlements = useEntitlements()
@@ -564,7 +568,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
   return (
     <div>
       <PageHeaderBar
-        title="Report detail"
+        title="Bug report"
         contextChip={null}
 
         helpTitle="About this report"
@@ -688,6 +692,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         <ScreenshotHero url={report.screenshot_url} className="mb-3" />
       )}
 
+      {recommendation.repeatsTriageBar ? null : (
       <RecommendedAction
         title={recommendation.title}
         description={recommendation.description}
@@ -696,6 +701,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         meta={recommendation.meta}
         actions={recommendation.actions}
       />
+      )}
 
       <ReportTriageBar
         report={report}
@@ -728,7 +734,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
         hasFixHistory={(report.fix_attempts?.length ?? 0) > 0}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {/* items-start: each card is as tall as its content; stretched to the
+          row's tallest card, the LLM classification and timeline cards were
+          mostly empty boxes (R2 sweep 2026-11-18). */}
+      <div className="grid grid-cols-1 items-start lg:grid-cols-2 gap-3">
         <Section id="report-user-report" title="User report" icon={<IconUser />}>
           {report.user_category && (
             <div className="mb-2.5">
@@ -737,7 +746,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
                 <InfoHint content="What the reporter said the issue was about, before LLM classification." />
               </div>
               <div className="mt-1">
-                <Badge className={categoryBadge(report.user_category)}>
+                <Badge className={CATEGORY_NEUTRAL}>
                   {categoryLabel(report.user_category)}
                 </Badge>
               </div>
@@ -757,11 +766,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
               tooltip="What the reporter said they were trying to do when the issue happened."
             />
           )}
-          {!report.screenshot_url && (
-            <p className="text-2xs text-fg-faint italic mt-2">
-              {screenshotEmptyText(report)}
-            </p>
-          )}
+          {/* A missing screenshot is on the one "Not captured" line below. */}
         </Section>
 
         <Section id="report-classification" title="LLM classification" icon={<IconIntelligence />}>
@@ -802,6 +807,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           </Section>
         )}
 
+        {!missing.includes('vitals') && (
         <Section id="report-performance" title="Performance metrics" icon={<IconGauge />}>
           {/* Phase 4b: pass anomalies for σ-above-baseline provenance badges */}
           <PerformanceMetrics
@@ -809,7 +815,9 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             anomalies={report.anomalies}
           />
         </Section>
+        )}
 
+        {!missing.includes('console') && (
         <Section id="report-console-logs" title="Console logs" icon={<IconTerminal />}>
           <ConsoleLogs logs={report.console_logs} />
           {/* Phase 4d: stack-frame panel with GitHub deeplinks when a fix commit exists */}
@@ -819,7 +827,9 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             commitSha={report.fix_attempts?.[0]?.commit_sha}
           />
         </Section>
+        )}
 
+        {!missing.includes('network') && (
         <Section id="report-network" title="Network requests" icon={<IconNetwork />}>
           <NetworkLogs logs={report.network_logs} projectId={report.project_id} />
           {/* Phase 4a: trace waterfall — client requests + backend spans in causal order */}
@@ -833,15 +843,34 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
             </div>
           )}
         </Section>
+        )}
 
         {/* Clock and story, not the console glyph: these lists were indistinguishable (NN/g #6). */}
         <Section title="Unified timeline" icon={<IconClock />}>
           <UnifiedTimelineCard reportId={report.id} />
         </Section>
 
+        {!missing.includes('repro') && (
         <Section title="Repro timeline" icon={<IconStory />}>
           <TimelineCard report={report} />
         </Section>
+        )}
+
+        {missing.length > 0 && (
+          <p
+            className="flex items-center gap-2 text-xs text-fg-muted lg:col-span-2"
+            data-testid="report-not-captured"
+            title={[
+              'The SDK records these while the widget session is open. Imports from Sentry and alarms carry none.',
+              missing.includes('screenshot') ? screenshotEmptyText(report) : null,
+            ].filter(Boolean).join(' ')}
+          >
+            <span aria-hidden className="ci-nodata h-3 w-6 shrink-0 rounded-sm border border-edge-subtle" />
+            <span>
+              <span className="font-medium text-fg-secondary">Not captured:</span> {missing.map((k) => CAPTURE_LABEL[k]).join(' · ')}
+            </span>
+          </p>
+        )}
       </div>
 
       <div className="mt-3">
@@ -859,6 +888,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
           reportId={report.id}
           reportStatus={report.status}
           onSentryClosed={onReload}
+          hideNoBreadcrumbsNote
         />
       </div>
 
@@ -874,32 +904,43 @@ function ReportDetailView({ report, onTriage, saving, savedAt, onReload }: Repor
       <div className="mt-3">
         <ReportComments
           thread={commentThread}
+          canReachReporter={reportHasReporter(report)}
           onPosted={(visibleToReporter) => {
             if (visibleToReporter) setReporterViewVersion((v) => v + 1)
           }}
         />
       </div>
 
-      <div className="mt-3">
-        <ReporterViewPanel reportId={report.id} version={reporterViewVersion} />
-      </div>
+      {/* A Sentry import, an alarm or a check has no reporter: "You reported
+          this" and "Ask reporter" on one was false (sweep 2026-11-18). */}
+      {reportHasReporter(report) ? (
+        <div className="mt-3">
+          <ReporterViewPanel reportId={report.id} version={reporterViewVersion} />
+        </div>
+      ) : null}
 
       {/* Identifiers live at the bottom: UUIDs are reference material for
           support threads, not triage information — leading with them pushed
           the plain-English diagnosis below the fold (UX-journeys audit F3). */}
-      <Section title="Identifiers" className="mb-3">
+      <Section title="Identifiers" className="mt-3 mb-3">
         <IdField label="Report ID" value={report.id} full tone="id" />
         <IdField label="Project ID" value={report.project_id} full tone="id" />
         {report.session_id ? (
           <IdField label="Session ID" value={report.session_id} full />
         ) : null}
         {report.reporter_token_hash ? (
-          <IdField
-            label="Reporter token hash"
-            value={report.reporter_token_hash}
-            full
-            tooltip="Opaque hash linking this report to a reporter identity — not PII."
-          />
+          isReporterKeyHash(report.reporter_token_hash) ? (
+            <IdField
+              label="Reporter token hash"
+              value={report.reporter_token_hash}
+              full
+              tooltip="Opaque hash linking this report to a reporter identity — not PII."
+            />
+          ) : (
+            // "sentry-webhook" is the intake that filed it, not a hash (sweep 2026-11-18).
+            // Whole name, with its copy button: "sentry-webho…" was cut at 12 characters (round-3 sweep 2026-11-19).
+            <IdField label="Filed by" value={report.reporter_token_hash} prefixLength={64} tooltip="The intake that filed this report. No person's key." />
+          )
         ) : null}
       </Section>
 

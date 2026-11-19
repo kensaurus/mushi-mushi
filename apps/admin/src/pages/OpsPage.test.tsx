@@ -137,7 +137,10 @@ describe('OpsPage', () => {
     expect(host.querySelector('h1')?.textContent).toBe('Ops')
     const today = host.querySelector('[data-testid="ops-today"]')!.textContent!
     expect(today).toContain('¥12,000')
-    expect(today).toContain('■ 1 need a look')
+    // The deploy failure was fixed by the next deploy (a resolve in its thread): nothing is open,
+    // whatever the server's 7-day alert tally says (openAlerts: 1 here).
+    expect(today).toContain('nothing open')
+    expect(host.querySelector('[data-testid="ops-needs-look"]')).toBeNull()
     const rows = [...host.querySelectorAll('[data-testid^="ops-coverage-row-"]')].map((r) => r.getAttribute('data-testid'))
     expect(rows).toEqual(['ops-coverage-row-p2', 'ops-coverage-row-p1'])
     expect(host.querySelector('[data-testid="ops-coverage-row-p2"]')!.textContent).toContain('How to connect')
@@ -149,11 +152,13 @@ describe('OpsPage', () => {
     const feedEl = host.querySelector('[data-testid="ops-feed"]')!
     const parent = feedEl.querySelector('[data-testid="ops-event-fail"]')!.closest('li')!
     expect(parent.querySelector('[data-testid="ops-event-fix"]')).not.toBeNull()
-    expect(host.querySelector('[data-testid="ops-slack-fail"]')!.textContent).toContain('✓ In Slack')
+    // "✓ In Slack" is the normal case: not drawn on every row. A failed post is.
+    expect(host.querySelector('[data-testid="ops-slack-fail"]')).toBeNull()
     const failed = host.querySelector('[data-testid="ops-slack-pay"]')!
     expect(failed.textContent).toContain('✕ Not posted')
     expect(failed.getAttribute('title')).toBe('channel_not_found')
-    expect(host.querySelector('[data-testid="ops-event-pay"]')!.textContent).toContain('Amount: ¥1,200  ·  Plan: Pro')
+    const facts = [...host.querySelectorAll('[data-testid="ops-facts-pay"] li')].map((li) => li.textContent)
+    expect(facts).toEqual(['Amount: ¥1,200', 'Plan: Pro'])
   })
 
   it('acknowledges an open event', async () => {
@@ -167,9 +172,76 @@ describe('OpsPage', () => {
     expect(state.mutations).toEqual(['/v1/admin/ops/events/fail/ack'])
   })
 
+  it('pins unacknowledged urgent and warning rows on top, worst first', () => {
+    state.feed = {
+      ...feed(),
+      events: [
+        ev({ id: 'dep1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 81243e7', occurred_at: '2026-11-17T04:50:00Z' }),
+        ev({ id: 'warn', severity: 'warn', kind: 'error.new', title: 'Error: Word not found', thread_key: null, occurred_at: '2026-11-17T04:40:00Z' }),
+        ev({ id: 'dep2', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:30:00Z' }),
+        ev({ id: 'urg', title: 'Release failed (v0.23.1)', thread_key: null, occurred_at: '2026-11-17T01:00:00Z' }),
+      ],
+    }
+    render()
+    const pinned = [...host.querySelectorAll('[data-testid="ops-needs-look"] [data-testid^="ops-event-"]')].map((r) => r.getAttribute('data-testid'))
+    expect(pinned).toEqual(['ops-event-urg', 'ops-event-warn'])
+    expect(host.querySelector('[data-testid="ops-feed"] [data-testid="ops-event-urg"]')).toBeNull()
+    // The warning is its own group, not inside the red failures box.
+    expect(host.querySelector('[data-testid="ops-needs-look-danger"] [data-testid="ops-event-warn"]')).toBeNull()
+    expect(host.querySelector('[data-testid="ops-needs-look-warn"] [data-testid="ops-event-warn"]')).not.toBeNull()
+    // Each count is its list's length, and the Today strip does not repeat it.
+    for (const tone of ['danger', 'warn']) {
+      const n = Number(host.querySelector(`[data-testid="ops-needs-look-${tone}-count"]`)!.textContent)
+      expect(n).toBe(host.querySelectorAll(`[data-testid="ops-needs-look-${tone}"] li`).length)
+    }
+    expect(host.querySelector('[data-testid="ops-today"]')!.textContent).not.toContain('need')
+    // Problems first: the list sits above Today and the coverage grid.
+    const order = [...host.querySelectorAll('[data-testid="ops-needs-look"], [data-testid="ops-today"], [data-testid="ops-coverage"]')].map((el) => el.getAttribute('data-testid'))
+    expect(order).toEqual(['ops-needs-look', 'ops-today', 'ops-coverage'])
+  })
+
+  it('groups an app\'s info rows with a bulk Acknowledge, and shows a repeated event once', async () => {
+    state.feed = {
+      ...feed(),
+      events: [
+        ev({ id: 'd1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 81243e7', occurred_at: '2026-11-17T04:50:00Z' }),
+        ev({ id: 'd2', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:30:00Z' }),
+        ev({ id: 'd3', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Deployed 556b6c3', occurred_at: '2026-11-17T04:29:00Z' }),
+      ],
+    }
+    render()
+    const group = host.querySelector('[data-testid="ops-group-p1|releases"]')!
+    expect(group.textContent).toContain('Glot.it · 3 releases')
+    // Collapsed: the repeated Info / In Slack / Acknowledge row is not drawn per event, nor the
+    // group's own Info chip and bulk button.
+    expect(group.querySelector('[data-testid="ops-event-d1"]')).toBeNull()
+    expect(group.textContent).not.toContain('Info')
+    expect(group.querySelector('[aria-label^="Acknowledge all"]')).toBeNull()
+    act(() => (host.querySelector('[data-testid="ops-group-toggle-p1|releases"]') as HTMLButtonElement).click())
+    expect(group.querySelector('[data-testid="ops-event-d1"]')).not.toBeNull()
+    expect(group.querySelector('[data-testid="ops-event-d3"]')).toBeNull()
+    expect(group.querySelector('[data-testid="ops-copies-d2"]')!.textContent).toBe('×2')
+    await act(async () => {
+      ;(host.querySelector('[aria-label="Acknowledge all: Glot.it · 3 releases"]') as HTMLButtonElement).click()
+    })
+    expect([...state.mutations].sort()).toEqual(['/v1/admin/ops/events/d1/ack', '/v1/admin/ops/events/d2/ack', '/v1/admin/ops/events/d3/ack'])
+  })
+
+  it('puts the columns that have data first, and stacks each app on a phone', () => {
+    render()
+    const heads = [...host.querySelectorAll('[data-testid="ops-coverage"] thead th')].map((th) => th.textContent!.trim())
+    expect(heads[1]).toContain('Releases')
+    expect(host.querySelector('[data-testid="ops-coverage-stacked"] [data-testid="ops-coverage-card-p1"]')!.textContent).toContain('×2')
+    // Only releases has data: the other columns are named once instead of "– never" on every row.
+    expect(heads).toHaveLength(2)
+    expect(host.querySelector('[data-testid="ops-coverage"] [data-testid="ops-coverage-empty-columns"]')!.textContent).toContain('No app has sent payments, alerts or bugs yet')
+  })
+
   it('reads its filters from the URL', () => {
     render('/ops?app=p1&category=alerts&unacked=1')
     expect(state.paths).toContain('/v1/admin/ops/events?org=org-1&limit=50&project=p1&category=alerts&unacked=1')
+    // "Needs a look" reads the unfiltered page, so a filter never hides a failure from the top.
+    expect(state.paths).toContain('/v1/admin/ops/events?org=org-1&limit=50')
     expect(opsFeedPath('o', new URLSearchParams('category=nope&severity=urgent'))).toBe('/v1/admin/ops/events?org=o&limit=50&severity=urgent')
   })
 

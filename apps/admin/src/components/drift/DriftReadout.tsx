@@ -50,7 +50,8 @@ export function DriftReadout({ stats, fetchedAt, validating }: DriftReadoutProps
   ]
 
   return (
-    <ReadoutPanel title="Drift readout" freshness={{ at: fetchedAt, isValidating: validating }}>
+    // No "Updated" time before the first scan (round 3: "Developer details · Updated now" on a never-scanned view).
+    <ReadoutPanel title="Drift readout" freshness={stats.snapshotCount > 0 ? { at: fetchedAt, isValidating: validating } : undefined}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Contract walker compares live API surfaces to snapshots. Use the Scanner tab to enqueue a fresh scan.
       </p>

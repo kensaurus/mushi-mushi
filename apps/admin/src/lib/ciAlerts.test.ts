@@ -127,7 +127,7 @@ describe('rankCiAlerts', () => {
 
   it('counts jobs a test machine stopped as "never finished", not as failures', () => {
     const a = rank(ciOverviewFixture()).find((x) => x.id === 'infra')!
-    expect(a.title).toBe('6 jobs never finished')
+    expect(a.title).toMatch(/^6 of the newest [\d,]+ jobs never finished$/)
     expect(a.detail).toContain('Not code failures')
     expect(a.jump).toBe('?view=machines#ci-infra')
   })

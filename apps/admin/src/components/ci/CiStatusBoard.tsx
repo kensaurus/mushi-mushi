@@ -18,7 +18,8 @@
  *               main delay as a status pill.
  *          The one-sentence status stays for screen readers (role=status). Data: lib/ciStatus.ts.
  */
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { CiOverview } from '../../lib/ciTypes'
 import {
   buildCiStatus,
@@ -32,8 +33,11 @@ import {
   type RunningNow,
   type WaitingGroup,
   type WaitingNow,
+  machinePresence,
+  machinePresenceWord,
 } from '../../lib/ciStatus'
 import type { RecentFailure } from '../../lib/ciAttention'
+import { fixLinkKey, type CiFixLinks } from '../../lib/ciView'
 import { ciJobKey, ciJobKeys, ciRepoKey, ciRunnerKey, useCiLink, type CiKey } from '../../lib/ciHighlight'
 import { LINK_ACCENT } from '../../lib/chipTone'
 import { useNow } from '../../lib/useNow'
@@ -52,15 +56,22 @@ const H3 = 'mb-1.5 flex items-center gap-2 text-xs font-semibold text-fg'
 const CHIP = 'inline-flex max-w-full items-center gap-1 truncate rounded-sm border border-edge bg-surface-raised px-1.5 py-px text-2xs font-semibold text-fg'
 const labelKey = (l: string): CiKey => `label:${l.toLowerCase()}`
 
-function machineStatus(m: MachineNow): RunStatus {
-  if (m.stale) return 'failed'
-  return m.running > 0 ? 'running' : 'idle'
+/** The tile's left edge: the only frame a machine gets inside its section (one level of card, 2026-11-18). */
+const MACHINE_EDGE: Record<MachineState, string> = {
+  idle: 'border-edge',
+  running: 'border-st-running',
+  failed: 'border-st-failed',
 }
 
-function machineWord(m: MachineNow): string {
-  if (m.stale) return 'offline'
-  return m.running > 0 ? `running ${m.running}` : 'idle'
+type MachineState = 'idle' | 'running' | 'failed'
+
+// One status per machine on every tab (lib/ciStatus machinePresence): Speed and cost and Settings read it too.
+function machineStatus(m: MachineNow): MachineState {
+  const p = machinePresence(m)
+  return p === 'offline' ? 'failed' : p
 }
+
+const machineWord = machinePresenceWord
 
 function Gauge({ label, pct }: { label: string; pct: number | null }) {
   if (pct == null) return null
@@ -77,14 +88,44 @@ function Gauge({ label, pct }: { label: string; pct: number | null }) {
 }
 
 /** One real machine as a tile. Pointing at it lights its jobs; a label chip lights the jobs that need it. */
-export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
+/**
+ * Labels two or more idle machines lack: one line under the tiles instead of the same red chip on
+ * each ("missing kensaurus-local" twice, 2026-11-18). Label → the machines that lack it.
+ *
+ */
+export function sharedMissingLabels(machines: ReadonlyArray<Pick<MachineNow, 'name' | 'missingLabels'>>): Map<string, string[]> {
+  const by = new Map<string, string[]>()
+  for (const m of machines) for (const l of m.missingLabels ?? []) by.set(l, [...(by.get(l) ?? []), m.name])
+  return new Map([...by].filter(([, names]) => names.length > 1))
+}
+
+/** One line per label several idle machines lack: the reason jobs wait while they sit idle. */
+export function MissingLabelsLine({ shared }: { shared: Map<string, string[]> }) {
+  if (shared.size === 0) return null
+  return (
+    <ul className="mt-1.5 flex flex-col gap-1" data-testid="ci-machines-missing-shared">
+      {[...shared].map(([label, names]) => (
+        <li key={label} className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-secondary">
+          <span className="inline-flex items-center gap-1 rounded-sm border border-st-failed/55 bg-st-failed-soft px-1.5 py-px font-bold text-st-failed-ink" data-testid="ci-machine-missing-label">
+            <StatusMark status="failed" size={9} />
+            missing {label}
+          </span>
+          <span>{names.join(', ')} sit idle: no runner with this label, which waiting jobs need.</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function MachineCard({ m, testId, sharedMissing }: { m: MachineNow; testId?: string; sharedMissing?: ReadonlyMap<string, string[]> }) {
+  const ownMissing = (m.missingLabels ?? []).filter((l) => !sharedMissing?.has(l))
   const keys = [...(m.runnerNames ?? []).map(ciRunnerKey), ...(m.labels ?? []).map(labelKey), ...(m.missingLabels ?? []).map(labelKey), `machine:${m.id}`]
   const link = useCiLink(keys, keys[0] ?? `machine:${m.id}`)
   const status = machineStatus(m)
   const dots = Math.min(m.running, 8)
   return (
     <li {...link} className={`${link.className} min-w-0`} data-testid={testId ?? `ci-machine-${m.id}`} data-status={status}>
-      <div className={`flex h-full flex-col gap-1.5 rounded-md border px-2.5 py-2 ${status === 'idle' ? 'border-edge bg-surface' : STATUS_SOFT[status]}`}>
+      <div className={`flex h-full flex-col gap-1.5 border-l-2 py-1 pr-1 pl-2.5 ${MACHINE_EDGE[status]}`}>
         <div className="flex min-w-0 items-center gap-1.5">
           <StatusMark status={status} size={12} />
           <span className="truncate text-sm font-bold text-fg">{m.name}</span>
@@ -115,9 +156,9 @@ export function MachineCard({ m, testId }: { m: MachineNow; testId?: string }) {
             <Gauge label="Mem" pct={m.memPct} />
           </span>
         )}
-        {((m.labels?.length ?? 0) > 0 || (m.missingLabels?.length ?? 0) > 0) && (
+        {((m.labels?.length ?? 0) > 0 || ownMissing.length > 0) && (
           <span className="flex flex-wrap gap-1" data-testid="ci-machine-labels">
-            {(m.missingLabels ?? []).map((l) => (
+            {ownMissing.map((l) => (
               <span key={`x${l}`} className="inline-flex items-center gap-1 rounded-sm border border-st-failed/55 bg-st-failed-soft px-1.5 py-px text-2xs font-bold text-st-failed-ink" title={`Jobs wait for “${l}”, and this idle machine has no runner with it`} data-testid="ci-machine-missing-label">
                 <StatusMark status="failed" size={9} />
                 missing {l}
@@ -156,18 +197,54 @@ function JobName({ name, url }: { name: string; url: string | null }) {
   )
 }
 
-/** One running job; pointing at it lights its app, job and runner across the page. */
-function RunningRow({ r }: { r: RunningNow }) {
+/**
+ * "Fix" beside a live job that belongs to a Mushi Mushi fix. Running and waiting jobs are listed
+ * once, here; the queue under the week shows only finished ones (2026-11-18), so the fix link
+ * the queue's live cards carried lives on these rows.
+ */
+function FixLink({ job, fixLinks }: { job: RunningNow['job']; fixLinks?: CiFixLinks }) {
+  const fix = job.prNumber != null ? fixLinks?.get(fixLinkKey(job.repo, job.prNumber)) : undefined
+  if (!fix) return null
+  return (
+    <Link to={`/reports/${fix.reportId}`} className={`text-2xs font-medium whitespace-nowrap ${LINK_ACCENT}`} data-testid="ci-live-fix-link">
+      Open the fix in Mushi Mushi
+    </Link>
+  )
+}
+
+/**
+ * The app and PR every live job shares, said once in the "Running now" header (round 3,
+ * 2026-11-19: "glot.it" and "#1081" on all five rows). Null when they differ.
+ *
+ * @internal Exported for tests.
+ */
+export function sharedLiveOrigin(jobs: ReadonlyArray<{ app: string; job: { prNumber: number | null } }>): { app: string; prNumber: number | null } | null {
+  if (jobs.length < 2) return null
+  const { app, job } = jobs[0]
+  return jobs.every((j) => j.app === app && j.job.prNumber === job.prNumber) ? { app, prNumber: job.prNumber } : null
+}
+
+/**
+ * One running job; pointing at it lights its app, job and runner across the page. The machine is
+ * its tile's business (the tile above lists the jobs on it), so a row names it only on hover.
+ */
+function RunningRow({ r, fixLinks, hideOrigin = false }: { r: RunningNow; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
   const link = useCiLink(ciJobKeys(r.job), ciJobKey(r.job.repo, r.job.jobName))
   const status: RunStatus = r.slow ? 'slow' : 'running'
   return (
-    <li {...link} className={`${link.className} grid grid-cols-1 items-center gap-x-3 gap-y-1 px-2.5 py-1.5 @xl:grid-cols-2`} data-testid={`ci-running-${r.job.id}`} data-status={status}>
+    <li
+      {...link}
+      className={`${link.className} grid grid-cols-1 items-center gap-x-3 gap-y-1 px-2.5 py-1.5 @xl:grid-cols-2`}
+      data-testid={`ci-running-${r.job.id}`}
+      data-status={status}
+      title={r.machine ? `On ${r.machine.name}` : undefined}
+    >
       <span className="flex min-w-0 flex-wrap items-center gap-1.5">
         <StatusMark status={status} label={r.slow ? 'Running slower than usual' : 'Running'} />
         <JobName name={r.job.jobName} url={r.job.htmlUrl} />
-        <span className={CHIP}>{r.app}</span>
-        {r.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{r.job.prNumber}</span>}
-        {r.machine && <span className={`${CHIP} font-normal text-fg-secondary`}>{r.machine.name}</span>}
+        {!hideOrigin && <span className={CHIP}>{r.app}</span>}
+        {!hideOrigin && r.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{r.job.prNumber}</span>}
+        <FixLink job={r.job} fixLinks={fixLinks} />
       </span>
       {r.elapsedS != null && <RunBar elapsedS={r.elapsedS} usualS={r.usualS} label={runLabel(r)} />}
     </li>
@@ -175,14 +252,15 @@ function RunningRow({ r }: { r: RunningNow }) {
 }
 
 /** One job waiting for a machine, under its group's header: mark, job, app, PR, wait. */
-function WaitingRow({ w }: { w: WaitingNow }) {
+function WaitingRow({ w, fixLinks, hideOrigin = false }: { w: WaitingNow; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
   const link = useCiLink([...ciJobKeys(w.job), ...w.needs.map(labelKey)], ciJobKey(w.job.repo, w.job.jobName))
   return (
     <li {...link} className={`${link.className} flex min-w-0 flex-wrap items-center gap-1.5 py-1.5 pr-2.5 pl-6`} data-testid={`ci-waiting-${w.job.id}`} data-status="waiting">
       <StatusMark status="waiting" label="Waiting for a machine" />
       <JobName name={w.job.jobName} url={w.job.htmlUrl} />
-      <span className={CHIP}>{w.app}</span>
-      {w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
+      {!hideOrigin && <span className={CHIP}>{w.app}</span>}
+      {!hideOrigin && w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
+      <FixLink job={w.job} fixLinks={fixLinks} />
       <span className="ml-auto font-mono text-2xs font-bold text-st-waiting-ink tabular-nums">{durationWords(w.waitS)}</span>
     </li>
   )
@@ -203,14 +281,16 @@ function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
       <span className="text-xs font-bold text-st-waiting-ink tabular-nums">
         {n} waiting for{g.needs.length === 0 ? ' a machine' : ''}
       </span>{' '}
+      {/* The label in the waiting colour: the red "missing <label>" under the machines already
+          says no idle machine has it, so a second red cross here said it twice (round 3). */}
       {g.needs.map((l) => (
         <span
           key={l}
-          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${g.mismatch ? STATUS_SOFT.failed + ' text-st-failed-ink' : STATUS_SOFT.waiting + ' text-st-waiting-ink'}`}
+          className={`inline-flex items-center gap-1 rounded-sm border px-1.5 py-px font-mono text-2xs font-bold ${STATUS_SOFT.waiting} text-st-waiting-ink`}
           title={g.mismatch ? `Needs “${l}”: an idle machine is not set up for it` : `Needs a “${l}” machine`}
           data-testid="ci-waiting-label"
+          data-mismatch={g.mismatch || undefined}
         >
-          {g.mismatch && <StatusMark status="failed" size={9} />}
           {l}
         </span>
       ))}
@@ -221,8 +301,10 @@ function WaitingGroupHeader({ g }: { g: WaitingGroup }) {
 /** Waiting jobs shown under their headers before "+N more"; every group's header always shows. */
 const WAITING_ROWS = 8
 
-function WaitingGroups({ groups, total }: { groups: WaitingGroup[]; total: number }) {
-  let left = WAITING_ROWS
+function WaitingGroups({ groups, total, fixLinks, hideOrigin = false }: { groups: WaitingGroup[]; total: number; fixLinks?: CiFixLinks; hideOrigin?: boolean }) {
+  // The rest on request, here: the queue below no longer lists live jobs a second time.
+  const [all, setAll] = useState(false)
+  let left = all ? total : WAITING_ROWS
   const shown = groups.map((g) => {
     const jobs = g.jobs.slice(0, Math.max(0, left))
     left -= jobs.length
@@ -235,11 +317,17 @@ function WaitingGroups({ groups, total }: { groups: WaitingGroup[]; total: numbe
         <Fragment key={g.key}>
           <WaitingGroupHeader g={g} />
           {jobs.map((w) => (
-            <WaitingRow key={w.job.id} w={w} />
+            <WaitingRow key={w.job.id} w={w} fixLinks={fixLinks} hideOrigin={hideOrigin} />
           ))}
         </Fragment>
       ))}
-      {hidden > 0 && <li className="px-2.5 py-1 text-2xs text-fg-secondary">+{hidden} more waiting in the queue below</li>}
+      {hidden > 0 && (
+        <li className="px-2.5 py-1">
+          <button type="button" className={`text-2xs font-medium ${LINK_ACCENT}`} onClick={() => setAll(true)} data-testid="ci-waiting-more">
+            Show {hidden} more waiting
+          </button>
+        </li>
+      )}
     </>
   )
 }
@@ -329,31 +417,105 @@ const DELAY: Record<NonNullable<CiStatus['apps'][number]['delay']> | 'none', { s
   none: { status: 'passed', word: 'fine' },
 }
 
+/** A number that never breaks inside ("18 / min" at 390 px, 2026-11-18). */
+const nw = (text: string) => <span className="whitespace-nowrap">{text}</span>
+
+/**
+ * The delay every app shares, or null when they differ. Nine "waits" pills in a column said one
+ * thing nine times (2026-11-18): then the header says it once and the column goes.
+ *
+ * @internal Exported for tests.
+ */
+export function sharedDelay(apps: ReadonlyArray<Pick<CiStatus['apps'][number], 'delay'>>): keyof typeof DELAY | null {
+  if (apps.length < 2) return null
+  const first = apps[0].delay ?? 'none'
+  return apps.every((a) => (a.delay ?? 'none') === first) ? first : null
+}
+
+/** Share of apps one delay must cover before the header names it once ("most apps: waits"). */
+const MOST_APPS = 0.75
+
+/**
+ * The delay most apps share (at least 3 apps and 3 in 4 of them), and whether every app does.
+ * "waits" on 9 of 10 rows said one thing nine times (2026-11-18): the header says it once and
+ * only the rows that differ keep a pill.
+ *
+ * @internal Exported for tests.
+ */
+export function commonDelay(apps: ReadonlyArray<Pick<CiStatus['apps'][number], 'delay'>>): { delay: keyof typeof DELAY; every: boolean } | null {
+  const all = sharedDelay(apps)
+  if (all) return { delay: all, every: true }
+  if (apps.length < 3) return null
+  const counts = new Map<keyof typeof DELAY, number>()
+  for (const a of apps) counts.set(a.delay ?? 'none', (counts.get(a.delay ?? 'none') ?? 0) + 1)
+  const [delay, n] = [...counts].sort((x, y) => y[1] - x[1])[0]
+  return n / apps.length >= MOST_APPS ? { delay, every: false } : null
+}
+
+function WaitBar({ a, maxWait }: { a: CiStatus['apps'][number]; maxWait: number }) {
+  return a.waitP95S != null ? <BarCell value={a.waitP95S} max={maxWait} tone={a.delay === 'waiting' ? 'warn' : 'heat'} text={nw(durationWords(a.waitP95S))} widthClass="w-20" /> : <>—</>
+}
+function RunBarCell({ a, maxRun }: { a: CiStatus['apps'][number]; maxRun: number }) {
+  return a.runP50S != null ? <BarCell value={a.runP50S} max={maxRun} tone={a.delay === 'slow' ? 'warn' : 'neutral'} text={nw(durationWords(a.runP50S))} widthClass="w-20" /> : <>—</>
+}
+function passOf(a: CiStatus['apps'][number]): number | null {
+  return a.passRate == null ? null : Math.round(a.passRate * 100)
+}
+
 /** One app's week; pointing at it lights the app across the page. */
-function AppTimeRow({ a, maxWait, maxRun }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number }) {
+function AppTimeRow({ a, maxWait, maxRun, column, showDelay }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number; column: boolean; showDelay: boolean }) {
   const link = useCiLink([ciRepoKey(a.repo)], ciRepoKey(a.repo))
   const d = DELAY[a.delay ?? 'none']
-  const pass = a.passRate == null ? null : Math.round(a.passRate * 100)
+  const pass = passOf(a)
   return (
     <tr {...link} className={link.className}>
-      <DataTableCell className="font-semibold">{a.app}</DataTableCell>
-      <DataTableCell>
-        {a.waitP95S != null ? <BarCell value={a.waitP95S} max={maxWait} tone={a.delay === 'waiting' ? 'warn' : 'heat'} text={durationWords(a.waitP95S)} widthClass="w-20" /> : '—'}
+      <DataTableCell className="font-semibold">
+        {a.app}
+        {/* Most apps share one delay (the header names it): the few that differ say so beside the name, not in a column of blanks (round 3). */}
+        {!column && showDelay && <StatusPill status={d.status} label={d.word} className="ml-1.5" />}
       </DataTableCell>
       <DataTableCell>
-        {a.runP50S != null ? <BarCell value={a.runP50S} max={maxRun} tone={a.delay === 'slow' ? 'warn' : 'neutral'} text={durationWords(a.runP50S)} widthClass="w-20" /> : '—'}
+        <WaitBar a={a} maxWait={maxWait} />
       </DataTableCell>
       <DataTableCell>
-        {pass != null ? <BarCell value={pass} max={100} tone={pass < 80 ? 'danger' : 'ok'} text={`${pass}%`} widthClass="w-16" /> : '—'}
+        <RunBarCell a={a} maxRun={maxRun} />
       </DataTableCell>
       <DataTableCell>
-        <StatusPill status={d.status} label={d.word} />
+        {pass != null ? <BarCell value={pass} max={100} tone={pass < 80 ? 'danger' : 'ok'} text={nw(`${pass}%`)} widthClass="w-16" /> : '—'}
       </DataTableCell>
+      {column && <DataTableCell>{showDelay && <StatusPill status={d.status} label={d.word} />}</DataTableCell>}
     </tr>
   )
 }
 
-export function CiStatusBoard({ overview }: { overview: CiOverview }) {
+/** The same app on a phone: name and pass rate on one line, wait and run bars under it. */
+function AppTimeCard({ a, maxWait, maxRun, showDelay }: { a: CiStatus['apps'][number]; maxWait: number; maxRun: number; showDelay: boolean }) {
+  const link = useCiLink([ciRepoKey(a.repo)], ciRepoKey(a.repo))
+  const d = DELAY[a.delay ?? 'none']
+  const pass = passOf(a)
+  return (
+    <li {...link} className={`${link.className} flex flex-col gap-1 py-1.5`}>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate text-xs font-semibold text-fg">{a.app}</span>
+        {pass != null && (
+          <span className={`ml-auto shrink-0 font-mono text-2xs font-bold whitespace-nowrap tabular-nums ${pass < 80 ? 'text-st-failed-ink' : 'text-st-passed-ink'}`}>{pass}% pass</span>
+        )}
+        {showDelay && <StatusPill status={d.status} label={d.word} className={pass == null ? 'ml-auto' : ''} />}
+      </span>
+      <span
+        // mushi-mushi-allowlist: label / bar columns (auto + the rest of the row)
+        className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-0.5 text-2xs text-fg-secondary"
+      >
+        <span>Wait (1 in 20)</span>
+        <WaitBar a={a} maxWait={maxWait} />
+        <span>Usual run</span>
+        <RunBarCell a={a} maxRun={maxRun} />
+      </span>
+    </li>
+  )
+}
+
+export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fixLinks?: CiFixLinks }) {
   const now = useNow(30_000)
   const status = useMemo(() => buildCiStatus(overview, now), [overview, now])
   const grouped = useMemo(() => groupFailures(overview, now), [overview, now])
@@ -364,6 +526,13 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
   const maxWait = Math.max(1, ...status.apps.map((a) => a.waitP95S ?? 0))
   const maxRun = Math.max(1, ...status.apps.map((a) => a.runP50S ?? 0))
   const machines = status.allMachines
+  const sharedMissing = useMemo(() => sharedMissingLabels(machines), [machines])
+  const common = commonDelay(status.apps)
+  // A row keeps its delay pill only where it differs from the one the header names.
+  const showDelayOf = (a: CiStatus['apps'][number]) => !common || (a.delay ?? 'none') !== common.delay
+  // A column only when there is no shared delay to name: with one, the rows that differ say so beside their name.
+  const delayColumn = !common
+  const origin = sharedLiveOrigin([...status.running, ...status.waitingJobs])
 
   return (
     // The wrapper is the container: a container query never matches the container element itself.
@@ -387,20 +556,28 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
           {machines.length > 0 ? (
             <ul className={`grid grid-cols-1 gap-2 ${MACHINE_GRID}`} data-testid="ci-machines-now">
               {machines.map((m) => (
-                <MachineCard key={m.id} m={m} />
+                <MachineCard key={m.id} m={m} sharedMissing={sharedMissing} />
               ))}
             </ul>
           ) : (
             <p className="text-xs text-fg-secondary">No machine has reported in.</p>
           )}
+          <MissingLabelsLine shared={sharedMissing} />
         </section>
 
         {/* 2. When will each job finish, and what waits? */}
         <section aria-labelledby="ci-running-now" className="min-w-0">
           <h3 id="ci-running-now" className={H3}>
             Running now
-            <StatusPill status="running" label={String(status.running.length)} />
+            {/* Nothing live: the line below says so; a "0" pill beside it said it twice (round 3). */}
+            {(status.running.length > 0 || status.waitingJobs.length > 0) && <StatusPill status="running" label={String(status.running.length)} />}
             {status.waitingJobs.length > 0 && <StatusPill status="waiting" label={`${status.waitingJobs.length} waiting`} />}
+            {origin && (
+              <span className="inline-flex items-center gap-1 font-normal" data-testid="ci-running-origin">
+                <span className={CHIP}>{origin.app}</span>
+                {origin.prNumber != null && <span className={`${CHIP} font-mono`}>#{origin.prNumber}</span>}
+              </span>
+            )}
           </h3>
           {status.running.length === 0 && status.waitingJobs.length === 0 ? (
             <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
@@ -409,9 +586,9 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
           ) : (
             <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid="ci-running-now">
               {status.running.map((r) => (
-                <RunningRow key={r.job.id} r={r} />
+                <RunningRow key={r.job.id} r={r} fixLinks={fixLinks} hideOrigin={origin != null} />
               ))}
-              <WaitingGroups groups={status.waitingGroups} total={status.waitingJobs.length} />
+              <WaitingGroups groups={status.waitingGroups} total={status.waitingJobs.length} fixLinks={fixLinks} hideOrigin={origin != null} />
             </ul>
           )}
         </section>
@@ -459,8 +636,19 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
         <section aria-labelledby="ci-time" className={BOARD_SPAN}>
           <h3 id="ci-time" className={H3}>
             Where the time goes this week
+            {common && (
+              <span className="inline-flex items-center gap-1 font-normal text-fg-secondary" data-testid="ci-time-shared-delay">
+                {common.every ? 'every app' : 'most apps'}: <StatusPill status={DELAY[common.delay].status} label={DELAY[common.delay].word} />
+              </span>
+            )}
           </h3>
-          <div className="overflow-x-auto">
+          {/* A phone gets one stacked row per app; the table (with its pass column) from a wider board. */}
+          <ul className="divide-y divide-edge-subtle @xl:hidden" data-testid="ci-time-by-app-stacked">
+            {status.apps.map((a) => (
+              <AppTimeCard key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} showDelay={showDelayOf(a)} />
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto @xl:block">
             <table className="w-full min-w-120 text-left text-xs" data-testid="ci-time-by-app">
               <thead>
                 <tr>
@@ -472,12 +660,12 @@ export function CiStatusBoard({ overview }: { overview: CiOverview }) {
                     <span title="Half the jobs finish within this">Usual run</span>
                   </DataTableHead>
                   <DataTableHead>Pass</DataTableHead>
-                  <DataTableHead>Main delay</DataTableHead>
+                  {delayColumn && <DataTableHead>Main delay</DataTableHead>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-edge-subtle">
                 {status.apps.map((a) => (
-                  <AppTimeRow key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} />
+                  <AppTimeRow key={a.repo} a={a} maxWait={maxWait} maxRun={maxRun} column={delayColumn} showDelay={showDelayOf(a)} />
                 ))}
               </tbody>
             </table>

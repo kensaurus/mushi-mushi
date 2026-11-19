@@ -75,10 +75,16 @@ export function creditsLine(c: ProviderCredits): CreditsLine {
   }
 }
 
-/** One line per provider: what Mushi recorded spending through it in 30 days. */
+/**
+ * One line per provider: what Mushi recorded spending through it in 30 days.
+ * The server counts this app's calls only (llm_invocations by project), while
+ * a key's "last used" covers every app the key serves, so the line names the
+ * app: "last used 10h ago" beside "No AI calls … in 30 days" read as a
+ * contradiction (round-2 review 2026-11-18).
+ */
 export function spendLine(s: ProviderSpend | undefined): string {
-  if (!s || s.calls === 0) return 'No AI calls recorded through this service in the last 30 days.'
+  if (!s || s.calls === 0) return 'No AI calls from this app through this service in the last 30 days.'
   const tokens = count.format(s.inputTokens + s.outputTokens)
   const calls = `${count.format(s.calls)} ${s.calls === 1 ? 'call' : 'calls'}`
-  return `Last 30 days: $${s.costUsd.toFixed(2)} across ${calls} (${tokens} tokens), ${count.format(s.byokCalls)} on your keys.`
+  return `This app, last 30 days: $${s.costUsd.toFixed(2)} across ${calls} (${tokens} tokens), ${count.format(s.byokCalls)} on your keys.`
 }

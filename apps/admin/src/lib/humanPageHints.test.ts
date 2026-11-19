@@ -4,7 +4,6 @@ import {
   fixesFailedHint,
   fixesFailedTitle,
   scopedHref,
-  triageBacklogHint,
   driftCriticalHint,
   codeHealthErrorsHint,
   anomaliesNoMetricsHint,
@@ -20,11 +19,6 @@ describe('humanPageHints', () => {
     expect(fixesFailedHint(1)).toMatch(/retry/i)
     expect(fixesFailedTitle(1)).toBe('Auto-fix stopped on 1 report')
     expect(fixesFailedTitle(3)).toBe('Auto-fix stopped on 3 reports')
-  })
-
-  it('triage backlog hint', () => {
-    expect(triageBacklogHint(3)).toMatch(/These reports/)
-    expect(triageBacklogHint(1)).toMatch(/This report/)
   })
 
   it('drift critical hint', () => {

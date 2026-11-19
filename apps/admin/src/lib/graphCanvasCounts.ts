@@ -15,7 +15,13 @@ export function graphCanvasProof(
   // Plain words: "47/200 nodes (newest 200 of 223) · 29/31 edges" read as
   // debug output on a page for people (2026-10-28).
   const noun = kind === 'nodes' ? 'items' : 'links'
-  const head = `${shown.toLocaleString()} of ${loaded.toLocaleString()} ${noun}`
+  // "0 of 0 links" and "2 of 2 items" restated one number twice (2026-11-18):
+  // say "of N" only when a filter is hiding some.
+  if (loaded === 0) return `no ${noun}`
+  const head =
+    shown === loaded
+      ? `${shown.toLocaleString()} ${shown === 1 ? noun.slice(0, -1) : noun}`
+      : `${shown.toLocaleString()} of ${loaded.toLocaleString()} ${noun}`
   if (typeof total === 'number' && total > loaded) {
     return `${head} (the newest ${loaded.toLocaleString()} of ${total.toLocaleString()})`
   }

@@ -3,7 +3,7 @@
  * PURPOSE: Rewards tab panel implementations extracted from RewardsPage.
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { apiFetch } from '../../../lib/supabase'
 import { useRealtimeReload } from '../../../lib/realtime'
 import { usePageData } from '../../../lib/usePageData'
@@ -44,7 +44,19 @@ import {
 import { Drawer } from '../../Drawer'
 import { TableSkeleton } from '../../skeletons/TableSkeleton'
 import { RewardsOverviewHighlights } from '../RewardsOverviewHighlights'
-import { eventsInLast24h, tierEmptyMessage } from '../overviewHelpers'
+import { eventsInLast24h, groupActivityEvents, sortTiersByLadder, testerLabel, tierEmptyMessage } from '../overviewHelpers'
+import {
+  DEFAULT_SIM_LINES,
+  flagLabel,
+  knownActionNames,
+  points30dCell,
+  questRowState,
+  questsForApp,
+  retentionLift,
+  tierHoldersLabel,
+  type RetentionData,
+} from '../rewardsView'
+import { useMediaQuery } from '../../../lib/useMediaQuery'
 import { CHIP_TONE } from '../../../lib/chipTone'
 import { httpsUrl, numberInRange, token } from '../../../lib/validators'
 import { plainApiError } from '../../../lib/humanizeApiError'
@@ -53,6 +65,7 @@ import { useConfirmAction } from '../useConfirmAction'
 import { describeWebhookTest, type WebhookTestSummary } from '../webhookTestOutcome'
 import { paginationWindow } from '../paginationWindow'
 import { metadataPairs } from './activityMetadata'
+import { StatusGlyph } from '../../signal/StatusGlyph'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -131,7 +144,8 @@ const TIER_BADGE: Record<string, string> = {
   free:        'bg-surface-overlay text-fg-secondary',
   explorer:    CHIP_TONE.infoSubtle,
   contributor: 'bg-brand/12 text-brand border border-brand/28',
-  champion:    CHIP_TONE.warnSubtle,
+  // A tier is a name, not a warning: no amber (2026-11-19).
+  champion:    'bg-surface-overlay text-fg border border-fg-secondary/40',
 }
 
 // ─── Overview tab ────────────────────────────────────────────
@@ -158,13 +172,19 @@ interface ActivityFeed {
   }
 }
 
-export function OverviewTab() {
-  const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<OverviewData>(
+/** Feed groups shown before "Show all": no inner scroll box with a half-cut last row (2026-11-19). */
+const FEED_PREVIEW = 5
+
+export function OverviewTab({ projectId = null }: { projectId?: string | null } = {}) {
+  const [feedAll, setFeedAll] = useState(false)
+  const { data, loading, error, reload } = usePageData<OverviewData>(
     `/v1/admin/rewards/overview`,
   )
-  const { data: feedData, reload: reloadFeed, lastFetchedAt: feedFetchedAt, isValidating: feedValidating } = usePageData<ActivityFeed>(
+  // One "Updated" stamp per tab: the page status line carries it (2026-11-18: 2-3 per tab).
+  const { data: feedData, reload: reloadFeed } = usePageData<ActivityFeed>(
     `/v1/admin/rewards/activity`,
   )
+  const { data: tierList } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
 
   useRealtimeReload(
     ['end_user_activity', 'end_user_points'],
@@ -175,24 +195,25 @@ export function OverviewTab() {
   if (loading) return <TableSkeleton rows={3} />
   if (error) return <ErrorAlert message={error} />
 
-  const tierEntries = Object.entries(data?.tier_distribution ?? {})
-    .sort((a, b) => b[1] - a[1])
+  // Ladder order, not head count (2026-11-18: Explorer, Champion, Contributor).
+  const tierEntries = sortTiersByLadder(Object.entries(data?.tier_distribution ?? {}), tierList)
 
   const totalHolders = tierEntries.reduce((sum, [, n]) => sum + n, 0)
   const pendingLiability = data?.pending_payout_liability_usd ?? 0
   // The server's feed can reach past a day; the section promises the last 24 h.
   const recentEvents = eventsInLast24h(feedData?.events ?? [])
+  const recentGroups = groupActivityEvents(recentEvents)
 
   return (
     <div className="space-y-4">
       {/* First: who earns most, what you owe, and what testers are working on. */}
-      <RewardsOverviewHighlights pendingPayoutUsd={pendingLiability} />
+      <RewardsOverviewHighlights pendingPayoutUsd={pendingLiability} projectId={projectId} />
 
-      <Section
-        title="Tier distribution"
-        icon={<IconRewards />}
-        freshness={{ at: lastFetchedAt, isValidating }}
-      >
+      <Section title="Tier distribution" icon={<IconRewards />}>
+        {tierEntries.length > 0 && (
+          // Scope said, so it never reads as the 30-day tester count above it.
+          <p className="mb-2 text-2xs text-fg-muted" data-testid="rewards-tier-scope">{tierHoldersLabel(totalHolders)}</p>
+        )}
         {tierEntries.length === 0 ? (
           <EmptyState {...tierEmptyMessage(data?.active_contributors_30d ?? 0)} />
         ) : (
@@ -213,7 +234,7 @@ export function OverviewTab() {
                       />
                     </div>
                   </div>
-                  <span className="text-xs font-mono text-fg-muted tabular-nums shrink-0 w-12 text-right">
+                  <span className="text-xs font-mono text-fg-muted tabular-nums shrink-0 whitespace-nowrap text-right">
                     {count} ({pct}%)
                   </span>
                 </div>
@@ -225,42 +246,27 @@ export function OverviewTab() {
 
 
       {/* ── Debug: 24h activity feed ── */}
-      <Section
-        title="Activity feed (last 24 h)"
-        icon={<IconGauge />}
-        freshness={{ at: feedFetchedAt, isValidating: feedValidating }}
-      >
+      {/* Every app in the team: the open app's rewards switch does not scope this feed. */}
+      <Section title="Activity feed · all apps · last 24 h" icon={<IconGauge />}>
+        {/* One inline strip (2026-11-18): four grey boxes sat inside this card. */}
         {feedData && (
-          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">total events</div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              {/* text-ok is under 4.5:1 on this overlay in light mode. */}
-              <div className="text-lg font-semibold tabular-nums text-ok-foreground">{feedData.stats_24h.accepted}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">accepted</div>
-            </div>
-            <div className={`rounded-lg bg-surface-overlay p-2 text-center ${feedData.stats_24h.rejected > 0 ? 'ring-1 ring-danger/30' : ''}`}>
-              <div className={`text-lg font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? 'text-danger' : 'text-fg-muted'}`}>
-                {feedData.stats_24h.rejected}
-              </div>
-              <div className="text-2xs text-fg-muted mt-0.5">
-                rejected{feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
-              </div>
-            </div>
-            <div className="rounded-lg bg-surface-overlay p-2 text-center">
-              <div className="text-lg font-semibold tabular-nums text-brand">+{feedData.stats_24h.points_awarded.toLocaleString()}</div>
-              <div className="text-2xs text-fg-muted mt-0.5">pts awarded</div>
-            </div>
-          </div>
+          <p className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted" data-testid="rewards-feed-strip">
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">{feedData.stats_24h.total}</span> events</span>
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">{feedData.stats_24h.accepted}</span> accepted</span>
+            <span className={`whitespace-nowrap ${feedData.stats_24h.rejected > 0 ? 'text-danger-foreground' : ''}`}>
+              <span className={`font-semibold tabular-nums ${feedData.stats_24h.rejected > 0 ? '' : 'text-fg'}`}>{feedData.stats_24h.rejected}</span> rejected
+              {feedData.stats_24h.rejection_rate_pct > 0 ? ` (${feedData.stats_24h.rejection_rate_pct}%)` : ''}
+            </span>
+            <span className="whitespace-nowrap"><span className="font-semibold tabular-nums text-fg">+{feedData.stats_24h.points_awarded.toLocaleString()}</span> pts</span>
+          </p>
         )}
 
         {feedData && feedData.stats_24h.top_actions.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1.5">
             {feedData.stats_24h.top_actions.map(({ action, count }) => (
               <span key={action} className="inline-flex items-center gap-1 rounded bg-surface-overlay px-2 py-0.5 text-2xs text-fg-muted">
-                <span className="font-mono text-fg">{action.replace(/_/g, ' ')}</span>
+                {/* The action's own name, as Activity rules and the Simulator spell it. */}
+                <span className="font-mono text-fg">{action}</span>
                 <span className="text-fg-faint">×{count}</span>
               </span>
             ))}
@@ -270,34 +276,37 @@ export function OverviewTab() {
         {recentEvents.length === 0 ? (
           <EmptyState title="No events in last 24 hours" description="Activity events will appear here as SDK clients send data." />
         ) : (
+          <>
           <div
             role="region"
             aria-label="Activity in the last 24 hours"
-            tabIndex={0}
-            className="max-h-64 overflow-y-auto divide-y divide-edge-subtle text-xs rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+            className="divide-y divide-edge-subtle text-xs"
           >
-            {/* Focusable so keyboard users can scroll the feed (axe scrollable-region-focusable). */}
-            {recentEvents.map((ev) => {
-              const rejected = !!ev.rejected_reason
+            {/* Grouped by tester and action (2026-11-18: 32 "session minute +1" rows). */}
+            {(feedAll ? recentGroups : recentGroups.slice(0, FEED_PREVIEW)).map((g) => {
+              const ev = g.latest
+              const rejected = !!g.rejectedReason
               return (
-                <div key={ev.id} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`}>
-                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 ${rejected ? 'bg-surface-overlay text-fg-faint' : CHIP_TONE.okSubtle}`}>
-                    {ev.action.replace(/_/g, ' ')}
+                <div key={g.key} className={`py-1.5 flex items-start gap-2 ${rejected ? 'opacity-50' : ''}`} data-testid="rewards-feed-group">
+                  {/* A name, not a status: neutral (2026-11-19: green chips). */}
+                  <span className={`shrink-0 inline-flex items-center rounded-sm px-1.5 py-0.5 text-2xs font-mono mt-0.5 whitespace-nowrap bg-surface-overlay ${rejected ? 'text-fg-faint' : 'text-fg-secondary'}`}>
+                    {g.action}
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 justify-between">
-                      <span className="text-fg-muted truncate max-w-36">
-                        {ev.end_users?.display_name ?? ev.end_users?.external_user_id ?? 'anonymous'}
+                      <span className="min-w-0 break-words text-fg-muted">
+                        <span className="text-fg">{g.tester}</span>
+                        {g.count > 1 && <span className="tabular-nums"> · {g.count} events</span>}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
-                        {!rejected && ev.points_awarded != null && (
-                          <span className="font-mono font-semibold text-ok tabular-nums">+{ev.points_awarded}</span>
+                        {!rejected && (g.count > 1 || ev.points_awarded != null) && (
+                          <span className="font-mono font-semibold text-ok-foreground tabular-nums">+{g.points}</span>
                         )}
-                        {rejected && ev.rejected_reason && (
+                        {rejected && g.rejectedReason && (
                           // mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas)
-                          <span className="text-fg-faint text-2xs truncate max-w-[100px]">{ev.rejected_reason}</span>
+                          <span className="text-fg-faint text-2xs truncate max-w-[100px]">{g.rejectedReason}</span>
                         )}
-                        <span className="text-fg-faint text-2xs">
+                        <span className="text-fg-faint text-2xs whitespace-nowrap">
                           <RelativeTime value={ev.created_at} />
                         </span>
                       </div>
@@ -307,6 +316,7 @@ export function OverviewTab() {
                       if (pairs.length === 0) return null
                       return (
                         <div className="text-2xs text-fg-faint mt-0.5 truncate">
+                          {g.count > 1 ? 'latest: ' : ''}
                           {pairs.map((pair, i) => (
                             <span key={pair.key}>
                               {i > 0 ? ' · ' : ''}
@@ -321,6 +331,18 @@ export function OverviewTab() {
               )
             })}
           </div>
+          {recentGroups.length > FEED_PREVIEW && (
+            <button
+              type="button"
+              className="mt-2 text-2xs text-accent-foreground underline underline-offset-2 hover:text-accent"
+              aria-expanded={feedAll}
+              onClick={() => setFeedAll((v) => !v)}
+              data-testid="rewards-feed-toggle"
+            >
+              {feedAll ? 'Show fewer' : `Show all ${recentGroups.length}`}
+            </button>
+          )}
+          </>
         )}
       </Section>
     </div>
@@ -331,14 +353,21 @@ const TIER_BAR: Record<string, string> = {
   free:        'bg-fg-faint',
   explorer:    'bg-info',
   contributor: 'bg-brand',
-  champion:    'bg-warn',
+  champion:    'bg-fg-secondary',
 }
 
 // ─── Activity rules tab ──────────────────────────────────────
 
+/** What the server awards with no rule rows (LEGACY_POINT_TABLE): event name · points. */
+const BUILTIN_POINTS: ReadonlyArray<{ action: string; points: number }> = [
+  { action: 'report.submitted', points: 10 },
+  { action: 'report.triaged', points: 50 },
+  { action: 'session_minute', points: 1 },
+]
+
 export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
   const toast = useToast()
-  const { data: rules, loading, error, reload, lastFetchedAt, isValidating } = usePageData<RewardRule[]>(
+  const { data: rules, loading, error, reload } = usePageData<RewardRule[]>(
     `/v1/admin/rewards/rules`,
   )
 
@@ -389,15 +418,15 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
       <Section
         title="Point rules"
         icon={<IconGauge />}
-        freshness={{ at: lastFetchedAt, isValidating }}
         action={
-          canEdit ? (
+          canEdit && allRules.length > 0 ? (
             <Btn
               variant="primary"
               size="sm"
               loading={saving}
               onClick={saveAll}
               disabled={Object.keys(edited).length === 0}
+              title={Object.keys(edited).length === 0 ? 'Change a value to save' : undefined}
             >
               Save rules
             </Btn>
@@ -405,17 +434,32 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
         }
       >
         {allRules.length === 0 ? (
-          <EmptyState
-            title="No custom rules yet"
-            description="Enable rewards with recommended defaults (report points + a 4-tier ladder), then fine-tune anytime. Everything is preset and ready to go."
-            action={
-              canEdit ? (
-                <Btn variant="primary" size="sm" loading={saving} onClick={applyPresets}>
-                  Use recommended defaults
-                </Btn>
-              ) : undefined
-            }
-          />
+          // Points are still awarded with no rule rows: the built-in values apply
+          // (2026-11-18: "No custom rules yet" sat beside a feed of awarded points).
+          // The three values as a table, not a sentence that wrapped "1." to the start of a
+          // line where it read as a list number (2026-11-19).
+          <div className="space-y-2" data-testid="rewards-builtin-values">
+            <p className="text-xs font-medium text-fg">Built-in point values in use</p>
+            <table className="text-xs">
+              <thead className="sr-only">
+                <tr><th>Event</th><th>Points</th></tr>
+              </thead>
+              <tbody className="divide-y divide-edge-subtle">
+                {BUILTIN_POINTS.map((r) => (
+                  <tr key={r.action}>
+                    <td className="py-1 pr-6 font-mono text-fg-secondary">{r.action}</td>
+                    <td className="py-1 text-right tabular-nums text-fg">{r.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-2xs text-fg-muted">Copy them into rules you can edit; any recommended tier you don&apos;t have yet is added too.</p>
+            {canEdit && (
+              <Btn variant="primary" size="sm" loading={saving} onClick={applyPresets}>
+                Use recommended defaults
+              </Btn>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -489,7 +533,7 @@ export function ActivityRulesTab({ canEdit }: { canEdit: boolean }) {
 
 export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
   const toast = useToast()
-  const { data: tiers, loading, error, reload, lastFetchedAt, isValidating } = usePageData<RewardTier[]>(
+  const { data: tiers, loading, error, reload } = usePageData<RewardTier[]>(
     `/v1/admin/rewards/tiers`,
   )
   const [saving, setSaving] = useState(false)
@@ -529,7 +573,6 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
       <Section
         title="Tier ladder"
         icon={<IconRewards />}
-        freshness={{ at: lastFetchedAt, isValidating }}
         action={
           canEdit ? (
             <Btn
@@ -550,49 +593,20 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
             description="Free → Explorer (100 pts) → Contributor (500 pts) → Champion (2 000 pts)"
           />
         ) : (
-          <div className="space-y-2">
+          // Flat rows, not cards in the section card; on a phone the badge and switch sit on
+          // one line and the fields stack full width (2026-11-18: "Contr", "Champ", "200").
+          <div className="divide-y divide-edge-subtle" data-testid="rewards-tier-rows">
             {allTiers.map((tier) => {
               const e = edited[tier.id] ?? {}
               const cur = { ...tier, ...e }
               const badgeCls = TIER_BADGE[tier.slug.toLowerCase()] ?? 'bg-surface-overlay text-fg-secondary'
               return (
-                <Card key={tier.id} className="p-3">
-                  <div className="flex items-start gap-3">
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-2xs font-semibold capitalize mt-0.5 shrink-0 ${badgeCls}`}>
+                <div key={tier.id} className="py-3 first:pt-0 last:pb-0 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                  <div className="flex items-center justify-between gap-3 sm:w-36 sm:shrink-0 sm:flex-col sm:items-start">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-2xs font-semibold capitalize ${badgeCls}`}>
                       {cur.display_name}
                     </span>
-                    <div className="flex-1 grid grid-cols-2 gap-2.5 text-xs">
-                      <label className="flex flex-col gap-1">
-                        <span className="text-fg-muted text-2xs">Points threshold</span>
-                        <Input
-                          type="number"
-                          value={String(cur.points_threshold)}
-                          onChange={(ev) => patch(tier.id, 'points_threshold', parseInt(ev.target.value, 10))}
-                          disabled={!canEdit}
-                        />
-                      </label>
-                      <label className="flex flex-col gap-1">
-                        <span className="text-fg-muted text-2xs">Display name</span>
-                        <Input
-                          value={cur.display_name}
-                          onChange={(ev) => patch(tier.id, 'display_name', ev.target.value)}
-                          disabled={!canEdit}
-                        />
-                      </label>
-                      {cur.monetary_reward_usd != null && (
-                        <label className="flex flex-col gap-1">
-                          <span className="text-fg-muted text-2xs">Monetary reward (USD)</span>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={String(cur.monetary_reward_usd)}
-                            onChange={(ev) => patch(tier.id, 'monetary_reward_usd', parseFloat(ev.target.value))}
-                            disabled={!canEdit}
-                          />
-                        </label>
-                      )}
-                    </div>
-                    <label className="flex items-center gap-1.5 text-2xs text-fg-muted shrink-0 mt-1">
+                    <label className="flex items-center gap-1.5 text-2xs text-fg-muted">
                       <input
                         type="checkbox"
                         checked={Boolean(cur.enabled)}
@@ -603,7 +617,39 @@ export function TierLadderTab({ canEdit }: { canEdit: boolean }) {
                       Enabled
                     </label>
                   </div>
-                </Card>
+                  <div className="flex-1 grid grid-cols-1 gap-2.5 text-xs sm:grid-cols-3">
+                    <Input
+                      label="Points threshold"
+                      id={`tier-${tier.id}-threshold`}
+                      type="number"
+                      value={String(cur.points_threshold)}
+                      onChange={(ev) => patch(tier.id, 'points_threshold', parseInt(ev.target.value, 10))}
+                      disabled={!canEdit}
+                      // mushi-mushi-allowlist: threshold input sized to its digits (8 digits, never clipped)
+                      className="min-w-[8ch]"
+                    />
+                    <Input
+                      label="Display name"
+                      id={`tier-${tier.id}-name`}
+                      value={cur.display_name}
+                      onChange={(ev) => patch(tier.id, 'display_name', ev.target.value)}
+                      disabled={!canEdit}
+                    />
+                    {cur.monetary_reward_usd != null && (
+                      <Input
+                        label="Monetary reward (USD)"
+                        id={`tier-${tier.id}-usd`}
+                        type="number"
+                        step="0.01"
+                        value={String(cur.monetary_reward_usd)}
+                        onChange={(ev) => patch(tier.id, 'monetary_reward_usd', parseFloat(ev.target.value))}
+                        disabled={!canEdit}
+                        // mushi-mushi-allowlist: threshold input sized to its digits (8 digits, never clipped)
+                        className="min-w-[8ch]"
+                      />
+                    )}
+                  </div>
+                </div>
               )
             })}
           </div>
@@ -857,11 +903,11 @@ function ContributorDrawer({
 
           {/* ── Anti-fraud flags ─── */}
           {(detail.profile.anti_fraud_flags ?? []).length > 0 && (
-            <div className="rounded-xl border border-danger/20 bg-danger/5 p-3 text-xs">
-              <div className="font-semibold text-danger mb-1">Anti-fraud flags</div>
+            <div className="rounded-xl border border-warn/25 bg-warn-muted/40 p-3 text-xs">
+              <div className="font-semibold text-warn-foreground mb-1">Anti-fraud flags to review</div>
               <div className="flex flex-wrap gap-1.5 mt-1">
                 {detail.profile.anti_fraud_flags.map((f) => (
-                  <Badge key={f} className={`${CHIP_TONE.dangerSubtle} text-2xs`}>{f}</Badge>
+                  <Badge key={f} className={`${CHIP_TONE.warnSubtle} text-2xs`}>{flagLabel(f)}</Badge>
                 ))}
               </div>
             </div>
@@ -974,7 +1020,7 @@ interface LeaderboardPage { data: Contributor[]; meta: LeaderboardMeta }
 
 const PAGE_SIZE = 25
 
-export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {}) {
+export function ContributorsTab({ canEdit = false }: { canEdit?: boolean }) {
   const { data: tiers } = usePageData<RewardTier[]>('/v1/admin/rewards/tiers')
 
   const [range,   setRange]   = useState<ContributorRange>('30d')
@@ -982,7 +1028,11 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
   const [search,  setSearch]  = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [tierFilter, setTierFilter] = useState('') // '' = all
+  const [heldOnly, setHeldOnly] = useState(false)
   const [page,    setPage]    = useState(0)
+  // The held filter is for the page it was turned on for: a new page, range, search or tier
+  // clears it, so it can't hide every row with no chip left to switch it off.
+  useEffect(() => { setHeldOnly(false) }, [page, range, debouncedSearch, tierFilter])
 
   const [selectedId,   setSelectedId]   = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState<string | null>(null)
@@ -1004,14 +1054,18 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
   if (debouncedSearch) params.set('search', debouncedSearch)
   if (tierFilter)      params.set('tier', tierFilter)
 
-  const { data: page_data, loading, error, reload, lastFetchedAt, isValidating } =
+  const { data: page_data, loading, error, reload } =
     usePageData<LeaderboardPage>(`/v1/admin/rewards/leaderboard?${params.toString()}`, {
       deps: [range, debouncedSearch, tierFilter, page],
     })
 
   useRealtimeReload(['end_user_points'], reload, { debounceMs: 3_000 })
 
-  const contributors = page_data?.data ?? []
+  const pageRows     = page_data?.data ?? []
+  // Payout holds: one count and a filter chip, not an amber pill and row tint on every row (2026-11-19).
+  const heldOnPage   = pageRows.filter((c) => (c.end_users?.anti_fraud_flags ?? []).length > 0).length
+  const contributors = heldOnly ? pageRows.filter((c) => (c.end_users?.anti_fraud_flags ?? []).length > 0) : pageRows
+  const anyStale     = range === '30d' && pageRows.some((c) => points30dCell(c.points_30d, c.end_users?.last_seen_at).kind === 'stale')
   const total        = page_data?.meta?.total ?? 0
   const totalPages   = Math.ceil(total / PAGE_SIZE)
 
@@ -1044,64 +1098,138 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
     setSelectedName((c.end_users as { display_name?: string | null })?.display_name ?? (c.end_users as { external_user_id?: string })?.external_user_id ?? null)
   }, [])
 
-  const renderRow = useCallback((c: Contributor, rank: number) => {
+  // Phone: one card per tester instead of a 7-column table (2026-11-18: names cut to
+  // "23ba", "5 months ago" on three lines, Flags off-screen).
+  const wide = useMediaQuery('(min-width: 640px)', true)
+
+  const rowParts = useCallback((c: Contributor) => {
     const flags   = c.end_users?.anti_fraud_flags ?? []
-    const hasFlag = flags.length > 0
     const tierBadge = c.reward_tiers
       ? (TIER_BADGE[c.reward_tiers.slug.toLowerCase()] ?? 'bg-surface-overlay text-fg-secondary')
       : null
     const lastSeen   = c.end_users?.last_seen_at ? new Date(c.end_users.last_seen_at) : null
     const atRisk     = lastSeen ? (Date.now() - lastSeen.getTime()) > 7 * 24 * 60 * 60 * 1000 : false
-    const pts        = range === '30d' ? c.points_30d : c.total_points
+    const cell       = range === '30d'
+      ? points30dCell(c.points_30d, c.end_users?.last_seen_at)
+      : { kind: 'value' as const, points: c.total_points }
+    const name = testerLabel(c.end_users)
+    const tier = tierBadge && c.reward_tiers ? (
+      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold capitalize whitespace-nowrap ${tierBadge}`}>
+        {c.reward_tiers.display_name}
+      </span>
+    ) : <span className="text-fg-faint">—</span>
+    const points = cell.kind === 'stale' ? (
+      // The stored 30-day total was not recounted for someone away 30+ days: "—", with one
+      // legend under the table (2026-11-19: hatched "Not recounted" 16 times).
+      <span
+        className="font-normal text-fg-faint"
+        title={`${cell.points.toLocaleString()} is an old 30-day total: no activity in the last 30 days, so it was not recounted.`}
+        data-testid="rewards-points-stale"
+      >
+        —
+      </span>
+    ) : cell.points.toLocaleString()
+    // A points-velocity check that holds payouts, not the Spam & abuse device check: one
+    // small mark, the reasons in its label (warning shape, not a failure).
+    const flagText = flags.map(flagLabel).join(', ')
+    const flag = flags.length > 0
+      ? (
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-2xs text-warn-foreground" title={`Payouts held: ${flagText}`} data-testid="rewards-payout-hold">
+          <StatusGlyph tone="warn" label={`Payouts held: ${flagText}`} />
+          Held
+        </span>
+      )
+      : null
+    const seen = lastSeen ? <span className="whitespace-nowrap"><RelativeTime value={lastSeen.toISOString()} /></span> : '—'
+    return { flags, atRisk, name, tier, points, flag, seen }
+  }, [range])
+
+  const renderRow = useCallback((c: Contributor, rank: number) => {
+    const p = rowParts(c)
+    const idLine = c.end_users?.display_name ? c.end_users.external_user_id : null
+
+    if (!wide) {
+      return (
+        <li key={c.end_user_id}>
+          <button
+            type="button"
+            onClick={() => openDrawer(c)}
+            className="w-full text-left py-2.5 flex items-start gap-2"
+            data-testid="rewards-contributor-card"
+          >
+            <span className="w-6 shrink-0 text-fg-faint tabular-nums text-xs">{rank}</span>
+            <span className="min-w-0 flex-1 space-y-1">
+              <span className="flex items-center justify-between gap-2">
+                <span className="min-w-0 break-words font-medium text-fg text-xs">{p.name}</span>
+                <span className="shrink-0 tabular-nums font-semibold text-fg text-xs">{p.points}</span>
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+                {p.tier}
+                <span>{p.seen}</span>
+                {p.flag}
+              </span>
+            </span>
+            <IconChevronRight className="h-3 w-3 mt-1 shrink-0 text-fg-faint" />
+          </button>
+        </li>
+      )
+    }
 
     return (
       <tr
         key={c.end_user_id}
-        className={`cursor-pointer transition-opacity ${hasFlag ? 'bg-danger/5 hover:bg-danger/8' : 'hover:bg-surface-overlay/50'}`}
+        className="cursor-pointer transition-opacity hover:bg-surface-overlay/50"
         onClick={() => openDrawer(c)}
       >
         <td className="py-2.5 pr-3 text-fg-faint tabular-nums w-8">{rank}</td>
         {/* mushi-mushi-allowlist: intentional arbitrary layout (calc/fr/%/canvas) */}
         <td className="py-2.5 pr-4 max-w-0 w-[35%]">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className="min-w-0">
-              <div className="font-medium text-fg truncate flex items-center gap-1">
-                {c.end_users?.display_name ?? c.end_users?.external_user_id ?? '—'}
-                {atRisk && (
-                  <span title="No activity in 7+ days" className="inline-block w-1.5 h-1.5 rounded-full bg-warn shrink-0" />
-                )}
-              </div>
-              <div className="text-fg-faint font-mono truncate text-2xs">
-                {c.end_users?.external_user_id}
-              </div>
+          <div className="min-w-0">
+            <div className="font-medium text-fg truncate flex items-center gap-1">
+              {p.name}
+              {p.atRisk && (
+                <span title="No activity in 7+ days" className="inline-block w-1.5 h-1.5 rounded-full bg-warn shrink-0" />
+              )}
             </div>
+            {idLine && <div className="text-fg-faint font-mono truncate text-2xs">{idLine}</div>}
           </div>
         </td>
-        <td className="py-2.5 pr-4">
-          {tierBadge && c.reward_tiers ? (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-semibold capitalize ${tierBadge}`}>
-              {c.reward_tiers.display_name}
-            </span>
-          ) : <span className="text-fg-faint">—</span>}
-        </td>
-        <td className="py-2.5 pr-4 tabular-nums font-mono font-semibold text-fg text-right">
-          {pts.toLocaleString()}
-        </td>
-        <td className="py-2.5 pr-4 text-fg-muted">
-          {lastSeen ? <RelativeTime value={lastSeen.toISOString()} /> : '—'}
-        </td>
-        <td className="py-2.5 pr-2">
-          {hasFlag
-            ? <Badge className={`${CHIP_TONE.dangerSubtle} text-2xs`}>{flags[0]}{flags.length > 1 ? ` +${flags.length - 1}` : ''}</Badge>
-            : <span className="text-fg-faint">—</span>
-          }
-        </td>
+        <td className="py-2.5 pr-4">{p.tier}</td>
+        <td className="py-2.5 pr-4 tabular-nums font-semibold text-fg text-right">{p.points}</td>
+        <td className="py-2.5 pr-4 text-fg-muted">{p.seen}</td>
+        <td className="py-2.5 pr-2">{p.flag ?? <span className="text-fg-faint">—</span>}</td>
         <td className="py-2.5 text-fg-faint w-6">
           <IconChevronRight className="h-3 w-3" />
         </td>
       </tr>
     )
-  }, [range, openDrawer])
+  }, [rowParts, openDrawer, wide])
+
+  const renderRows = (list: Contributor[], rankOf: (i: number) => number, head: boolean) =>
+    wide ? (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          {head && (
+            <thead>
+              <tr className="border-b border-edge-subtle text-left text-fg-secondary text-2xs font-semibold">
+                <th className="py-2 pr-3 w-8">#</th>
+                <th className="py-2 pr-4">Tester</th>
+                <th className="py-2 pr-4">Tier</th>
+                <th className="py-2 pr-4 text-right">{range === '30d' ? 'Pts (30d)' : 'Pts (all)'}</th>
+                <th className="py-2 pr-4">Last seen</th>
+                <th className="py-2 pr-2" title="Payouts held by the points-velocity check">Payout</th>
+                <th className="py-2 w-6" />
+              </tr>
+            </thead>
+          )}
+          <tbody className="divide-y divide-edge-subtle">
+            {list.map((c, i) => renderRow(c, rankOf(i)))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <ul className="divide-y divide-edge-subtle">{list.map((c, i) => renderRow(c, rankOf(i)))}</ul>
+    )
 
   return (
     <>
@@ -1121,6 +1249,19 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
           size="sm"
         />
         <div className="flex-1" />
+        {(heldOnPage > 0 || heldOnly) && (
+          <button
+            type="button"
+            aria-pressed={heldOnly}
+            onClick={() => setHeldOnly((v) => !v)}
+            // mushi-mushi-allowlist: a filter chip toggle, not card chrome
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs ${heldOnly ? 'border-accent bg-accent-muted text-accent-foreground' : 'border-edge-subtle text-fg-secondary hover:bg-surface-overlay'}`}
+            data-testid="rewards-held-filter"
+          >
+            <StatusGlyph tone="warn" />
+            {heldOnPage} held on this page
+          </button>
+        )}
         <SegmentedControl
           value={range}
           options={[
@@ -1143,11 +1284,16 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
         />
       </div>
 
+      {/* The title follows the selected range (2026-11-19: "839 · all time" over a selected
+          "30 days"). The 30-day head count is the status line's; this list ranks every tester
+          with points, so its count is said as "with points" only on All time. */}
       <Section
-        title={total > 0 ? `${total.toLocaleString()} contributors` : 'Contributors'}
+        title={range === '30d' ? 'Testers · last 30 days · all apps' : total > 0 ? `${total.toLocaleString()} testers with points · all time` : 'Testers'}
         icon={<IconUser />}
-        freshness={{ at: lastFetchedAt, isValidating }}
       >
+        {range === '30d' && total > 0 && (
+          <p className="mb-2 text-2xs text-fg-muted" data-testid="rewards-contributors-scope">Ranked by points earned in the last 30 days.</p>
+        )}
         {loading && <TableSkeleton rows={PAGE_SIZE} />}
         {error && <ErrorAlert message={error} />}
 
@@ -1163,26 +1309,8 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
         {!loading && !error && contributors.length > 0 && (
           <>
             {/* ── Ranked flat view ── */}
-            {view === 'ranked' && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-edge-subtle text-left text-fg-secondary text-2xs font-semibold">
-                      <th className="py-2 pr-3 w-8">#</th>
-                      <th className="py-2 pr-4">User</th>
-                      <th className="py-2 pr-4">Tier</th>
-                      <th className="py-2 pr-4 text-right">{range === '30d' ? 'Pts (30d)' : 'Pts (all)'}</th>
-                      <th className="py-2 pr-4">Last seen</th>
-                      <th className="py-2 pr-2">Flags</th>
-                      <th className="py-2 w-6" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-edge-subtle">
-                    {contributors.map((c, i) => renderRow(c, page * PAGE_SIZE + i + 1))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {/* Real ranks while filtered: the row's place on the page, not 1..n of the filter. */}
+            {view === 'ranked' && renderRows(contributors, (i) => page * PAGE_SIZE + pageRows.indexOf(contributors[i]!) + 1, true)}
 
             {/* ── Grouped by tier view ── */}
             {view === 'grouped' && grouped && (
@@ -1197,17 +1325,11 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
                           {group.label}
                         </span>
                         <span className="text-xs text-fg-muted">{group.items.length} users</span>
-                        <span className="text-xs font-mono text-fg-muted">
+                        <span className="text-xs tabular-nums text-fg-muted">
                           · {groupPts.toLocaleString()} pts total
                         </span>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <tbody className="divide-y divide-edge-subtle">
-                            {group.items.map((c, i) => renderRow(c, i + 1))}
-                          </tbody>
-                        </table>
-                      </div>
+                      {renderRows(group.items, (i) => i + 1, false)}
                     </div>
                   )
                 })}
@@ -1216,13 +1338,14 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
 
             {/* ── Pagination ── */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-3 border-t border-edge-subtle text-xs">
-                <span className="text-fg-muted">
-                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-edge-subtle text-xs">
+                {/* Short enough not to wrap at 390 (2026-11-19: "1–25 / of / 839"). */}
+                <span className="whitespace-nowrap tabular-nums text-fg-muted">
+                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)}/{total.toLocaleString()}
                 </span>
-                <div className="flex gap-1.5">
-                  <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                    ← Prev
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <Btn variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
+                    ←
                   </Btn>
                   {paginationWindow(page, totalPages).map((p) => {
                     return (
@@ -1235,8 +1358,8 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
                       </button>
                     )
                   })}
-                  <Btn variant="ghost" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-                    Next →
+                  <Btn variant="ghost" size="sm" disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
+                    →
                   </Btn>
                 </div>
               </div>
@@ -1245,6 +1368,11 @@ export function ContributorsTab({ canEdit = false }: { canEdit?: boolean } = {})
         )}
       </Section>
 
+      {anyStale && (
+        <p className="text-2xs text-fg-faint mt-1" data-testid="rewards-stale-legend">
+          — = no activity in the last 30 days, so the 30-day total was not recounted.
+        </p>
+      )}
       {/* ── At-risk legend ── */}
       {contributors.some((c) => {
         const ls = c.end_users?.last_seen_at ? new Date(c.end_users.last_seen_at) : null
@@ -1816,9 +1944,13 @@ interface QuestRow {
   repeatable: boolean; project_id: string | null; created_at: string
 }
 
-export function QuestsTab({ canEdit }: { canEdit: boolean }) {
+/** `paused`: the app's rewards are off, so an enabled quest awards nothing right now. */
+export function QuestsTab({ canEdit, paused = false, projectId = null }: { canEdit: boolean; paused?: boolean; projectId?: string | null }) {
   const toast = useToast()
-  const { data: quests, loading, error, reload } = usePageData<QuestRow[]>('/v1/admin/rewards/quests')
+  const { data: allQuests, loading, error, reload } = usePageData<QuestRow[]>('/v1/admin/rewards/quests')
+  // The open app's quests and team-wide ones; other apps' quests are counted, not listed
+  // (2026-11-19: glot.it's "Welcome to glot.it" under "one app at a time: kensaur.us").
+  const { mine: quests, otherApps } = questsForApp(allQuests ?? [], projectId)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -1897,8 +2029,8 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
       </p>
 
       {showForm && (
-        <Card className="p-3 mb-3 space-y-2.5">
-          <div className="grid grid-cols-2 gap-2.5">
+        <div className="mb-3 space-y-2.5 border-b border-edge-subtle pb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <Input
               label="Quest name"
               placeholder="Tour the app"
@@ -1943,24 +2075,36 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
             <Btn variant="cancel" size="sm" onClick={() => setShowForm(false)}>Cancel</Btn>
             <Btn variant="primary" size="sm" loading={saving} onClick={saveQuest}>Save quest</Btn>
           </div>
-        </Card>
+        </div>
       )}
 
-      {(quests ?? []).length === 0 && !showForm ? (
+      {otherApps > 0 && (
+        <p className="text-2xs text-fg-muted mb-3" data-testid="rewards-quests-other-apps">
+          {otherApps} more {otherApps === 1 ? 'quest belongs' : 'quests belong'} to your other apps. Switch app to see {otherApps === 1 ? 'it' : 'them'}.
+        </p>
+      )}
+
+      {quests.length === 0 && !showForm ? (
         <EmptyState
           title="No quests yet"
           description="Create multi-step goals to guide users through key app flows and reward exploration."
         />
       ) : (
-        <div className="space-y-1.5">
-          {(quests ?? []).map((q) => (
-            <Card key={q.id} className="p-3">
+        // Flat rows in the section card, not a card per quest.
+        <div className="divide-y divide-edge-subtle" data-testid="rewards-quest-rows">
+          {quests.map((q) => {
+            const state = questRowState(q.enabled, paused)
+            return (
+            <div key={q.id} className="py-3 first:pt-0 last:pb-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-xs text-fg">{q.name}</span>
-                    <Badge className={q.enabled ? `text-2xs ${CHIP_TONE.okSubtle}` : 'text-2xs bg-surface-overlay text-fg-muted'}>
-                      {q.enabled ? 'Active' : 'Disabled'}
+                    <Badge
+                      className={state.tone === 'on' ? `text-2xs ${CHIP_TONE.okSubtle}` : 'text-2xs bg-surface-overlay text-fg-muted'}
+                      title={state.tone === 'paused' ? 'Rewards are off for this app, so this quest awards nothing until you turn them on.' : undefined}
+                    >
+                      {state.label}
                     </Badge>
                     <Badge className="text-2xs bg-surface-overlay text-fg-secondary">+{q.completion_points} pts</Badge>
                     {q.repeatable && <Badge className={`text-2xs ${CHIP_TONE.infoSubtle}`}>Repeatable</Badge>}
@@ -1999,8 +2143,9 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
                   </div>
                 )}
               </div>
-            </Card>
-          ))}
+            </div>
+            )
+          })}
         </div>
       )}
     </Section>
@@ -2009,73 +2154,71 @@ export function QuestsTab({ canEdit }: { canEdit: boolean }) {
 
 // ─── Retention analytics tab ─────────────────────────────────
 
-interface RetentionData {
-  top_tier: { slug: string; display_name: string; count: number; median_retention_days: number }
-  all_others: { count: number; median_retention_days: number }
-  lift_pct: number | null
-}
-
 export function RetentionAnalyticsTab() {
-  const { data, loading, error, lastFetchedAt, isValidating } = usePageData<RetentionData>('/v1/admin/rewards/retention-impact')
+  const { data, loading, error } = usePageData<RetentionData>('/v1/admin/rewards/retention-impact')
 
   if (loading) return <TableSkeleton rows={3} />
   if (error) return <EmptyState title="Could not load retention data" description={String(error)} />
 
+  // One rule for the number, its colour and the callout: a 0 base or a tiny cohort is
+  // "Not enough data", never a percentage (2026-11-18: "+45708510%" over "Others median 0d").
+  const lift = retentionLift(data)
+  const top = data?.top_tier
+  const rest = data?.all_others
+
   return (
-    <Section
-      title="Retention impact"
-      icon={<IconDashboard />}
-      freshness={{ at: lastFetchedAt, isValidating }}
-    >
+    <Section title="Retention impact" icon={<IconDashboard />}>
       <p className="text-2xs text-fg-muted mb-4">
-        Compares the median active span (first seen → last seen) for users who reached the highest tier
-        vs everyone else. Higher lift = the rewards program drives retention.
+        Median days between first and last visit: testers who reached the top tier vs everyone else.
       </p>
 
-      {!data ? (
-        <EmptyState title="No data yet" description="Retention analytics will appear once contributors earn points." />
+      {!top || !rest ? (
+        <EmptyState title="Not enough data" description={lift.kind === 'insufficient' ? lift.reason : 'Retention appears once testers earn points.'} />
       ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            <StatCard
-              label={`${data.top_tier.display_name} median`}
-              value={`${data.top_tier.median_retention_days}d`}
-              hint={`Median active span for ${data.top_tier.count} top-tier user${data.top_tier.count !== 1 ? 's' : ''}.`}
-            />
-            <StatCard
-              label="Others median"
-              value={`${data.all_others.median_retention_days}d`}
-              hint={`Median active span for the remaining ${data.all_others.count} users.`}
-            />
-            <StatCard
-              label="Retention lift"
-              value={data.lift_pct !== null ? `${data.lift_pct > 0 ? '+' : ''}${data.lift_pct}%` : 'n/a'}
-              accent={
-                data.lift_pct === null ? undefined
-                  : data.lift_pct >= 20 ? 'text-ok'
-                    : data.lift_pct < 0 ? 'text-danger'
-                      : 'text-warn'
-              }
-              hint="Retention lift = top-tier median relative to the all-others median."
-            />
-          </div>
+        <div className="space-y-4" data-testid="rewards-retention">
+          {/* One flat row in the card, not three bordered tiles inside it; a median that the
+              lift can't use reads "—", not "0d" beside "Not enough data" (2026-11-19). */}
+          <dl className="flex flex-wrap gap-x-8 gap-y-2" data-testid="rewards-retention-stats">
+            {[
+              {
+                label: `${top.display_name} median`,
+                value: top.count > 0 && top.median_retention_days >= 1 ? `${top.median_retention_days}d` : '—',
+                hint: `Median active span for ${top.count} top-tier tester${top.count !== 1 ? 's' : ''}.`,
+                tone: 'text-fg',
+              },
+              {
+                label: 'Others median',
+                value: rest.count > 0 && rest.median_retention_days >= 1 ? `${rest.median_retention_days}d` : '—',
+                hint: `Median active span for the other ${rest.count} testers.`,
+                tone: 'text-fg',
+              },
+              {
+                label: 'Retention lift',
+                value: lift.kind === 'lift' ? `${lift.pct > 0 ? '+' : ''}${lift.pct.toLocaleString()}%` : 'Not enough data',
+                hint: lift.kind === 'insufficient' ? lift.reason : 'Top-tier median relative to the others median.',
+                tone: lift.kind === 'lift' ? (lift.tone === 'ok' ? 'text-ok-foreground' : lift.tone === 'danger' ? 'text-danger-foreground' : 'text-warn-foreground') : 'text-fg-muted',
+              },
+            ].map((m) => (
+              <div key={m.label} className="min-w-0" title={m.hint}>
+                <dt className="text-2xs text-fg-muted">{m.label}</dt>
+                <dd className={`text-lg font-semibold tabular-nums ${m.tone}`}>{m.value}</dd>
+              </div>
+            ))}
+          </dl>
 
-          {(data.lift_pct ?? 0) >= 50 && (
-            <div className="rounded-xl p-3 text-xs bg-ok-muted/50 text-ok-foreground border border-ok/25">
-              Top contributors retain <strong>{data.lift_pct}% longer</strong> than average — a strong
-              signal to invest further in the rewards program.
-            </div>
+          {lift.kind === 'lift' && lift.strong && (
+            <p className="text-xs text-fg-secondary">
+              Top-tier testers stay <strong className="text-fg">{lift.pct.toLocaleString()}% longer</strong> than the others.
+            </p>
           )}
-          {(data.lift_pct ?? 0) < 0 && (
+          {lift.kind === 'lift' && lift.negative && (
             <div className="rounded-xl p-3 text-xs bg-warn-muted/50 text-warn-foreground border border-warn/25">
               Top contributors are retaining <strong>less</strong> than average. Consider adding
               recurring incentives or time-gated perks to retain power users after they hit the top tier.
             </div>
           )}
 
-          <p className="text-2xs text-fg-faint">
-            Computed from end_user first_seen_at → last_seen_at. Results update daily.
-          </p>
+          <p className="text-2xs text-fg-faint">Recounted daily from each tester&apos;s first and last visit.</p>
         </div>
       )}
     </Section>
@@ -2093,12 +2236,12 @@ interface SimulationResult {
 
 export function SandboxSimulatorTab() {
   const toast = useToast()
-  const [lines, setLines] = useState<Array<{ action: string; count: number }>>([
-    { action: 'report_submit', count: 5 },
-    { action: 'screen_view_unique_per_day', count: 20 },
-    { action: 'session_minute', count: 60 },
-    { action: 'comment_posted', count: 2 },
-  ])
+  // Start from the action names the live feed shows ("report.submitted", "session_minute"),
+  // and suggest the ones your rules and feed use (2026-11-18: the simulator said "report_submit").
+  const [lines, setLines] = useState<Array<{ action: string; count: number }>>(() => DEFAULT_SIM_LINES.map((l) => ({ ...l })))
+  const { data: simRules } = usePageData<RewardRule[]>('/v1/admin/rewards/rules')
+  const { data: simFeed } = usePageData<ActivityFeed>('/v1/admin/rewards/activity')
+  const actionNames = useMemo(() => knownActionNames(simRules, simFeed?.stats_24h.top_actions), [simRules, simFeed])
   const [result, setResult] = useState<SimulationResult | null>(null)
   const [running, setRunning] = useState(false)
 
@@ -2128,12 +2271,16 @@ export function SandboxSimulatorTab() {
 
       <div className="space-y-1.5 mb-4">
         {lines.map((line, i) => (
-          <div key={i} className="flex items-end gap-2">
-            <div className="flex-1">
+          // Phone: the action takes the full row so "screen_view_unique_per_day" isn't cut; no
+          // "×" beside the remove button (2026-11-19).
+          <div key={i} className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
+            <div className="min-w-0 basis-full sm:basis-auto sm:flex-1">
               <Input
                 value={line.action}
                 onChange={(e) => updateLine(i, 'action', e.target.value)}
-                placeholder="action e.g. report_submit"
+                placeholder="action e.g. report.submitted"
+                list="rewards-sim-actions"
+                aria-label={`Event ${i + 1} action`}
               />
             </div>
             <div className="w-24">
@@ -2141,14 +2288,20 @@ export function SandboxSimulatorTab() {
                 type="number"
                 min={1}
                 max={10000}
+                label={i === 0 ? 'Count' : undefined}
+                aria-label={`Event ${i + 1} count`}
                 value={String(line.count)}
                 onChange={(e) => updateLine(i, 'count', parseInt(e.target.value, 10) || 1)}
               />
             </div>
-            <span className="text-2xs text-fg-faint pb-2.5">×</span>
-            <Btn variant="ghost" size="sm" onClick={() => removeLine(i)}>✕</Btn>
+            <Btn variant="ghost" size="sm" onClick={() => removeLine(i)} aria-label={`Remove event ${i + 1}`}>
+              <IconClose />
+            </Btn>
           </div>
         ))}
+        <datalist id="rewards-sim-actions">
+          {actionNames.map((name) => <option key={name} value={name} />)}
+        </datalist>
         <div className="flex items-center gap-2.5 pt-1">
           <Btn variant="ghost" size="sm" onClick={addLine}>+ Add event</Btn>
           <Btn variant="primary" size="sm" loading={running} onClick={run}>Run simulation</Btn>

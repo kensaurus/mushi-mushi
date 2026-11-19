@@ -34,7 +34,7 @@ without installing it for good.
 2. **Signs you in** through your browser, and makes a project and a key that can only send reports.
 3. **Installs `mushi-mushi`** with the package manager your lockfile uses. React Native and Capacitor apps get their own package, `@mushi-mushi/react-native` or `@mushi-mushi/capacitor`.
 4. **Writes two settings** (your project ID and key) to `.env.local`, or to `.env` if you already have one. Each name gets the prefix your framework needs, such as `VITE_` or `NEXT_PUBLIC_`.
-5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first. For React, Vue and the others it prints the code, because that code has to wrap your app and a wizard that rewrites your components can break them.
+5. **Shows the code to add.** For a plain JavaScript app it offers to add it for you and asks first (with `--yes` it adds it). For React, Next.js, Vue and the others it prints the code and one line naming the file to paste it into, because that code has to wrap your app and a wizard that rewrites your components can break them.
 6. **Offers to send a test report**, so you see your first report in the [console](https://kensaur.us/mushi-mushi/admin).
 
 Apart from that offer, it doesn't change your app's code. It warns you if
@@ -54,10 +54,12 @@ Mushi Mushi setting that is already there, except with `--yes`
 Paste this into Cursor, Claude Code or any AI editor that can run commands:
 
 ```text
-Add Mushi Mushi to this app. In the project folder, run `npx mushi-mushi --yes`.
-It prints a sign-in link: show it to me and wait while I approve it in my
-browser. Then add the code it prints to the file it names, and tell me which
-file you changed.
+Add Mushi Mushi to this app. In the project folder, first run
+`npx mushi-mushi --dry-run` and tell me what it will change. Then run
+`npx mushi-mushi --yes`. It prints a sign-in link: show it to me and wait while
+I approve it in my browser. It sends a test report at the end. If it prints
+code and names a file, add the code there. Then run `npx mushi-mushi doctor`
+and tell me which file you changed and what doctor says.
 ```
 
 `--yes` takes the default answers, which an AI editor's terminal needs because
@@ -106,6 +108,7 @@ short `mushi` command.
 ## Flags
 
 ```bash
+npx mushi-mushi --dry-run                      # show what it would do: no sign-in, no install, no writes
 npx mushi-mushi --framework next               # skip framework detection
 npx mushi-mushi --project-id <project-uuid> --api-key mushi_xxx
 npx mushi-mushi --skip-install                 # print the install command, don't run it

@@ -1,9 +1,8 @@
 /**
  * FILE: apps/admin/src/components/graph/GraphLegend.tsx
  * PURPOSE: In-canvas legend so a first-time visitor can decode the colors
- *          without opening the help drawer. Collapsed by default to stay out
- *          of the way; the summary line still shows the highest-signal info
- *          (node-type swatches).
+ *          without opening the help drawer. Open by default (the dots alone
+ *          named nothing); it collapses to a one-line summary of swatches.
  */
 
 import { useState } from 'react'
@@ -17,8 +16,10 @@ const LEGEND_EDGE_SPECS: Array<{ key: string; label: string; token: string }> = 
   { key: 'related', label: 'other', token: 'viz-graph-muted' },
 ]
 
-export function GraphLegend() {
-  const [open, setOpen] = useState(false)
+/** showEdges: the edge key is noise on a map with no links drawn. */
+export function GraphLegend({ showEdges = true }: { showEdges?: boolean } = {}) {
+  // Open by default: a row of twelve unlabelled dots decoded nothing.
+  const [open, setOpen] = useState(true)
   const edgeColors = LEGEND_EDGE_SPECS.map((spec) => ({
     ...spec,
     color: readVizToken(spec.token),
@@ -61,6 +62,7 @@ export function GraphLegend() {
               ))}
             </div>
           </div>
+          {showEdges ? (
           <div>
             <div className="text-3xs text-fg-secondary mb-0.5 font-semibold">Edges</div>
             <div className="space-y-0.5">
@@ -80,6 +82,7 @@ export function GraphLegend() {
               </div>
             </div>
           </div>
+          ) : null}
         </div>
       )}
     </div>

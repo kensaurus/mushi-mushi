@@ -40,7 +40,7 @@ export function QaCoverageStatusBanner({
         subtitle={
           plainBanner
             ? 'QA tests run per app — choose one in the header.'
-            : 'Pick a project to manage QA stories and scheduled runs.'
+            : 'Pick a project to manage its scheduled tests.'
         }
         action={
           <StatusBannerAction label={actions.setup ?? 'Go to Setup'} to="/onboarding" tone="info" />
@@ -53,7 +53,7 @@ export function QaCoverageStatusBanner({
     return (
       <StatusBannerShell
         tone="info"
-        title={plainBanner ? 'No automated tests yet' : `No QA stories on ${projectLabel}`}
+        title={plainBanner ? 'No automated tests yet' : `No scheduled tests on ${projectLabel}`}
         subtitle={
           stats.topPriorityLabel ??
           'Write a user-story test — it runs on a schedule and posts screenshots when it fails.'
@@ -61,13 +61,13 @@ export function QaCoverageStatusBanner({
         action={
           onCreateStory ? (
             <StatusBannerAction
-              label={actions.newStory ?? '+ New story'}
+              label={actions.newStory ?? '+ New test'}
               onClick={onCreateStory}
               tone="info"
             />
           ) : (
             <StatusBannerAction
-              label={actions.create ?? 'Create story'}
+              label={actions.create ?? 'Create test'}
               to={scopedHref('/qa-coverage?tab=overview', pid)}
               tone="info"
             />

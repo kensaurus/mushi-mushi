@@ -82,7 +82,8 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
 
   const summary = result ? describeCsvImport(result) : null
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-dashed border-edge-subtle p-3">
+    // A plain row under a hairline, not a dashed box inside the card (2026-11-18 sweep).
+    <div className="flex flex-col gap-2 border-t border-edge-subtle pt-2.5" data-testid="resource-csv-import">
       <p className="text-xs text-fg-secondary">
         Import resources from a CSV with the columns <code className="font-mono">kind, external_id, project</code> and,
         optionally, <code className="font-mono">role</code>. <code className="font-mono">project</code> is a project&apos;s
@@ -93,18 +94,22 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
         <pre className="mt-1 overflow-x-auto rounded-sm bg-surface-overlay p-2 font-mono">{CSV_EXAMPLE}</pre>
       </details>
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          aria-label="CSV file of shared resources"
-          disabled={busy}
-          className="min-w-0 text-2xs"
-          onChange={(e) => {
-            void pick(e.target.files?.[0])
-            // Let the same file be picked again after a fix.
-            e.target.value = ''
-          }}
-        />
+        {/* A labelled picker, not the browser's "Choose File No file chosen" (round 3). */}
+        <label className="relative inline-flex cursor-pointer items-center gap-1.5 rounded-sm border border-edge-subtle px-2 py-1 text-2xs font-medium text-fg-secondary hover:bg-surface-overlay focus-within:ring-2 focus-within:ring-brand/60">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            aria-label="CSV file of shared resources"
+            disabled={busy}
+            className="sr-only"
+            onChange={(e) => {
+              void pick(e.target.files?.[0])
+              // Let the same file be picked again after a fix.
+              e.target.value = ''
+            }}
+          />
+          {file ? 'Choose another CSV' : 'Choose a CSV file'}
+        </label>
         <Btn
           size="sm"
           variant={file ? 'primary' : 'ghost'}
@@ -116,7 +121,10 @@ export function ResourceCsvImport({ orgId, onImported }: Props) {
         >
           Import CSV
         </Btn>
-        {file && <span className="text-2xs text-fg-muted">{file.name}</span>}
+        {/* Why Import is off, said beside it instead of only in a tooltip. */}
+        <span className="text-2xs text-fg-muted" data-testid="resource-csv-file">
+          {file ? file.name : 'No file picked yet.'}
+        </span>
       </div>
       {error && (
         <Callout tone="danger">

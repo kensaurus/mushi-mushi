@@ -186,7 +186,7 @@ export function KnownHolesCard({ projectId }: { projectId: string }) {
             <p className="text-xs text-fg-muted">No known holes in what ships to users.</p>
           ) : null}
           {devOnly.length > 0 && (
-            <details className="rounded-md border border-edge-subtle px-3 py-2">
+            <details className="border-t border-edge-subtle pt-2">
               <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">{devOnly.length} in development-only packages (not filed)</summary>
               <ul className="flex flex-col divide-y divide-edge-subtle">
                 {devOnly.map((g) => <HoleRow key={g.groupKey} g={g} busy={busy === g.groupKey} onDismiss={() => setStatus(g, 'dismissed')} />)}
@@ -194,7 +194,7 @@ export function KnownHolesCard({ projectId }: { projectId: string }) {
             </details>
           )}
           {dismissed.length > 0 && (
-            <details className="rounded-md border border-edge-subtle px-3 py-2">
+            <details className="border-t border-edge-subtle pt-2">
               <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">{dismissed.length} dismissed</summary>
               <ul className="flex flex-col divide-y divide-edge-subtle">
                 {dismissed.map((g) => <HoleRow key={g.groupKey} g={g} busy={busy === g.groupKey} onReopen={() => setStatus(g, 'open')} />)}
@@ -287,7 +287,8 @@ function HoleRow({ g, busy, onDismiss, onReopen }: { g: KnownHoleGroup; busy: bo
       </p>
       <ul className="flex flex-col gap-0.5 text-xs">
         {g.advisories.slice(0, 4).map((a) => (
-          <li key={a.id} className="min-w-0 truncate">
+          // Wraps, never cut: "denial of s…" at 390 hid what the advisory is (round 3).
+          <li key={a.id} className="min-w-0 wrap-break-word">
             <a href={a.url} target="_blank" rel="noreferrer" className={LINK_ACCENT}>{a.id}</a>
             <span className="text-fg-muted"> {a.title}</span>
           </li>

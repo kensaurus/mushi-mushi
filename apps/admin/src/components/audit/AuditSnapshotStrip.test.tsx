@@ -29,29 +29,37 @@ afterEach(() => {
 })
 
 describe('auditSentence', () => {
-  it('says who made the last day of changes, in words', () => {
-    expect(auditSentence(stats({ events24h: 18, humanCount24h: 18, totalEvents: 65 }))).toBe('18 changes in the last 24 hours (18 by people). No failures.')
-    expect(auditSentence(stats({ events24h: 3, humanCount24h: 1, agentCount24h: 2, failCount24h: 1 }))).toBe(
-      '3 changes in the last 24 hours (1 by a person, 2 by agents). 1 failure to look at.',
-    )
+  it('names the latest change instead of repeating the numbers', () => {
+    const s = auditSentence(stats({ events24h: 18, humanCount24h: 18, totalEvents: 65, latestAction: 'settings.updated', latestActorEmail: 'kenji@example.com' }))
+    expect(s).toBe('Latest: settings.updated by kenji@example.com.')
+    expect(s).not.toMatch(/18/)
+    expect(auditSentence(stats({ events24h: 3, failCount24h: 1, totalEvents: 3 }))).toBe('Failed actions in the last 24 hours need a look.')
   })
   it('covers a quiet day, an empty log and a plan without the audit log', () => {
     expect(auditSentence(stats({ totalEvents: 4 }))).toBe('No changes in the last 24 hours.')
+    expect(auditSentence(stats({ totalEvents: 4, latestAction: 'api_key.created' }))).toBe(
+      'No changes in the last 24 hours. Latest: api_key.created by Mushi Mushi.',
+    )
+    // The table's actor label wins, so the sentence and the row name the same person (2026-11-19).
+    expect(auditSentence(stats({ totalEvents: 4, latestAction: 'api_key.created' }), 'Test')).toBe(
+      'No changes in the last 24 hours. Latest: api_key.created by Test.',
+    )
     expect(auditSentence(stats({}))).toMatch(/^Nothing recorded yet/)
     expect(auditSentence(stats({ auditLogEntitlement: false, planDisplayName: 'Hobby' }))).toMatch(/isn't part of the Hobby plan/)
   })
 })
 
 describe('AuditSnapshotStrip', () => {
-  it('shows three linked numbers and no actor ratio', () => {
+  it('shows two linked 24h numbers; the all-time total lives on the Log tab only', () => {
     act(() => {
       root.render(
         createElement(MemoryRouter, null, createElement(AuditSnapshotStrip, { stats: stats({ events24h: 18, humanCount24h: 18, totalEvents: 65, failCount24h: 2 }), statsFetchedAt: null })),
       )
     })
     const labels = Array.from(host.querySelectorAll('dt')).map((d) => d.textContent)
-    expect(labels).toEqual(['Changes (24h)', 'Failures (24h)', 'All time'])
+    expect(labels).toEqual(['24h changes', '24h failures'])
     expect(host.textContent).not.toContain('18/0/0')
-    expect(host.querySelectorAll('dd a')).toHaveLength(3)
+    expect(host.textContent).not.toContain('65')
+    expect(host.querySelectorAll('dd a')).toHaveLength(2)
   })
 })

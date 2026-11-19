@@ -46,7 +46,8 @@ export function CodeHealthReadout({ stats, fetchedAt, validating }: CodeHealthRe
   ]
 
   return (
-    <ReadoutPanel title="Code health readout" freshness={{ at: fetchedAt ?? null, isValidating: validating }}>
+    // No "Updated" time before the first CI run sent numbers (round 3).
+    <ReadoutPanel title="Code health readout" freshness={stats.hasRun ? { at: fetchedAt ?? null, isValidating: validating } : undefined}>
       <p className="mb-4 text-xs leading-relaxed text-fg-muted">
         Host CI posts bundle KB and god-file findings here via{' '}
         <code className="font-mono text-2xs">MUSHI_INGEST_KEY</code>. Separate from the in-app reporter SDK.

@@ -502,6 +502,10 @@ describe('a report with no code location', () => {
     expect(anyway?.tone).toBe('ghost')
     anyway?.onClick?.()
     expect(request).toHaveBeenCalledTimes(1)
+    // The triage bar says and does the same; the page shows the bar alone (sweep 2026-11-18).
+    expect(rec.repeatsTriageBar).toBe(true)
+    const withCode = deriveRecommendation(makeReport(overrides), makeDispatchState(), 0, request, Date.now(), undefined, true)
+    expect(withCode.repeatsTriageBar).toBeUndefined()
   })
 
   it('"Dispatch anyway" is disabled while the gate blocks', () => {

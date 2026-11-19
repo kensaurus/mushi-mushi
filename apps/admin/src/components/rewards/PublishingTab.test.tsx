@@ -140,3 +140,28 @@ describe('PublishingTab form inputs', () => {
     expect(JSON.parse(put![1].body as string).name).toBe('Edited')
   })
 })
+
+describe('PublishingTab round 2 (2026-11-18)', () => {
+  it('reads Paused on every enabled bounty while rewards are off, with no card inside the section', async () => {
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(PublishingTab, { paused: true })))
+    })
+    const rows = [...container.querySelectorAll('[data-testid="rewards-bounty-row"]')]
+    expect(rows).toHaveLength(5)
+    for (const row of rows) expect(row.textContent).toContain('Paused')
+    expect(container.textContent).not.toMatch(/\bOn\b/)
+    // Inputs are wide enough for "2500" on a phone.
+    const points = container.querySelector<HTMLInputElement>('input[aria-label="Critical bug points"]')
+    expect(points?.value).toBe('2500')
+    expect(points?.className).toContain('min-w-[7ch]')
+  })
+
+  it('says why Publish is greyed out and that the listing is not published', async () => {
+    server.data['proj-1'] = null
+    await render()
+    expect(container.querySelector('[data-testid="rewards-publish-blocked"]')?.textContent).toBe('Save a draft below first.')
+    expect(container.textContent).toContain('Not published')
+    expect(container.textContent).toContain('No cap set')
+    expect(container.textContent).not.toContain('0%')
+  })
+})

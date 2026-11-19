@@ -486,7 +486,8 @@ export function resolveNavBadge(
     case '/notifications':
       return {
         kind: 'health',
-        tone: toneForOpen(navCounts.notificationsUnread, 11),
+        // Unread updates are not a failure: a neutral count, never the failure red (fresh-eyes 2026-11-18).
+        tone: 'idle',
         count: navCounts.notificationsUnread,
         label:
           navCounts.notificationsUnread > 0

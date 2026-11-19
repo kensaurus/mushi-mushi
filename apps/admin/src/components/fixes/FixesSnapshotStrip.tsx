@@ -5,7 +5,10 @@
  * lib/countDefinitions.ts, so "Stopped" here is Home's "Auto-fix stopped".
  */
 
+import { Link } from 'react-router-dom'
 import { PageStatus } from '../ui'
+import { StatusGlyph } from '../signal/StatusGlyph'
+import { usePageData } from '../../lib/usePageData'
 import type { FixesStats } from './FixesStatsTypes'
 import { COUNT_HINTS, stoppedTitle } from '../../lib/countDefinitions'
 import { pluralizeWithCount } from '../../lib/format'
@@ -36,8 +39,40 @@ function fixesSentence(stats: FixesStats, inFlight: number, ready: number): stri
   return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`
 }
 
+/** Open bugs, for the "no fixes yet" line (total only; one row fetched). */
+const OPEN_BUGS_PATH = '/v1/admin/reports?status=open&sort=created_at&dir=desc&limit=1'
+
+/**
+ * @internal Exported for tests.
+ * No fix has run: an off mark, never a green "ok" dot, and the bugs that wait
+ * for one. "● No fixes in the last 30 days." in green while 4 bugs waited read
+ * as all clear (fresh-eyes sweep 2026-11-18).
+ */
+function NoFixesLine({ openBugs }: { openBugs: number | null }) {
+  return (
+    <div
+      role="status"
+      aria-label="Fixes status"
+      // mushi-mushi-allowlist: one status row with role="status"; Card takes no role or aria-label
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2 text-sm text-fg-secondary"
+      data-testid="fixes-none-yet"
+    >
+      <StatusGlyph tone="off" />
+      <span>No fixes in the last 30 days.</span>
+      {openBugs != null && openBugs > 0 && (
+        <Link to="/reports?status=open&sort=severity&dir=desc" className="whitespace-nowrap font-medium text-link hover:underline">
+          {pluralizeWithCount(openBugs, 'bug')} waiting for a fix
+        </Link>
+      )}
+    </div>
+  )
+}
+
 export function FixesSnapshotStrip({ stats, ready = 0, inFlight }: Props) {
   const running = inFlight ?? stats.inProgress + stats.inflightDispatches
+  const none = stats.totalAttempts === 0 && running === 0
+  const open = usePageData<{ total?: number }>(none ? OPEN_BUGS_PATH : null)
+  if (none) return <NoFixesLine openBugs={open.data?.total ?? null} />
   return (
     <PageStatus
       ariaLabel="Fixes status"

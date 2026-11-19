@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Btn, Card, FILTER_SELECT_CLASS, RelativeTime, SegmentedControl, Toggle } from '../ui'
 import { useToast } from '../../lib/toast'
-import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
+import { groupQueueRows, heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import { StageTrain, type TrainStage } from '../signal/StageTrain'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { StatusPill, type RunStatus } from '../signal/StatusMark'
@@ -307,11 +307,13 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
       {listed.length > 0 && (
         // A long queue scrolls inside the panel instead of pushing the list down.
         <ul className="max-h-40 overflow-y-auto divide-y divide-edge-subtle" id="merge-queue-rows">
-          {listed.map((r) => {
+          {groupQueueRows(listed).map((group) => {
+            const r = group[0]
             const why = r.state === 'blocked' ? heldReasonOf(r.detail) : null
+            const many = group.length > 1
             return (
-            <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5" data-testid={`merge-queue-row-${r.id}`}>
-              <StatusPill status={QUEUE_ROW_STATUS[r.state]} label={MERGE_QUEUE_STATE_LABEL[r.state]} className="shrink-0" />
+            <li key={r.id} className="flex flex-wrap items-start gap-x-2 gap-y-1 py-1.5" data-testid={`merge-queue-row-${r.id}`} data-count={group.length}>
+              <StatusPill status={QUEUE_ROW_STATUS[r.state]} label={many ? `${MERGE_QUEUE_STATE_LABEL[r.state]} ${group.length}` : MERGE_QUEUE_STATE_LABEL[r.state]} className="shrink-0" />
               {why && (
                 <span
                   className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-warn/55 bg-warn-muted px-1 text-3xs font-bold text-warn-foreground"
@@ -325,16 +327,30 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
               {/* A long owner/repo#N is unbreakable monospace: let it break on a
                   phone, and give the reason a content basis (flex-auto, not
                   flex-1's 0%) so it wraps onto its own line instead of
-                  collapsing beside the ref (390px, report c07fb341). */}
-              <a href={prLink(r)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
-                {r.repo}#{r.pr_number}
-              </a>
+                  collapsing beside the ref (390px, report c07fb341).
+                  Same state, repo and sentence: one line, every PR on it (fresh-eyes 2026-11-18). */}
+              <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                {group.map((g, i) => (
+                  <span key={g.id} className="inline-flex items-center gap-0.5">
+                    <a href={prLink(g)} target="_blank" rel="noreferrer" className="min-w-0 max-w-full wrap-anywhere text-2xs font-mono text-fg-secondary hover:text-fg hover:underline">
+                      {i === 0 ? `${g.repo}#${g.pr_number}` : `#${g.pr_number}`}
+                    </a>
+                    {many && (
+                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
+                        ✕
+                      </Btn>
+                    )}
+                  </span>
+                ))}
+              </span>
               <span className="min-w-0 flex-auto wrap-break-word text-2xs text-fg-muted" title={r.detail ?? undefined}>
                 {r.detail ? withoutReasonCode(r.detail) : 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
               </span>
-              <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
-                Remove
-              </Btn>
+              {!many && (
+                <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
+                  Remove
+                </Btn>
+              )}
             </li>
             )
           })}

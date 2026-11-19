@@ -28,12 +28,12 @@ import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Btn, Card, Skeleton } from '../components/ui'
+import { Card, Skeleton } from '../components/ui'
 import { PageStatus, type PageStatusTone } from '../components/ui/page-status'
 import { IconShieldCheck } from '../components/icons'
 import { UpgradePill } from '../components/billing/UpgradeNudge'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { CHECK_GROUPS, CHECK_SUB_GROUPS, type CheckSubGroupId } from '../lib/navRegistry'
+import { CHECK_GROUPS } from '../lib/navRegistry'
 import { buildOperatorNav, type BuiltNavItem } from '../lib/buildNav'
 import { navSlicesForPaths } from '../lib/navBadges'
 import { useEntitlements } from '../lib/useEntitlements'
@@ -50,11 +50,13 @@ import { AlertCards } from '../components/signal/AlertCards'
 import { AgeCell, ChangeChip } from '../components/signal/AgeChips'
 import { HighlightProvider, useLinked } from '../components/signal/linkedHighlight'
 import { StatusMark, StatusPill, type RunStatus } from '../components/signal/StatusMark'
+import { StatusGlyph, TONE_INK, type SignalTone } from '../components/signal/StatusGlyph'
 import type { OpsReadResponse } from '../lib/kensaurusOpsTypes'
 import { providerState } from '../lib/providersView'
+import { useReadTimedOut } from '../lib/ciReadTimeout'
+import { CiNotChecked } from '../components/ci/CiNotChecked'
 
 const ALL_PATHS = CHECK_GROUPS.flatMap((g) => g.paths)
-const GROUP_OF: ReadonlyMap<string, CheckSubGroupId> = new Map(CHECK_GROUPS.flatMap((g) => g.paths.map((p) => [p, g.id] as const)))
 
 /** One nav-meta read with only the check slices (judge rides on include=counts). */
 const NAV_META_PATH = `/v1/admin/workspace/nav-meta?${new URLSearchParams({
@@ -89,8 +91,21 @@ const STATE_STATUS: Record<CheckCardState, RunStatus> = {
   pass: 'passed',
 }
 
-/** Passing and watching checks fold into one line; everything else stays open. */
+/**
+ * The banner's marks, worst first: only the states that need you. Each count shows once on the
+ * page (2026-11-18 round 2: "2 watching · 1 passing" sat in the banner and again on the fold):
+ * passing and watching are counted on their fold, not set up and not run on their list.
+ */
+const COUNT_MARKS: ReadonlyArray<{ state: CheckCardState; tone: SignalTone; word: string }> = [
+  { state: 'failed', tone: 'danger', word: 'failed' },
+  { state: 'findings', tone: 'warn', word: 'with findings' },
+  { state: 'unavailable', tone: 'off', word: 'could not read' },
+]
+
+/** Passing and watching checks fold into one line. */
 const FOLDED: ReadonlySet<CheckCardState> = new Set(['pass', 'watching'])
+/** Checks that are not running yet: one compact list, not a card each (2026-11-18 round 2). */
+const IDLE: ReadonlySet<CheckCardState> = new Set(['not_checked', 'not_set_up'])
 
 /** The last run's age as a graded cell (components/signal/AgeChips). */
 function RunAge({ lastRunAt, now }: { lastRunAt: string | null | undefined; now: number }) {
@@ -118,7 +133,44 @@ export function sortCheckCards(cards: readonly CheckCard[]): CheckCard[] {
     .map((x) => x.card)
 }
 
-/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence: what needs you first, then what is fine. */
+/**
+ * Exported for tests; page modules are knip entries, so it carries no tag. How many checks are in
+ * each state, plus how many are still being read. The banner marks and the passing fold both read
+ * this, so no two places on the page count differently (2026-11-18).
+ */
+export function checkCounts(cards: readonly CheckCard[]): Record<CheckCardState, number> & { reading: number } {
+  const out = { failed: 0, findings: 0, unavailable: 0, not_checked: 0, not_set_up: 0, watching: 0, pass: 0, reading: 0 }
+  for (const c of cards) {
+    if (c.view) out[c.view.state] += 1
+    else out.reading += 1
+  }
+  return out
+}
+
+/** The banner: one mark per non-empty problem state, worst first; the sentence when nothing needs you. */
+function CountMarks({ counts, fallback }: { counts: ReturnType<typeof checkCounts>; fallback: string }) {
+  const any = COUNT_MARKS.some((m) => counts[m.state] > 0) || counts.reading > 0
+  if (!any) return <span data-testid="checks-counts">{fallback}</span>
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="checks-counts">
+      {COUNT_MARKS.filter((m) => counts[m.state] > 0).map((m) => (
+        <span key={m.state} className="inline-flex items-center gap-1 whitespace-nowrap" data-testid={`checks-count-${m.state}`}>
+          <StatusGlyph tone={m.tone} />
+          <span className={`font-mono font-extrabold tabular-nums ${TONE_INK[m.tone]}`}>{counts[m.state]}</span>
+          <span className="text-fg-secondary">{m.word}</span>
+        </span>
+      ))}
+      {counts.reading > 0 && (
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-fg-secondary" data-testid="checks-count-reading">
+          <StatusMark status="running" />
+          {counts.reading} reading
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** Exported for tests; page modules are knip entries, so it carries no tag. One sentence (the page context summary): what needs you first, then what is fine. */
 export function checksStatus(cards: readonly CheckCard[]): { tone: PageStatusTone; sentence: string } {
   const ready = cards.filter((c) => c.view)
   const failed = ready.filter((c) => c.view!.state === 'failed')
@@ -183,18 +235,33 @@ export function ChecksPage() {
   // Providers & AI routes: operators only (the route 403s for everyone else).
   const ops = usePageData<OpsReadResponse>(isOperator ? '/v1/admin/kensaurus/ops' : null, { scope: 'none' })
 
+  // Never an endless "Checking…": a read with no answer after 10 s reads as "could not read",
+  // with one Retry (lib/ciReadTimeout.ts). An answer that lands later still renders.
+  const navWaiting = nav.data == null && nav.error == null
+  const recipeWaiting = !!projectId && recipe.data == null && recipe.error == null
+  const testWaiting = !!projectId && firstUserTest.data == null && firstUserTest.error == null
+  const opsWaiting = !!isOperator && ops.data == null && ops.error == null
+  const { timedOut, restart } = useReadTimedOut(navWaiting || recipeWaiting || testWaiting || opsWaiting)
+  const retryReads = () => {
+    nav.reload()
+    recipe.reload()
+    firstUserTest.reload()
+    ops.reload()
+    restart()
+  }
+
   // No selected app: the recipe read never starts, so these cards must not stay blank.
   const recipePhase = !projectId
     ? 'no_project'
     : recipe.data
       ? 'ready'
-      : recipe.error
+      : recipe.error || timedOut
         ? 'error'
         : 'loading'
   const slices = nav.data ? normalizeNavSlices(nav.data.slices) : null
   const views = buildCheckCardViews({
     // A failed nav-meta read reads as Status unavailable on every slice card, never as a pass.
-    navReady: nav.data != null || nav.error != null,
+    navReady: nav.data != null || nav.error != null || timedOut,
     qa: slices?.qaCoverage ?? null,
     health: slices?.health ?? null,
     audit: slices?.fullstackAudit ?? null,
@@ -213,10 +280,10 @@ export function ChecksPage() {
     design: observed(recipe.data?.elements.design, '/design'),
     ci: observed(recipe.data?.elements.ci, '/ci'),
     firstUserTest: {
-      phase: !projectId ? 'no_project' : firstUserTest.data ? 'ready' : firstUserTest.error ? 'error' : 'loading',
+      phase: !projectId ? 'no_project' : firstUserTest.data ? 'ready' : firstUserTest.error || timedOut ? 'error' : 'loading',
       runs: firstUserTest.data?.runs ?? [],
     },
-    providers: isOperator ? providersCheck(ops.data, ops.errorCode, ops.error) : undefined,
+    providers: isOperator ? providersCheck(ops.data, ops.errorCode, ops.error ?? (timedOut ? 'timeout' : null)) : undefined,
   })
 
   const cards = sortCheckCards(
@@ -231,7 +298,7 @@ export function ChecksPage() {
     }),
   )
   const status = checksStatus(cards)
-  const firstRed = cards.find((c) => c.view && (c.view.state === 'failed' || c.view.state === 'findings'))
+  const counts = checkCounts(cards)
   const now = useNow(60_000)
 
   // Each check's count at the end of the last full read, per app: the "▲ +3" on the cards.
@@ -248,10 +315,13 @@ export function ChecksPage() {
     base.data,
     now,
   )
-  const open = cards.filter((c) => !c.view || !FOLDED.has(c.view.state))
+  // A check with an alert card is shown there once, not again in the grid (2026-11-18).
+  const alerted = new Set(alerts.map((a) => `/${a.id}`))
+  const open = cards.filter((c) => (!c.view || (!FOLDED.has(c.view.state) && !IDLE.has(c.view.state))) && !alerted.has(c.path))
+  const idle = cards.filter((c) => c.view && IDLE.has(c.view.state))
   const folded = cards.filter((c) => c.view && FOLDED.has(c.view.state))
-  const passing = folded.filter((c) => c.view!.state === 'pass').length
-  const watching = folded.length - passing
+  const passing = counts.pass
+  const watching = counts.watching
   const labelOf = new Map(cards.map((c) => [`check:${c.path}`, c.item.label]))
 
   usePublishPageContext({
@@ -285,23 +355,14 @@ export function ChecksPage() {
             {
               priority: POSTURE_PRIORITY.status,
               children: (
-                <PageStatus
-                  ariaLabel="Checks status"
-                  tone={status.tone}
-                  sentence={status.sentence}
-                  action={
-                    firstRed ? (
-                      <Btn size="sm" variant="primary" to={firstRed.path}>
-                        Open {firstRed.item.label}
-                      </Btn>
-                    ) : undefined
-                  }
-                  data-testid="checks-status"
-                />
+                // Counts as marks; the alert cards below carry the names and the Open buttons.
+                <PageStatus ariaLabel="Checks status" tone={status.tone} marked sentence={<CountMarks counts={counts} fallback="No check needs you right now." />} data-testid="checks-status" />
               ),
             },
           ]}
         />
+
+        {timedOut && <CiNotChecked what="Some checks" onRetry={retryReads} testId="checks-not-checked" />}
 
         <AlertCards alerts={alerts} emptyText={null} label="Checks that need you" testIdPrefix="checks" keyLabel={(k) => labelOf.get(k) ?? k} />
 
@@ -313,6 +374,37 @@ export function ChecksPage() {
               ))}
             </ul>
           </div>
+        )}
+
+        {idle.length > 0 && (
+          <section className="rounded-md border border-edge bg-surface-raised" aria-labelledby="checks-idle-title" data-testid="checks-idle">
+            <h2 id="checks-idle-title" className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-fg">
+              <StatusGlyph tone="off" />
+              Not running yet
+              <span className="font-mono font-extrabold tabular-nums" data-testid="checks-idle-count">
+                ({idle.length})
+              </span>
+            </h2>
+            {/* Two groups named once, rows without a pill each: "Not set up" ×3 and "Not run yet" ×2
+                under one header said each state on every row (round 3). */}
+            {[
+              { id: 'not_set_up', word: 'Not set up', cards: idle.filter((c) => c.view!.state === 'not_set_up') },
+              { id: 'not_checked', word: 'Not run yet', cards: idle.filter((c) => c.view!.state !== 'not_set_up') },
+            ]
+              .filter((g) => g.cards.length > 0)
+              .map((g) => (
+                <div key={g.id} className="border-t border-edge-subtle" data-testid={`checks-idle-${g.id}`}>
+                  <p className="px-3 pt-1.5 text-2xs font-semibold text-fg-secondary">
+                    {g.word} <span className="font-mono tabular-nums">{g.cards.length}</span>
+                  </p>
+                  <ul className="list-none divide-y divide-edge-subtle p-0" aria-label={`Checks ${g.word.toLowerCase()}`}>
+                    {g.cards.map((card) => (
+                      <FoldedCheck key={card.path} {...rowProps(card)} hidePill />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </section>
         )}
 
         {folded.length > 0 && (
@@ -359,7 +451,6 @@ const LINK = 'truncate rounded-sm text-sm font-semibold text-fg after:absolute a
 function OpenCheck({ card, gated, change, now }: RowProps) {
   const { path, item, view } = card
   const Icon = item.icon
-  const group = GROUP_OF.get(path)
   const link = useLinked([`check:${path}`], `check:${path}`)
   return (
     <li {...link} className={`${link.className} min-w-0`} data-testid={`checks-card-${path.slice(1)}`} data-state={view?.state ?? 'loading'}>
@@ -386,7 +477,6 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-fg-muted">
           <RunAge lastRunAt={view?.lastRunAt} now={now} />
           {view?.detail && !view.lastRunAt ? <span className="text-fg-secondary">{view.detail}</span> : null}
-          {group ? <span>{CHECK_SUB_GROUPS[group].title}</span> : null}
           {view?.state === 'not_set_up' && view.setupTo ? (
             <Link
               to={view.setupTo}
@@ -402,7 +492,7 @@ function OpenCheck({ card, gated, change, now }: RowProps) {
 }
 
 /** A passing or watching check, one line inside the fold. */
-function FoldedCheck({ card, gated, change, now }: RowProps) {
+function FoldedCheck({ card, gated, change, now, hidePill = false }: RowProps & { hidePill?: boolean }) {
   const { path, item, view } = card
   const Icon = item.icon
   const link = useLinked([`check:${path}`], `check:${path}`)
@@ -424,8 +514,17 @@ function FoldedCheck({ card, gated, change, now }: RowProps) {
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-2xs">
         {gated && item.requiresFeature && <UpgradePill flag={item.requiresFeature} />}
         <ChangeChip change={change} testId="checks-change" />
-        {view?.lastRunAt ? <RunAge lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="text-fg-secondary">{view.detail}</span> : null}
-        {view && <StatusPill status={STATE_STATUS[view.state]} label={view.chip} />}
+        {view?.lastRunAt ? <RunAge lastRunAt={view.lastRunAt} now={now} /> : view?.detail ? <span className="hidden text-fg-secondary sm:inline">{view.detail}</span> : null}
+        {view && !hidePill && <StatusPill status={STATE_STATUS[view.state]} label={view.chip} />}
+        {view?.state === 'not_set_up' && view.setupTo ? (
+          <Link
+            to={view.setupTo}
+            className="relative z-10 rounded-sm font-medium whitespace-nowrap text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            aria-label={`Set up ${item.label}`}
+          >
+            Set up →
+          </Link>
+        ) : null}
       </span>
     </li>
   )

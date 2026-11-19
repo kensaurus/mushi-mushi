@@ -36,7 +36,7 @@ vi.mock('../../lib/supabase', async (importOriginal) => ({
 }))
 
 import { FreshEyesPanel } from './FreshEyesPanel'
-import { formatSeconds, isStartUrl, runHeadline, runnerMessage, stepNotes, ttfvTrend, type FreshEyesStep } from '../../lib/freshEyes'
+import { formatSeconds, isStartUrl, runHeadline, runNowBlocker, runnerMessage, stepNotes, ttfvTrend, type FreshEyesStep } from '../../lib/freshEyes'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -174,10 +174,32 @@ describe('Run now', () => {
 
   it('with no computer of yours, says so with one setup action, and Run now is off', () => {
     render({ ...GLOT, runner: { state: 'none', hostname: null, lastSeenAt: null } })
-    expect(host.querySelector('[data-testid="fresh-eyes-runner"]')!.textContent).toContain('Set up Mushi Mushi on your computer once')
+    expect(host.querySelector('[data-testid="fresh-eyes-runner"]')!.textContent).toContain('Install the Mushi Mushi worker there once')
     expect(host.textContent).toContain('mushi worker install')
     expect(host.querySelector('a[href="/pipeline?tab=workers"]')).not.toBeNull()
     expect(button('Run now')!.disabled).toBe(true)
+    // The off button points at step 1 instead of repeating it.
+    expect(host.querySelector('[data-testid="fresh-eyes-run-blocker"]')!.textContent).toBe('Finish step 1 first.')
+    // Step 1 carries its own state mark, so "Finish step 1" points at something marked not done (2026-11-19).
+    const mark = host.querySelector('[data-testid="fresh-eyes-setup-step"] [data-testid="status-pill"]')!
+    expect(mark.textContent).toContain('No worker online')
+    expect(mark.getAttribute('data-status')).toBe('idle')
+  })
+
+  it('draws setup as step 1 above the form, neutral when never set up (round-2 sweep)', () => {
+    render({ ...GLOT, runner: { state: 'none', hostname: null, lastSeenAt: null } })
+    const step = host.querySelector('[data-testid="fresh-eyes-setup-step"]')!
+    expect(step.querySelector('[aria-label="Step 1"]')).not.toBeNull()
+    expect(step.className).not.toContain('warn')
+    const startPage = field('Start page')
+    expect(step.compareDocumentPosition(startPage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The instruction is said once on the card.
+    const text = host.querySelector('[data-testid="fresh-eyes-run-now"]')!.textContent ?? ''
+    expect(text.split('Install the Mushi Mushi worker').length - 1).toBe(1)
+    expect(text).not.toContain('Set up Mushi Mushi')
+    // A computer you had that is now offline is a warning.
+    render({ ...GLOT, runner: { state: 'offline', hostname: 'alienware', lastSeenAt: null } })
+    expect(host.querySelector('[data-testid="fresh-eyes-setup-step"]')!.className).toContain('warn')
   })
 
   it('names an old or offline computer and what to do', () => {
@@ -261,6 +283,15 @@ describe('freshEyes helpers', () => {
     expect(runnerMessage({ state: 'busy', hostname: 'alienware', lastSeenAt: null }, now)).toMatchObject({ canRun: true })
     expect(runnerMessage(null, now)).toMatchObject({ canRun: true, setup: null })
     expect(runnerMessage({ state: 'paused', hostname: 'alienware', lastSeenAt: null }, now).setup).toBe('workers')
+  })
+
+  it('say why Run now is off: the computer first, then the start page, then the goal', () => {
+    const ok = { runnerCanRun: true, runnerSetup: null, url: 'https://glot.it', goal: 'sign up' } as const
+    expect(runNowBlocker(ok)).toBeNull()
+    expect(runNowBlocker({ ...ok, runnerCanRun: false, runnerSetup: 'install', url: '' })).toBe('Finish step 1 first.')
+    expect(runNowBlocker({ ...ok, url: '' })).toBe('Add a start page.')
+    expect(runNowBlocker({ ...ok, url: 'ftp://x' })).toContain('https://')
+    expect(runNowBlocker({ ...ok, goal: '  ' })).toContain('came to do')
   })
 
   it('take only http(s) start pages and keep the trend to time', () => {
