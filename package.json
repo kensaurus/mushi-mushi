@@ -282,7 +282,8 @@
       },
       "apps/admin": {
         "entry": [
-          "src/stubs/rrweb.ts"
+          "src/stubs/rrweb.ts",
+          "public/runtime-config.js"
         ]
       },
       "apps/docs": {

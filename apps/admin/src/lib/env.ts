@@ -160,7 +160,7 @@ const _storedAtLoad = sanitizeStoredInstanceConfig()
  * rebuild (VITE_* are fixed at build time). The file shipped in `public/`
  * sets an empty object, so the hosted build is unchanged.
  */
-export interface RuntimeConfig {
+interface RuntimeConfig {
   supabaseUrl?: string
   supabaseAnonKey?: string
   apiUrl?: string
