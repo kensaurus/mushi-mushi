@@ -23011,6 +23011,20 @@ The **Scheduled jobs** tab has a card for each background job: `judge-batch`,
 Click **Trigger now** on `judge-batch` or `intelligence-report` to run it immediately.
 It spends AI budget, and only admins can use it. `data-retention` has no manual trigger.
 
+### Stuck reports
+
+Above the job cards, **Stuck reports** counts this app's reports stuck before triage
+(new or held for over 5 minutes, under 3 tries), failed triage jobs with tries left,
+and jobs that have waited for the worker for over 15 minutes. **Run recovery now**
+does what the 5-minute `pipeline-recovery` job does, for this app only: it sends the
+stuck reports to triage again, retries the failed jobs, and closes jobs whose report
+was already triaged. The result shows on the same line ("Re-sent 3 stuck reports to
+triage, retried 1 failed job."). It spends AI budget, so only owners and admins can
+run it. The same line shows on the **Overview** tab while something is stuck.
+
+A run by hand does not count as a run of the scheduled job, so a scheduled job that
+is not running still shows as late.
+
 ---
 
 ## Recent LLM calls log
@@ -24896,6 +24910,10 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
 
+In **All apps**, an open group lists its items in one block per app: the app with the item that has waited longest comes first, its header shows how many of the group's items are in that app and how long the oldest has waited, and **Open →** switches to that app's own Pipeline at the same group. With one app, or in **This app**, the list stays flat.
+
+The status line at the top names the group to start with, and in **All apps** the apps it is in. Its button is that group's first fix the server would take. When nothing is stuck but nothing opens fixes either, the button opens the **Workers** tab.
+
 ## Release trains
 
 One row per repository with the trains of the last 7 days: green merged, red failed, blue on the way. Click a square for that train's detail. The checks that failed the trains most often are listed under the row. **Run merge queue now** checks the queue at once and says whether a train left, and if not, when the next one may leave or why it waits.
@@ -26401,6 +26419,36 @@ Selecting a report opens the full detail view:
   the active attempt, CI badge, and merge controls.
 - **Related links**: other reports for this component, this reporter's history,
   the knowledge graph, the dispatched PR and the auto-fix pipeline.
+
+---
+
+## Pipeline strip on report detail
+
+Below **The story so far**, the **Pipeline** strip shows where this report is:
+**Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
+its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
+how long it took against the longest stage, and the time itself. A stage still open
+shows the time so far.
+
+When a stage failed or is stuck, the strip names it with the reason in one plain line
+("The AI key or the internal worker token was refused.") and the try count. The raw
+error, with keys removed, is behind **Details**, with the triage job's history. The
+button next to it retries that stage:
+
+| Stage | Button | What it does |
+| --- | --- | --- |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing; a report that is already diagnosed is refused, since it would spend AI budget again. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks (disabled with the reason when a fix PR is still open, for example). |
+| CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
+
+While triage runs, the strip checks again every few seconds and the page updates when
+it finishes. The unified timeline also lists the triage job: when it was queued, and
+when it finished, failed or gave up.
+
+In **All apps**, the list groups its rows by app: the app with the most urgent open bug
+first (critical, then high, then untriaged), the counts per state in its header and
+**Open →** to that app alone. Rows inside an app keep your sort. Grouping covers the
+page you are on.
 
 ---
 

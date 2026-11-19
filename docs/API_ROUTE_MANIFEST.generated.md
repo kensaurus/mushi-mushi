@@ -2,7 +2,7 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-18 · **824** routes.
+> Generated: 2026-11-19 · **826** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
@@ -10,7 +10,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | --- | ---: |
 | `adminOrApiKey` | 222 |
 | `apiKeyAuth` | 60 |
-| `jwtAuth` | 421 |
+| `jwtAuth` | 423 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
 | `unknown` | 51 |
@@ -571,6 +571,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/reports/:id/blast-radius` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/reports/:id/fix-context` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | POST | `/v1/admin/reports/:id/known-issues` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
+| GET | `/v1/admin/reports/:id/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-pipeline.ts` |
+| POST | `/v1/admin/reports/:id/pipeline/retry` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-pipeline.ts` |
 | GET | `/v1/admin/reports/:id/replay-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/reporter-view` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |

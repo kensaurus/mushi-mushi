@@ -58,6 +58,10 @@ Each group says its reason in plain words, for example "12 PRs: their own CI is 
 
 Every action asks first, works on one PR or the whole group, shows each PR's result, and then the page reads again.
 
+In **All apps**, an open group lists its items in one block per app: the app with the item that has waited longest comes first, its header shows how many of the group's items are in that app and how long the oldest has waited, and **Open →** switches to that app's own Pipeline at the same group. With one app, or in **This app**, the list stays flat.
+
+The status line at the top names the group to start with, and in **All apps** the apps it is in. Its button is that group's first fix the server would take. When nothing is stuck but nothing opens fixes either, the button opens the **Workers** tab.
+
 ## Release trains
 
 One row per repository with the trains of the last 7 days: green merged, red failed, blue on the way. Click a square for that train's detail. The checks that failed the trains most often are listed under the row. **Run merge queue now** checks the queue at once and says whether a train left, and if not, when the next one may leave or why it waits.

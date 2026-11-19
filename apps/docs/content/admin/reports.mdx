@@ -69,6 +69,36 @@ Selecting a report opens the full detail view:
 
 ---
 
+## Pipeline strip on report detail
+
+Below **The story so far**, the **Pipeline** strip shows where this report is:
+**Reported → Quick check → Diagnosis → Fix → PR → CI → Merged → Live**. Each stage has
+its state (✓ passed, ● running, ◷ waiting, ⧗ slow, ✕ failed, ○ not started), a bar for
+how long it took against the longest stage, and the time itself. A stage still open
+shows the time so far.
+
+When a stage failed or is stuck, the strip names it with the reason in one plain line
+("The AI key or the internal worker token was refused.") and the try count. The raw
+error, with keys removed, is behind **Details**, with the triage job's history. The
+button next to it retries that stage:
+
+| Stage | Button | What it does |
+| --- | --- | --- |
+| Quick check, Diagnosis | **Retry triage** / **Re-run diagnosis** | Runs triage again for this report. A job the worker already has answers "already running" and starts nothing; a report that is already diagnosed is refused, since it would spend AI budget again. Members only, at most 30 an hour per person. |
+| Fix | **Retry fix** | The page's own dispatch, with the same checks (disabled with the reason when a fix PR is still open, for example). |
+| CI | **CI repair ↑** | Jumps to the fix actions bar at the top of the page, which holds CI repair and the other PR actions. |
+
+While triage runs, the strip checks again every few seconds and the page updates when
+it finishes. The unified timeline also lists the triage job: when it was queued, and
+when it finished, failed or gave up.
+
+In **All apps**, the list groups its rows by app: the app with the most urgent open bug
+first (critical, then high, then untriaged), the counts per state in its header and
+**Open →** to that app alone. Rows inside an app keep your sort. Grouping covers the
+page you are on.
+
+---
+
 ## Merging a fix from report detail
 
 When a fix attempt completes with an open PR, the report detail page shows:

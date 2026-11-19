@@ -158,6 +158,12 @@ export function PipelinePage() {
     () => topStuck(stages.filter((s) => s.id !== 'triaged').flatMap((s) => s.groups)) ?? topStuck(stages.flatMap((s) => s.groups)),
     [stages],
   )
+  // All apps: which apps the group to start with is in ("in yen-yen, glot.it +2"), so the lead says where.
+  const topApps = useMemo(() => {
+    if (!top || !showApp) return null
+    const names = [...new Set(top.group.items.map((i) => projectNames.get(i.projectId) ?? 'an app'))]
+    return names.length > 3 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ')
+  }, [top, showApp, projectNames])
   const openers = useMemo(() => (data?.dispatchers ? openerSummary(data.dispatchers) : null), [data])
   const openerParts = useMemo(() => (data?.dispatchers ? openerSplit(data.dispatchers) : null), [data])
   // How fast fixes land and how long the waiting bugs take at that pace (2026-11-16).
@@ -334,7 +340,10 @@ export function PipelinePage() {
             sentence={
               top
                 ? // "Start here", not "the biggest": failed work leads, so a 42-report group led a 773-report backlog (round-3 review, 2026-11-19).
-                  <>Start here: <span className="font-medium">{top.group.label}</span>.</>
+                  <>
+                    Start here: <span className="font-medium">{top.group.label}</span>
+                    {topApps && <span className="text-fg-secondary"> in {topApps}</span>}.
+                  </>
                 : nothingOpens
                   ? agentCredits.state?.out
                     ? `${agentCreditsTitle(agentCredits.state)}, so nothing opens fixes. Nothing already open is stuck.`
@@ -372,6 +381,11 @@ export function PipelinePage() {
                 <a href="#pipeline-stuck" className="text-xs font-medium text-brand hover:underline" data-testid="pipeline-top-why">
                   See why →
                 </a>
+              ) : nothingOpens ? (
+                // Nothing opens fixes: the one thing to do is give the bugs someone who fixes them.
+                <Btn size="sm" variant="primary" onClick={() => setTab('workers')} data-testid="pipeline-top-workers">
+                  Set up who fixes
+                </Btn>
               ) : undefined
             }
             data-testid="pipeline-status"
