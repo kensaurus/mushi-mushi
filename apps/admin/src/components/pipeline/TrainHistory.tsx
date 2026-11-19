@@ -48,9 +48,9 @@ export function appBadgeName(repo: string, appName: string | undefined): string 
 /**
  * Repos whose trains all merged (none failed, none on the way): with two or more they fold into one
  * line, "4 repos green: …", instead of four rows of "✓ N merged ○ 0 failed" (round-3 review,
- * 2026-11-19). A repo with a retry result stays a row. @internal Exported for tests.
+ * 2026-11-19). A repo with a retry result stays a row.
  */
-export function splitGreenTrains(trains: readonly TrainSummary[], results: ReadonlyMap<string, ActionOutcome>): { rows: TrainSummary[]; green: TrainSummary[] } {
+function splitGreenTrains(trains: readonly TrainSummary[], results: ReadonlyMap<string, ActionOutcome>): { rows: TrainSummary[]; green: TrainSummary[] } {
   const green = trains.filter((t) => t.merged > 0 && t.failed === 0 && t.active === 0 && !results.has(t.repo))
   if (green.length < 2) return { rows: [...trains], green: [] }
   return { rows: trains.filter((t) => !green.includes(t)), green }

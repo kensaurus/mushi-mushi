@@ -9,8 +9,7 @@
 import type { CHIP_TONE } from './chipTone'
 import { usePageData } from './usePageData'
 
-export const PROJECT_GROUP_COLORS = ['brand', 'accent', 'info', 'ok', 'warn', 'danger', 'neutral'] as const
-export type ProjectGroupColor = (typeof PROJECT_GROUP_COLORS)[number]
+export type ProjectGroupColor = 'brand' | 'accent' | 'info' | 'ok' | 'warn' | 'danger' | 'neutral'
 
 export interface ProjectGroup {
   id: string
