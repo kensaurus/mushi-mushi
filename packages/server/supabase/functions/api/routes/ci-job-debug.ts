@@ -343,9 +343,12 @@ async function explainJob(c: Context, deps: AllDeps): Promise<Response> {
   return c.json({ ok: true, data: { explanation, cached: false } })
 }
 
-/** The App (or no stored token) refused: the stored token is the fix. */
+/**
+ * The App refused (and no stored token could): the installation has not accepted the App's
+ * Actions: Read and write yet (requested 2026-11-20), or there is no App on this repo.
+ */
 const WRITE_MISSING =
-  "Mushi Mushi's GitHub access can read your CI but not re-run or cancel it. In the GitHub connection, add a fine-grained token with Actions: Read and write for this repository."
+  "Mushi Mushi's GitHub access can read your CI but not re-run or cancel it. Accept the Mushi Mushi App's Actions permission on GitHub (Settings → Applications → Review request), or add a fine-grained token with Actions: Read and write in the GitHub connection."
 /** The stored token was tried and refused too: that token is what needs the permission. */
 const STORED_WRITE_MISSING =
   "The GitHub token saved in the GitHub connection can't re-run or cancel CI. Give it Actions: Read and write for this repository (fine-grained token), or replace it."
@@ -372,7 +375,7 @@ async function runAction(c: Context, deps: AllDeps, action: 'rerun' | 'cancel'):
   let status = await call(token.token)
   let storedRefused = token.source === 'stored'
   if (status === 403 && token.source === 'app') {
-    // The App reads Actions only: the stored token (if any) is the one that can write them.
+    // An installation that has not accepted the App's Actions write refuses: the stored token (if any) may still be able to.
     const stored = await deps.resolveRepoToken(db, row.project_id, row.repo, { skipApp: true })
     if (!('error' in stored)) {
       status = await call(stored.token)
