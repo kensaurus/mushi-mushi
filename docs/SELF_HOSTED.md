@@ -328,30 +328,30 @@ target) and DNS configuration details, see
 
 ---
 
-## Headless bootstrap (`MUSHI_INIT_*`) — currently broken
+## Headless bootstrap (`MUSHI_INIT_*`)
 
-> **Does not work today (2026-11-18).** `POST /v1/admin/bootstrap` inserts
-> `organizations` without the required `slug` and `owner_id`, and `projects`
-> without `slug`, so it returns `ORG_CREATE_FAILED` / `PROJECT_CREATE_FAILED`.
-> Create the first account, project and key in the console and with
-> `mushi login` (see the [Quickstart](#quickstart-5-commands)). The section
-> below describes the intended behaviour, kept for when the route is fixed.
+> Fixed 2026-11-19. The owner signs up once in the console first: an organisation
+> and a project each need a real owner account. Bootstrap then creates the team
+> org (or uses the owner's personal org), the project and the reporter key.
 
 Mirror of [Langfuse's `LANGFUSE_INIT_*`](https://langfuse.com/docs/self-hosting) pattern.
 When these environment variables are set, the Mushi API bootstraps an initial
 organisation, project, and reporter API key on the first authenticated request
 — useful for IaC, Docker Compose, CI seeds, and one-click deploys.
 
-Set the following Supabase secrets (all optional; omit any you don't need):
+Set the following Supabase secrets (only the owner is required once you set an org or project):
 
 ```bash
-# Org
+# Owner: an account that has signed up in the console
+npx supabase secrets set MUSHI_INIT_OWNER_EMAIL="you@example.com"
+
+# Org (optional: the owner's personal org otherwise)
 npx supabase secrets set MUSHI_INIT_ORG_NAME="My Team"
 npx supabase secrets set MUSHI_INIT_ORG_ID="00000000-0000-0000-0000-000000000001"   # optional, makes idempotent
 
 # Project
 npx supabase secrets set MUSHI_INIT_PROJECT_NAME="Production"
-npx supabase secrets set MUSHI_INIT_PROJECT_ID="00000000-0000-0000-0000-000000000002"  # optional, makes idempotent
+npx supabase secrets set MUSHI_INIT_PROJECT_ID="00000000-0000-0000-0000-000000000002"  # optional: reuse this existing project
 
 # First reporter key (mushi_... format); written as a pre-hashed key
 npx supabase secrets set MUSHI_INIT_REPORTER_KEY="mushi_mystaticreporterkey123"
