@@ -1,11 +1,22 @@
 import { createHmac } from 'node:crypto'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   buildComposeEnv,
   buildRuntimeConfigSql,
   buildSelfhostSteps,
+  consoleCheck,
+  DEPLOY_INFO_PATH,
+  formatSelfhostCheck,
+  isCloudEndpoint,
   linkedTargetFlag,
+  loadDeployStamper,
+  selfhostDoctorExitCode,
+  serverHealthCheck,
+  stampDeployInfo,
   llmProviderOfKey,
   mintSupabaseJwt,
   SELFHOST_PLAN_SQL,
@@ -48,9 +59,11 @@ describe('buildSelfhostSteps', () => {
     expect(secrets.args).toEqual(['secrets', 'set', '--env-file', join(TMP, 'mushi-secrets.env')])
     expect(secrets.files?.[0]?.content.split('\n')).toEqual([
       `MUSHI_INTERNAL_CALLER_SECRET=${TOKEN}`,
+      'MUSHI_INSTANCE_MODE=self-hosted',
       'ANTHROPIC_API_KEY=sk-ant-api03-Key_value',
       'OPENAI_API_KEY=sk-proj-Other_key',
       'ADMIN_BASE_URL=https://admin.example.com/console',
+      'MUSHI_ADMIN_ORIGIN_ALLOWLIST=https://admin.example.com',
       '',
     ])
   })
@@ -85,6 +98,8 @@ describe('buildSelfhostSteps', () => {
     expect(steps({}).filter((s) => s.args[0] === 'functions').map((s) => s.args)).toEqual([
       ['functions', 'deploy'],
     ])
+    // Only the deploy is stamped with the commit.
+    expect(steps({}).filter((s) => s.stampDeployInfo).map((s) => s.args[0])).toEqual(['functions'])
     expect(steps({ skipDeploy: true }).some((s) => s.args[0] === 'functions')).toBe(false)
   })
 
@@ -215,5 +230,89 @@ describe('selfhost secrets', () => {
     expect(vars.SUPABASE_SERVICE_ROLE_KEY).toBe(mintSupabaseJwt('service_role', vars.JWT_SECRET!, 1_700_000_000))
     expect(vars.ANTHROPIC_API_KEY).toBe('')
     expect(vars.MUSHI_PUBLIC_URL).toBe('http://localhost')
+  })
+})
+
+describe('deploy stamp', () => {
+  const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
+
+  it('stamps deploy-info.ts with the clone\u2019s own helper and puts the checked-in file back', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mushi-stamp-'))
+    try {
+      const file = join(root, DEPLOY_INFO_PATH)
+      mkdirSync(join(file, '..'), { recursive: true })
+      writeFileSync(file, 'original\n')
+      const stamper = {
+        resolveDeploySha: (cwd?: string) => (cwd === root ? 'abc1234' : 'wrong-cwd'),
+        deployInfoSource: (sha: string, at: string) => `sha=${sha} at=${at}\n`,
+      }
+      const stamp = stampDeployInfo(root, stamper, new Date('2026-11-19T00:00:00Z'))
+      expect(stamp?.sha).toBe('abc1234')
+      expect(readFileSync(file, 'utf8')).toBe('sha=abc1234 at=2026-11-19T00:00:00.000Z\n')
+      stamp!.restore()
+      stamp!.restore()
+      expect(readFileSync(file, 'utf8')).toBe('original\n')
+      expect(stampDeployInfo(join(root, 'nope'), stamper)).toBeNull()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('loads the helpers from the repo\u2019s scripts/deploy-edge-function.mjs, and null without them', async () => {
+    const stamper = await loadDeployStamper(REPO_ROOT)
+    expect(stamper).not.toBeNull()
+    const src = stamper!.deployInfoSource('deadbeef', '2026-11-19T00:00:00.000Z')
+    expect(src).toContain('export const DEPLOY_INFO')
+    expect(src).toContain('"deadbeef"')
+    expect(await loadDeployStamper(join(tmpdir(), 'no-such-mushi-clone'))).toBeNull()
+  })
+})
+
+describe('selfhost doctor', () => {
+  const SELF = 'https://abcdefghijklmnopqrst.supabase.co/functions/v1/api'
+  const fakeFetch = (res: Response | Error) =>
+    (async () => {
+      if (res instanceof Error) throw res
+      return res
+    }) as unknown as typeof fetch
+
+  it('info lines never change the exit code', () => {
+    expect(selfhostDoctorExitCode([{ status: 'pass' }, { status: 'info' }])).toBe(0)
+    expect(selfhostDoctorExitCode([{ status: 'info' }, { status: 'warn' }])).toBe(2)
+    expect(selfhostDoctorExitCode([{ status: 'warn' }, { status: 'fail' }])).toBe(1)
+  })
+
+  it('knows Mushi Mushi Cloud\u2019s API', () => {
+    expect(isCloudEndpoint('https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api')).toBe(true)
+    expect(isCloudEndpoint('https://kensaur.us/mushi-mushi/api')).toBe(true)
+    expect(isCloudEndpoint(SELF)).toBe(false)
+  })
+
+  it('console: no address is info, Cloud\u2019s console for a self-host warns, an HTML 200 passes', async () => {
+    expect(await consoleCheck(undefined, SELF, fakeFetch(new Error('unused')))).toMatchObject({ status: 'info' })
+    expect(await consoleCheck('https://kensaur.us/mushi-mushi/admin', SELF, fakeFetch(new Error('unused')))).toMatchObject({ status: 'warn' })
+    const ok = new Response('<html></html>', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+    expect(await consoleCheck('https://mushi.example.com/', SELF, fakeFetch(ok))).toMatchObject({ status: 'pass', summary: 'https://mushi.example.com answers (HTTP 200).' })
+    const notFound = new Response('nope', { status: 404, headers: { 'content-type': 'text/plain' } })
+    expect(await consoleCheck('https://mushi.example.com', SELF, fakeFetch(notFound))).toMatchObject({ status: 'warn', summary: expect.stringContaining('HTTP 404') })
+    expect(await consoleCheck('https://mushi.example.com', SELF, fakeFetch(new Error('ECONNREFUSED')))).toMatchObject({ status: 'warn', summary: expect.stringContaining('ECONNREFUSED') })
+    expect(await consoleCheck(undefined, 'https://kensaur.us/mushi-mushi/api', fakeFetch(new Error('unused')))).toBeNull()
+  })
+
+  it('server: an unstamped deploy is info, a self-host claiming Cloud warns, a stamped one passes', async () => {
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    expect(await serverHealthCheck(SELF, fakeFetch(json({ status: 'ok', version: 'dev', mode: 'self-hosted' })))).toMatchObject({ status: 'info' })
+    expect(await serverHealthCheck(SELF, fakeFetch(json({ status: 'ok', version: 'abc', mode: 'hosted' })))).toMatchObject({ status: 'warn', hint: expect.stringContaining('MUSHI_INSTANCE_MODE=self-hosted') })
+    expect(await serverHealthCheck(SELF, fakeFetch(json({ status: 'ok', version: '0123456789abcdef', mode: 'self-hosted' })))).toMatchObject({ status: 'pass', summary: 'Running commit 0123456.' })
+    expect(await serverHealthCheck(SELF, fakeFetch(new Response('', { status: 502 })))).toMatchObject({ status: 'fail' })
+    expect(await serverHealthCheck(SELF, fakeFetch(new Error('timeout')))).toMatchObject({ status: 'fail' })
+  })
+
+  it('prints the label and the app name, never a raw id first, and a fix only for problems', () => {
+    expect(
+      formatSelfhostCheck({ name: 'codebase_index:1234-uuid', label: 'Code index', appName: 'glot.it', status: 'warn', summary: 'Index stalled.', hint: 'Re-index.' }),
+    ).toEqual(['WARN  Code index (glot.it): Index stalled.', '      \u2192 Re-index.'])
+    expect(formatSelfhostCheck({ name: 'observability', status: 'info', summary: 'Langfuse: off.', hint: 'Optional.' })[0]).toBe('INFO  observability: Langfuse: off.')
+    expect(formatSelfhostCheck({ name: 'x', label: 'X', status: 'pass', summary: 'ok', hint: 'unused' })).toEqual(['OK    X: ok'])
   })
 })
