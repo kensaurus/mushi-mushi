@@ -63,7 +63,7 @@ Every failed job has a **Why?** button: on the cards at the top (**Why it failed
 | **Log around the failure** | The lines around the errors in the job's log, read from GitHub when you open the panel. Lines that read like instructions to an AI or name a secret are hidden, and links show as `[url]`. Mushi Mushi does not store the log. GitHub's annotations are listed under it. |
 | Actions | **Re-run failed jobs** for that run, **Cancel run** while it is still going, and **Send to CI repair** when the job tested a Mushi Mushi fix: an agent makes CI green without weakening tests. **Open on GitHub** is last. |
 
-Re-run and cancel need **Actions: Read and write** on the GitHub access Mushi Mushi uses. The Mushi Mushi GitHub App reads Actions only, so the panel says so and links the GitHub connection, where a fine-grained token with that permission can be added. A missing OpenAI key or a spent AI limit shows its own fix button.
+Re-run and cancel need **Actions: Read and write** on the GitHub access Mushi Mushi uses. The Mushi Mushi GitHub App asks for it; if your installation has not accepted it yet (GitHub → Settings → Applications → Review request), the panel says so and links the GitHub connection, where a fine-grained token with that permission also works. A missing OpenAI key or a spent AI limit shows its own fix button.
 
 ## Test machine or your code
 
