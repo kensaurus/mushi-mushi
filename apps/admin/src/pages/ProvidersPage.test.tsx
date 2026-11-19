@@ -318,9 +318,9 @@ describe('ProvidersPage tabs', () => {
     const rows = [...container.querySelectorAll('[data-testid^="provider-row-"]')]
     const noInc = rows.find((r) => !r.querySelector('[data-testid="provider-incidents"] [title]'))
     if (noInc) expect(noInc.querySelector('[data-testid="provider-incidents"]')?.textContent).toContain('no incidents')
-    // No balance reading is unknown: hatched "not checked", never "no balance".
+    // No balance reading says why (a key-only check), hatched, never "no balance".
     const anthropic = q('[data-testid="provider-row-kenji:anthropic"]')!
-    expect(anthropic.querySelector('[data-testid="gauge-not-checked"]')?.textContent).toBe('not checked')
+    expect(anthropic.querySelector('[data-testid="gauge-not-checked"]')?.textContent).toBe('key check only')
     expect(container.textContent).not.toContain('no balance')
   })
 

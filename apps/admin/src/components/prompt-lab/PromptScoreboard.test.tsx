@@ -69,12 +69,12 @@ describe('scoreboardRows + stageVerdict', () => {
 
   it('never calls an ungraded test better or worse', () => {
     const row = { stage: 'stage1', active: v('stage1', 'v1', { is_active: true, avg_judge_score: 0.8 }), candidate: v('stage1', 'v2', { is_candidate: true, traffic_percentage: 5 }) }
-    expect(stageVerdict(row).text).toBe('Test at 5% of traffic, waiting for grades')
+    expect(stageVerdict(row).text).toBe('Testing on 1 in 20 reports, waiting for grades')
   })
 
   it('calls a test at 0% of traffic not started, not running', () => {
     const row = { stage: 'stage1', active: v('stage1', 'v1', { is_active: true }), candidate: v('stage1', 'v2', { is_candidate: true, traffic_percentage: 0 }) }
-    expect(stageVerdict(row)).toEqual({ text: 'Not started: 0% of traffic', tone: 'warn' })
+    expect(stageVerdict(row)).toEqual({ text: 'Not started: gets no reports', tone: 'warn' })
   })
 })
 
@@ -148,6 +148,6 @@ describe('PromptScoreboard', () => {
     }
     const [row] = scoreboardRows(['stage2'], g)
     expect(row!.candidate?.version).toBe('v3')
-    expect(stageVerdict(row!).text).toBe('Test at 50% of traffic, waiting for grades')
+    expect(stageVerdict(row!).text).toBe('Testing on half of reports, waiting for grades')
   })
 })

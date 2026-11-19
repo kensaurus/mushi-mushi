@@ -59,6 +59,7 @@ import {
   type OptimisticPatch,
   type ProvidersTab,
   makeAppNamer,
+  makeAppProjectFinder,
 } from '../lib/providersView'
 
 export function ProvidersPage() {
@@ -92,6 +93,7 @@ export function ProvidersPage() {
   // The ops registry names apps by repo slug; the console names them as every other page does.
   const setup = useSetupStatus(useActiveProjectId())
   const appName = useMemo(() => makeAppNamer(setup.data?.projects ?? []), [setup.data?.projects])
+  const appProject = useMemo(() => makeAppProjectFinder(setup.data?.projects ?? []), [setup.data?.projects])
   const toast = useToast()
   const now = useNow(30_000)
   const [snapshot, addPatch] = useOptimistic(ops.data?.snapshot ?? null, applyOptimistic)
@@ -253,7 +255,7 @@ export function ProvidersPage() {
           <ProvidersAlerts alerts={alerts} onOpen={openTab} />
           <TabbedSubNav ariaLabel="Providers views" tabs={tabs} />
           {tab === 'providers' && (
-            <ProvidersTable providers={providers} incidents={incidents} now={now} pending={pending} onToggle={onProviderToggle} onEditThresholds={setEditing} appName={appName} />
+            <ProvidersTable providers={providers} incidents={incidents} now={now} pending={pending} onToggle={onProviderToggle} onEditThresholds={setEditing} appName={appName} appProject={appProject} />
           )}
           {tab === 'spend' && <SpendPanel snapshot={snapshot} appName={appName} />}
           {tab === 'routes' && (

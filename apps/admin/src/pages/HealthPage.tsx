@@ -55,7 +55,6 @@ import { useNextBestAction } from '../lib/useNextBestAction'
 import { markJudgeBatchSeen } from '../lib/judgeFreshness'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { AlertCards } from '../components/signal/AlertCards'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { HealthSectionsBar, resolveHealthView, type HealthSection } from '../components/health/HealthSectionsBar'
@@ -453,58 +452,11 @@ function HealthPageContent() {
     ? { ok: cronStates.filter((c) => c.state.tone === 'ok').length, total: KNOWN_JOBS.length, failed: failingCron.length }
     : undefined
 
+  // A failed or overdue job, and a failing share of AI calls, lead the status line below with
+  // their one button ("Run now", "See failed calls"); the cards that said them again are gone
+  // (console UX overhaul, 2026-11-19).
+  const jobMarks = cronStates.map(({ job, state }) => ({ job, tone: state.tone, label: state.label }))
   const recommendedAction = (() => {
-    if (llm.errorRate > 0.05) {
-      return (
-        <RecommendedAction
-          tone="urgent"
-          title={`LLM error rate is ${errorPct}% over the last ${window}`}
-          description="Anything above 5% usually points to an upstream provider outage or an expired API key. Check provider status pages and rotate keys if needed."
-          cta={{ label: 'Check Anthropic status', href: 'https://status.anthropic.com' }}
-        />
-      )
-    }
-    if (llm.fallbackRate > 0.1) {
-      return (
-        <RecommendedAction
-          tone="urgent"
-          title={`Fallback rate spiked to ${fallbackPct}%`}
-          description="More than 10% of calls are falling back to the secondary provider. Primary may be rate-limiting or returning errors."
-          cta={{ label: 'Check Anthropic status', href: 'https://status.anthropic.com' }}
-        />
-      )
-    }
-    if (failingCron.length > 0) {
-      return (
-        <RecommendedAction
-          tone="urgent"
-          title={`${failingCron.length} scheduled ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
-          description={`Last ${failingCron.length === 1 ? 'run of' : 'runs of'} ${failingCron.join(', ')} ended in error. Trigger manually to confirm it's reproducible, then open the cron logs.`}
-          cta={{ label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') }}
-        />
-      )
-    }
-    if (lateCount > 0) {
-      // Late, not broken: a serious ◆ card (2026-11-18), drawn first on the page.
-      return (
-        <AlertCards
-          testIdPrefix="health"
-          label="Jobs that need you"
-          emptyText={null}
-          alerts={[
-            {
-              id: 'cron-overdue',
-              severity: 'serious',
-              label: 'Overdue',
-              title: `${lateCount} scheduled ${lateCount === 1 ? 'job is' : 'jobs are'} overdue`,
-              detail: overdueCron.length > 0 ? overdueCron.join(', ') : 'Missed its expected schedule',
-              metric: { value: String(lateCount), unit: 'overdue' },
-              action: { label: 'Open Scheduled jobs', onClick: () => setActiveTab('cron') },
-            },
-          ]}
-        />
-      )
-    }
     if (llm.totalCalls === 0) {
       return (
         <RecommendedAction
@@ -589,6 +541,13 @@ function HealthPageContent() {
                 stats={stats}
                 lateJobs={lateCount}
                 jobs={jobsOnTime}
+                jobMarks={cron ? jobMarks : undefined}
+                failingJobs={failingCron}
+                overdueJobs={overdueCron}
+                window={window}
+                onRunJob={(job) => void triggerJob(job)}
+                runningJob={triggering}
+                onTab={setActiveTab}
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}

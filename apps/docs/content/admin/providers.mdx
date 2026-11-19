@@ -10,7 +10,9 @@ robots:
 
 **Route:** `/providers` (operators only; other accounts never see it)
 
-- **Providers:** one row per provider account, worst first: ✕ down, ⧗ warn, ✓ ok, ◷ stale. Each row shows its balance or quota bar.
+- **Providers:** one row per provider account, worst first, each state a glyph and a plain word: ✕ Down, ⧗ Warning, ✓ Working, ◷ Not checked lately, ○ Not checked, ⊘ Off. Each row shows its balance or quota bar; with no balance it says why ("key check only" when the account's check only tests its key). **Used by** is one chip per app with its icon; hover a chip for the features that app calls the account for.
+  - An account that is off says so in one line with **Turn on**.
+  - An unchecked account says why in one line: no key is stored on kenji for its health check, or the watch has not probed it yet. That is set up on kenji, so there is no button.
 - **Spend:** what each app's AI calls cost against what the app sells, with the margin as ▲/▼.
 - **Routes:** the models each app tries, in order. Toggle, reorder or edit a route; a change that would leave an app with no enabled default route is refused.
 - **History:** every change, who made it, and when.
