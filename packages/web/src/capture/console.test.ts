@@ -81,4 +81,39 @@ describe('createConsoleCapture', () => {
     expect(entries[0].message).toContain('"key"');
     expect(entries[0].message).toContain('"value"');
   });
+
+  it('records an uncaught error that never went through console.*', () => {
+    capture = createConsoleCapture();
+    const err = new TypeError("Cannot read properties of undefined (reading '0')");
+    window.dispatchEvent(
+      new ErrorEvent('error', { error: err, message: err.message, filename: 'https://shop.example/app.js', lineno: 42, colno: 7 }),
+    );
+    const [entry] = capture.getEntries();
+    expect(entry.level).toBe('error');
+    expect(entry.message).toBe(
+      "Uncaught TypeError: Cannot read properties of undefined (reading '0') (https://shop.example/app.js:42:7)",
+    );
+    expect(entry.stack).toContain('TypeError');
+  });
+
+  it('records an unhandled promise rejection', () => {
+    capture = createConsoleCapture();
+    const event = new Event('unhandledrejection') as PromiseRejectionEvent;
+    Object.defineProperty(event, 'reason', { value: new Error('order request timed out') });
+    window.dispatchEvent(event);
+    const plain = new Event('unhandledrejection') as PromiseRejectionEvent;
+    Object.defineProperty(plain, 'reason', { value: { code: 503 } });
+    window.dispatchEvent(plain);
+    expect(capture.getEntries().map((e) => e.message)).toEqual([
+      'Unhandled rejection: Error: order request timed out',
+      'Unhandled rejection: {"code":503}',
+    ]);
+  });
+
+  it('stops listening for window errors after destroy', () => {
+    capture = createConsoleCapture();
+    capture.destroy();
+    window.dispatchEvent(new ErrorEvent('error', { error: new Error('late'), message: 'late' }));
+    expect(capture.getEntries()).toHaveLength(0);
+  });
 });

@@ -62,6 +62,51 @@ export function createConsoleCapture(): ConsoleCapture {
     console[level] = wrapper as typeof console.log;
   }
 
+  // An exception thrown in an event handler and an unhandled promise
+  // rejection never pass through console.*: the browser prints "Uncaught …"
+  // itself. They are often the cause of the bug being reported, so record
+  // them as error entries too (2026-11-20: a demo Pay handler's TypeError
+  // reached neither the report nor the diagnosis).
+  const push = (entry: MushiConsoleEntry) => {
+    entries.push(entry);
+    if (entries.length > MAX_ENTRIES) entries.shift();
+  };
+  const onError = (event: ErrorEvent) => {
+    const err = event.error instanceof Error ? event.error : undefined;
+    const where = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : '';
+    const what = err ? `${err.name}: ${err.message}` : event.message || 'error';
+    push({
+      level: 'error',
+      message: `Uncaught ${what}${where}`.slice(0, MAX_MESSAGE_LENGTH),
+      timestamp: Date.now(),
+      ...(err?.stack ? { stack: err.stack.slice(0, 1000) } : {}),
+    });
+  };
+  const onRejection = (event: PromiseRejectionEvent) => {
+    const reason: unknown = event.reason;
+    let what: string;
+    if (reason instanceof Error) {
+      what = `${reason.name}: ${reason.message}`;
+    } else {
+      try {
+        what = typeof reason === 'string' ? reason : JSON.stringify(reason);
+      } catch {
+        what = String(reason);
+      }
+    }
+    push({
+      level: 'error',
+      message: `Unhandled rejection: ${what}`.slice(0, MAX_MESSAGE_LENGTH),
+      timestamp: Date.now(),
+      ...(reason instanceof Error && reason.stack ? { stack: reason.stack.slice(0, 1000) } : {}),
+    });
+  };
+  const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
+  if (canListen) {
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+  }
+
   return {
     getEntries() {
       return [...entries];
@@ -76,6 +121,10 @@ export function createConsoleCapture(): ConsoleCapture {
         if (originals[level] && console[level] === wrappers[level]) {
           console[level] = originals[level] as typeof console.log;
         }
+      }
+      if (canListen) {
+        window.removeEventListener('error', onError);
+        window.removeEventListener('unhandledrejection', onRejection);
       }
     },
   };
