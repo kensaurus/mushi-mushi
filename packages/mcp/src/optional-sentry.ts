@@ -7,9 +7,37 @@
  *          installs nor imports it.
  */
 
+/**
+ * SDK 11 replacement for the v10 `sendDefaultPii` default (off). In v11 every
+ * `dataCollection` field left unset collects, so each one is set explicitly.
+ * v10 ignores the option and keeps its own restrictive default.
+ *
+ * Typed structurally on purpose: importing `@sentry/node` types here would put
+ * the optional peer into this package's declarations. The test file checks it
+ * against the real `NodeOptions['dataCollection']`.
+ */
+export const SENTRY_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: false,
+  httpBodies: [] as never[],
+  urlQueryParams: false,
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  mcp: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+}
+
 /** The slice of `@sentry/node` this module uses. */
 interface SentryModule {
-  init(options: { dsn: string; environment: string; tracesSampleRate: number }): unknown
+  init(options: {
+    dsn: string
+    environment: string
+    tracesSampleRate: number
+    dataCollection: typeof SENTRY_DATA_COLLECTION
+  }): unknown
 }
 
 export type OptionalSentryStatus = 'disabled' | 'enabled' | 'unavailable'
@@ -51,6 +79,7 @@ export async function initOptionalSentry(
     dsn,
     environment: env.MUSHI_SENTRY_ENVIRONMENT ?? env.NODE_ENV ?? 'development',
     tracesSampleRate: 0,
+    dataCollection: SENTRY_DATA_COLLECTION,
   })
   return 'enabled'
 }

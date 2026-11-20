@@ -5,7 +5,9 @@
  *          self-hosted forks that don't want to send telemetry to our org).
  *
  * PRIVACY:
- *   - sendDefaultPii: false — never auto-attach IPs, cookies, or request bodies
+ *   - dataCollection: SENTRY_DATA_COLLECTION — SDK 11 removed sendDefaultPii and
+ *     collects everything when dataCollection is unset; this keeps the old
+ *     sendDefaultPii: false baseline (no user info, cookies, IP headers, bodies)
  *   - replays disabled — org free-tier quota (errors-only capture retained)
  *   - beforeSend strips token-like query params from URLs before transport
  *
@@ -27,7 +29,7 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
-import { makeFetchTransport, createTransport } from '@sentry/react'
+import { makeFetchTransport, createTransport, type BrowserOptions } from '@sentry/react'
 
 // Sentry's transport-related types (Transport, Envelope, BrowserTransportOptions,
 // TransportMakeRequestResponse) live inside @sentry/core and are NOT re-exported
@@ -39,6 +41,25 @@ type BrowserTransportOptions = Parameters<typeof makeFetchTransport>[0]
 type Transport = ReturnType<typeof makeFetchTransport>
 type SendArg = Parameters<Transport['send']>[0]
 type SendResult = Awaited<ReturnType<Transport['send']>>
+
+/**
+ * SDK 11 replacement for `sendDefaultPii: false`. Every field left unset in
+ * `dataCollection` defaults to collecting, so each one is set explicitly.
+ */
+const IP_LIKE_HEADERS = ['forwarded', 'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'via']
+export const SENTRY_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: { deny: IP_LIKE_HEADERS }, response: { deny: IP_LIKE_HEADERS } },
+  httpBodies: [],
+  urlQueryParams: { deny: ['api_key', 'apiKey', 'token', 'key', 'access_token', 'session'] },
+  graphQL: { document: false, variables: false },
+  genAI: { inputs: false, outputs: false },
+  mcp: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  stackFrameVariables: false,
+} satisfies NonNullable<BrowserOptions['dataCollection']>
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -98,7 +119,7 @@ export function initSentry(): void {
     dsn,
     environment: import.meta.env.MODE,
     release: import.meta.env.VITE_RELEASE,
-    sendDefaultPii: false,
+    dataCollection: SENTRY_DATA_COLLECTION,
     tracesSampleRate: 0.05,
     transport: makeCircuitBreakingTransport,
     integrations: [
