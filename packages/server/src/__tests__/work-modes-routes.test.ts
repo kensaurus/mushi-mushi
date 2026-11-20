@@ -12,6 +12,11 @@
  *              a finding is filed once (open or dismissed blocks a refile, a
  *              fixed one may be filed again), goes to a fix lane on the same
  *              machine, and a finding that reads as an instruction is refused;
+ *            - audit patterns (ADR 0063): a new screen of an open pattern joins
+ *              its report, a fixed pattern that comes back reopens it, a person's
+ *              dismissal holds, past the app's open cap a finding waits in
+ *              code_audit_deferred, a low-confidence finding is refused, and the
+ *              lane's daily recheck closes what no longer reproduces;
  *            - skill (ADR 0042 amendment): only skill-run rounds from its own
  *              queue; a fix lane leaves a report queued for another lane;
  *            - the console sets the new modes and the audit's veto model.
@@ -92,7 +97,11 @@ function setup(seed: Record<string, Array<Record<string, unknown>>> = {}) {
       autoId: true,
       uniques: { work_queue: ['lane_id', 'report_id'], work_lanes: ['host_id', 'name'], code_audit_keys: ['project_id', 'audit_key'] },
       // One active claim per report, and one per merge-queue row; NULLs are distinct, as in Postgres.
-      partialUniques: { work_claims: { keys: ['report_id', 'merge_queue_id'], where: (r) => r.status === 'active' && (r.report_id != null || r.merge_queue_id != null) } },
+      partialUniques: {
+        work_claims: { keys: ['report_id', 'merge_queue_id'], where: (r) => r.status === 'active' && (r.report_id != null || r.merge_queue_id != null) },
+        // reports_code_audit_open_pattern_uniq (20261121120000).
+        reports: { keys: ['project_id', 'pattern_key'], where: (r) => r.source === 'code_audit' && r.pattern_key != null && r.parent_report_id == null && ['new', 'classified', 'triaged', 'reopened', 'fixing'].includes(String(r.status)) },
+      },
       rpc: () => null,
     },
   )
@@ -319,18 +328,20 @@ describe('audit mode (ADR 0050)', () => {
     expect(s.db.table('reports')).toHaveLength(1)
   })
 
-  it('a dismissed report is never filed again; a fixed one is, when the evidence is still there', async () => {
+  it('a dismissed report is never filed again; a fixed one that comes back reopens as a regression (ADR 0063)', async () => {
     const s = await auditLane()
     const first = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
     const rep = s.db.table('reports')[0]!
     rep.status = 'dismissed'
     expect((await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })).status).toBe(409)
     rep.status = 'fixed'
-    const refiled = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
-    expect(refiled.status).toBe(201)
-    expect(refiled.body.data.reportId).not.toBe(first.body.data.reportId)
+    const back = await s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body: finding() })
+    // Sentry's model: the same issue regresses, it is not a new one.
+    expect([back.status, back.body.data.outcome, back.body.data.reportId]).toEqual([200, 'regressed', first.body.data.reportId])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect(rep).toMatchObject({ status: 'reopened', custom_metadata: { regressed: { from_status: 'fixed', file: 'src/app/settings/page.tsx' }, occurrences: 2 } })
     expect(s.db.table('code_audit_keys')).toHaveLength(1)
-    expect(s.db.table('code_audit_keys')[0]!.report_id).toBe(refiled.body.data.reportId)
+    expect(s.db.table('code_audit_keys')[0]!.report_id).toBe(first.body.data.reportId)
   })
 
   it('runs one pass per lane at a time, whatever its concurrency', async () => {
@@ -343,11 +354,16 @@ describe('audit mode (ADR 0050)', () => {
     expect(third.body.data.claim).toMatchObject({ kind: 'audit' })
   })
 
-  it('stops claiming and filing at the hourly cap', async () => {
-    const keys = Array.from({ length: 12 }, (_, i) => ({ id: `k${i}`, project_id: P1, audit_key: `f:${i}`, file: 'f', rule: 'r', line: 1, filed_at: '2026-10-27T11:30:00Z' }))
+  it('stops claiming and filing at the hourly cap; a due recheck still gets a pass that proposes nothing', async () => {
+    const keys = Array.from({ length: 12 }, (_, i) => ({ id: `k${i}`, project_id: P1, audit_key: `f:${i}`, file: 'f', rule: 'r', line: 1, merged: false, filed_at: '2026-10-27T11:30:00Z' }))
     const s = await lanes({ code_audit_keys: keys }, [{ name: 'glot-audit', mode: 'audit' }])
+    const lane = s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!
+    lane.audit_rechecked_at = '2026-10-27T06:00:00Z'
     const res = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
     expect(res.body.data).toEqual({ claim: null, reason: expect.stringMatching(/already filed 12 code-audit findings/) })
+    lane.audit_rechecked_at = null
+    const due = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(due.body.data.claim.audit).toMatchObject({ recheck: true, propose: false, findingsLeft: 0 })
   })
 
   it('refuses a finding that reads as an instruction, a path out of the repo, and a finding on a fix claim', async () => {
@@ -441,5 +457,130 @@ describe('console: the new modes and the veto model', () => {
     expect(byName.a.recent[0]).toMatchObject({ kind: 'audit', title: 'Code-read audit pass', outcome: 'filed' })
     expect(byName.a.counts7d.filed).toBe(1)
     expect(byName.c.repo).toBe(REPO)
+  })
+})
+
+describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
+  async function auditLane(seed: Record<string, Array<Record<string, unknown>>> = {}) {
+    const s = await lanes(seed, [{ name: 'glot-audit', mode: 'audit' }])
+    s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at = '2026-10-27T11:00:00Z'
+    const claim = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })).body.data.claim
+    return { ...s, claim }
+  }
+  const loading = (page: string, over: Record<string, unknown> = {}) =>
+    finding({
+      title: `Screen reader hears nothing while ${page} loads`,
+      file: `app/${page}/loading.tsx`,
+      screen: `app/${page}/loading.tsx`,
+      line: 7,
+      rule: 'loading-status-missing',
+      evidenceLine: `<div className="flex"> {/* ${page} */}`,
+      userImpact: `A screen reader user hears nothing while ${page} loads.`,
+      check: { kind: 'pattern', summary: `/aria-live/ is absent in app/${page}/loading.tsx near line 7` },
+      confidence: 0.8,
+      rootFile: 'app/**/loading.tsx',
+      ...over,
+    })
+  const post = (s: Awaited<ReturnType<typeof auditLane>>, body: unknown) => s.app.call('POST', '/v1/worker/claims/:id/findings', { params: { id: s.claim.id }, body })
+
+  it('a new screen of an open pattern joins its report instead of filing a new one, and does not count toward the hourly cap', async () => {
+    const s = await auditLane()
+    const a = await post(s, loading('pricing'))
+    expect([a.status, a.body.data.outcome]).toEqual([201, 'filed'])
+    const parent = s.db.table('reports')[0]!
+    expect(parent).toMatchObject({ pattern_key: 'a11y-loading-silent:app/**/loading.tsx', custom_metadata: { category: 'a11y-loading-silent', confidence: 0.8, root: 'app/**/loading.tsx' } })
+    const b = await post(s, loading('chat'))
+    expect([b.status, b.body.data.outcome, b.body.data.reportId]).toEqual([200, 'merged', a.body.data.reportId])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect((parent.affected_screens as Array<{ file: string }>).map((x) => x.file)).toEqual(['app/pricing/loading.tsx', 'app/chat/loading.tsx'])
+    expect(s.db.table('code_audit_keys').map((k) => k.merged)).toEqual([false, true])
+    // The exact replay of the merged screen is a duplicate.
+    expect((await post(s, loading('chat'))).status).toBe(409)
+    expect(s.claim.audit.findingsLeft).toBe(12)
+    const next = await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'filed' } })
+    expect(next.status).toBe(200)
+    const again = (await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })).body.data.claim
+    expect(again.audit.findingsLeft).toBe(11)
+  })
+
+  it('refuses a finding its model rated under the confidence floor, and a root outside the repository', async () => {
+    const s = await auditLane()
+    const low = await post(s, loading('pricing', { confidence: 0.4 }))
+    expect([low.status, low.body.error?.code]).toEqual([422, 'REFUSED'])
+    expect((await post(s, loading('pricing', { rootFile: '../x/**/loading.tsx' }))).status).toBe(400)
+    expect((await post(s, loading('pricing', { confidence: 2 }))).status).toBe(400)
+    expect(s.db.table('reports') ?? []).toHaveLength(0)
+  })
+
+  it('past the open cap a finding waits in code_audit_deferred, outside every count; the lane then only rechecks once a day', async () => {
+    const open = { id: R(5), project_id: P1, source: 'code_audit', status: 'classified', pattern_key: 'other:x:app/x.tsx', parent_report_id: null, created_at: '2026-10-26T00:00:00Z' }
+    const base = await lanes({ reports: [open], project_settings: [{ project_id: P1, code_audit_open_cap: 1 }] }, [{ name: 'glot-audit', mode: 'audit' }])
+    // Never rechecked: the pass is given, to recheck only.
+    const claim = (await base.app.call('POST', '/v1/worker/claim', { body: { laneId: base.ids['glot-audit'] } })).body.data.claim
+    expect(claim.audit).toMatchObject({ recheck: true, propose: false, backlog: { open: 1, cap: 1 } })
+    const s = { ...base, claim }
+    const res = await post(s, loading('pricing', { severity: 'high' }))
+    expect([res.status, res.body.data.outcome, res.body.data.reportId]).toEqual([202, 'deferred', null])
+    expect(s.db.table('reports')).toHaveLength(1)
+    expect(s.db.table('code_audit_deferred')).toEqual([expect.objectContaining({ pattern_key: 'a11y-loading-silent:app/**/loading.tsx', score: 2.4 })])
+    await post(s, loading('pricing', { severity: 'high' }))
+    expect(s.db.table('code_audit_deferred')[0]).toMatchObject({ seen_count: 2 })
+    await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'no_change' } })
+    s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at = NOW.toISOString()
+    const none = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
+    expect(none.body.data).toEqual({ claim: null, reason: expect.stringMatching(/1 open code-audit reports \(its cap is 1\)/) })
+  })
+
+  it('the daily recheck closes what no longer reproduces with the commit seen, queues a rejected fix that still reproduces once, and hands back deferred findings that fit', async () => {
+    const base = { project_id: P1, source: 'code_audit', parent_report_id: null, severity: 'medium', title: 't', description: 'd', created_at: '2026-10-29T00:00:00Z' }
+    const s = await auditLane({
+      reports: [
+        { ...base, id: R(1), status: 'classified', pattern_key: 'a11y-loading-silent:app/**/loading.tsx', custom_metadata: { rule: 'loading-status-missing' } },
+        { ...base, id: R(2), status: 'triaged', pattern_key: 'other:a:b', custom_metadata: { fix_rejected: { count: 1, pr_url: 'https://github.com/x/y/pull/1', at: '2026-11-01T00:00:00Z' } } },
+        { ...base, id: R(3), status: 'fixing', pattern_key: 'other:c:d' },
+        { ...base, id: R(4), status: 'classified', source: 'widget' },
+      ],
+      code_audit_deferred: [{ id: 'd0000000-0000-4000-8000-000000000001', project_id: P1, pattern_key: 'contrast:app/x.tsx', audit_key: 'k', finding: { title: 'x' }, score: 2, deferred_at: '2026-11-01T00:00:00Z' }],
+    })
+    const read = await s.app.call('GET', '/v1/worker/claims/:id/recheck', { params: { id: s.claim.id } })
+    expect(read.status).toBe(200)
+    // A fix in flight and a person's report are not the audit's to recheck.
+    expect(read.body.data.reports.map((r: { id: string }) => r.id)).toEqual([R(1), R(2)])
+    expect(read.body.data.backlog).toEqual({ open: 3, cap: 25 })
+    expect(read.body.data.deferred.map((d: { id: string }) => d.id)).toEqual(['d0000000-0000-4000-8000-000000000001'])
+
+    const write = await s.app.call('POST', '/v1/worker/claims/:id/recheck', {
+      params: { id: s.claim.id },
+      body: {
+        sha: 'abc1234def',
+        base: 'main',
+        results: [
+          { reportId: R(1), gone: true, reason: 'the shared component components/route-loading-shell.tsx already has /aria-live/' },
+          { reportId: R(2), gone: false, reason: '' },
+          { reportId: R(3), gone: true, reason: 'not mine to close' },
+          { reportId: R(4), gone: true, reason: 'a person reported it' },
+        ],
+        deferredGone: ['d0000000-0000-4000-8000-000000000001'],
+      },
+    })
+    expect(write.body.data).toEqual({ closed: 1, requeued: 1, deferredDropped: 1 })
+    const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
+    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_not_reproduced', sha: 'abc1234def', base: 'main' } } })
+    expect(byId(R(2))).toMatchObject({ status: 'classified', custom_metadata: { fix_rejected: { count: 1, rechecked: { sha: 'abc1234def' } } } })
+    expect([byId(R(3)).status, byId(R(4)).status]).toEqual(['fixing', 'classified'])
+    expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
+
+    // The closed pattern comes back: a regression of the same report, not a new one.
+    const back = await post(s, loading('events'))
+    expect([back.body.data.outcome, back.body.data.reportId]).toEqual(['regressed', R(1)])
+    expect(byId(R(1)).status).toBe('reopened')
+  })
+
+  it('refuses a recheck body it cannot trust', async () => {
+    const s = await auditLane()
+    const bad = (body: unknown) => s.app.call('POST', '/v1/worker/claims/:id/recheck', { params: { id: s.claim.id }, body })
+    expect((await bad({ sha: 'not a sha', base: 'main', results: [] })).status).toBe(400)
+    expect((await bad({ sha: 'abc1234', base: 'main; rm -rf', results: [] })).status).toBe(400)
+    expect((await bad({ sha: 'abc1234', base: 'main', results: [{ reportId: R(1), gone: true, reason: '' }] })).status).toBe(400)
   })
 })

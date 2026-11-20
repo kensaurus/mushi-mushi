@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { goneNote, parseAuditCheck, recheckReport, verdictCommits } from './work-recheck.js'
+import { goneNote, parseAuditCheck, planBacklog, recheckReport, verdictCommits } from './work-recheck.js'
 
 /** The description shape the server writes for a code-audit finding (_shared/work-modes.ts). */
 const desc = (summary: string) =>
@@ -81,5 +81,91 @@ describe('verdictCommits and goneNote', () => {
     expect(note).toContain('without an agent run')
     expect(note).toContain('origin/main at db4c8383a')
     expect(note).toContain('Reopen')
+  })
+})
+
+/** A tiny clone at the default branch, read the way recheckReport reads a worktree. */
+const tree = (files: Record<string, string>) => (p: string) => files[p.split(String.fromCharCode(92)).join('/').replace(/^\/wt\//, '')] ?? null
+
+describe('a shared wrapper holds what an absent check missed (ADR 0063)', () => {
+  const files = {
+    'components/route-loading-shell.tsx': ['export function RouteLoadingShell({ children }) {', '  return <>{children}<div role="alert" aria-live="assertive" /></>', '}'].join('\n'),
+    'app/pricing/loading.tsx': [
+      'import { RouteLoadingShell } from "@/components/route-loading-shell"',
+      'export default function L() {',
+      '  return (',
+      '    <RouteLoadingShell>',
+      '      <h1 className="sr-only">Pricing</h1>',
+      '    </RouteLoadingShell>',
+      '  )',
+      '}',
+    ].join('\n'),
+    'app/chat/loading.tsx': ['export default function L() {', '  return (', '    <div className="flex">', '      <h1 className="sr-only">Chat</h1>', '    </div>', '  )', '}'].join('\n'),
+  }
+  const at = (file: string, line: number) => ({ source: 'code_audit', description: desc(`/aria-busy|aria-live|role="status"/ is absent in ${file} near line ${line}`) })
+
+  it('pricing is gone: the shell around line 5 has the live region', () => {
+    const r = recheckReport(at('app/pricing/loading.tsx', 5), '/wt', tree(files))
+    expect(r.gone).toBe(true)
+    expect(r.reason).toContain('components/route-loading-shell.tsx')
+  })
+
+  it('chat is still there: nothing wraps it', () => {
+    expect(recheckReport(at('app/chat/loading.tsx', 4), '/wt', tree(files))).toEqual({ gone: false, reason: null })
+  })
+})
+
+describe('planBacklog: what a recheck would close and how the rest collapse', () => {
+  const finding = (id: string, file: string, line: number, title: string, check: string, over: Record<string, unknown> = {}) => ({
+    id,
+    project_id: 'p1',
+    source: 'code_audit',
+    status: 'classified',
+    severity: 'medium',
+    title,
+    created_at: '2026-10-29T06:00:00Z',
+    custom_metadata: { rule: 'loading-status-missing', file, line },
+    description: [
+      title,
+      '',
+      `Where: ${file}:${line}`,
+      'The code there: <div className="flex">',
+      'What the user sees: A screen reader hears nothing while it loads.',
+      'Fix: x.',
+      'Done when: y.',
+      '',
+      `Reproduced by the worker with no model: pattern check, ${check}`,
+      `Found by the code-read audit of ${file} on the local worker lane glot-audit.`,
+    ].join('\n'),
+    ...over,
+  })
+  const files = {
+    'app/a/loading.tsx': ['<div className="flex">', '<p />', '</div>'].join('\n'),
+    'app/b/loading.tsx': ['<div className="flex">', '<p />', '</div>'].join('\n'),
+    'app/c/loading.tsx': ['<div className="flex">', '<p role="status" />', '</div>'].join('\n'),
+    'app/d/page.tsx': ['<div className="flex">', '<Price value={0} />', '</div>'].join('\n'),
+  }
+  const absent = (f: string) => `/role="status"/ is absent in ${f} near line 1`
+
+  it('closes what no longer reproduces, and one route-kind pattern keeps one parent for every loading screen', () => {
+    const plan = planBacklog(
+      [
+        finding('r1', 'app/a/loading.tsx', 1, 'Screen reader hears nothing while A loads', absent('app/a/loading.tsx')),
+        finding('r2', 'app/b/loading.tsx', 1, 'Screen reader hears nothing while B loads', absent('app/b/loading.tsx'), { severity: 'high' }),
+        finding('r3', 'app/c/loading.tsx', 1, 'Screen reader hears nothing while C loads', absent('app/c/loading.tsx')),
+        finding('r4', 'app/d/page.tsx', 2, 'Total shows 0 while the price loads', '/Price value/ is present in app/d/page.tsx near line 2', {
+          custom_metadata: { rule: 'zero-total', file: 'app/d/page.tsx', line: 2 },
+        }),
+        { id: 'w1', source: 'widget', title: 'A person wrote this' },
+      ],
+      '/wt',
+      tree(files),
+    )
+    expect(plan.checked).toBe(4)
+    expect(plan.gone.map((g) => g.reportId)).toEqual(['r3'])
+    const loading = plan.patterns.find((p) => p.key === 'a11y-loading-silent:app/**/loading.tsx')
+    // The most severe is the parent.
+    expect(loading).toMatchObject({ parentId: 'r2', reportIds: ['r2', 'r1'], screens: ['app/a/loading.tsx', 'app/b/loading.tsx'] })
+    expect([plan.remaining, plan.collapsed]).toEqual([2, 1])
   })
 })

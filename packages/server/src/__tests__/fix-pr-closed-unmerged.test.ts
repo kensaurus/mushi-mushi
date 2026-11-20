@@ -162,6 +162,27 @@ describe('finalizeFixClosedUnmerged', () => {
     )
   })
 
+  // ADR 0063: 120 rejected code-audit fixes went back to the queue as if new.
+  it("a rejected fix of Mushi's own finding leaves it triaged, out of the fix queue, with the rejection counted", async () => {
+    const { db, queries } = scripted({
+      report: { id: ATTEMPT.report_id, status: 'fixing', source: 'code_audit', custom_metadata: { rule: 'loading-status-missing' }, fix_pr_url: ATTEMPT.pr_url },
+    })
+    const res = await finalizeFixClosedUnmerged(db, ATTEMPT, { prNumber: 424, closedAt: '2026-11-21T00:00:00Z', source: 'webhook' })
+    expect(res).toEqual({ justClosed: true, reportStatus: 'triaged' })
+    const reportUpdate = findQueries(queries, 'reports', 'update')[0]
+    expect(reportUpdate.payload).toMatchObject({
+      status: 'triaged',
+      custom_metadata: { rule: 'loading-status-missing', fix_rejected: { count: 1, pr_url: ATTEMPT.pr_url } },
+    })
+  })
+
+  it("a person's unclassified report goes back to classified, never to new", async () => {
+    const { db, queries } = scripted({ report: { id: ATTEMPT.report_id, status: 'fixing', source: 'widget' } })
+    const res = await finalizeFixClosedUnmerged(db, ATTEMPT, { source: 'ci_sync' })
+    expect(res.reportStatus).toBe('classified')
+    expect(findQueries(queries, 'reports', 'update')[0].payload).not.toHaveProperty('custom_metadata')
+  })
+
   it('is idempotent: an already-closed attempt emits no second event', async () => {
     const { db, queries } = scripted({
       alreadyClosed: true,

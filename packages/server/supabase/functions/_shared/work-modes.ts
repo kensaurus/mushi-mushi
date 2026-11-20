@@ -128,6 +128,17 @@ export const AUDIT_FINDINGS_PER_HOUR = 12
 export const AUDIT_CHECK_KINDS = ['pattern', 'script'] as const
 export type AuditCheckKind = (typeof AUDIT_CHECK_KINDS)[number]
 export const AUDIT_SEVERITIES = ['high', 'medium', 'low'] as const
+/**
+ * A finding the proposing model rates below this is not filed (ADR 0063). The
+ * worker drops it first; the server refuses one that slips through.
+ */
+export const AUDIT_MIN_CONFIDENCE = 0.6
+/** Open code-audit reports one app may have before new findings wait in code_audit_deferred (project_settings.code_audit_open_cap). */
+export const DEFAULT_CODE_AUDIT_OPEN_CAP = 25
+/** The audit lane rechecks every open finding on the default branch at most this often (work_lanes.audit_rechecked_at). */
+export const AUDIT_RECHECK_EVERY_MS = 20 * 60 * 60_000
+/** Statuses a code-audit pattern parent is open in: the open list plus a fix in flight. */
+export const CODE_AUDIT_OPEN_STATUSES = ['new', 'queued', 'pending', 'submitted', 'classified', 'triaged', 'grouped', 'reopened', 'fixing', 'in_progress'] as const
 
 export interface AuditFinding {
   title: string
@@ -148,6 +159,13 @@ export interface AuditFinding {
   screen: string
   proposedBy: string | null
   vetoBy: string | null
+  /** The proposing model's confidence, 0 to 1; null from a worker older than ADR 0063. */
+  confidence: number | null
+  /**
+   * Where one fix would land (worker/audit-patterns.ts patternRoot): the shared
+   * component the evidence renders, `app/** /loading.tsx` for a route file, or `file`.
+   */
+  rootFile: string
 }
 
 const SAFE_PATH_RE = /^[A-Za-z0-9_@()[\]+.-]+(?:\/[A-Za-z0-9_@()[\]+.-]+)*$/
@@ -201,6 +219,20 @@ export function parseAuditFinding(raw: unknown): Parsed<AuditFinding> {
   const screen = safeRepoPath(b.screen)
   if (!screen) return { ok: false, message: 'screen must be the path of the screen or module the audit read.' }
   const model = (v: unknown) => (typeof v === 'string' && MODEL_RE.test(v) ? v : null)
+  let confidence: number | null = null
+  if (b.confidence !== undefined && b.confidence !== null) {
+    if (typeof b.confidence !== 'number' || !Number.isFinite(b.confidence) || b.confidence < 0 || b.confidence > 1) return { ok: false, message: 'confidence must be a number from 0 to 1.' }
+    confidence = Math.round(b.confidence * 100) / 100
+  }
+  let rootFile = file
+  if (b.rootFile !== undefined && b.rootFile !== null) {
+    const root = typeof b.rootFile === 'string' ? b.rootFile.trim() : ''
+    // A route-kind root (`app/**/loading.tsx`) is the one place a glob is allowed.
+    const globbed = /^([A-Za-z0-9_@()[\]+.-]+(?:\/[A-Za-z0-9_@()[\]+.-]+)*)\/\*\*\/([A-Za-z0-9_+.-]+)$/.exec(root)
+    const ok = globbed ? safeRepoPath(globbed[1]) !== null && safeRepoPath(globbed[2]) !== null : safeRepoPath(root) !== null
+    if (!ok) return { ok: false, message: 'rootFile must be a path inside the repository.' }
+    rootFile = root
+  }
   return {
     ok: true,
     value: {
@@ -217,8 +249,51 @@ export function parseAuditFinding(raw: unknown): Parsed<AuditFinding> {
       screen,
       proposedBy: model(b.proposedBy),
       vetoBy: model(b.vetoBy),
+      confidence,
+      rootFile,
     },
   }
+}
+
+/** Null when the finding's confidence is high enough to file (ADR 0063); otherwise why not. */
+export function auditConfidenceRefusal(f: Pick<AuditFinding, 'confidence'>): string | null {
+  if (f.confidence !== null && f.confidence < AUDIT_MIN_CONFIDENCE) return `The proposing model rated this finding ${f.confidence}, below ${AUDIT_MIN_CONFIDENCE}.`
+  return null
+}
+
+const SEVERITY_WEIGHT: Record<string, number> = { high: 3, medium: 2, low: 1 }
+
+/** How a finding ranks for the open slots: severity × confidence (a finding with no confidence counts as 0.7). */
+export function auditFindingScore(f: Pick<AuditFinding, 'severity' | 'confidence'>): number {
+  return Math.round((SEVERITY_WEIGHT[f.severity] ?? 1) * (f.confidence ?? 0.7) * 100) / 100
+}
+
+/** The cap from project_settings, or the default when it is unset or out of range. */
+export function codeAuditOpenCap(raw: unknown): number {
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 1 && n <= 500 ? n : DEFAULT_CODE_AUDIT_OPEN_CAP
+}
+
+/** Is an audit lane's daily recheck due? (Never rechecked, or longer ago than AUDIT_RECHECK_EVERY_MS.) */
+export function auditRecheckDue(recheckedAt: string | null | undefined, now: Date): boolean {
+  if (!recheckedAt) return true
+  const t = Date.parse(recheckedAt)
+  return !Number.isFinite(t) || now.getTime() - t >= AUDIT_RECHECK_EVERY_MS
+}
+
+export interface AffectedScreen {
+  screen: string
+  file: string
+  line: number
+  title: string
+  at: string
+}
+
+/** The parent's affected_screens with one more occurrence: same file and line counts once; at most 50, newest kept. */
+export function appendAffectedScreen(list: unknown, s: AffectedScreen): AffectedScreen[] {
+  const prev = (Array.isArray(list) ? list : []).filter((x): x is AffectedScreen => !!x && typeof x === 'object' && typeof (x as AffectedScreen).file === 'string')
+  const rest = prev.filter((x) => !(x.file === s.file && x.line === s.line))
+  return [...rest, s].slice(-50)
 }
 
 /**

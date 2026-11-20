@@ -92,7 +92,7 @@ function buildAuthedApp(counter: { drift: number }): Hono<any> {
     return c.json({ ok: true, data: { openFindings: (c as unknown as { get(k: string): unknown }).get('userId') === 'user-1' ? 4 : 0, criticalOpen: 0 } })
   })
   app.get('/v1/admin/fixes/summary', (c) => c.json({ ok: true, data: { inProgress: 2, failed: 1, retryable: 1, prsOpen: 3 } }))
-  app.get('/v1/admin/reports', (c) => c.json({ ok: true, data: { total: 5 } }))
+  app.get('/v1/admin/reports', (c) => c.json({ ok: true, data: { total: c.req.query('source') === 'check' ? 2 : 7 } }))
   app.get('/v1/admin/queue/summary', (c) => c.json({ ok: true, data: { byStatus: { dead_letter: 2, failed: 1, completed: 9 } } }))
   app.get('/v1/admin/inbox/stats', (c) => c.json({ ok: true, data: { openActions: 6, urgentOpenReports: 2 } }))
   app.get('/v1/admin/judge/stats', (c) => c.json({ ok: false, error: { code: 'DB_ERROR' } }, 500))
@@ -152,7 +152,9 @@ Deno.test('nav-meta folds the sidebar counters in when asked, keeping null for a
     assertEquals(counts.prsOpen, 3)
     assertEquals(counts.fixesRetryable, 1)
     assertEquals(counts.urgentOpenReports, 2)
+    // ADR 0063: 7 untriaged, 2 of them Mushi's own checks.
     assertEquals(counts.untriagedBacklog, 5)
+    assertEquals(counts.untriagedAutomated, 2)
     assertEquals(counts.queueFailed, 3)
     assertEquals(counts.inboxOpenActions, 6)
     // judge/stats failed: no number, not a fake zero.

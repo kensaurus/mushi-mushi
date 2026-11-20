@@ -124,16 +124,34 @@ again within the hour.
 One pass reads one screen (a page file, or a UI file in an app without page
 folders) of the default branch, in a worktree under `~/.cache/mushi/audit/`:
 
-1. The lane's model, in read-only ask mode, proposes up to 3 bugs. Each
-   comes with the line, the code on it, and a check: a pattern near that
-   line, or one of the repo's own `lint`, `typecheck`, `test` or `check`
-   scripts that must fail and name the file.
-2. The machine runs each check itself, with no model.
+1. The lane's model, in read-only ask mode, proposes 0 to 3 bugs, none when
+   nothing would matter to a real user. Each comes with the line, the code on
+   it, what the user sees, a severity, a confidence (under 0.6 is dropped) and
+   a check: a pattern near that line, or one of the repo's own `lint`,
+   `typecheck`, `test` or `check` scripts that must fail and name the file.
+2. The machine runs each check itself, with no model. A "missing" check also
+   fails when a shared component around the line already has what is missing.
 3. **Second model (may only veto)**, when set, can drop a reproduced
    finding. It cannot add one. A missing answer counts as a veto.
-4. What is left is filed as a report (`source = code_audit`), once per file,
-   rule and line of code, at most 12 an hour per app. It goes into the queue
-   of a fix lane for the same app on the same machine, when there is one.
+4. What is left is filed as a report (`source = code_audit`), at most 12 an
+   hour per app. It goes into the queue of a fix lane for the same app on the
+   same machine, when there is one. Filing is by root cause (ADR 0065):
+   - the same problem in the same shared component, or in every route file of
+     one kind (`app/**/loading.tsx`), is one report; each new screen is added
+     to that report's affected screens;
+   - a problem that comes back after its report was fixed reopens that report;
+   - an app holds at most 25 open code-audit reports
+     (`project_settings.code_audit_open_cap`). Past that, findings wait outside
+     every count and the lane stops proposing.
+5. Once a day the lane checks every open code-audit report of its app again on
+   the default branch first, with no model. What no longer reproduces is closed
+   as fixed with the commit it checked; the best waiting findings are filed as
+   slots free up. `mushi work --recheck --dry-run --json` shows what that would
+   do, and how the open reports collapse, without changing anything.
+
+A fix PR closed without a merge sends a code-audit report to `triaged`, out of
+the fix lane's queue, until the daily check runs: still there, it is queued
+once more (twice at most); gone, it is closed.
 
 The screens done, and findings the hourly cap held back, live in
 `~/.cache/mushi/audit/<lane>.json`. Delete it to start the screens over. An

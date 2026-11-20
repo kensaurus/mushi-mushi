@@ -24,6 +24,7 @@
 
 import { join } from 'node:path'
 import { patternReproduces, readWorktreeFile, safePath, safeRegex } from '../worker/audit.js'
+import { absentHeldByWrapper, auditCategory, auditPatternKey, patternRoot } from '../worker/audit-patterns.js'
 
 /** checkSummary cuts its text at 300 characters; a check that long may have lost its end. */
 const SUMMARY_CAP = 300
@@ -65,18 +66,30 @@ export function parseAuditCheck(description: string | null | undefined): ParsedA
 type Recheck = { gone: true; reason: string } | { gone: false; reason: string | null }
 
 /**
- * Does the report's own check still
- * reproduce in `worktree`? `gone: true` only when it is a code-audit report
- * with a readable check, the file is there, and the check no longer holds.
+ * Does the report's own check still reproduce in `worktree`? `gone: true`
+ * only when it is a code-audit report with a readable check, the file is
+ * there, and the check no longer holds. An `absent` problem is also gone when
+ * a shared wrapper around the cited line already has what was missing
+ * (ADR 0063: glot's loading screens inside RouteLoadingShell).
  */
 export function recheckReport(detail: { source?: string | null; description?: string | null }, worktree: string, readFile: (path: string) => string | null = readWorktreeFile): Recheck {
   if (detail.source !== 'code_audit') return { gone: false, reason: null }
   const check = parseAuditCheck(detail.description)
   if (!check) return { gone: false, reason: 'its check could not be read back, so the agent looks' }
-  const text = readFile(join(worktree, check.file))
+  const readRel = (p: string) => readFile(join(worktree, p))
+  const text = readRel(check.file)
   // A file that moved or was split may still hold the bug elsewhere: the agent looks.
   if (text === null) return { gone: false, reason: `${check.file} is not in the base branch any more, so the agent looks` }
-  if (patternReproduces(text, check)) return { gone: false, reason: null }
+  if (patternReproduces(text, check)) {
+    if (check.expect === 'absent') {
+      const re = safeRegex(check.regex, check.ignoreCase)
+      const wrapper = re ? absentHeldByWrapper(check.file, text, check.line, re, readRel, (p) => readRel(p) !== null) : null
+      if (wrapper) {
+        return { gone: true, reason: `the shared component ${wrapper} that wraps line ${check.line} of ${check.file} already has /${check.regex}/${check.ignoreCase ? 'i' : ''}` }
+      }
+    }
+    return { gone: false, reason: null }
+  }
   // The audit looks 3 lines either side of the cited line. Code that only
   // moved (2026-11-12: 93 of 217 "gone" findings) still has the problem
   // elsewhere in the file: a `present` problem is gone only when the whole
@@ -88,6 +101,92 @@ export function recheckReport(detail: { source?: string | null; description?: st
     gone: true,
     reason: `its own check no longer reproduces: /${check.regex}/${check.ignoreCase ? 'i' : ''} is not ${check.expect} in ${check.file}${check.line ? ` near line ${check.line}` : ''}`,
   }
+}
+
+/** One labelled line of a code-audit report description (`What the user sees: …`). */
+function descField(description: string | null | undefined, label: string): string {
+  const m = new RegExp(`^${label}: (.*)$`, 'm').exec(description ?? '')
+  return m ? m[1]!.trim() : ''
+}
+
+export interface BacklogRow {
+  id: string
+  project_id?: string | null
+  source?: string | null
+  status?: string | null
+  severity?: string | null
+  title?: string | null
+  summary?: string | null
+  description?: string | null
+  created_at?: string | null
+  custom_metadata?: { rule?: string | null; file?: string | null; line?: number | null; confidence?: number | null; pattern_key?: string | null } | null
+}
+
+export interface BacklogPattern {
+  key: string
+  category: string
+  root: string
+  /** The report that stays open for the pattern: the most severe, then the oldest. */
+  parentId: string
+  reportIds: string[]
+  screens: string[]
+}
+
+export interface BacklogPlan {
+  checked: number
+  gone: Array<{ reportId: string; severity: string | null; reason: string }>
+  stillThere: number
+  unclear: number
+  /** Every pattern the reports still there fall into, biggest first. */
+  patterns: BacklogPattern[]
+  /** Reports that would become duplicate children of a pattern parent. */
+  collapsed: number
+  /** Open reports left: one per pattern. */
+  remaining: number
+}
+
+const SEVERITY_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+
+/**
+ * What a recheck sweep would do to an open code-audit backlog, with no write: which reports are gone on the base
+ * branch, and how the rest collapse into one report per pattern key
+ * (category + root, ADR 0063). `mushi work --recheck --dry-run --json` prints it.
+ */
+export function planBacklog(rows: readonly BacklogRow[], worktree: string, readFile: (path: string) => string | null = readWorktreeFile): BacklogPlan {
+  const plan: BacklogPlan = { checked: 0, gone: [], stillThere: 0, unclear: 0, patterns: [], collapsed: 0, remaining: 0 }
+  const readRel = (p: string) => readFile(join(worktree, p))
+  const byKey = new Map<string, { category: string; root: string; rows: BacklogRow[]; screens: Set<string> }>()
+  for (const r of rows) {
+    if (r.source !== 'code_audit') continue
+    plan.checked++
+    const res = recheckReport(r, worktree, readFile)
+    if (res.gone) {
+      plan.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason })
+      continue
+    }
+    if (res.reason) plan.unclear++
+    else plan.stillThere++
+    const where = /^(.+):(\d+)$/.exec(descField(r.description, 'Where'))
+    const file = r.custom_metadata?.file ?? where?.[1] ?? parseAuditCheck(r.description)?.file ?? ''
+    const rule = r.custom_metadata?.rule ?? ''
+    const evidence = descField(r.description, 'The code there')
+    const category = auditCategory({ rule, title: r.title ?? r.summary ?? '', userImpact: descField(r.description, 'What the user sees') })
+    const root = file ? patternRoot(file, evidence, readRel(file), readRel, (p) => readRel(p) !== null) : `report:${r.id}`
+    const key = r.custom_metadata?.pattern_key ?? auditPatternKey(category, root, rule || r.id)
+    const g = byKey.get(`${r.project_id ?? ''}|${key}`) ?? { category, root, rows: [], screens: new Set<string>() }
+    g.rows.push(r)
+    const screen = /code-read audit of (\S+?) on the local/.exec(r.description ?? '')?.[1] ?? file
+    if (screen) g.screens.add(screen)
+    byKey.set(`${r.project_id ?? ''}|${key}`, g)
+  }
+  for (const [k, g] of byKey) {
+    const sorted = [...g.rows].sort((a, b) => (SEVERITY_RANK[b.severity ?? ''] ?? 0) - (SEVERITY_RANK[a.severity ?? ''] ?? 0) || String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
+    plan.patterns.push({ key: k.slice(k.indexOf('|') + 1), category: g.category, root: g.root, parentId: sorted[0]!.id, reportIds: sorted.map((r) => r.id), screens: [...g.screens].sort() })
+  }
+  plan.patterns.sort((a, b) => b.reportIds.length - a.reportIds.length || a.key.localeCompare(b.key))
+  plan.remaining = plan.patterns.length
+  plan.collapsed = plan.patterns.reduce((n, p) => n + p.reportIds.length - 1, 0)
+  return plan
 }
 
 const SHA_RE = /\b([0-9a-f]{7,40})\b/g

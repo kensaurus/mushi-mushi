@@ -31,7 +31,7 @@ import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 import { agentRun, agentSpec, agentUnavailable, cursorSignInState, parseLocalAgent, type AgentSignIn, type LocalAgent } from './work-agents.js'
 import { wrongRepoMessage } from './work-repo.js'
-import { goneNote, recheckReport, verdictCommits } from './work-recheck.js'
+import { goneNote, planBacklog, recheckReport, verdictCommits, type BacklogPlan } from './work-recheck.js'
 
 export { cursorSignInState }
 
@@ -775,6 +775,8 @@ interface RecheckSweep {
   stillThere: number
   unclear: number
   closeFailed: number
+  /** With --dry-run: how what is still there collapses into one report per pattern (ADR 0063). */
+  plan?: Pick<BacklogPlan, 'patterns' | 'collapsed' | 'remaining'>
 }
 
 /**
@@ -804,6 +806,10 @@ async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; l
         if (got.length < RECHECK_PAGE) break
       }
     }
+    if (o.dryRun) {
+      const plan = planBacklog(rows, wt, o.readFile)
+      out.plan = { patterns: plan.patterns, collapsed: plan.collapsed, remaining: plan.remaining }
+    }
     for (const r of rows) {
       if (interruptedBy()) break
       out.checked++
@@ -828,6 +834,7 @@ async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; l
   const verb = o.dryRun ? 'would close' : 'closed'
   o.log(`Rechecked ${out.checked} open code-audit report(s) on origin/${base}${sha ? ` (${sha.slice(0, 9)})` : ''}: ${verb} ${out.gone.length} that no longer reproduce, ${out.stillThere} still reproduce, ${out.unclear} left to the agent (check unreadable or file moved).`)
   if (out.closeFailed) o.log(`${out.closeFailed} could not be closed; see the lines above.`)
+  if (out.plan) o.log(`The ${out.stillThere + out.unclear} left would be ${out.plan.remaining} report(s), one per pattern: ${out.plan.collapsed} would join a pattern's report as a duplicate.`)
   return out
 }
 
@@ -1376,7 +1383,7 @@ export function registerWorkCommands(program: Command): void {
     .option('--max <n>', 'Reports per run', '3')
     .option('--report <id>', 'Work on this report only')
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
-    .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens) and close those that no longer reproduce; with --dry-run, only count them')
+    .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens; shared wrappers followed) and close those that no longer reproduce; with --dry-run, only count them and show how the rest collapse into one report per pattern')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--any-repo', 'Skip the check that the clone is a repo the key\'s project is linked to (a monorepo or a fork)')

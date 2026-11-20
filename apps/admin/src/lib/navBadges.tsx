@@ -447,7 +447,7 @@ export function resolveNavBadge(
         label:
           extras.criticalReports30d > 0
             ? `${extras.criticalReports30d} critical ${extras.criticalReports30d === 1 ? 'report' : 'reports'} (30d)`
-            : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`,
+            : `${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}${(navCounts.untriagedAutomated ?? 0) > 0 ? ` (+${navCounts.untriagedAutomated} from Mushi's checks)` : ''}`,
         hideWhenZero: true,
       }
     case '/judge':

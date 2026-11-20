@@ -188,7 +188,10 @@ describe('the claim a lane accepts (P3)', () => {
 
   it('an audit claim carries only models and a count; an unknown kind is refused', () => {
     const r = parseClaim({ id: ID, kind: 'audit', model: 'grok-4.7-xhigh-fast', audit: { reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 } })
-    expect(r.ok && r.value.kind === 'audit' && r.value.audit).toEqual({ reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12 })
+    // A server older than ADR 0063 sends no recheck or propose: no recheck, propose as before.
+    expect(r.ok && r.value.kind === 'audit' && r.value.audit).toEqual({ reviewModel: 'claude-opus-5-5-medium', findingsLeft: 12, recheck: false, propose: true })
+    const full = parseClaim({ id: ID, kind: 'audit', model: null, audit: { reviewModel: null, findingsLeft: 0, recheck: true, propose: false, backlog: { open: 25, cap: 25 } } })
+    expect(full.ok && full.value.kind === 'audit' && full.value.audit).toEqual({ reviewModel: null, findingsLeft: 0, recheck: true, propose: false })
     expect(parseClaim({ id: ID, kind: 'audit', model: null, audit: { reviewModel: '--x' } }).ok).toBe(false)
     expect(parseClaim({ id: ID, kind: 'shell', model: null }).ok).toBe(false)
     expect(parseClaim({ id: ID, kind: 'fix', model: '--yolo', report: { id: P1 } }).ok).toBe(false)

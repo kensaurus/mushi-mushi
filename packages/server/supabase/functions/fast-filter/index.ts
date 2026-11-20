@@ -483,10 +483,11 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
 
     if ((classification.confidence > confidenceThreshold && !forceStage2) || usedHeuristic) {
       const summary = clipAtWord(`${classification.symptom} — ${classification.actual}`, 200)
+      // ADR 0063: grouping (fire-and-forget above) may already have closed it as a duplicate.
       await db.from('reports').update({
         status: 'classified',
         summary,
-      }).eq('id', reportId)
+      }).eq('id', reportId).neq('status', 'dismissed')
 
       const { data: project } = await db.from('projects').select('name').eq('id', projectId).single()
       const projectName = project?.name ?? 'Unknown'
