@@ -85,6 +85,8 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
       },
       environment,
       reporterToken: getReporterToken(cfg.projectId),
+      // Only an image the app showed the reporter (see `captureScreenshot()`).
+      ...(payload.screenshot?.startsWith('data:image/') ? { screenshotDataUrl: payload.screenshot } : {}),
     };
 
     const res = await client.submitReport(report);

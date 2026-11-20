@@ -42,3 +42,24 @@ describe('WebMushi endpoint', () => {
     expect(urls[0]).toBe('https://self.example/functions/v1/api/v1/reports')
   })
 })
+
+describe('WebMushi screenshot', () => {
+  function sentBody(): Record<string, unknown> {
+    const call = vi.mocked(globalThis.fetch).mock.calls.find(([u]) => String(u).endsWith('/v1/reports'))!
+    return JSON.parse(String((call[1] as RequestInit).body)) as Record<string, unknown>
+  }
+
+  it('sends the screenshot the app passed in', async () => {
+    const plugin = new WebMushi()
+    await plugin.configure(CONFIG)
+    await plugin.report({ description: 'Checkout button does nothing', screenshot: 'data:image/png;base64,AAAA' })
+    expect(sentBody().screenshotDataUrl).toBe('data:image/png;base64,AAAA')
+  })
+
+  it('sends no screenshot unless one is passed in', async () => {
+    const plugin = new WebMushi()
+    await plugin.configure(CONFIG)
+    await plugin.report({ description: 'Checkout button does nothing' })
+    expect(sentBody().screenshotDataUrl).toBeUndefined()
+  })
+})

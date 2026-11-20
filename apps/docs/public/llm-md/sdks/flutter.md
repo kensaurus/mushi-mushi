@@ -61,7 +61,8 @@ await Mushi.instance.report(
 ## Screenshot capture
 
 The SDK captures the widget tree under `screenshotBoundaryKey` into a PNG
-before submission. No boundary key, no screenshot; set
+when the report sheet opens. The sheet shows it with **Remove**, and only a
+screenshot still shown is sent. No boundary key, no screenshot; set
 `captureScreenshot: false` to turn it off entirely.
 
 ## Offline queue

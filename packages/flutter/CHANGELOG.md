@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The report sheet shows the screenshot it attaches, with a Remove button.
+  Only a screenshot still shown is sent; one that can't be shown is dropped.
+
 ## 0.3.0
 
 - Version aligned with the Mushi Mushi 1.21 SDK release wave.
