@@ -74,23 +74,34 @@ Cloudflare Tunnel)? Proxy to `127.0.0.1:3000` and set `MUSHI_PUBLIC_URL` and
 `SITE_URL` in `.env` to your URL: the console and the API share one origin,
 so one route is enough.
 
-### Your own model server (Ollama, vLLM, LM Studio)
+### Any model: your own server or a hosted one
 
-Any OpenAI-compatible server works, with any model it serves. Mushi names no
-model: open models change every few weeks, so you pick, and switch later with
-the same command.
+Any OpenAI-compatible endpoint works, with any model it serves: your own
+server (Ollama, vLLM, LM Studio, llama.cpp) or a hosted one (NVIDIA NIM,
+OpenRouter, Groq, DeepSeek, Together, a company gateway). Mushi names no model
+and lists no provider: models change every few weeks, so you pick, and switch
+later with the same command.
 
 ```bash
+# your own server
 sh mushi.sh llm http://host.docker.internal:11434/v1 <model>
+# a hosted endpoint: put its key in .env as OPENAI_API_KEY=... first
+sh mushi.sh llm https://integrate.api.nvidia.com/v1 <model id from the provider>
 # optional third argument: an embedding model that returns 1536-dimension vectors
 ```
 
-It sets `OPENAI_BASE_URL`, `MUSHI_OPENAI_MODEL` (used for every step: filter,
-diagnosis, judge, fixes), `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true` for an
-`http://` address, and a placeholder `OPENAI_API_KEY`, then restarts the
-functions. For a different model per step, set `MUSHI_OPENAI_MODEL_MAP`
-(`gpt-6-luna=small-model,gpt-6.1-terra=big-model`), which wins over
-`MUSHI_OPENAI_MODEL`.
+It sets `OPENAI_BASE_URL` and `MUSHI_OPENAI_MODEL` (used for every step:
+filter, diagnosis, judge, fixes), turns on `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL`
+for an `http://` address (with a placeholder key) and off for `https://`,
+restarts the functions, then asks the endpoint's `/models` from a container
+and says whether your model is listed. For a different model per step, set
+`MUSHI_OPENAI_MODEL_MAP` (`gpt-6-luna=small-model,gpt-6.1-terra=big-model`),
+which wins over `MUSHI_OPENAI_MODEL`.
+
+  A report holds your users' words, screenshots, and console and network
+  events. Some free hosted tiers keep or train on the prompts they receive;
+  read the provider's data terms before you send reports there. A model on
+  your own hardware keeps them on your machine.
 
 The model gets text only (the report, console and network events, code
 context) and must answer in JSON, so pick one that follows instructions well.
@@ -113,8 +124,11 @@ Set `OLLAMA_HOST=0.0.0.0` (and keep port 11434 closed at your firewall), or
 run Ollama in Docker on the same network. Docker Desktop (macOS, Windows)
 needs nothing extra.
 
-Only this server-wide setting accepts a private `http://` address; base URLs
-stored with a user's own key in the console stay limited to https providers.
+This server-wide setting is yours, so it takes any `https://` host and, when
+you turn it on, a private `http://` address. Base URLs that users store with
+their own keys in the console stay limited to a list of known https providers
+(add hosts with `MUSHI_OPENAI_BASE_URL_ALLOWLIST`), so a user cannot point
+the server at your internal network.
 
 ### Day to day
 
@@ -126,7 +140,7 @@ stored with a user's own key in the console stay limited to https providers.
 | `sh mushi.sh restore FILE` | Puts a backup back (asks first) |
 | `sh mushi.sh update [VERSION]` | Backs up, pulls `latest` or a pinned version, restarts; migrations apply on start |
 | `sh mushi.sh https DOMAIN` | HTTPS with Caddy, as above |
-| `sh mushi.sh llm URL MODEL` | Your own model server and model, as above; run again to switch |
+| `sh mushi.sh llm URL MODEL` | Any OpenAI-compatible endpoint and model, as above; run again to switch |
 | `sh mushi.sh secrets` | The URLs and keys the SDK, CLI and MCP need |
 
 A backup contains `.env`, which holds your secrets: keep it off the server and

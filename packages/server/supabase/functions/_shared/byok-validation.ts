@@ -105,7 +105,17 @@ function isAllowedCompatibleHost(hostname: string, extraAllowedHosts: readonly s
 export function validateOpenAiBaseUrl(
   raw: string | undefined,
   extraAllowedHosts: readonly string[] = [],
-  options: { allowPrivateServer?: boolean } = {},
+  options: {
+    allowPrivateServer?: boolean;
+    /**
+     * The URL comes from the server operator's own environment
+     * (OPENAI_BASE_URL), not from a console user. Any https host and port is
+     * then accepted: the host list below guards against users pointing the
+     * server at internal addresses (SSRF), and an operator already controls
+     * the server. New providers need no code change.
+     */
+    operatorConfigured?: boolean;
+  } = {},
 ): { ok: true; value: string } | { ok: false; message: string } {
   const candidate = raw?.trim() || DEFAULT_OPENAI_BASE_URL;
   let url: URL;
@@ -144,6 +154,9 @@ export function validateOpenAiBaseUrl(
       ok: false,
       message: 'baseUrl must not contain a query string or fragment',
     };
+  }
+  if (options.operatorConfigured) {
+    return { ok: true, value: url.toString().replace(/\/$/, '') };
   }
   if (url.port && url.port !== '443') {
     return { ok: false, message: 'baseUrl must use the default HTTPS port' };

@@ -2073,7 +2073,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
     keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "one-command", "install"],
-    headings: ["One-command install", "Run the installer", "Open the console", "Add an AI key (optional)", "HTTPS on your own domain", "Your own model server (Ollama, vLLM, LM Studio)", "Day to day", "Point your app and tools at it"],
+    headings: ["One-command install", "Run the installer", "Open the console", "Add an AI key (optional)", "HTTPS on your own domain", "Any model: your own server or a hosted one", "Day to day", "Point your app and tools at it"],
     excerpt: "Run all of Mushi Mushi on your own server with one command, no Supabase account. Closed sign-up, HTTPS, backups and updates included.",
   },
   {

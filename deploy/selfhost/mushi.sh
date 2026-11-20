@@ -10,8 +10,8 @@
 #   sh mushi.sh update [VERSION]       back up, pull images, restart; migrations
 #                                      apply on start. VERSION: latest or sha-xxxxxxx
 #   sh mushi.sh https DOMAIN           serve on https://DOMAIN with Caddy (auto TLS)
-#   sh mushi.sh llm URL MODEL [EMBED]  use your own OpenAI-compatible model server
-#                                      (Ollama, vLLM, LM Studio); any model it serves
+#   sh mushi.sh llm URL MODEL [EMBED]  use any OpenAI-compatible endpoint and model
+#                                      (Ollama, vLLM, NVIDIA NIM, OpenRouter, ...)
 #   sh mushi.sh secrets                print the URLs and keys you need
 set -eu
 
@@ -116,25 +116,40 @@ case "$cmd" in
   llm)
     url=${1:?usage: sh mushi.sh llm http://host.docker.internal:11434/v1 MODEL [EMBEDDING_MODEL]}
     model=${2:?usage: sh mushi.sh llm URL MODEL [EMBEDDING_MODEL]  (MODEL: a name your server serves)}
-    case "$url" in http://*|https://*) ;; *) echo "mushi.sh: URL must start with http:// or https://" >&2; exit 1 ;; esac
+    url=${url%/}
+    key=$(env_get OPENAI_API_KEY)
+    case "$url" in
+      http://*)
+        # Your own server: no key needed, but the OpenAI path runs only with one set.
+        [ -n "$key" ] || { key=local; set_env OPENAI_API_KEY local; }
+        set_env MUSHI_ALLOW_PRIVATE_LLM_BASE_URL true
+        ;;
+      https://*)
+        # A hosted provider (NVIDIA NIM, OpenRouter, Groq, ...) needs its key.
+        if [ -z "$key" ] || [ "$key" = local ]; then
+          echo "mushi.sh: put your provider's key in .env as OPENAI_API_KEY=..., then run this again." >&2
+          exit 1
+        fi
+        # Any https provider works: the operator's own OPENAI_BASE_URL is trusted.
+        set_env MUSHI_ALLOW_PRIVATE_LLM_BASE_URL false
+        ;;
+      *) echo "mushi.sh: URL must start with http:// or https://" >&2; exit 1 ;;
+    esac
     set_env OPENAI_BASE_URL "$url"
     set_env MUSHI_OPENAI_MODEL "$model"
     set_env MUSHI_OPENAI_EMBEDDING_MODEL "${3:-}"
-    # A local server needs no key, but the OpenAI path runs only with one set.
-    [ -n "$(env_get OPENAI_API_KEY)" ] || set_env OPENAI_API_KEY local
-    case "$url" in http://*) set_env MUSHI_ALLOW_PRIVATE_LLM_BASE_URL true ;; esac
     docker compose up -d --wait functions >/dev/null 2>&1 || { echo "mushi.sh: the functions did not restart; see: sh mushi.sh logs functions" >&2; exit 1; }
     printf 'Chat model: %s at %s\n' "$model" "$url"
     # Ask from a container, as the functions do (host.docker.internal is the host).
     tools
     models=$(docker run --rm --add-host host.docker.internal:host-gateway --entrypoint wget "$TOOLS_IMAGE" \
-      -q -T 10 -O - "$url/models" 2>/dev/null || true)
+      -q -T 15 --header "Authorization: Bearer $key" -O - "$url/models" 2>/dev/null || true)
     if [ -z "$models" ]; then
-      echo "Could not reach $url/models from a container. Is the server running and listening beyond 127.0.0.1 (Ollama on Linux: OLLAMA_HOST=0.0.0.0)?" >&2
-    elif printf '%s' "$models" | grep -q "\"$model\""; then
+      echo "Could not list $url/models from a container: check the URL, the key, and that the server listens beyond 127.0.0.1 (Ollama on Linux: OLLAMA_HOST=0.0.0.0)." >&2
+    elif printf '%s' "$models" | grep -qF "\"$model\""; then
       echo "The server answers and serves $model. New reports are diagnosed with it."
     else
-      echo "The server answers but does not list $model; pull it there first (ollama pull $model)." >&2
+      echo "The server answers but does not list $model. Check the name (Ollama: ollama pull $model first)." >&2
     fi
     ;;
 
