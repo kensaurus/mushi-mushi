@@ -162,12 +162,20 @@ public final class Mushi {
     #endif
 
     /// Submit a report with the given description and optional category.
-    /// Captures device context and (if enabled) a screenshot automatically.
-    /// Attaches the breadcrumb ring buffer (PII-scrubbed) to the payload.
+    /// Captures device context and attaches the breadcrumb ring buffer
+    /// (PII-scrubbed) to the payload.
+    ///
+    /// Screenshot: pass `screenshot` (raw base64 JPEG/PNG) to send an image
+    /// the reporter has already seen; nothing is captured then. Pass
+    /// `captureScreenshot: false` to send none. Left at `nil`, a screenshot is
+    /// captured now when `config.captureScreenshot` is on, without the
+    /// reporter seeing it, so do that only for reports your app files itself.
     public func report(
         description: String,
         category: String = "bug",
-        metadata: [String: Any]? = nil
+        metadata: [String: Any]? = nil,
+        screenshot: String? = nil,
+        captureScreenshot: Bool? = nil
     ) {
         guard let snapshot = reportSnapshot(extraMetadata: metadata) else { return }
 
@@ -197,8 +205,14 @@ public final class Mushi {
 
         snapshot.breadcrumbs.add(category: .lifecycle, message: "report submitted: \(category)")
 
+        if let screenshot {
+            payload["screenshot"] = screenshot
+            snapshot.apiClient.submitReport(payload)
+            return
+        }
+
         #if os(iOS)
-        if snapshot.config.captureScreenshot {
+        if captureScreenshot ?? snapshot.config.captureScreenshot {
             let submit: ([String: Any]) -> Void = { snapshot.apiClient.submitReport($0) }
             if Thread.isMainThread {
                 MainActor.assumeIsolated {

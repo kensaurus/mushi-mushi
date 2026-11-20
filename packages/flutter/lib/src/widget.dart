@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'config.dart';
@@ -5,6 +8,9 @@ import 'config.dart';
 /// Bottom sheet for collecting a free-form bug description plus a category
 /// tag. Mirrors the iOS `MushiWidgetController` and Android
 /// `MushiBottomSheet` widgets.
+///
+/// The screenshot taken when the sheet opened is shown as a preview the
+/// reporter can remove; only what is still shown is sent.
 class MushiReportSheet extends StatefulWidget {
   const MushiReportSheet({
     super.key,
@@ -47,6 +53,32 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
   static const _categories = ['bug', 'slow', 'visual', 'confusing'];
   String _category = _categories.first;
 
+  /// Base64 PNG still attached, and its decoded bytes for the preview.
+  /// Both `null` once the reporter removes it, or if it can't be shown.
+  String? _screenshot;
+  Uint8List? _screenshotBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    final shot = widget.attachedScreenshot;
+    if (shot != null) {
+      try {
+        _screenshotBytes = base64Decode(shot);
+        _screenshot = shot;
+      } on FormatException {
+        // Never send an image the reporter cannot see.
+      }
+    }
+  }
+
+  void _removeScreenshot() {
+    setState(() {
+      _screenshot = null;
+      _screenshotBytes = null;
+    });
+  }
+
   bool get _valid =>
       _controller.text.length >= widget.config.minDescriptionLength;
 
@@ -61,8 +93,8 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
       'description': _controller.text,
       'category': _category,
     };
-    if (widget.attachedScreenshot != null) {
-      payload['screenshot'] = widget.attachedScreenshot;
+    if (_screenshot != null) {
+      payload['screenshot'] = _screenshot;
     }
     widget.onSubmit(payload);
     Navigator.of(context).maybePop();
@@ -135,6 +167,45 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
                 fillColor: cardColor,
               ),
             ),
+            if (_screenshotBytes != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                key: const Key('mushi-screenshot-preview'),
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.memory(
+                      _screenshotBytes!,
+                      height: 120,
+                      fit: BoxFit.contain,
+                      semanticLabel:
+                          'Screenshot that will be sent with this report',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Screenshot attached',
+                            style: TextStyle(color: textColor)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Check it, and remove it if anything private is visible.',
+                          style: TextStyle(color: subColor, fontSize: 12),
+                        ),
+                        TextButton(
+                          key: const Key('mushi-screenshot-remove'),
+                          onPressed: _removeScreenshot,
+                          child: const Text('Remove'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,

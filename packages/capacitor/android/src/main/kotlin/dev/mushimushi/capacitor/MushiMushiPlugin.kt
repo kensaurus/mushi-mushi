@@ -6,6 +6,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import dev.mushimushi.sdk.Mushi
+import dev.mushimushi.sdk.capture.ScreenshotCapture
 import dev.mushimushi.sdk.config.MushiConfig
 import dev.mushimushi.sdk.config.Theme
 import dev.mushimushi.sdk.config.TriggerInset
@@ -82,18 +83,32 @@ class MushiMushiPlugin : Plugin() {
                 js.keys().forEachRemaining { k -> put(k, js.opt(k)) }
             }
         }
-        Mushi.report(description = description, category = category, metadata = metadata)
+        // The app's own form calls this: send only a screenshot it already
+        // showed the reporter (from captureScreenshot()), never an unseen one.
+        Mushi.report(
+            description = description,
+            category = category,
+            metadata = metadata,
+            screenshot = call.getString("screenshot"),
+            captureScreenshot = false
+        )
         val res = JSObject().apply { put("accepted", true) }
         call.resolve(res)
     }
 
     @PluginMethod
     fun captureScreenshot(call: PluginCall) {
-        // Native screenshot capture is performed implicitly when a report is
-        // submitted; we don't expose a direct capture call from Java because
-        // Activity context isn't safe to leak.
-        val res = JSObject().apply { put("image", JSObject.NULL) }
-        call.resolve(res)
+        // Captured on the UI thread with the current activity, used only for
+        // this call and never stored. The app shows the image to the reporter
+        // and passes it to report() if they keep it.
+        val act = activity ?: run {
+            call.resolve(JSObject().apply { put("image", JSObject.NULL) })
+            return
+        }
+        act.runOnUiThread {
+            val image = ScreenshotCapture.captureBase64(act)
+            call.resolve(JSObject().apply { put("image", image ?: JSObject.NULL) })
+        }
     }
 
     @PluginMethod

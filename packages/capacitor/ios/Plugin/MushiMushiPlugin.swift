@@ -96,7 +96,15 @@ public class MushiMushiPlugin: CAPPlugin {
         }
         let category = call.getString("category") ?? "bug"
         let metadata = call.getObject("metadata") as? [String: Any]
-        Mushi.shared.report(description: description, category: category, metadata: metadata)
+        // The app's own form calls this: send only a screenshot it already
+        // showed the reporter (from captureScreenshot()), never an unseen one.
+        Mushi.shared.report(
+            description: description,
+            category: category,
+            metadata: metadata,
+            screenshot: call.getString("screenshot"),
+            captureScreenshot: false
+        )
         call.resolve(["accepted": true])
     }
 
