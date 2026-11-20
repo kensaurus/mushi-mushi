@@ -30,7 +30,7 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
-import { makeFetchTransport, createTransport, type BrowserOptions } from '@sentry/react'
+import { makeFetchTransport, createTransport, type BrowserOptions, type Event } from '@sentry/react'
 
 // Sentry's transport-related types (Transport, Envelope, BrowserTransportOptions,
 // TransportMakeRequestResponse) live inside @sentry/core and are NOT re-exported
@@ -53,7 +53,9 @@ type SendResult = Awaited<ReturnType<Transport['send']>>
  * crawler filters read `User-Agent`; `Referer` has the query-param policy
  * below applied by the SDK). Any other header name, e.g. Authorization or
  * Cookie, is masked as `[Filtered]`. The SDK matches allow terms as
- * case-insensitive substrings.
+ * case-insensitive substrings (and leaves headers set on the event itself
+ * untouched), so `keepAllowedRequestHeaders` below enforces the exact names
+ * before every error and transaction is sent.
  *
  * Query params stay collected with a deny list, as before: v10 sent the full
  * page URL, and `beforeSend` already redacts the same token-like names.
@@ -72,6 +74,24 @@ export const SENTRY_DATA_COLLECTION = {
   queues: false,
   stackFrameVariables: false,
 } satisfies NonNullable<BrowserOptions['dataCollection']>
+
+const ALLOWED_HEADER_NAMES = new Set(SENTRY_ALLOWED_REQUEST_HEADERS)
+
+/**
+ * Drops every request header whose name is not exactly (case-insensitive)
+ * one of SENTRY_ALLOWED_REQUEST_HEADERS, so a name that merely contains an
+ * allow term (`X-Referer-Token`, `User-Agent-Session`) is never sent.
+ */
+export function keepAllowedRequestHeaders<T extends Event>(event: T): T {
+  const headers = event.request?.headers
+  if (!headers) return event
+  const kept: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) {
+    if (ALLOWED_HEADER_NAMES.has(name.toLowerCase())) kept[name] = value
+  }
+  event.request!.headers = Object.keys(kept).length > 0 ? kept : undefined
+  return event
+}
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
 
@@ -171,7 +191,11 @@ export function initSentry(): void {
       'NetworkError when attempting to fetch resource',
       'Load failed',
     ],
+    beforeSendTransaction(event) {
+      return keepAllowedRequestHeaders(event)
+    },
     beforeSend(event) {
+      keepAllowedRequestHeaders(event)
       if (event.request?.url) {
         event.request.url = event.request.url.replace(TOKEN_QUERY_RX, '$1[redacted]')
       }

@@ -9,7 +9,11 @@ import {
   httpContextIntegration,
   type Event,
 } from '@sentry/react'
-import { SENTRY_ALLOWED_REQUEST_HEADERS, SENTRY_DATA_COLLECTION } from './sentry'
+import {
+  SENTRY_ALLOWED_REQUEST_HEADERS,
+  SENTRY_DATA_COLLECTION,
+  keepAllowedRequestHeaders,
+} from './sentry'
 
 describe('SENTRY_DATA_COLLECTION headers', () => {
   it('collects only the two request headers v10 sent, and no response headers', () => {
@@ -74,5 +78,48 @@ describe('SENTRY_DATA_COLLECTION with the real browser SDK', () => {
     expect(Object.keys(headers).sort()).toEqual(['Referer', 'User-Agent'])
     expect(headers['User-Agent']).toBe(navigator.userAgent)
     expect(headers['Referer']).not.toContain('secret123')
+  })
+
+  async function send(event: Event): Promise<Event | undefined> {
+    const sent: Event[] = []
+    const client = new BrowserClient({
+      dsn: 'https://public@o0.ingest.sentry.io/0',
+      dataCollection: SENTRY_DATA_COLLECTION,
+      integrations: [httpContextIntegration()],
+      stackParser: () => [],
+      transport: options =>
+        createTransport(options, async () => ({ statusCode: 200 })),
+      beforeSend(e) {
+        sent.push(keepAllowedRequestHeaders(e))
+        return null
+      },
+    })
+    client.init()
+    client.captureEvent(event)
+    await client.flush(1000)
+    return sent[0]
+  }
+
+  it('sends only headers named exactly User-Agent or Referer, not ones that contain those words', async () => {
+    const event = await send({
+      message: 'header check',
+      request: {
+        headers: {
+          'X-Referer-Token': 'secret-a',
+          'User-Agent-Session': 'secret-b',
+          'X-Original-User-Agent': 'secret-c',
+        },
+      },
+    })
+    const headers = event?.request?.headers ?? {}
+    expect(Object.keys(headers).sort()).toEqual(['User-Agent'])
+    expect(JSON.stringify(event)).not.toMatch(/secret-[abc]/)
+  })
+
+  it('keeps User-Agent and Referer whatever their case', () => {
+    const event = keepAllowedRequestHeaders({
+      request: { headers: { 'user-agent': 'ua', REFERER: 'ref', 'X-Referer-Id': 'x' } },
+    })
+    expect(event.request?.headers).toEqual({ 'user-agent': 'ua', REFERER: 'ref' })
   })
 })
