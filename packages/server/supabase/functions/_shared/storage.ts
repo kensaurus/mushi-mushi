@@ -26,6 +26,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { getServiceClient } from './db.ts'
 import { log } from './logger.ts'
 import { isProjectStorageSecretRef } from './vault-ref.ts'
+import { toPublicSupabaseUrl } from './public-url.ts'
 
 const storageLog = log.child('storage')
 
@@ -446,7 +447,7 @@ class SupabaseStorageAdapter implements StorageAdapter {
       .createSignedUrl(input.key, ttlSecs)
     if (signErr || !signed) throw new Error(`Supabase signed URL failed: ${signErr?.message}`)
     return {
-      url: signed.signedUrl,
+      url: toPublicSupabaseUrl(signed.signedUrl),
       storagePath: `storage://supabase/${this.bucket}/${input.key}`,
       signed: true,
     }
@@ -456,7 +457,7 @@ class SupabaseStorageAdapter implements StorageAdapter {
     await this.ensureBucket()
     const { data, error } = await this.db.storage.from(this.bucket).createSignedUrl(key, ttlSecs)
     if (error || !data) throw new Error(`Supabase signed URL failed: ${error?.message}`)
-    return data.signedUrl
+    return toPublicSupabaseUrl(data.signedUrl)
   }
 
   async delete(key: string): Promise<void> {

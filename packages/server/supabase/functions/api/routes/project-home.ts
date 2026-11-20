@@ -84,6 +84,7 @@ import { readWorkerFlags } from './work-status.ts'
 import { flagsForProject, type WorkerFlag } from '../../_shared/work-flags.ts'
 import { combineOrGroups, reportWindowStartIso } from '../../_shared/report-list-filters.ts'
 import { reportSourceKindFilter } from '../../_shared/report-source-kind.ts'
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import { dbError, OPEN_REPORT_STATUSES, parseUuidParam, userCanAccessProject } from '../shared.ts'
 
 const hlog = log.child('project-home')
@@ -521,7 +522,7 @@ export async function readProjectHome(db: Db, project: ProjectRow, deps: Project
   let thumbnail: { url: string; capturedAt: string | null; pageUrl: string | null } | null = null
   if (thumb.ok && thumb.value?.storage_path) {
     const { data } = await db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(thumb.value.storage_path, THUMBNAIL_URL_TTL_SEC)
-    if (data?.signedUrl) thumbnail = { url: data.signedUrl, capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url }
+    if (data?.signedUrl) thumbnail = { url: toPublicSupabaseUrl(data.signedUrl), capturedAt: thumb.value.captured_at, pageUrl: thumb.value.page_url }
   }
   const ownKey = firecrawl.ok && firecrawl.value?.source === 'byok'
   const thumbnailState = {
@@ -698,7 +699,7 @@ export function registerProjectHomeRoutes(app: Hono<{ Variables: Variables }>, d
       const path = await deps.captureThumbnail(db, id, pageUrl, fc.key)
       await logAudit(db, id, c.get('userId') as string, 'settings.updated', 'home_thumbnail', id, { pageUrl }).catch(() => {})
       const { data } = await db.storage.from(THUMBNAIL_BUCKET).createSignedUrl(path, THUMBNAIL_URL_TTL_SEC)
-      return c.json({ ok: true, data: { url: data?.signedUrl ?? null, capturedAt: now.toISOString(), pageUrl } })
+      return c.json({ ok: true, data: { url: toPublicSupabaseUrl(data?.signedUrl ?? null), capturedAt: now.toISOString(), pageUrl } })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       hlog.warn('thumbnail capture failed', { projectId: id, err: message.slice(0, 200) })

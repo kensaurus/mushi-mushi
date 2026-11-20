@@ -42,6 +42,7 @@ import {
 } from '../../_shared/voice-intake.ts'
 import { callerMayConfirmFromList, confirmTokenForListing, type VoiceGateRow } from '../../_shared/voice-confirm-listing.ts'
 import { classifyIngestRateLimitError } from './ingest-rate-limit.ts'
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import { resolveOwnedProject, jsonError, dbError } from '../shared.ts'
 
 const vlog = log.child('intake-voice')
@@ -287,7 +288,7 @@ export function registerIntakeVoiceRoutes(app: Hono<{ Variables: Variables }>): 
       data: {
         bucket: VOICE_INTAKE_BUCKET,
         path,
-        signedUrl: data.signedUrl,
+        signedUrl: toPublicSupabaseUrl(data.signedUrl),
         token: data.token,
         mime: mimeForExtension(ext),
         expires_in: UPLOAD_URL_TTL_SEC,

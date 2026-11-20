@@ -165,11 +165,55 @@ function sanitizeStoredInstanceConfig(): ReturnType<typeof getStoredInstanceConf
 // Stored config (runtime override) takes precedence over build-time env vars.
 const _storedAtLoad = sanitizeStoredInstanceConfig()
 
+/**
+ * Server-provided config for one prebuilt image. The self-hosted admin
+ * container writes `/runtime-config.js` (window.__MUSHI_RUNTIME_CONFIG__) at
+ * start from its env, so one published image serves any domain without a
+ * rebuild (VITE_* are fixed at build time). The file shipped in `public/`
+ * sets an empty object, so the hosted build is unchanged.
+ */
+interface RuntimeConfig {
+  supabaseUrl?: string
+  supabaseAnonKey?: string
+  apiUrl?: string
+  mcpHttpUrl?: string
+  instanceType?: string
+}
+
+/** @internal Exported for tests only. */
+export function readRuntimeConfig(source: unknown): Required<RuntimeConfig> {
+  const raw = source && typeof source === 'object' ? (source as Record<string, unknown>) : {}
+  const str = (k: keyof RuntimeConfig) => (typeof raw[k] === 'string' ? (raw[k] as string).trim() : '')
+  // The operator wrote this URL, so any host is allowed (a homelab name such
+  // as http://nas:8000 has no dot), but only http(s).
+  const url = (k: keyof RuntimeConfig) => {
+    const v = stripTrailingSlash(str(k))
+    try {
+      const p = new URL(v)
+      return p.protocol === 'http:' || p.protocol === 'https:' ? v : ''
+    } catch {
+      return ''
+    }
+  }
+  return {
+    supabaseUrl: url('supabaseUrl'),
+    supabaseAnonKey: str('supabaseAnonKey'),
+    apiUrl: url('apiUrl'),
+    mcpHttpUrl: url('mcpHttpUrl'),
+    instanceType: str('instanceType').toLowerCase(),
+  }
+}
+
+const RUNTIME = readRuntimeConfig(
+  typeof window === 'undefined' ? undefined : (window as { __MUSHI_RUNTIME_CONFIG__?: unknown }).__MUSHI_RUNTIME_CONFIG__,
+)
+
 export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
   // User explicitly chose Mushi Cloud → skip env vars (they may point to a
   // self-hosted instance) and go straight to the cloud constant.
   (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_URL) ||
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseUrl) ||
+  RUNTIME.supabaseUrl ||
   (() => {
     const envUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim()
     return envUrl && isValidBackendUrl(envUrl) ? envUrl : ''
@@ -180,6 +224,7 @@ export const RESOLVED_SUPABASE_ANON_KEY =
   // Same short-circuit: cloud mode must not fall through to env-var overrides.
   (_storedAtLoad?.mode === 'cloud' && CLOUD_SUPABASE_ANON_KEY) ||
   (_storedAtLoad?.mode === 'self-hosted' && _storedAtLoad.supabaseAnonKey) ||
+  RUNTIME.supabaseAnonKey ||
   (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() ||
   CLOUD_SUPABASE_ANON_KEY
 export const RESOLVED_API_URL = stripTrailingSlash(resolveApiUrl())
@@ -188,6 +233,7 @@ export const RESOLVED_EXTERNAL_API_URL = stripTrailingSlash(
 )
 
 function resolveApiUrl(): string {
+  if (RUNTIME.apiUrl) return RUNTIME.apiUrl
   const explicit = (import.meta.env.VITE_API_URL ?? '').trim()
   // Dev: route API through the Vite `/functions` proxy (any localhost port).
   if (import.meta.env.DEV) {
@@ -200,7 +246,9 @@ function resolveApiUrl(): string {
 
 /** Hosted Streamable HTTP MCP endpoint (Cursor remote / cloud orchestrators). */
 export const RESOLVED_MCP_HTTP_URL = stripTrailingSlash(
-  (import.meta.env.VITE_MCP_HTTP_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/mcp`,
+  RUNTIME.mcpHttpUrl ||
+    (import.meta.env.VITE_MCP_HTTP_URL ?? '').trim() ||
+    `${RESOLVED_SUPABASE_URL}/functions/v1/mcp`,
 )
 
 /**
@@ -257,10 +305,12 @@ export interface EnvStatus {
 function detectMode(supabaseUrl: string): InstanceMode {
   // 1. Stored runtime preference (highest priority — user explicitly chose this)
   if (_storedAtLoad?.mode) return _storedAtLoad.mode
-  // 2. Build-time explicit override
+  // 2. The self-hosted container's runtime config
+  if (RUNTIME.instanceType === 'self-hosted' || RUNTIME.supabaseUrl) return 'self-hosted'
+  // 3. Build-time explicit override
   const explicit = (import.meta.env.VITE_INSTANCE_TYPE ?? '').trim().toLowerCase()
   if (explicit === 'self-hosted') return 'self-hosted'
-  // 3. URL differs from cloud — infer self-hosted
+  // 4. URL differs from cloud — infer self-hosted
   if (supabaseUrl && supabaseUrl !== CLOUD_SUPABASE_URL) return 'self-hosted'
   return 'cloud'
 }
@@ -296,8 +346,8 @@ export function checkEnv(): EnvStatus {
   const storedKey = (_storedAtLoad?.supabaseAnonKey ?? '').trim()
   const rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
   const missing: string[] = []
-  if (!storedUrl && !rawUrl) missing.push('VITE_SUPABASE_URL')
-  if (!storedKey && !rawKey) missing.push('VITE_SUPABASE_ANON_KEY')
+  if (!storedUrl && !RUNTIME.supabaseUrl && !rawUrl) missing.push('VITE_SUPABASE_URL')
+  if (!storedKey && !RUNTIME.supabaseAnonKey && !rawKey) missing.push('VITE_SUPABASE_ANON_KEY')
 
   return {
     supabaseUrl: RESOLVED_SUPABASE_URL,

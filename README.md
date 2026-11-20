@@ -286,14 +286,23 @@ A "fix first" review can go back to the agent with its findings, at most twice p
 
 ## Self-host
 
+On your own Supabase project (the free tier works):
+
 ```bash
 git clone https://github.com/kensaurus/mushi-mushi.git && cd mushi-mushi
-npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>   # your own Supabase project
-# or, everything in Docker with no Supabase account:
-npx mushi-mushi@latest selfhost secrets && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+npx mushi-mushi@latest selfhost up --project-ref <your-supabase-ref>
 ```
 
-Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosting), [Docker Compose](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) and [every environment variable](https://kensaur.us/mushi-mushi/docs/self-hosting/environment). Self-host turns every feature on, with no plan limits. Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
+Or everything in Docker on one Linux or macOS server, no Supabase account:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kensaurus/mushi-mushi/master/deploy/selfhost/install.sh -o install.sh
+sh install.sh --email you@example.com
+```
+
+The installer runs Supabase's self-host kit plus Mushi's published images (amd64 and arm64), generates every secret, closes sign-up and keeps every port on `127.0.0.1`. `sh mushi.sh https your.domain` adds HTTPS; `backup`, `restore` and `update` are one command each; your own model server (Ollama, vLLM) works too.
+
+Guides: [Self-hosting quickstart](https://kensaur.us/mushi-mushi/docs/self-hosting), [Docker (one command)](https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose) and [every environment variable](https://kensaur.us/mushi-mushi/docs/self-hosting/environment). Self-host turns every feature on, with no plan limits. Self-hosting is bring-your-own-key: you pay your LLM vendor at list price. The hosted service needs no key; it bills per diagnosis with a spend cap ([pricing](https://kensaur.us/mushi-mushi/docs/pricing)). Teams wiring Mushi Mushi into an existing stack (SSO, retention, region routing, Kubernetes) start at [`docs/operators/`](./docs/operators/). Only the public `api` function should face the internet: see [internal caller authentication](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ## Where it stops
 
