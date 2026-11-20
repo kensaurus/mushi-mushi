@@ -339,6 +339,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
+        // Which coding agent the lanes run, so the console names its account (not always Cursor).
+        agent: deps.agent ?? 'cursor',
         agents: agents(),
         ...(guards ? { maxAgents: guards.max_agents } : {}),
         ...(lastReadings?.memAvailableGb != null ? { memAvailableGb: lastReadings.memAvailableGb } : {}),

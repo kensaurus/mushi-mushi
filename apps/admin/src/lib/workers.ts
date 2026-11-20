@@ -39,6 +39,15 @@ export interface HostGuards {
   gh_floor: number
 }
 
+/**
+ * The coding agent a machine's lanes run, from its heartbeat (`mushi work --agent`); a daemon
+ * older than that field runs Cursor. A Claude Code worker read "Cursor account: not checked
+ * yet" and offered a Cursor account switch (2026-11-20).
+ */
+export function workerAgentLabel(status: Record<string, unknown> | null | undefined): 'Claude Code' | 'Cursor' {
+  return status?.agent === 'claude' ? 'Claude Code' : 'Cursor'
+}
+
 export interface WorkerHost {
   id: string
   hostname: string

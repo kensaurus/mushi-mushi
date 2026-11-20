@@ -141,6 +141,21 @@ describe('WorkersPanel', () => {
     expect(q('worker-host-h1-switch-account')).toBeNull()
   })
 
+  it('names a Claude Code worker\'s account, with no Cursor account switch (2026-11-20)', async () => {
+    const data = fixture()
+    data.hosts[0] = {
+      ...data.hosts[0]!,
+      status: { ...data.hosts[0]!.status, agent: 'claude', checks: { cursor: { result: 'expected', ageSec: 30, detail: 'Logged in', account: null } } },
+      canSwitchAccount: true,
+    }
+    state.data = data
+    await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
+    expect(q('worker-host-h1-account')!.textContent).toContain('the Claude account Claude Code is signed in to')
+    expect(q('worker-host-h1-switch-account')).toBeNull()
+    expect(q('worker-host-h1-checks')!.textContent).toContain('Claude Code account:')
+    expect(q('worker-host-h1-checks')!.textContent).not.toContain('Cursor account')
+  })
+
   it('reads this app and shows the machine, its lane, what it runs, its queue and its runs', async () => {
     await render(createElement(WorkersPanel, { projectId: 'p1', now: NOW }))
     expect(state.paths[0]).toBe('/v1/admin/work/lanes?projectId=p1')

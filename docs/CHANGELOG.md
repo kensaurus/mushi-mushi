@@ -16,6 +16,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 - **Hidden stays hidden** — what the page hides (display, visibility, opacity) stays hidden, so hover-only buttons no longer show up.
 - **Pages that failed outright** — pages with a `--` comment, framework attribute names (`@click`, `:href`) or control characters in text no longer fail with reason `error`.
 - **Speed and size** — off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget).
+- **The worker's heartbeat names its coding agent** — `mushi work --daemon` now sends which agent its lanes run (`cursor` or `claude`). The console uses it to show a Claude Code worker's account. Before, it read "Cursor account: not checked yet" and offered a Cursor account switch that does nothing for Claude Code.
 
 ## v1.37.x
 
