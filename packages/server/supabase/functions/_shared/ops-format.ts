@@ -238,7 +238,17 @@ const OPS_MARKS = ['✅', '🔴', '⚠️', '⚠', '🚀', '↩️', '↩', '�
  * "🚀 🚀 …"). Never empty: an all-emoji title keeps its text.
  * @internal Exported for tests.
  */
+/**
+ * CI and release markers a PR title carries for the pipelines ("[skip ota]",
+ * "[skip mobile]", "[skip ci]", "[skip release]", "[release:all]"). They steer
+ * the deploy and mean nothing to a reader, so the post never shows them
+ * (2026-11-20: "help her take photo web is live · fix(events): … [skip ota]").
+ */
+const CI_MARKERS = /\s*\[(?:skip[ -](?:ci|mobile|ota|release|actions|android|ios)|release:[^\]]*|no ci)\]/gi
+
 export function stripLeadingMark(title: string): string {
+  const unmarked = title.replace(CI_MARKERS, '').trim()
+  if (unmarked && unmarked !== title.trim()) title = unmarked
   let t = title.trim()
   for (let i = 0; i < 3; i++) {
     const mark = OPS_MARKS.find((m) => t.startsWith(m))
