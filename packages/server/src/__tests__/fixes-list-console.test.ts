@@ -123,6 +123,14 @@ describe('GET /v1/admin/fixes', () => {
     expect(ids.size).toBe(75)
   })
 
+  it('returns a failure without the colour codes an older worker stored with it', async () => {
+    db = makeFakeDb({
+      fix_attempts: [attempt(1, { status: 'failed', error: 'mushi work: git push failed: Secret scan... \u001b[32;1mOK\u001b[0m' })],
+    })
+    const res = await get('/v1/admin/fixes')
+    expect(res.json.data.fixes[0].error).toBe('mushi work: git push failed: Secret scan... OK')
+  })
+
   it('links a fix to the Sentry issue its report came from', async () => {
     db = makeFakeDb({ fix_attempts: [attempt(1), attempt(2)] })
     reportRows = new Map([['r1', { id: 'r1', sentry_issue_url: 'https://acme.sentry.io/issues/4501/' }]])

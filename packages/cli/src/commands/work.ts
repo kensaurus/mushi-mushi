@@ -1137,9 +1137,9 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync)
+  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync, (process.env['PATH'] ?? '').split(';'))
   if (!spawnable) {
-    log(`  deps: no ${cmd[0]} script next to this Node, so no install; the agent works without dependencies`)
+    log(`  deps: no ${cmd[0]} found next to this Node or on PATH, so no install; the agent works without dependencies (install it: npm i -g ${cmd[0]})`)
     return
   }
   const [bin, args] = spawnable
@@ -1162,12 +1162,23 @@ const WINDOWS_PM_SCRIPTS: Record<string, readonly string[]> = {
  * with this Node instead, never through cmd.exe: a shell anywhere in runProc
  * made CodeQL treat every git argument as shell input (alerts 417-420). Null
  * when no script is found, and the run goes on without an install.
+ *
+ * Beside node.exe first, then each PATH folder: `npm i -g pnpm` puts pnpm in
+ * %APPDATA%\npm (on PATH, not beside node.exe), so the worker found no pnpm
+ * and pnpm repos ran with no dependencies (2026-11-20). A standalone
+ * `pnpm.exe` on PATH starts directly.
  */
-export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean): [string, string[]] | null {
+export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean, pathDirs: readonly string[] = []): [string, string[]] | null {
   if (platform !== 'win32') return cmd
   // Windows path rules whatever the host: the tests run this on Linux too.
-  const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(win32.dirname(nodeExe), rel)).find((p) => hasFile(p))
-  return script ? [nodeExe, [script, ...cmd[1]]] : null
+  const dirs = [win32.dirname(nodeExe), ...pathDirs.map((d) => d.trim().replace(/^"|"$/g, '')).filter(Boolean)]
+  for (const dir of dirs) {
+    const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(dir, rel)).find((p) => hasFile(p))
+    if (script) return [nodeExe, [script, ...cmd[1]]]
+    const exe = win32.join(dir, `${cmd[0]}.exe`)
+    if (hasFile(exe)) return [exe, cmd[1]]
+  }
+  return null
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */

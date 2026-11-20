@@ -290,6 +290,18 @@ describe('windowsInstaller', () => {
 
   it('gives up (no install) rather than reach for a shell', () => {
     expect(windowsInstaller(pnpm, 'win32', node, () => false)).toBeNull()
+    expect(windowsInstaller(pnpm, 'win32', node, () => false, [String.raw`C:\Windows`])).toBeNull()
+  })
+
+  it('finds a global `npm i -g pnpm` on PATH, which is not beside node.exe (2026-11-20)', () => {
+    const global = String.raw`C:\Users\me\AppData\Roaming\npm\node_modules\pnpm\bin\pnpm.cjs`
+    const path = [String.raw`C:\Windows\system32`, String.raw`"C:\Users\me\AppData\Roaming\npm"`, '']
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === global, path)).toEqual([node, [global, 'install', '--frozen-lockfile', '--prefer-offline']])
+  })
+
+  it('starts a standalone pnpm.exe on PATH directly', () => {
+    const exe = String.raw`C:\Users\me\AppData\Local\pnpm\pnpm.exe`
+    expect(windowsInstaller(pnpm, 'win32', node, (p) => p === exe, [String.raw`C:\Users\me\AppData\Local\pnpm`])).toEqual([exe, ['install', '--frozen-lockfile', '--prefer-offline']])
   })
 })
 
