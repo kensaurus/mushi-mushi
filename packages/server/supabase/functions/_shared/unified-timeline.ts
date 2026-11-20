@@ -4,6 +4,7 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { plainTriageError, queueJobTimelineTitle, screenDetail, TRAIL_QUEUE_COLUMNS, type TrailQueueRow } from './triage-queue-text.ts'
 
 export type UnifiedTimelineLane =
   | 'report'
@@ -13,6 +14,8 @@ export type UnifiedTimelineLane =
   | 'qa'
   | 'skill_pipeline'
   | 'ask_mushi'
+  // The triage queue (processing_queue): fast-filter's stage-1 job, its attempts and last error.
+  | 'pipeline'
   // Telemetry lanes (Phase 1c): SDK-captured events merged by wall-clock timestamp.
   // These give the AI diagnosis agent a full causal picture: what the user did,
   // what network requests fired, and what the backend observed — all in one feed.
@@ -69,6 +72,18 @@ export async function buildUnifiedReportTimeline(
     status: report.status,
     actor: 'reporter',
   })
+
+  // The triage queue job(s): one entry when the job was created, and one for
+  // where it ended (done, failed, gave up) with the error in plain words.
+  const { data: jobs } = await db
+    .from('processing_queue')
+    .select(TRAIL_QUEUE_COLUMNS)
+    .eq('report_id', reportId)
+    .order('created_at', { ascending: true })
+    .limit(20)
+  for (const j of (jobs ?? []) as unknown as TrailQueueRow[]) {
+    entries.push(...queueJobTimelineEntries(j))
+  }
 
   const { data: comments } = await db
     .from('report_comments')
@@ -319,4 +334,36 @@ export function commentTimelineTitle(c: { author_kind: string | null; visible_to
 export function timelineIso(ts: unknown, fallbackIso: string): string {
   const d = typeof ts === 'number' || typeof ts === 'string' ? new Date(ts) : null
   return d && Number.isFinite(d.getTime()) ? d.toISOString() : fallbackIso
+}
+
+/** @internal Exported for tests. A queue job as timeline entries (created, and where it ended). */
+export function queueJobTimelineEntries(j: TrailQueueRow): UnifiedTimelineEntry[] {
+  const out: UnifiedTimelineEntry[] = [
+    {
+      id: `queue-${j.id}-created`,
+      lane: 'pipeline',
+      at: j.created_at,
+      title: 'Queued for a quick check',
+      status: 'pending',
+      actor: 'mushi',
+      provenance: { source: 'mushi' },
+    },
+  ]
+  const ended = j.completed_at ?? (j.status === 'processing' || j.status === 'running' ? j.started_at : null)
+  if (ended && j.status !== 'pending') {
+    const failed = j.status === 'failed' || j.status === 'dead_letter'
+    const plain = failed ? plainTriageError(j.last_error) : null
+    const raw = failed ? screenDetail(j.last_error) : null
+    out.push({
+      id: `queue-${j.id}-${j.status}`,
+      lane: 'pipeline',
+      at: ended,
+      title: queueJobTimelineTitle(j),
+      body: plain && raw ? `${plain}\n${raw}` : plain ?? raw,
+      status: j.status,
+      actor: 'mushi',
+      provenance: { source: 'mushi' },
+    })
+  }
+  return out
 }

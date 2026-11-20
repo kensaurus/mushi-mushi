@@ -78,7 +78,10 @@ const SDK_WASM_VERSION = readPkgVersion('../../packages/wasm-classifier/package.
 const CREATE_MUSHI_VERSION = readPkgVersion('../../packages/create-mushi-mushi/package.json')
 const LAUNCHER_VERSION = readPkgVersion('../../packages/launcher/package.json')
 const BUILD_SHA = readGitSha()
-const BUILD_DATE = new Date().toISOString().slice(0, 10)
+// Full ISO instant: the console shows the build to the minute in the viewer's
+// own time zone (sidebar stamp + version popover, owner 2026-11-19).
+const BUILD_TIME = new Date().toISOString()
+const BUILD_DATE = BUILD_TIME.slice(0, 10)
 
 // Local dev: proxy Supabase Edge Functions through Vite so any dev port (6464,
 // 5180, …) avoids browser CORS preflight failures against the cloud API.
@@ -106,6 +109,7 @@ export default defineConfig({
     __SERVER_VERSION__: JSON.stringify(SERVER_VERSION),
     __BUILD_SHA__: JSON.stringify(BUILD_SHA),
     __BUILD_DATE__: JSON.stringify(BUILD_DATE),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
     // Extended SDK catalog
     __SDK_CORE_VERSION__: JSON.stringify(SDK_CORE_VERSION),
     __SDK_VUE_VERSION__: JSON.stringify(SDK_VUE_VERSION),

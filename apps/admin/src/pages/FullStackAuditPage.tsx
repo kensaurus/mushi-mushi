@@ -18,7 +18,7 @@ import { useLocation } from 'react-router-dom'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Card, Btn, Callout, Section, ErrorAlert, FindingSeverityBadge } from '../components/ui'
+import { Card, Btn, Callout, Section, ErrorAlert } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import { describeApiError } from '../lib/humanizeApiError'
@@ -112,19 +112,21 @@ function AuditResultCard({ result }: { result: AuditResult }) {
       )}
 
       {backend.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium text-fg-secondary">Backend ({backend.length})</p>
-          {backend.map((f, i) => (
-            // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-            <div key={i} className="flex items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-raised px-3 py-2">
-              <FindingSeverityBadge severity={f.severity} />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-fg">{f.title}</p>
-                <p className="mt-0.5 text-xs text-fg-secondary">{f.detail}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        // Rows with a status glyph, not a card per finding; past five they fold (2026-11-19).
+        <details open={backend.length <= 5} className="space-y-1">
+          <summary className="cursor-pointer text-xs font-medium text-fg-secondary hover:text-fg">Your backend ({backend.length})</summary>
+          <ul className="flex flex-col divide-y divide-edge-subtle" data-testid="audit-backend-findings">
+            {backend.map((f, i) => (
+              <li key={i} className="flex items-start gap-2 py-1.5">
+                <StatusGlyph tone={f.severity === 'error' ? 'danger' : f.severity === 'warn' ? 'warn' : 'off'} label={f.severity === 'error' ? 'Error' : f.severity === 'warn' ? 'Warning' : 'Note'} className="mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-fg">{f.title}</p>
+                  <p className="text-2xs text-fg-secondary">{f.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {restarted.length > 0 && (

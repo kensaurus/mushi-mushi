@@ -7,6 +7,7 @@ import { dbError, callerProjectIds, userCanAccessProject } from '../shared.ts';
 import { queueRetryDenial } from '../../_shared/queue-retry-policy.ts';
 import { denyViewerWrite } from '../viewer-gate.ts';
 import { ingestReport, triggerClassification } from '../helpers.ts';
+import { recoverStranded, resetQueueJob } from '../queue-actions.ts';
 
 /**
  * Bulk flush/recover re-run triage (LLM spend) across the caller's projects.
@@ -318,15 +319,7 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
       return c.json({ ok: false, error: { code: 'NOT_RETRYABLE', message: denial } }, 409);
     }
 
-    await db
-      .from('processing_queue')
-      .update({
-        status: 'pending',
-        attempts: 0,
-        last_error: null,
-        scheduled_at: new Date().toISOString(),
-      })
-      .eq('id', queueId);
+    await resetQueueJob(db, queueId, { now: new Date() });
 
     triggerClassification(item.report_id, item.project_id);
     return c.json({ ok: true });
@@ -394,78 +387,22 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
       return c.json({ ok: true, data: { reports: 0, queue: 0, reconciled: 0 } });
     }
 
-    const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
-    const { data: stranded } = await db
-      .from('reports')
-      .select('id, project_id, status')
-      .in('project_id', projectIds)
-      .in('status', ['new', 'queued'])
-      .lt('created_at', cutoff)
-      .lt('processing_attempts', 3)
-      .order('created_at', { ascending: true })
-      .limit(50);
+    const recovered = await recoverStranded(db, projectIds, triggerClassification, new Date());
 
-    const items = stranded ?? [];
-    for (const r of items) {
-      if (r.status === 'queued') {
-        await db.from('reports').update({ status: 'new' }).eq('id', r.id);
-      }
-      triggerClassification(r.id, r.project_id);
-    }
-
-    const { data: failed } = await db
-      .from('processing_queue')
-      .select('id, report_id, project_id, attempts, max_attempts')
-      .in('project_id', projectIds)
-      .eq('status', 'failed')
-      .order('created_at', { ascending: true })
-      .limit(50);
-
-    const retryable = (failed ?? []).filter((f) => (f.attempts ?? 0) < (f.max_attempts ?? 3));
-    for (const q of retryable) {
-      await db
-        .from('processing_queue')
-        .update({
-          status: 'pending',
-          scheduled_at: new Date().toISOString(),
-        })
-        .eq('id', q.id);
-      triggerClassification(q.report_id, q.project_id);
-    }
-
-    const { data: stale } = await db
-      .from('processing_queue')
-      .select('id, reports!inner(status)')
-      .in('project_id', projectIds)
-      .eq('status', 'pending')
-      .in('reports.status', ['classified', 'dispatched', 'completed'])
-      .limit(100);
-
-    const reconcileIds = (stale ?? []).map((s) => s.id);
-    if (reconcileIds.length > 0) {
-      await db
-        .from('processing_queue')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        })
-        .in('id', reconcileIds);
-    }
-
-    for (const projectId of [...new Set(items.map((i) => i.project_id))]) {
+    for (const [projectId, reports] of recovered.reportsByProject) {
       await logAudit(db, projectId, userId, 'settings.updated', 'queue', undefined, {
         kind: 'recover_stranded',
-        reports: items.filter((i) => i.project_id === projectId).length,
-        queue: retryable.length,
+        reports,
+        queue: recovered.queue,
       }).catch(() => {});
     }
 
     return c.json({
       ok: true,
       data: {
-        reports: items.length,
-        queue: retryable.length,
-        reconciled: reconcileIds.length,
+        reports: recovered.reports,
+        queue: recovered.queue,
+        reconciled: recovered.reconciled,
       },
     });
   });

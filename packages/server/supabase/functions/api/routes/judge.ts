@@ -4,6 +4,8 @@ import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { dbError, callerProjectIds, resolveOwnedProject } from '../shared.ts';
 import { JUDGE_ELIGIBLE_STATUSES, judgeEmptyResult, judgeWeekLabel, onlyJudgeable } from '../../_shared/judge-eligibility.ts';
+import { graderPatch, reviewedAfterGrade } from '../../_shared/judge-review.ts';
+import { isClassifierCategory } from '../../_shared/report-category.ts';
 
 /** A valid ISO instant from a query value, or null (never a raw filter string). */
 function isoOrNull(raw: string | undefined): string | null {
@@ -21,7 +23,11 @@ const AGREEMENT_ROW_CAP = 5000;
 /** PostgREST answers at most 1,000 rows a request, so the trend is read in pages of this size. */
 const AGREEMENT_PAGE = 1000;
 
-type AgreementRow = { created_at: string; classification_agreed: boolean | null };
+type AgreementRow = { created_at: string; classification_agreed: boolean | null; report_id?: string | null };
+/** Recent disagreements checked for a person's review; a busier project counts its newest only. */
+const REVIEW_CHECK_CAP = 300;
+/** Report ids per read when checking reviews. */
+const REVIEW_ID_CHUNK = 100;
 
 /**
  * The (created_at, classification_agreed) rows since `since`, newest first, in
@@ -33,7 +39,7 @@ async function readAgreementRows(db: ReturnType<typeof getServiceClient>, pid: s
   for (let from = 0; from < AGREEMENT_ROW_CAP; from += AGREEMENT_PAGE) {
     const { data, error } = await db
       .from('classification_evaluations')
-      .select('created_at, classification_agreed')
+      .select('created_at, classification_agreed, report_id')
       .eq('project_id', pid)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
@@ -63,6 +69,7 @@ function agreementSummary(rows: AgreementRow[], now: number) {
   const recentFrom = now - RECENT_DAYS * 86_400_000;
   let recentGraded = 0;
   let recentDisagreed = 0;
+  const recentDisagreementRows: Array<{ reportId: string; gradedAt: string }> = [];
   for (const r of rows) {
     const t = Date.parse(r.created_at);
     if (!Number.isFinite(t)) continue;
@@ -73,13 +80,17 @@ function agreementSummary(rows: AgreementRow[], now: number) {
     weeks.set(key, w);
     if (t >= recentFrom) {
       recentGraded += 1;
-      if (r.classification_agreed === false) recentDisagreed += 1;
+      if (r.classification_agreed === false) {
+        recentDisagreed += 1;
+        if (r.report_id) recentDisagreementRows.push({ reportId: r.report_id, gradedAt: r.created_at });
+      }
     }
   }
   return {
     agreementWeeks: [...weeks.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)),
     recentEvaluations: recentGraded,
     recentDisagreements: recentDisagreed,
+    recentDisagreementRows,
     capped: rows.length >= AGREEMENT_ROW_CAP,
   };
 }
@@ -107,6 +118,8 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
       /** Grades in the last recentWindowDays; null when that read failed. */
       recentEvaluations: null as number | null,
       recentDisagreements: null as number | null,
+      /** Recent disagreements a person has not reviewed yet; null when that read failed. */
+      recentToReview: null as number | null,
       /** Share of grades per week where the grader agreed with the diagnosis, oldest first. */
       agreementWeeks: [] as Array<{ weekStart: string; graded: number; agreed: number }>,
       agreementCapped: false,
@@ -194,6 +207,28 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         readAgreementRows(db, pid, agreementSince),
       ]);
     const agreement = agreementRes === null ? null : agreementSummary(agreementRes, Date.now());
+    // Recent disagreements nobody has reviewed yet (Accept / Keep on /judge set the category):
+    // the page's "Review N". Null when the read fails, so the page falls back to the plain count.
+    let recentToReview: number | null = null;
+    if (agreement) {
+      const pending = agreement.recentDisagreementRows.slice(0, REVIEW_CHECK_CAP);
+      if (pending.length === 0) recentToReview = 0;
+      else {
+        // Ids in chunks of 100: 300 UUIDs in one `.in()` is an ~11 KB URL some gateways refuse.
+        const ids = [...new Set(pending.map((p) => p.reportId))];
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += REVIEW_ID_CHUNK) chunks.push(ids.slice(i, i + REVIEW_ID_CHUNK));
+        const reads = await Promise.all(
+          chunks.map((chunk) => db.from('reports').select('id, category_confirmed_at').in('id', chunk)),
+        );
+        if (reads.every((r) => !r.error)) {
+          const confirmed = reads.flatMap((r) => (r.data ?? []) as Array<{ id: string; category_confirmed_at: string | null }>);
+          const at = new Map(confirmed.map((r) => [r.id, r.category_confirmed_at]));
+          const open = pending.filter((p) => !reviewedAfterGrade(at.get(p.reportId), p.gradedAt)).length;
+          recentToReview = open + Math.max(0, agreement.recentDisagreementRows.length - pending.length);
+        }
+      }
+    }
 
     const weeks = (weekRes.data ?? []) as Array<{
       week_start: string;
@@ -300,6 +335,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         recentWindowDays: RECENT_DAYS,
         recentEvaluations: agreement?.recentEvaluations ?? null,
         recentDisagreements: agreement?.recentDisagreements ?? null,
+        recentToReview,
         agreementWeeks: agreement?.agreementWeeks ?? [],
         agreementCapped: agreement?.capped ?? false,
         classifiedReports,
@@ -417,7 +453,7 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
           : null;
 
     const evalColumns =
-      'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used';
+      'id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used, suggested_correction';
     let q = db
       .from('classification_evaluations')
       .select(stageColumn ? `${evalColumns}, reports!inner(${stageColumn})` : evalColumns, { count: 'exact' })
@@ -449,31 +485,47 @@ export function registerJudgeRoutes(app: Hono<{ Variables: Variables }>): void {
         description: string | null;
         severity: string | null;
         status: string | null;
+        category: string | null;
+        component: string | null;
+        categoryConfirmedAt: string | null;
       }
     >();
     if (reportIds.length > 0) {
       const { data: reportRows } = await db
         .from('reports')
-        .select('id, summary, description, severity, status')
+        .select('id, summary, description, severity, status, category, component, category_confirmed_at')
         .in('id', reportIds);
-      for (const r of reportRows ?? []) {
+      for (const r of (reportRows ?? []) as Array<Record<string, unknown>>) {
+        const str = (v: unknown) => (typeof v === 'string' ? v : null);
         summaryMap.set(r.id as string, {
-          summary: (r as { summary: string | null }).summary,
-          description: (r as { description: string | null }).description,
-          severity: (r as { severity: string | null }).severity,
-          status: (r as { status: string | null }).status,
+          summary: str(r.summary),
+          description: str(r.description),
+          severity: str(r.severity),
+          status: str(r.status),
+          category: str(r.category),
+          component: str(r.component),
+          categoryConfirmedAt: str(r.category_confirmed_at),
         });
       }
     }
     const enriched = evalRows.map((joined) => {
       // Drop the join column; the row keeps its own fields only.
-      const { reports: _join, ...row } = joined;
+      // The raw suggestion stays server-side: the console gets only the PATCH body it can send.
+      const { reports: _join, suggested_correction: suggested, ...row } = joined;
       const meta = summaryMap.get(row.report_id as string);
+      const now = { category: meta?.category ?? null, severity: meta?.severity ?? null, component: meta?.component ?? null };
       return {
         ...row,
         report_summary: meta?.summary ?? meta?.description ?? null,
         report_severity: meta?.severity ?? null,
         report_status: meta?.status ?? null,
+        // The review step (Accept grader's view / Keep diagnosis), _shared/judge-review.ts.
+        // Only a category PATCH accepts back: a reporter's own (feature, question…) can't be
+        // re-confirmed, so the console offers no Keep for it instead of a 400.
+        report_category: isClassifierCategory(now.category) ? now.category : null,
+        report_component: now.component,
+        grader_patch: row.classification_agreed === false && meta ? graderPatch(suggested, now) : null,
+        reviewed: meta ? reviewedAfterGrade(meta.categoryConfirmedAt, row.created_at as string) : false,
       };
     });
     return c.json({ ok: true, data: { evaluations: enriched, total: count ?? enriched.length, page, limit } });

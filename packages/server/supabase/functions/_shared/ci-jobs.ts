@@ -249,6 +249,12 @@ export async function rerunFailedJobs(gh: CiGithub, repo: string, runId: number)
   return res.status
 }
 
+/** POST cancel for a run. 202 = cancelling; 409 = it already finished; 403 = the token cannot write Actions. */
+export async function cancelRun(gh: CiGithub, repo: string, runId: number): Promise<number> {
+  const res = await ghRequest<unknown>(gh, `${API}/repos/${repo}/actions/runs/${runId}/cancel`, 'POST')
+  return res.status
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mapping
 // ─────────────────────────────────────────────────────────────────────────────

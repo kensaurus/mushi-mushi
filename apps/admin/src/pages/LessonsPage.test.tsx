@@ -101,7 +101,9 @@ describe('LessonsPage recurring patterns', () => {
     mocks.clusters = []
     await render('/lessons?tab=clusters')
     const status = host.querySelector('[data-testid="page-status"]')?.textContent ?? ''
-    expect(status).toContain('Promote a ready pattern to make its rule a lesson.')
+    // The lead names the next step and the button does it (console UX overhaul, 2026-11-19).
+    expect(status).toContain('1 recurring bug is ready to become a rule.')
+    expect(status).toContain('Promote 1')
     expect(status).not.toContain('lessons in use;')
   })
 

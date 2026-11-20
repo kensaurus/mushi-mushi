@@ -10,7 +10,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v1.37.x
 
-Latest tag: `v1.37.1`
+Latest tag: `v1.37.2`
 
 ### Highlights
 
@@ -21,7 +21,7 @@ Latest tag: `v1.37.1`
 
 - `@mushi-mushi/core` → 1.37.0
 - `@mushi-mushi/web` → 1.37.0
-- `mushi-mushi` → 1.37.1
+- `mushi-mushi` → 1.37.2
 
 ## v1.36.x
 
@@ -536,11 +536,11 @@ Latest tag: `v1.0.6`
 
 ## v0.40.x
 
-Latest tag: `v0.40.3`
+Latest tag: `v0.40.4`
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.40.3
+- `@mushi-mushi/cli` → 0.40.4
 
 ## v0.39.x
 
@@ -614,12 +614,12 @@ Latest tag: `v0.32.0`
 
 ## v0.31.x
 
-Latest tag: `v0.31.5`
+Latest tag: `v0.31.6`
 
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.31.0
-- `@mushi-mushi/mcp` → 0.31.5
+- `@mushi-mushi/mcp` → 0.31.6
 
 ## v0.30.x
 

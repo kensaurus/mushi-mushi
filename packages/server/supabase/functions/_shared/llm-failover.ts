@@ -302,7 +302,7 @@ export async function withLlmFailover<T>(
       code: 'NO_KEYS_CONFIGURED',
       provider,
       attempts: 0,
-      lastError: `No ${provider} key configured. Add one in Settings → API Keys.`,
+      lastError: `No ${provider} key configured. Add one in Settings → AI keys.`,
     });
   }
 

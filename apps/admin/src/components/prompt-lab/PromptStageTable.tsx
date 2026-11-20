@@ -20,6 +20,7 @@ import { CHIP_TONE } from '../../lib/chipTone'
 import { effectiveTraffic } from './promptLabCounts'
 import { VersionStateMark } from './VersionStateMark'
 import { useMediaQuery } from '../../lib/useMediaQuery'
+import { BarCell, type BarTone } from '../signal/BarCell'
 
 // Icon-only Btn override for the dense action column.
 //
@@ -47,10 +48,18 @@ const ICON_BTN = '!px-1.5'
  * recolours legitimate 0.80–0.89 judge scores from green to amber. See the
  * comment in JudgePage#ScorePill for the full rationale.
  */
-function judgeScoreTone(score: number): string {
-  if (score >= 0.8) return 'text-ok'
-  if (score >= 0.6) return 'text-warn'
-  return 'text-danger'
+function judgeScoreTone(score: number): BarTone {
+  if (score >= 0.8) return 'ok'
+  if (score >= 0.6) return 'warn'
+  return 'danger'
+}
+
+/** A grade as a bar on the 0–100 scale, or a dash with no grades. */
+function GradeBar({ score }: { score: number | null }) {
+  // A dash: the status line says "no grades" once (2026-11-19: four times).
+  if (score == null) return <span className="text-fg-faint text-2xs" title="No grades yet">—</span>
+  const pct = Math.round(score * 100)
+  return <BarCell value={pct} max={100} text={`${pct}%`} tone={judgeScoreTone(score)} widthClass="w-12" />
 }
 
 interface PromptStageTableProps {
@@ -82,7 +91,7 @@ export function PromptStageTable({
 
   const renderState = (p: PromptVersion) => (
     <>
-      <VersionStateMark version={p} />
+      <VersionStateMark version={p} detailed />
       {p.project_id == null && (
         <Badge className="ml-1 bg-surface-overlay text-fg-secondary border border-edge-subtle" title="Built-in version shared by every app; clone it to edit.">Global</Badge>
       )}
@@ -157,9 +166,9 @@ export function PromptStageTable({
               variant="success"
               disabled={busy === p.id}
               onClick={() => onActivate(p)}
-              title="Make this the live prompt for this stage"
+              title="Use this version for every report in this step"
             >
-              Activate
+              Switch to this
             </Btn>
           )}
           {!p.is_active && (
@@ -169,8 +178,8 @@ export function PromptStageTable({
               className={ICON_BTN}
               disabled={busy === p.id}
               onClick={() => onTraffic(p)}
-              title="Set A/B traffic share"
-              aria-label={`Set A/B traffic share for ${p.version}`}
+              title="Choose how many reports this version tests on"
+              aria-label={`Choose how many reports ${p.version} tests on`}
             >
               <IconSliders />
             </Btn>
@@ -205,13 +214,13 @@ export function PromptStageTable({
             return (
               <li key={p.id} className="space-y-1 py-2">
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="min-w-0 break-all font-mono text-fg-secondary">{p.version}</span>
                   {renderState(p)}
+                  <span className="min-w-0 break-all font-mono text-2xs text-fg-muted" data-testid="prompt-version-id">{p.version}</span>
                 </div>
-                <p className="flex flex-wrap gap-x-3 text-fg-muted tabular-nums">
-                  <span>Traffic {effectiveTraffic(p, prompts)}%</span>
-                  <span>Grade {score == null ? '—' : `${(score * 100).toFixed(1)}%`}</span>
-                  <span>{p.total_evaluations} evals</span>
+                <p className="flex flex-wrap items-center gap-x-3 text-fg-muted tabular-nums">
+                  <GradeBar score={score} />
+                  <span>{p.total_evaluations} grades</span>
+                  <span>{effectiveTraffic(p, prompts)}% of reports</span>
                   <RelativeTime value={p.updated_at} />
                 </p>
                 <div className="flex flex-wrap items-center gap-1">{renderActions(p)}</div>
@@ -245,16 +254,16 @@ export function PromptStageTable({
           <table className="w-full min-w-max text-2xs">
             <thead className="text-fg-faint">
               <tr>
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">State</th>
                 <th className="whitespace-nowrap text-left font-normal px-2 py-1">Version</th>
-                <th className="whitespace-nowrap text-right font-normal px-2 py-1">
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">Grade</th>
+                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Grades</th>
+                <th className="whitespace-nowrap text-left font-normal px-2 py-1">
                   <span className="inline-flex items-center gap-1">
-                    Traffic
+                    Share of reports
                     <ConfigHelp helpId="prompt-lab.traffic_percentage" />
                   </span>
                 </th>
-                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Judge score</th>
-                <th className="whitespace-nowrap text-right font-normal px-2 py-1">Evals</th>
-                <th className="whitespace-nowrap text-left font-normal px-2 py-1">State</th>
                 <th className="whitespace-nowrap text-left font-normal px-2 py-1">Updated</th>
                 <th className="whitespace-nowrap text-right font-normal px-2 py-1">Actions</th>
               </tr>
@@ -265,42 +274,27 @@ export function PromptStageTable({
                 const share = effectiveTraffic(p, prompts)
                 return (
                   <tr key={p.id} className="border-t border-edge-subtle">
-                    <td className="whitespace-nowrap px-2 py-1.5 font-mono text-fg-secondary">
+                    <td className="whitespace-nowrap px-2 py-1.5">
+                      {/* The same mark as Triage grading, with the share in words. */}
+                      {renderState(p)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5 font-mono text-2xs text-fg-muted" data-testid="prompt-version-id">
                       {p.version}
                     </td>
-                    <td
-                      className="px-2 py-1.5 text-right tabular-nums text-fg-secondary"
-                      title={p.is_active
-                        ? `Keeps ${share} % of live traffic: what the tests below do not take.`
-                        : `Receives ${share} % of live traffic; the version in use keeps the rest.`}
-                    >
-                      {/* Traffic is a deliberate A/B split, not a quality
-                          signal. Rendering it through the higher-better tone
-                          ramp would paint 50/50 experiments and 0 % idle
-                          candidates red ("something's broken!") when they're
-                          working exactly as configured. Keep this neutral
-                          and match the JudgePage leaderboard treatment. */}
-                      {share}%
-                    </td>
-                    <td className="px-2 py-1.5 text-right">
-                      {score == null ? (
-                        // A dash: the status line says "no grades" once (2026-11-19: four times).
-                        <span className="text-fg-faint text-2xs" title="No grades yet">—</span>
-                      ) : (
-                        <span
-                          className={`tabular-nums ${judgeScoreTone(score)}`}
-                          title="Judge score — higher is better. Uses the rolling 7-day eval window."
-                        >
-                          {(score * 100).toFixed(1)}%
-                        </span>
-                      )}
+                    <td className="px-2 py-1.5" title="Average grade from Triage grading; higher is better.">
+                      <GradeBar score={score} />
                     </td>
                     <td className="px-2 py-1.5 text-right text-fg-muted tabular-nums">
                       {p.total_evaluations}
                     </td>
-                    <td className="px-2 py-1.5">
-                      {/* The same word and mark as the Versions table and Triage grading. */}
-                      {renderState(p)}
+                    <td
+                      className="px-2 py-1.5"
+                      title={p.is_active
+                        ? `Keeps ${share}% of reports: what the tests do not take.`
+                        : `Gets ${share}% of reports; the version in use keeps the rest.`}
+                    >
+                      {/* A deliberate split, not a quality signal: a neutral bar. */}
+                      <BarCell value={share} max={100} text={`${share}%`} widthClass="w-12" />
                     </td>
                     <td className="px-2 py-1.5 text-fg-muted">
                       <RelativeTime value={p.updated_at} />

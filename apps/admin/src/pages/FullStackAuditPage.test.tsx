@@ -37,7 +37,7 @@ vi.mock('../components/PageHeaderBar', () => ({
 vi.mock('../components/PagePosture', () => ({ PagePosture: () => null, POSTURE_PRIORITY: { guide: 1 } }))
 
 import { FullStackAuditPage, auditStatus, unfinishedChecks } from './FullStackAuditPage'
-import { findingFixPrompt } from '../components/gates/CopyFixPromptButton'
+import { checkFindingsFixPrompt, findingFixPrompt } from '../components/gates/CopyFixPromptButton'
 import { EMPTY_FULLSTACK_AUDIT_STATS } from '../components/fullstack-audit/FullstackAuditStatsTypes'
 
 const STATS: FullstackAuditStats = {
@@ -123,6 +123,16 @@ describe('findingFixPrompt', () => {
     const text = findingFixPrompt({ gate: 'api_contract', message: 'POST /orders body does not match', file_path: 'src/orders.ts', line: 41 })
     expect(text).toContain('"API contract" check found a problem in src/orders.ts (line 41): POST /orders body does not match.')
     expect(text).toContain('run the tests')
+  })
+
+  it('puts every open finding of one check in one prompt (Fix all, 2026-11-19)', () => {
+    const text = checkFindingsFixPrompt([
+      { gate: 'api_contract', message: 'POST /orders body does not match', file_path: 'src/orders.ts', line: 41 },
+      { gate: 'api_contract', message: 'GET /users is never called' },
+    ])
+    expect(text).toContain('"API contract" check found 2 problems:')
+    expect(text).toContain('- POST /orders body does not match (src/orders.ts:41)')
+    expect(text).toContain('- GET /users is never called')
   })
 })
 

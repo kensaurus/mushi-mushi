@@ -5,6 +5,7 @@ import { useMotionTransition } from '../../lib/useMotionTransition'
 import { Badge, Btn, SegmentedControl } from '../ui'
 import { IconDots } from '../icons'
 import { InventoryStatusPill } from './InventoryStatusPill'
+import { StatusPill } from '../signal/StatusMark'
 
 /**
  * Renders the full schema shape of `user_stories[]` from inventory.yaml:
@@ -73,7 +74,7 @@ type StoryFilter = 'all' | 'open' | 'regressed'
 const STORY_FILTERS: Array<{ id: StoryFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'open', label: 'Not verified' },
-  { id: 'regressed', label: 'Regressed' },
+  { id: 'regressed', label: 'Stopped working' },
 ]
 
 /** Actions a filter keeps; `all` keeps every action. */
@@ -269,14 +270,9 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGat
                   <strong className="font-semibold text-fg">{verifiedCount}</strong>
                   <span className="text-fg-faint">/{story.actions.length}</span>
                 </span>
-                {regressedCount > 0 && (
-                  <span className="text-danger">
-                    {regressedCount} regressed
-                  </span>
-                )}
-                {stubCount > 0 && (
-                  <span className="text-warn">{stubCount} stub</span>
-                )}
+                {/* Plain words, with a mark each (2026-11-19: "regressed" and "stub" read as internal states). */}
+                {regressedCount > 0 && <StatusPill status="failed" label={`${regressedCount} stopped working`} />}
+                {stubCount > 0 && <StatusPill status="slow" label={`${stubCount} no code yet`} title="The button or link has nothing behind it yet" />}
                 <span className="text-fg-muted">
                   <span className="text-fg-faint">Tests </span>
                   <strong className="font-semibold text-fg">{totalTests}</strong>

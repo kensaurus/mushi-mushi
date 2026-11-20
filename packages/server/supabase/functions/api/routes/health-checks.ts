@@ -132,7 +132,7 @@ async function bannerRow(db: Db, projectId: string, now: Date): Promise<HealthCh
 async function doctorRows(db: Db, userId: string, projectId: string, platform: boolean, deps: HealthChecksDeps): Promise<HealthCheck[]> {
   const at = deps.now().toISOString()
   try {
-    const { checks } = await within(deps.runDoctorChecks(db, userId, { projectIds: [projectId], platform }), 'server doctor', SOURCE_MS)
+    const { checks } = await within(deps.runDoctorChecks(db, userId, { projectIds: [projectId], platform, instance: false }), 'server doctor', SOURCE_MS)
     return checks.map((ch) => fromDoctorCheck(ch.name.startsWith('codebase_index') || ch.name === 'stranded_reports' || ch.name === 'dead_letter' ? projectId : null, ch, at))
   } catch (err) {
     return ['stranded_reports', 'dead_letter'].map((name) =>

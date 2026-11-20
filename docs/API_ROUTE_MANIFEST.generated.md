@@ -2,15 +2,15 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-18 · **824** routes.
+> Generated: 2026-11-19 · **830** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 222 |
+| `adminOrApiKey` | 226 |
 | `apiKeyAuth` | 60 |
-| `jwtAuth` | 421 |
+| `jwtAuth` | 423 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
 | `unknown` | 51 |
@@ -101,6 +101,10 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/ci/cost-fixes/:id` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-cost-fix.ts` |
 | GET | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | PUT | `/v1/admin/ci/cost-settings` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ci.ts` |
+| POST | `/v1/admin/ci/jobs/:id/cancel` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-job-debug.ts` |
+| GET | `/v1/admin/ci/jobs/:id/debug` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-job-debug.ts` |
+| POST | `/v1/admin/ci/jobs/:id/explain` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-job-debug.ts` |
+| POST | `/v1/admin/ci/jobs/:id/rerun` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-job-debug.ts` |
 | GET | `/v1/admin/ci/overview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci.ts` |
 | GET | `/v1/admin/ci/placement` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
 | POST | `/v1/admin/ci/placement/preview` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ci-placement.ts` |
@@ -571,6 +575,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/reports/:id/blast-radius` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | GET | `/v1/admin/reports/:id/fix-context` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/report-agent-context.ts` |
 | POST | `/v1/admin/reports/:id/known-issues` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reports.ts` |
+| GET | `/v1/admin/reports/:id/pipeline` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-pipeline.ts` |
+| POST | `/v1/admin/reports/:id/pipeline/retry` | `jwtAuth` | `packages/server/supabase/functions/api/routes/report-pipeline.ts` |
 | GET | `/v1/admin/reports/:id/replay-url` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | POST | `/v1/admin/reports/:id/reply` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/reports/:id/reporter-view` | `jwtAuth` | `packages/server/supabase/functions/api/routes/reporter-admin.ts` |

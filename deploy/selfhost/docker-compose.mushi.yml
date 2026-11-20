@@ -44,6 +44,8 @@ services:
       VERIFY_JWT: "false"
       MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET}
       # Links in emails, CLI sign-in, MCP and CORS all use the public URL.
+      # GET /health says "self-hosted" (_shared/instance-mode.ts).
+      MUSHI_INSTANCE_MODE: self-hosted
       MUSHI_ADMIN_URL: ${MUSHI_PUBLIC_URL}
       ADMIN_BASE_URL: ${MUSHI_PUBLIC_URL}
       SITE_URL: ${MUSHI_PUBLIC_URL}

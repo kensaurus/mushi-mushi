@@ -34,6 +34,29 @@ export function findingFixPrompt(f: PromptFinding): string {
     .join('\n\n')
 }
 
+/**
+ * Every open finding of one check as one prompt (Full-stack
+ * audit "Fix all in this check", 2026-11-19): the check, each finding with its place, then the rule.
+ */
+export function checkFindingsFixPrompt(findings: readonly PromptFinding[]): string {
+  const gate = findings[0]?.gate
+  const check = gate ? gateLabel(gate) : 'An automatic check'
+  const about = gate ? gateInfo(gate)?.checks : undefined
+  const lines = findings.map((f) => {
+    const where = f.file_path ? ` (${f.file_path}${f.line != null ? `:${f.line}` : ''})` : ''
+    const rule = f.rule_id ? ` [${ruleLabel(f.rule_id)}]` : ''
+    return `- ${f.message.trim()}${where}${rule}`
+  })
+  return [
+    `Mushi Mushi's "${check}" check found ${findings.length} problem${findings.length === 1 ? '' : 's'}:`,
+    lines.join('\n'),
+    about ? `What this check looks for: ${about}` : null,
+    'Fix each one with the smallest change that makes the check pass. Keep the existing behaviour, then run the tests.',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
 export function CopyFixPromptButton({
   finding,
   variant = 'ghost',
@@ -43,10 +66,30 @@ export function CopyFixPromptButton({
   variant?: 'ghost' | 'primary'
   label?: string
 }) {
+  return <CopyPromptButton text={findingFixPrompt(finding)} variant={variant} label={label} testId="copy-fix-prompt" />
+}
+
+/**
+ * A button that copies any prepared prompt for the editor and says "Copied" for a moment
+ * (App blueprint "Fix all", Design system per-file prompts, 2026-11-19).
+ */
+export function CopyPromptButton({
+  text,
+  variant = 'ghost',
+  label = 'Copy fix prompt',
+  title,
+  testId = 'copy-prompt',
+}: {
+  text: string
+  variant?: 'ghost' | 'primary'
+  label?: string
+  title?: string
+  testId?: string
+}) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(findingFixPrompt(finding))
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -54,7 +97,7 @@ export function CopyFixPromptButton({
     }
   }
   return (
-    <Btn size="sm" variant={variant} onClick={() => void copy()} data-testid="copy-fix-prompt">
+    <Btn size="sm" variant={variant} onClick={() => void copy()} title={title} data-testid={testId}>
       {copied ? 'Copied' : label}
     </Btn>
   )

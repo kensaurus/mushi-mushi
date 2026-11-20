@@ -82,7 +82,8 @@ describe('PromptStageTable', () => {
   it('keeps the full version id and scrolls instead of truncating the cell', () => {
     render()
     const rows = [...host.querySelectorAll('tbody tr')]
-    const versionCells = rows.map((row) => row.querySelector('td'))
+    // The id is secondary text now (state first), but still whole and never ellipsized.
+    const versionCells = rows.map((row) => row.querySelector<HTMLElement>('[data-testid="prompt-version-id"]'))
     expect(versionCells.map((td) => td?.textContent)).toEqual([
       'v1-baseline-auto-20261028',
       'v2-experiment',
@@ -97,8 +98,8 @@ describe('PromptStageTable', () => {
     const scroller = table?.parentElement
     expect(classTokens(scroller?.className)).toEqual(expect.arrayContaining(['min-w-0', 'overflow-x-auto']))
     expect(classTokens(table?.className)).toContain('min-w-max')
-    const judge = [...host.querySelectorAll('th')].find((th) => th.textContent?.includes('Judge score'))
-    expect(judge?.textContent).toContain('Judge score')
+    const judge = [...host.querySelectorAll('th')].find((th) => th.textContent === 'Grade')
+    expect(judge?.textContent).toBe('Grade')
     expect(classTokens(judge?.className)).toContain('whitespace-nowrap')
     expect(classTokens(host.firstElementChild?.className)).toContain('min-w-0')
   })
@@ -147,8 +148,8 @@ describe('PromptStageTable', () => {
       const measured = await page.evaluate(() => {
         const scroller = document.querySelector('.overflow-x-auto') as HTMLElement
         const table = scroller.querySelector('table') as HTMLElement
-        const version = table.querySelector('tbody td') as HTMLElement
-        const judge = [...table.querySelectorAll('th')].find((th) => th.textContent?.includes('Judge score')) as HTMLElement
+        const version = table.querySelector('[data-testid="prompt-version-id"]') as HTMLElement
+        const judge = [...table.querySelectorAll('th')].find((th) => th.textContent === 'Grade') as HTMLElement
         const textWidth = (el: HTMLElement) => {
           const range = document.createRange()
           range.selectNodeContents(el)
@@ -180,7 +181,7 @@ describe('PromptStageTable', () => {
       expect(measured.versionWhiteSpace).toBe('nowrap')
       expect(measured.versionCellWidth).toBeGreaterThanOrEqual(measured.versionTextWidth - 1)
       expect(measured.versionRight).toBeLessThanOrEqual(measured.tableRight + 1)
-      expect(measured.judgeText).toContain('Judge score')
+      expect(measured.judgeText).toBe('Grade')
       expect(measured.judgeWhiteSpace).toBe('nowrap')
       expect(measured.judgeCellWidth).toBeGreaterThanOrEqual(measured.judgeTextWidth - 1)
       expect(measured.judgeRight).toBeLessThanOrEqual(measured.tableRight + 1)

@@ -22,9 +22,16 @@ App blueprint is the Mushi Mushi console screen for one project's recipe: what t
 
 **Refresh** reads the repo again — the recipe file, design tokens, CI builds and environment variable names — and reloads this page. A failure shows the reason. Until the recipe loads, the page says **Composing the recipe…**. A load error names the app recipe and offers a retry.
 
-The status card has two sides:
+The page opens on one status line: a plain sentence on the worst thing on the page, up to three numbers (risk checks not met, dependencies with known holes, blueprint parts to check) and one button that fixes it:
 
-- **Overall** is the worst state on the page. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
+- dependency holes lead with **Fix all holes: copy prompt**, one prompt for your editor that makes every upgrade;
+- another failed risk check leads with its **Copy fix prompt**;
+- a check that could not finish, or no result yet, leads with **Run checks**;
+- with no risk problem, the first blueprint card that needs a look leads with **Show how to fix**.
+
+The blueprint card under the risk checks has two sides:
+
+- **Blueprint** is the worst state of the cards. When that state is a problem, it names those parts. **OK** and **Not set up** are not named as problems.
 - **Recipe file** says the page is built from what Mushi Mushi already sees when `mushi.recipe.json` is missing, and tells you to add that file at the repo root to declare design tokens, deploy targets and budgets. When the file is present, the card shows its path, the short commit and when it was read. Problems in the file are listed: fix them in the repo, then press Refresh.
 
 ---
@@ -74,7 +81,11 @@ With nothing selected, the panel says to pick a card. A selected card shows the 
 
 ## Risk checks
 
-**Risk checks** sits under the cards: store rules, an expiring domain, a broken privacy link, storage that keeps billing. Problems are listed first. Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
+**Risk checks** comes right after the status line: store rules, an expiring domain, a broken privacy link, a known hole in a dependency. Each check that is not met is one row, worst first: a status mark (▲ error, ◆ warning, ○ could not finish), its name, one line of cause and its own fix (**Copy fix prompt**, or **Run again** for a check that could not finish). More than three findings fold under the row.
+
+Known holes in dependencies are one table: package, installed version → the version that fixes it, the hole count as a bar, and the row's fix. **Fix in a PR** opens the bug report Mushi Mushi filed for that upgrade, where the Fix button opens a pull request; a row with no report yet has **Copy prompt**. **Fix all: copy prompt** sits on the check's row. Development-only packages are greyed and sorted last. Past ten rows, **Show N more**.
+
+Checks that never ran are under **not checked yet (not a pass)**. Passing checks are in their own disclosure. **Run checks** starts a run and tells you to refresh in a minute. Mushi Mushi's own setup checks are linked to [Full-stack audit](/admin/fullstack-audit) instead of being repeated here.
 
 ---
 

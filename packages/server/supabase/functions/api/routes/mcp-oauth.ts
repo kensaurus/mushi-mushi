@@ -65,6 +65,7 @@ import {
   verifyPkceS256,
 } from '../../_shared/mcp-oauth-helpers.ts'
 import { mcpOAuthIssuerForResource } from '../../_shared/mcp-oauth-metadata.ts'
+import { consolePageUrl } from '../../_shared/console-page-url.ts'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -156,10 +157,7 @@ export function redirectUriMatches(registered: string, presented: string): boole
 }
 
 function consentPageUrl(txnId: string): string {
-  const adminOrigin =
-    (Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST') ?? '').split(',')[0]?.trim() ||
-    'https://kensaur.us'
-  return `${adminOrigin}/mushi-mushi/admin/mcp-auth?txn=${txnId}`
+  return consolePageUrl(`mcp-auth?txn=${txnId}`)
 }
 
 export function registerMcpOauthRoutes(app: Hono<{ Variables: Variables }>): void {

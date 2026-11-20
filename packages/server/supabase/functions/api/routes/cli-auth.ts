@@ -55,6 +55,7 @@ import {
   evaluateTokenDelivery,
   parseClientId,
 } from '../../_shared/cli-auth-helpers.ts'
+import { consolePageUrl } from '../../_shared/console-page-url.ts'
 
 /** Generate a 9-char user-friendly code in the format XXXX-XXXX (RFC 8628 §6.1). */
 function generateUserCode(): string {
@@ -266,14 +267,8 @@ export function registerCliAuthRoutes(app: Hono<{ Variables: Variables }>): void
     }
 
     // The console approval page URL — user_code pre-fills the field.
-    // MUSHI_ADMIN_URL (the console's full base URL, as in the email links) wins:
-    // a self-hosted console is served at its own root, not /mushi-mushi/admin.
-    const adminOrigin =
-      (Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST') ?? '').split(',')[0]?.trim() ||
-      'https://kensaur.us'
-    const adminBase =
-      (Deno.env.get('MUSHI_ADMIN_URL') ?? '').trim().replace(/\/+$/, '') || `${adminOrigin}/mushi-mushi/admin`
-    const verificationUri = `${adminBase}/cli-auth?code=${userCode}`
+    // A self-host's own console (ADMIN_BASE_URL), never Mushi Mushi Cloud's.
+    const verificationUri = consolePageUrl(`cli-auth?code=${userCode}`)
 
     // Fire-and-forget: record that a CLI auth attempt started. No user_id yet
     // (public endpoint) so deduplicate on device_code alone.
