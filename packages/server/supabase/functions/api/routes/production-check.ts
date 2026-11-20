@@ -37,7 +37,8 @@ import { runInBackground } from '../../_shared/background.ts'
 import { resolveFirecrawl } from '../../_shared/firecrawl.ts'
 import { emitProductEvent } from '../../_shared/product-events.ts'
 import { sendTransactionalEmail } from '../../_shared/email.ts'
-import { renderEmailHtml, renderEmailText, type EmailDoc } from '../../_shared/email-layout.ts'
+import type { EmailDoc } from '../../_shared/email-layout.ts'
+import { renderDocOnKit } from '../../_shared/email-doc-kit.ts'
 import { hmacSha256Hex } from '../../_shared/connectors/jwt.ts'
 import { clientIpOf, verifiedClientIp } from '../../_shared/edge-proxy.ts'
 import { checkPublicUrl, resolvesPublic, runtimeResolver, sameAddressVariants, UNREACHABLE_ADDRESS } from '../../_shared/public-url-guard.ts'
@@ -140,6 +141,16 @@ export function rerunUrl(url: string): string {
   return `${REPORT_PAGE}?url=${encodeURIComponent(url)}`
 }
 
+/**
+ * The KENSAURUS email kit (yen-yen ADR 0100) as kind `transactional`, with no
+ * "More from KENSAURUS" row: the visitor asked for this one report, and its
+ * address is deleted once it is sent.
+ */
+function onKit(doc: EmailDoc, subject: string, campaign: string): { subject: string; text: string; html: string } {
+  const mail = renderDocOnKit(doc, { subject, campaign, crossLinks: false })
+  return { subject: mail.subject, text: mail.text, html: mail.html }
+}
+
 /** The email for a site no page of which could be read: a failed check, said plainly. */
 export function buildUnreachableEmail(host: string, id: string, url: string, reason: UnreachableReason): { subject: string; text: string; html: string } {
   const t = UNREACHABLE_TEXT[reason]
@@ -161,11 +172,7 @@ export function buildUnreachableEmail(host: string, id: string, url: string, rea
       'You asked for this email on the Mushi Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
     ],
   }
-  return {
-    subject: `We could not reach ${host} (Production Check)`,
-    text: renderEmailText(doc),
-    html: renderEmailHtml(doc),
-  }
+  return onKit(doc, `We could not reach ${host} (Production Check)`, 'production-check-unreachable')
 }
 
 /**
@@ -224,11 +231,11 @@ export function buildReportEmail(
           'You asked for this email on the Mushi Mushi Production Check page. It is the only one you will get about this check: your address is not on any mailing list, and it was deleted after this email was sent.',
         ],
       }
-  return {
-    subject: n ? `${host}: ${plural(n, 'thing', 'things')} to fix (Production Check)` : `${host} passed the Production Check`,
-    text: renderEmailText(doc),
-    html: renderEmailHtml(doc),
-  }
+  return onKit(
+    doc,
+    n ? `${host}: ${plural(n, 'thing', 'things')} to fix (Production Check)` : `${host} passed the Production Check`,
+    n ? 'production-check-findings' : 'production-check-passed',
+  )
 }
 
 export interface RunDeps {
