@@ -24,6 +24,8 @@ export function createConsoleCapture(): ConsoleCapture {
     const wrapper = (...args: unknown[]) => {
       const message = args
         .map((arg) => {
+          // JSON.stringify(new Error('x')) is "{}": keep the name and message.
+          if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
           try {
             return typeof arg === 'string' ? arg : JSON.stringify(arg);
           } catch {
@@ -46,8 +48,10 @@ export function createConsoleCapture(): ConsoleCapture {
         ...(correlationId ? { correlationId } : {}),
       };
 
-      if (level === 'error' && args[0] instanceof Error) {
-        entry.stack = (args[0] as Error).stack?.slice(0, 1000);
+      // The Error is often not the first argument: console.error('save failed', err).
+      const firstError = level === 'error' ? args.find((a): a is Error => a instanceof Error) : undefined;
+      if (firstError?.stack) {
+        entry.stack = firstError.stack.slice(0, 1000);
       }
 
       entries.push(entry);

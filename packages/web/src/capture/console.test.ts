@@ -34,6 +34,16 @@ describe('createConsoleCapture', () => {
     expect(entries[0].level).toBe('error');
   });
 
+  it("keeps an Error argument's name, message and stack, wherever it sits", () => {
+    capture = createConsoleCapture();
+    const err = new TypeError("Cannot read properties of undefined (reading '0')");
+    console.error('[checkout] payment failed', err);
+    const [entry] = capture.getEntries();
+    // JSON.stringify(err) is "{}", which used to be all that was kept.
+    expect(entry.message).toBe("[checkout] payment failed TypeError: Cannot read properties of undefined (reading '0')");
+    expect(entry.stack).toContain('TypeError');
+  });
+
   it('stores timestamps', () => {
     capture = createConsoleCapture();
     const before = Date.now();

@@ -2,4 +2,4 @@
 "@mushi-mushi/web": patch
 ---
 
-Reports now include uncaught errors and unhandled promise rejections in their console log. An exception thrown in an event handler never passes through `console.*`, so it was missing from the report and the diagnosis even when it was the cause.
+Reports now keep the error that caused a bug. Uncaught errors and unhandled promise rejections are recorded in the console log: an exception thrown in an event handler never passes through `console.*`, so it was missing. An `Error` passed to `console.error` (for example `console.error("save failed", err)`) is recorded as its name and message with its stack, where it used to be stored as `{}`.
