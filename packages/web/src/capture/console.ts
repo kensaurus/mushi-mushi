@@ -17,48 +17,39 @@ export function createConsoleCapture(): ConsoleCapture {
   const wrappers: Partial<Record<string, (...args: unknown[]) => void>> = {};
   const levels: Array<MushiConsoleEntry['level']> = ['log', 'warn', 'error', 'info', 'debug'];
 
+  // JSON.stringify(new Error('x')) is "{}": an Error keeps its name and message.
+  const str = (arg: unknown): string => {
+    if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
+    try {
+      return typeof arg === 'string' ? arg : JSON.stringify(arg);
+    } catch {
+      return String(arg);
+    }
+  };
+  const record = (level: MushiConsoleEntry['level'], message: string, err: unknown, extra?: Partial<MushiConsoleEntry>) => {
+    const entry: MushiConsoleEntry = { level, message: message.slice(0, MAX_MESSAGE_LENGTH), timestamp: Date.now(), ...extra };
+    if (err instanceof Error && err.stack) entry.stack = err.stack.slice(0, 1000);
+    entries.push(entry);
+    if (entries.length > MAX_ENTRIES) entries.shift();
+  };
+
   for (const level of levels) {
     const original = console[level];
     originals[level] = original;
 
     const wrapper = (...args: unknown[]) => {
-      const message = args
-        .map((arg) => {
-          // JSON.stringify(new Error('x')) is "{}": keep the name and message.
-          if (arg instanceof Error) return `${arg.name}: ${arg.message}`;
-          try {
-            return typeof arg === 'string' ? arg : JSON.stringify(arg);
-          } catch {
-            return String(arg);
-          }
-        })
-        .join(' ')
-        .slice(0, MAX_MESSAGE_LENGTH);
-
       // Phase 3b: stamp the active network request's correlationId so this log
       // entry can be linked to the fetch/XHR that was in-flight when it was emitted
       // (e.g. from a request interceptor). Not from the caller's own catch block:
       // the ID is popped before it runs. Best-effort; see network.ts.
       const correlationId = getActiveCorrelationId();
-
-      const entry: MushiConsoleEntry = {
-        level,
-        message,
-        timestamp: Date.now(),
-        ...(correlationId ? { correlationId } : {}),
-      };
-
       // The Error is often not the first argument: console.error('save failed', err).
-      const firstError = level === 'error' ? args.find((a): a is Error => a instanceof Error) : undefined;
-      if (firstError?.stack) {
-        entry.stack = firstError.stack.slice(0, 1000);
-      }
-
-      entries.push(entry);
-      if (entries.length > MAX_ENTRIES) {
-        entries.shift();
-      }
-
+      record(
+        level,
+        args.map(str).join(' '),
+        level === 'error' ? args.find((a) => a instanceof Error) : undefined,
+        correlationId ? { correlationId } : undefined,
+      );
       original.call(console, ...args);
     };
 
@@ -71,44 +62,20 @@ export function createConsoleCapture(): ConsoleCapture {
   // itself. They are often the cause of the bug being reported, so record
   // them as error entries too (2026-11-20: a demo Pay handler's TypeError
   // reached neither the report nor the diagnosis).
-  const push = (entry: MushiConsoleEntry) => {
-    entries.push(entry);
-    if (entries.length > MAX_ENTRIES) entries.shift();
-  };
-  const onError = (event: ErrorEvent) => {
-    const err = event.error instanceof Error ? event.error : undefined;
-    const where = event.filename ? ` (${event.filename}:${event.lineno}:${event.colno})` : '';
-    const what = err ? `${err.name}: ${err.message}` : event.message || 'error';
-    push({
-      level: 'error',
-      message: `Uncaught ${what}${where}`.slice(0, MAX_MESSAGE_LENGTH),
-      timestamp: Date.now(),
-      ...(err?.stack ? { stack: err.stack.slice(0, 1000) } : {}),
-    });
-  };
-  const onRejection = (event: PromiseRejectionEvent) => {
-    const reason: unknown = event.reason;
-    let what: string;
-    if (reason instanceof Error) {
-      what = `${reason.name}: ${reason.message}`;
+  const onUncaught = (event: Event) => {
+    if (event.type === 'unhandledrejection') {
+      const reason: unknown = (event as PromiseRejectionEvent).reason;
+      record('error', `Unhandled rejection: ${str(reason)}`, reason);
     } else {
-      try {
-        what = typeof reason === 'string' ? reason : JSON.stringify(reason);
-      } catch {
-        what = String(reason);
-      }
+      const e = event as ErrorEvent;
+      const where = e.filename ? ` (${e.filename}:${e.lineno}:${e.colno})` : '';
+      record('error', `Uncaught ${str(e.error ?? (e.message || 'error'))}${where}`, e.error);
     }
-    push({
-      level: 'error',
-      message: `Unhandled rejection: ${what}`.slice(0, MAX_MESSAGE_LENGTH),
-      timestamp: Date.now(),
-      ...(reason instanceof Error && reason.stack ? { stack: reason.stack.slice(0, 1000) } : {}),
-    });
   };
   const canListen = typeof window !== 'undefined' && typeof window.addEventListener === 'function';
   if (canListen) {
-    window.addEventListener('error', onError);
-    window.addEventListener('unhandledrejection', onRejection);
+    window.addEventListener('error', onUncaught);
+    window.addEventListener('unhandledrejection', onUncaught);
   }
 
   return {
@@ -127,8 +94,8 @@ export function createConsoleCapture(): ConsoleCapture {
         }
       }
       if (canListen) {
-        window.removeEventListener('error', onError);
-        window.removeEventListener('unhandledrejection', onRejection);
+        window.removeEventListener('error', onUncaught);
+        window.removeEventListener('unhandledrejection', onUncaught);
       }
     },
   };
