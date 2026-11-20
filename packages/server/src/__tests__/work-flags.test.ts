@@ -347,3 +347,11 @@ describe('durationText', () => {
     expect(durationText(4 * 86_400)).toBe('4 d')
   })
 })
+
+describe('the agent a worker runs (2026-11-20)', () => {
+  it('keeps the agent word so the console names a Claude Code account, and drops unknown agents', () => {
+    expect(cleanStatus({ state: 'working', agent: 'claude' })).toMatchObject({ agent: 'claude' })
+    expect(cleanStatus({ state: 'working', agent: 'cursor' })).toMatchObject({ agent: 'cursor' })
+    expect(cleanStatus({ state: 'working', agent: 'rm -rf /' })).not.toHaveProperty('agent')
+  })
+})

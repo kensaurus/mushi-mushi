@@ -675,16 +675,15 @@ async function runBrowserSignIn(
 
     if (!isInteractive()) {
       const cwd = options.cwd ?? process.cwd();
-      const choice = chooseProjectNonInteractive(
-        projects,
-        defaultProjectName(readPackageJson(cwd)?.name, cwd),
-      );
+      const name = defaultProjectName(readPackageJson(cwd)?.name, cwd);
+      // init runs in the app's folder, so the chooser never answers 'ask' here.
+      const choice = chooseProjectNonInteractive(projects, name);
       if (choice.kind === 'existing') {
         p.log.info(`Using project "${choice.name}" (matches this app — pass --project-id to pick another).`);
         target = { kind: 'existing', projectId: choice.id };
       } else {
-        p.log.info(`Creating project "${choice.name}" (no project matches this app — pass --project-id to use an existing one).`);
-        target = { kind: 'new', name: choice.name };
+        p.log.info(`Creating project "${name}" (no project matches this app — pass --project-id to use an existing one).`);
+        target = { kind: 'new', name };
       }
     } else {
       const NEW = '__new__';

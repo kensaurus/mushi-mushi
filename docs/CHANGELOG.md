@@ -8,19 +8,29 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## Unreleased *(pending release)*
 
+### Highlights
+
+- **A Claude Code worker's account check reads properly** — `claude auth status` answers in JSON, so the console showed `checked 2 min ago: "{"`. It now reads "logged in (claude.ai)" or "logged out", and never includes the account's e-mail.
+
 ## v1.37.x
 
-Latest tag: `v1.37.2`
+Latest tag: `v1.37.3`
 
 ### Highlights
 
 - **App version.** — `reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`.
 - **`loadMyReports()`.** — It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of "no reports". `listMyReports()` keeps returning `[]` on failure.
+- **Scroll position** — the capture shows the part of the page the user had scrolled to, including pages that scroll inside an app shell (`<main>`) and sticky headers. It used to always show the top of the page.
+- **Layout** — sections above the viewport keep their live size, so the visible part no longer drifts out of frame on long pages. Each stylesheet's own text is used, in document order. Chrome's CSSOM dropped `font: … var()` shorthands, and the old order broke `@layer` cascades. CSS-in-JS rules added with `insertRule` are kept.
+- **Images and canvases** — they are embedded at their natural size and keep transparency, so pixel sprites no longer turn into black boxes. CSS background images (sprites, hero art, icons) are embedded too. Running animations keep their current frame. Unreadable media becomes a grey box of the same size.
+- **Hidden stays hidden** — what the page hides (display, visibility, opacity) stays hidden, so hover-only buttons no longer show up.
+- **Pages that failed outright** — pages with a `--` comment, framework attribute names (`@click`, `:href`) or control characters in text no longer fail with reason `error`.
+- **Speed and size** — off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget).
 
 ### Packages bumped
 
 - `@mushi-mushi/core` → 1.37.0
-- `@mushi-mushi/web` → 1.37.0
+- `@mushi-mushi/web` → 1.37.3
 - `mushi-mushi` → 1.37.2
 
 ## v1.36.x
@@ -536,11 +546,17 @@ Latest tag: `v1.0.6`
 
 ## v0.40.x
 
-Latest tag: `v0.40.4`
+Latest tag: `v0.40.5`
+
+### Highlights
+
+- **pnpm repos on a Windows worker** — the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`.
+- **The worker's stop hint** — on Windows it no longer says `systemctl`.
+- **`mushi login` outside an app folder** — run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead.
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.40.4
+- `@mushi-mushi/cli` → 0.40.5
 
 ## v0.39.x
 
@@ -614,12 +630,12 @@ Latest tag: `v0.32.0`
 
 ## v0.31.x
 
-Latest tag: `v0.31.6`
+Latest tag: `v0.31.7`
 
 ### Packages bumped
 
 - `@mushi-mushi/cli` → 0.31.0
-- `@mushi-mushi/mcp` → 0.31.6
+- `@mushi-mushi/mcp` → 0.31.7
 
 ## v0.30.x
 

@@ -1137,9 +1137,9 @@ export async function installDeps(wt: string, log: (line: string) => void): Prom
   const cmd = installCommand((f) => existsSync(join(wt, f)))
   if (!cmd) return
   log(`  deps: ${cmd[0]} ${cmd[1][0]} (so the agent can run tests and the commit hooks work)`)
-  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync)
+  const spawnable = windowsInstaller(cmd, process.platform, process.execPath, existsSync, (process.env['PATH'] ?? '').split(';'))
   if (!spawnable) {
-    log(`  deps: no ${cmd[0]} script next to this Node, so no install; the agent works without dependencies`)
+    log(`  deps: no ${cmd[0]} found next to this Node or on PATH, so no install; the agent works without dependencies (install it: npm i -g ${cmd[0]})`)
     return
   }
   const [bin, args] = spawnable
@@ -1162,12 +1162,23 @@ const WINDOWS_PM_SCRIPTS: Record<string, readonly string[]> = {
  * with this Node instead, never through cmd.exe: a shell anywhere in runProc
  * made CodeQL treat every git argument as shell input (alerts 417-420). Null
  * when no script is found, and the run goes on without an install.
+ *
+ * Beside node.exe first, then each PATH folder: `npm i -g pnpm` puts pnpm in
+ * %APPDATA%\npm (on PATH, not beside node.exe), so the worker found no pnpm
+ * and pnpm repos ran with no dependencies (2026-11-20). A standalone
+ * `pnpm.exe` on PATH starts directly.
  */
-export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean): [string, string[]] | null {
+export function windowsInstaller(cmd: [string, string[]], platform: NodeJS.Platform, nodeExe: string, hasFile: (path: string) => boolean, pathDirs: readonly string[] = []): [string, string[]] | null {
   if (platform !== 'win32') return cmd
   // Windows path rules whatever the host: the tests run this on Linux too.
-  const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(win32.dirname(nodeExe), rel)).find((p) => hasFile(p))
-  return script ? [nodeExe, [script, ...cmd[1]]] : null
+  const dirs = [win32.dirname(nodeExe), ...pathDirs.map((d) => d.trim().replace(/^"|"$/g, '')).filter(Boolean)]
+  for (const dir of dirs) {
+    const script = (WINDOWS_PM_SCRIPTS[cmd[0]] ?? []).map((rel) => win32.join(dir, rel)).find((p) => hasFile(p))
+    if (script) return [nodeExe, [script, ...cmd[1]]]
+    const exe = win32.join(dir, `${cmd[0]}.exe`)
+    if (hasFile(exe)) return [exe, cmd[1]]
+  }
+  return null
 }
 
 /** @internal Exported for tests only. Pure: a commit hook that failed because a package is not installed, not because of the change. */
@@ -1232,6 +1243,28 @@ const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
  * one machine the old single 60 s check reported "not signed in" 5 times in
  * one lane while `cursor-agent status` said "Logged in" (Mushi report 7880503f).
  */
+/**
+ * @internal Exported for tests only. One line for the console's account check.
+ * `claude auth status` answers in JSON, so its first line was "{" and the
+ * console read `checked 2 min ago: "{"` (2026-11-20). A JSON answer becomes
+ * "logged in (claude.ai)"; the account's e-mail never goes into it.
+ */
+export function signInDetail(text: string): string {
+  const start = text.indexOf('{')
+  if (start >= 0) {
+    try {
+      const j = JSON.parse(text.slice(start)) as { loggedIn?: unknown; authMethod?: unknown }
+      if (typeof j.loggedIn === 'boolean') {
+        const how = typeof j.authMethod === 'string' && /^[\w.-]{1,30}$/.test(j.authMethod) ? ` (${j.authMethod})` : ''
+        return j.loggedIn ? `logged in${how}` : 'logged out'
+      }
+    } catch {
+      // Not JSON after all: the first line below.
+    }
+  }
+  return text.split('\n')[0]?.slice(0, 200) ?? ''
+}
+
 export async function checkAgentSignIn(
   agent: LocalAgent,
   run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
@@ -1245,7 +1278,7 @@ export async function checkAgentSignIn(
     const state = spec.signInState(p)
     const detail = p.timedOut
       ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
-      : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
+      : signInDetail(stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim()) || `exit ${p.code}`
     last = { state, detail, output: stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).slice(0, 2000) }
     if (state === 'signed_in' || state === 'missing') break
   }

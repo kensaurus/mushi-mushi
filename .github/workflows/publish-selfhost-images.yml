@@ -8,13 +8,22 @@
 #          Supabase's kit, every migration on an empty database, sign-in, a
 #          report), so a broken image is never pushed.
 #
-# WHEN:    Only on release tags and manual dispatch. Never on pull requests or
-#          branch pushes (Actions minutes are billed; see ci-cost rules).
+# WHEN:    On release tags, manual dispatch, and once a week. Never on pull
+#          requests or branch pushes (Actions minutes are billed; see ci-cost
+#          rules).
 #          Tags created by the Release workflow's GITHUB_TOKEN do not trigger
 #          other workflows, so release.yml's `selfhost-images` job dispatches
 #          this one with the released `mushi-mushi` version. By hand:
 #            gh workflow run "Publish self-host images" --ref master -f version=<x.y.z>
 #          or push a `selfhost-v<x.y.z>` tag yourself.
+#          Weekly (Thursday 19:00 JST, after ADR 0062's npm release day): if
+#          anything that goes into an image changed since the last published
+#          image, publish `<mushi-mushi version>-selfhost.<YYYYMMDD>` and
+#          `latest`; otherwise build nothing. Server-only fixes carry no
+#          changeset, so they used to reach self-hosters only by a manual
+#          dispatch (2026-11-20). Not on every merge: `latest` is what
+#          `mushi.sh update` pulls and its migrations run on start, so it
+#          moves on a cadence, as Sentry's self-hosted images do.
 #
 # NOTES:   - Plain docker CLI steps, no third-party build actions.
 #          - The runner needs Docker with BuildKit (the per-Dockerfile
@@ -35,6 +44,9 @@ on:
         description: 'Image version tag (e.g. 1.37.0). Empty = sha-<commit>, no latest.'
         required: false
         default: ''
+  schedule:
+    # Thursday 10:00 UTC = 19:00 JST, after the weekly npm release (ADR 0062).
+    - cron: '0 10 * * 4'
 
 concurrency:
   group: publish-selfhost-images-${{ github.ref }}
@@ -44,8 +56,56 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Anything new for the images?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          # Tags and dispatches always publish (they name what they want).
+          if [ "$EVENT" != "schedule" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Weekly: compare with the commit the last published images came from.
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow publish-selfhost-images.yml \
+            --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+          if [ -n "$prev" ] && git cat-file -e "${prev}^{commit}" 2>/dev/null \
+            && git diff --quiet "$prev" HEAD -- packages apps/admin deploy package.json pnpm-lock.yaml; then
+            echo "::notice::Nothing that goes into an image changed since ${prev::7}; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base=$(node -p "require('./packages/launcher/package.json').version")
+          version="${base}-selfhost.$(date -u +%Y%m%d)"
+          echo "::notice::Image inputs changed since ${prev:0:7}; publishing ${version} and latest."
+          {
+            echo "publish=true"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
   smoke:
     name: Install from scratch with the new images
+    needs: changes
+    if: needs.changes.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -84,7 +144,7 @@ jobs:
 
   publish:
     name: Build & push edge + admin + migrate images
-    needs: smoke
+    needs: [changes, smoke]
     runs-on: ${{ (github.actor != 'dependabot[bot]' && vars.LINUX_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 45
     permissions:
@@ -103,12 +163,16 @@ jobs:
         id: tags
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          WEEKLY_VERSION: ${{ needs.changes.outputs.version }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY_OWNER,,}"
-          if [ "$REF_TYPE" = "tag" ]; then
+          if [ -n "$WEEKLY_VERSION" ]; then
+            version="$WEEKLY_VERSION"
+            latest=true
+          elif [ "$REF_TYPE" = "tag" ]; then
             version="${REF_NAME#mushi-mushi@}"
             version="${version#selfhost-v}"
             latest=true

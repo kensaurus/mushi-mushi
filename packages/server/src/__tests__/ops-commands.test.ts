@@ -150,4 +150,16 @@ describe('runOpsCommand on the database', () => {
     expect(body).toContain('🐞 1 open bug')
     expect(body).toContain('✕ 1 CI failure today')
   })
+
+  it('lists a release once: a GitHub post the app’s own post replaced is left out', async () => {
+    const d = db({
+      ops_events: [
+        { organization_id: ORG, project_id: 'p1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: 'Admin console 0.1.700 is live', occurred_at: '2026-11-17T04:00:03Z', slack_error: null },
+        { organization_id: ORG, project_id: 'p1', category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: '76f5bb1 is live in production', occurred_at: '2026-11-17T04:00:00Z', slack_error: 'superseded by the app’s own release post x' },
+      ],
+    })
+    const body = text(await cmds.runOpsCommand(d as never, { sub: 'releases', n: 5 }, ctx))
+    expect(body).toContain('Admin console 0.1.700 is live')
+    expect(body).not.toContain('76f5bb1 is live')
+  })
 })

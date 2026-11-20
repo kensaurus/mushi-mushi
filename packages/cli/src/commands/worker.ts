@@ -22,7 +22,7 @@
  */
 
 import type { Command } from 'commander'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -34,10 +34,29 @@ import { isKeychainEnabled, tryDeleteWorkerKey, trySaveWorkerKey } from '../keyc
 import { parseLocalAgent } from './work-agents.js'
 import { assertWorkerKey, readWorkerKey } from '../worker/daemon.js'
 import { flagLines, type WorkerFlagView } from '../worker/flags-view.js'
-import { parseLanesConf, SYSTEMD_UNIT_NAME, systemdUnit, WINDOWS_TASK_NAME, windowsTaskArgs } from '../worker/install.js'
+import { parseLanesConf, SYSTEMD_UNIT_NAME, systemdUnit, WINDOWS_STARTUP_FILE, WINDOWS_TASK_NAME, windowsStartupScript, windowsTaskArgs, windowsWorkerLogPath } from '../worker/install.js'
 import { loadWorkerConfig, MODEL_RE, validateWorkerConfig, WORKER_CONFIG_PATH, WORKER_KEY_PATH, type LocalLane, type WorkerConfig } from '../worker/protocol.js'
 
 const UNIT_PATH = join(process.env['XDG_CONFIG_HOME'] || join(homedir(), '.config'), 'systemd', 'user', SYSTEMD_UNIT_NAME)
+
+/** The user's Startup folder (no administrator needed), where the fallback launcher goes. */
+function windowsStartupPath(): string {
+  return join(process.env['APPDATA'] || join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', WINDOWS_STARTUP_FILE)
+}
+
+/**
+ * The logon task could not be created (an ordinary account usually may not):
+ * start the daemon from the Startup folder instead, and start it now.
+ */
+function installWindowsStartup(node: string, cli: string): void {
+  const log = windowsWorkerLogPath(homedir())
+  const file = windowsStartupPath()
+  mkdirSync(dirname(log), { recursive: true })
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, windowsStartupScript({ node, cli, log }))
+  spawn('wscript.exe', [file], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  console.log(`The scheduled task needs administrator rights here, so the worker starts from your Startup folder instead (${file}). It is running now; its log is ${log}.`)
+}
 
 interface WorkLanesView {
   generatedAt: string
@@ -205,7 +224,8 @@ export function registerWorkerCommands(program: Command): void {
         console.log(enable.status === 0 ? `Started ${SYSTEMD_UNIT_NAME}. Logs: journalctl --user -u ${SYSTEMD_UNIT_NAME} -f` : `Wrote ${UNIT_PATH}; start it with: systemctl --user enable --now ${SYSTEMD_UNIT_NAME}`)
       } else if (service?.kind === 'task') {
         const r = spawnSync('schtasks', service.args, { stdio: 'inherit' })
-        console.log(r.status === 0 ? `Created the scheduled task "${WINDOWS_TASK_NAME}"; it starts at your next logon.` : 'The scheduled task was not created; run the schtasks line above yourself.')
+        if (r.status === 0) console.log(`Created the scheduled task "${WINDOWS_TASK_NAME}"; it starts at your next logon.`)
+        else installWindowsStartup(node, cli0)
       }
       console.log('The console shows this worker on Pipeline → Workers within a minute of its first heartbeat.')
     })
@@ -234,7 +254,7 @@ export function registerWorkerCommands(program: Command): void {
                   execFileSync('schtasks', ['/Query', '/TN', WINDOWS_TASK_NAME], { stdio: 'ignore' })
                   return 'scheduled'
                 } catch {
-                  return 'not installed'
+                  return existsSync(windowsStartupPath()) ? 'startup folder' : 'not installed'
                 }
               })()
             : 'unknown'
@@ -313,7 +333,10 @@ export function registerWorkerCommands(program: Command): void {
       tryDeleteWorkerKey()
       if (existsSync(WORKER_KEY_PATH)) rmSync(WORKER_KEY_PATH)
       if (process.platform === 'linux') spawnSync('systemctl', ['--user', 'disable', '--now', SYSTEMD_UNIT_NAME], { stdio: 'inherit' })
-      if (process.platform === 'win32') spawnSync('schtasks', ['/Delete', '/TN', WINDOWS_TASK_NAME, '/F'], { stdio: 'inherit' })
+      if (process.platform === 'win32') {
+        spawnSync('schtasks', ['/Delete', '/TN', WINDOWS_TASK_NAME, '/F'], { stdio: 'inherit' })
+        if (existsSync(windowsStartupPath())) rmSync(windowsStartupPath())
+      }
       console.log(`Removed the key from this machine. The lanes file (${WORKER_CONFIG_PATH}) is kept; delete it if you do not need it.`)
     })
 }

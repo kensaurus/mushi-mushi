@@ -25,6 +25,7 @@ import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
+import { stripTerminalCodes } from '../../_shared/terminal-text.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEventDetached } from '../../_shared/plugins.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
@@ -720,6 +721,8 @@ export function registerQueryFixesRepoRoutes(app: Hono<{ Variables: Variables }>
       const report = loaded.reports.get(f.report_id as string);
       return {
         ...f,
+        // Older workers stored hook output with its colour codes.
+        error: stripTerminalCodes(f.error as string | null),
         report_title: reportTitle(report),
         report_status: report?.status ?? null,
         // The Sentry issue the report came from, so a fix links back to it.

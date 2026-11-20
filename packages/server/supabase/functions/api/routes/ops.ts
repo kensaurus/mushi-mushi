@@ -20,7 +20,9 @@
  *   POST /v1/ops/slack/commands                 Slack slash command, signed with the org's own
  *        signing secret (found by team_id). help answers inline; everything that reads data acks
  *        at once and answers through response_url (Slack's 3 s limit).
- *   POST /v1/ops/slack/interactions             Slack buttons: Acknowledge, Mute 24h.
+ *   POST /v1/ops/slack/interactions             Slack buttons: Acknowledge, and the ⋯ menu's
+ *        "Mute this alert for 24 h" (that alert's kind and fingerprint only, never the app,
+ *        payments or releases). slack-interactions forwards any ops_* action here.
  *   POST /v1/internal/ops/sentry                service role only: a Sentry outcome forwarded
  *        by `api` (_shared/ops-forward.ts), so `api` never bundles the Ops emitter.
  */
@@ -37,8 +39,12 @@ import { verifySlackRequest } from '../../_shared/slack-verify.ts'
 import { createWebhookMiddleware, RateLimitError, ReplayAttackError } from '../../_shared/webhook-middleware.ts'
 import {
   findEventPii,
+  isSupersededRelease,
   OPS_ACTION_ACK,
+  OPS_ACTION_MORE,
   OPS_ACTION_MUTE,
+  OPS_MUTE_OPTION_PREFIX,
+  opsMuteScope,
   OPS_BODY_MAX,
   OPS_CATEGORIES,
   OPS_FACT_LABEL_MAX,
@@ -176,6 +182,8 @@ export const opsEventSchema = z
     thread_key: z.string().trim().min(1).max(200).optional(),
     dedupe_key: z.string().trim().min(1).max(200).optional(),
     occurred_at: z.string().datetime({ offset: true }).optional(),
+    /** A store sandbox or test purchase (yen-yen's digests, 2026-11-20): accepted and dropped, never stored or posted. */
+    sandbox: z.boolean().optional(),
   })
   .strict()
   .refine((v) => (v.amount_minor == null) === (v.currency == null), { message: 'amount_minor and currency go together', path: ['currency'] })
@@ -264,6 +272,8 @@ async function ingestEvent(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
   const parsed = opsEventSchema.safeParse(raw)
   if (!parsed.success) return jsonError(c, 'VALIDATION_ERROR', issues(parsed.error), 400)
   const b = parsed.data
+  // Never a test purchase in #payments, nor in the sales sums that read ops_events.
+  if (b.sandbox === true) return c.json({ ok: true, data: { status: 'dropped', reason: 'sandbox' } }, 202)
   const pii = findEventPii({ title: b.title, body: b.body, facts: b.facts })
   if (pii) {
     return jsonError(c, 'PII_REJECTED', `${pii.field} looks like it carries ${pii.kind === 'email' ? 'an email address' : 'a phone number'}. Ops events must not carry personal data: send the email's domain or an id instead.`, 422, { field: pii.field })
@@ -435,9 +445,10 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
   const [apps, cov, today, alerts, mutes, settings] = await Promise.all([
     orgApps(db, org.orgId),
     db.rpc('ops_coverage', { p_organization_id: org.orgId }),
-    db.from('ops_events').select('category, kind, amount_minor, currency').eq('organization_id', org.orgId).gte('occurred_at', dayStart).limit(10_000),
+    db.from('ops_events').select('category, kind, amount_minor, currency, slack_error').eq('organization_id', org.orgId).gte('occurred_at', dayStart).limit(10_000),
     db.from('ops_events').select('project_id, severity, thread_key, acked_at, occurred_at').eq('organization_id', org.orgId).eq('category', 'alerts').gte('occurred_at', new Date(now.getTime() - 7 * 86_400_000).toISOString()).limit(2000),
-    db.from('ops_mutes').select('project_id, until, muted_by').eq('organization_id', org.orgId),
+    // `*`: the scope column may not exist yet; a scoped (one alert) mute is not an app mute.
+    db.from('ops_mutes').select('*').eq('organization_id', org.orgId),
     readOpsSettings(db as never, org.orgId),
   ])
   for (const r of [cov, today, alerts, mutes]) {
@@ -448,8 +459,9 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
   }
   const payments: Record<string, number> = {}
   let releases = 0
-  for (const e of (today.data as Array<{ category: string; kind: string; amount_minor: number | null; currency: string | null }> | null) ?? []) {
-    if (e.category === 'releases') releases++
+  for (const e of (today.data as Array<{ category: string; kind: string; amount_minor: number | null; currency: string | null; slack_error: string | null }> | null) ?? []) {
+    // A GitHub release post the app's own post replaced is the same release.
+    if (e.category === 'releases' && !isSupersededRelease(e)) releases++
     if (e.category === 'payments' && e.amount_minor != null && e.currency) {
       const refund = /refund|chargeback|reversal/i.test(e.kind)
       payments[e.currency] = (payments[e.currency] ?? 0) + (refund ? -Math.abs(e.amount_minor) : Math.abs(e.amount_minor))
@@ -463,7 +475,9 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
       apps,
       coverage: ((cov.data as CoverageRpcRow[] | null) ?? []).map((r) => ({ ...r, count_7d: Number(r.count_7d) || 0 })),
       today: { payments, releases, openAlerts: openCount, since: dayStart },
-      mutes: ((mutes.data as Array<{ project_id: string; until: string }> | null) ?? []).filter((m) => Date.parse(m.until) > now.getTime()),
+      mutes: ((mutes.data as Array<{ project_id: string; until: string; muted_by: string | null; scope?: string | null }> | null) ?? [])
+        .filter((m) => Date.parse(m.until) > now.getTime() && !m.scope)
+        .map((m) => ({ project_id: m.project_id, until: m.until, muted_by: m.muted_by })),
       slack: { enabled: settings.ok ? Boolean(settings.row?.enabled) : false },
     },
   })
@@ -814,7 +828,32 @@ interface BlockActionsPayload {
   trigger_id?: string
   team?: { id?: string }
   user?: { id?: string }
-  actions?: Array<{ action_id?: string; value?: string }>
+  actions?: Array<{ action_id?: string; value?: string; type?: string; selected_option?: { value?: string } }>
+}
+
+/**
+ * What a click asks for: Acknowledge, or Mute (the ⋯ menu's option, or the
+ * legacy Mute 24h button on messages from before 2026-11-20), with its event
+ * id. Null for a link (Open, Open in Mushi Mushi) or anything else.
+ * @internal Exported for tests.
+ */
+export function opsClick(action: { action_id?: string; value?: string; selected_option?: { value?: string } } | undefined): { kind: 'ack' | 'mute'; eventId: string } | null {
+  if (!action) return null
+  const id = (v: string | undefined) => (v && UUID_RE.test(v) ? v : null)
+  if (action.action_id === OPS_ACTION_ACK) {
+    const eventId = id(action.value)
+    return eventId ? { kind: 'ack', eventId } : null
+  }
+  if (action.action_id === OPS_ACTION_MUTE) {
+    const eventId = id(action.value)
+    return eventId ? { kind: 'mute', eventId } : null
+  }
+  if (action.action_id === OPS_ACTION_MORE) {
+    const v = action.selected_option?.value ?? ''
+    const eventId = v.startsWith(OPS_MUTE_OPTION_PREFIX) ? id(v.slice(OPS_MUTE_OPTION_PREFIX.length)) : null
+    return eventId ? { kind: 'mute', eventId } : null
+  }
+  return null
 }
 
 async function slackInteraction(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
@@ -833,14 +872,14 @@ async function slackInteraction(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
     await audit.resolve(verified.status === 401 ? 'rejected_signature' : 'accepted', verified.status === 401 ? 401 : 200, verified.reason)
     return verified.status === 401 ? c.json({ ok: false, error: { code: 'BAD_SIGNATURE', message: 'Invalid Slack signature' } }, 401) : c.body(null, 200)
   }
-  const action = payload.actions?.[0]
-  const eventId = action?.value ?? ''
+  const click = payload.type === 'block_actions' ? opsClick(payload.actions?.[0]) : null
   const userId = (payload.user?.id ?? '').replace(/[^A-Z0-9]/gi, '').slice(0, 30)
-  if (payload.type !== 'block_actions' || (action?.action_id !== OPS_ACTION_ACK && action?.action_id !== OPS_ACTION_MUTE) || !UUID_RE.test(eventId)) {
+  if (!click) {
     // Link buttons (Open, Open in Mushi Mushi) also arrive here: nothing to do.
     await audit.resolve('accepted', 200, 'ignored')
     return c.body(null, 200)
   }
+  const eventId = click.eventId
   const orgId = verified.settings.organization_id
   const work = (async () => {
     const { data } = await db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('id', eventId).maybeSingle()
@@ -848,18 +887,25 @@ async function slackInteraction(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
     // Only an event of the organization whose secret verified this request.
     if (!event || event.organization_id !== orgId) return
     const opts = { fetchImpl: deps.fetchImpl, now: deps.now }
-    if (action.action_id === OPS_ACTION_ACK) {
+    if (click.kind === 'ack') {
       await ackOpsEvent(db as never, event, { id: `slack:${userId}`, mention: userId ? `<@${userId}>` : 'someone in Slack' }, opts)
       return
     }
-    if (!event.project_id) return
+    // Only an alert can be muted from Slack, and only that alert (its kind and
+    // fingerprint): never the app, and never payments or releases.
+    if (!event.project_id || event.category !== 'alerts') return
     const until = new Date(deps.now().getTime() + MUTE_BUTTON_MS)
-    const muted = await muteProject(db as never, { organizationId: orgId, projectId: event.project_id, until, by: `slack:${userId}` })
-    if (!muted.ok || !event.slack_ts || !event.slack_channel || event.slack_channel === 'webhook') return
+    const muted = await muteProject(db as never, { organizationId: orgId, projectId: event.project_id, until, by: `slack:${userId}`, scope: opsMuteScope(event) })
+    if (!event.slack_ts || !event.slack_channel || event.slack_channel === 'webhook') return
     const token = await readVaultSecret(db as never, verified.settings.bot_token_secret_id)
-    if (token) {
-      await slackApi(token, 'chat.postMessage', { channel: event.slack_channel, thread_ts: event.slack_thread_ts ?? event.slack_ts, text: `🔕 Muted here for 24 hours by ${userId ? `<@${userId}>` : 'someone'}. Events are still kept in Mushi Mushi.` }, opts)
-    }
+    if (!token) return
+    const who = userId ? `<@${userId}>` : 'someone'
+    const text = muted.ok
+      ? `🔕 ${who} muted this alert here for 24 hours. Other alerts, releases and payments from this app still post, and this one is still kept in Mushi Mushi.`
+      : muted.error === 'migration_pending'
+        ? 'Could not mute this alert yet: Mushi Mushi is waiting for database update 20261120090000_ops_mutes_scope. Nothing was muted.'
+        : 'Could not mute this alert. Try again in a minute.'
+    await slackApi(token, 'chat.postMessage', { channel: event.slack_channel, thread_ts: event.slack_thread_ts ?? event.slack_ts, text }, opts)
   })().catch((err) => olog.error('ops interaction failed', { eventId, err: String(err).slice(0, 200) }))
   deps.runInBackground(work)
   await audit.resolve('accepted', 200)

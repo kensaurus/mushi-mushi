@@ -42,6 +42,7 @@ import {
   revokeHost,
   sinceLabel,
   workersSummary,
+  workerAgentLabel,
   STAGE_LABEL,
   type HostGuards,
   type LaneSettings,
@@ -78,6 +79,14 @@ function CursorAccountRow({ host, onChanged }: { host: WorkerHost; onChanged: ()
   const [open, setOpen] = useState(false)
   const testId = `worker-host-${host.id}`
   const login = host.cursorLogin
+  if (workerAgentLabel(host.status) === 'Claude Code') {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid={`${testId}-account`}>
+        <span>Lanes spend:</span>
+        <span className="text-fg">the Claude account Claude Code is signed in to on this machine</span>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-2xs text-fg-muted" data-testid={`${testId}-account`}>
       <span>Lanes spend:</span>
@@ -137,7 +146,7 @@ function HostChecks({ host, now }: { host: WorkerHost; now: number }) {
   return (
     <div className="space-y-1 text-2xs text-fg-muted" data-testid={`${testId}-checks`} data-stale={stale ? 'true' : undefined}>
       <p className="flex flex-wrap items-center gap-1.5">
-        <span>Cursor account:</span>
+        <span>{workerAgentLabel(host.status)} account:</span>
         {cur && curMeta ? (
           <>
             <StatusPill status={stale ? 'idle' : curMeta.status} label={curMeta.text} />

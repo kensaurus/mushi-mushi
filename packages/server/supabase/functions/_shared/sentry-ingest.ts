@@ -215,7 +215,7 @@ async function findLinkedReport(
   db: SupabaseClient,
   projectId: string,
   sentryIssueId: string,
-): Promise<{ reportId: string; status: string; regressionCount: number } | null> {
+): Promise<{ reportId: string; status: string; regressionCount: number; firstSeenAt: string | null } | null> {
   const { data: link } = await db
     .from('report_external_issues')
     .select('report_id')
@@ -226,7 +226,7 @@ async function findLinkedReport(
   if (!link?.report_id) return null;
   const { data: report } = await db
     .from('reports')
-    .select('id, status, regression_count')
+    .select('id, status, regression_count, created_at')
     .eq('id', link.report_id)
     .maybeSingle();
   if (!report) return null;
@@ -234,6 +234,7 @@ async function findLinkedReport(
     reportId: report.id as string,
     status: (report.status as string) ?? 'new',
     regressionCount: (report.regression_count as number) ?? 0,
+    firstSeenAt: (report.created_at as string | null) ?? null,
   };
 }
 
@@ -307,6 +308,8 @@ export async function ingestSentryError(
           environment: event?.environment ?? tagValue(event?.tags, 'environment'),
           release: event?.release ?? tagValue(event?.tags, 'release'),
           url: event?.web_url ?? issue?.permalink ?? null,
+          // "Regressed: …, first seen <date>": Sentry's own date, else when the report was filed.
+          firstSeen: issue?.firstSeen ?? linked.firstSeenAt,
           regressionCount: linked.regressionCount + 1,
         });
         return { outcome: 'reopened', reportId: linked.reportId };

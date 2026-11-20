@@ -168,7 +168,7 @@ describe('POST /v1/ops/events', () => {
     expect(body.data.status).toBe('created')
     await Promise.all(h.background)
     expect(h.db.table('ops_events')[0]).toMatchObject({ organization_id: ORG, project_id: P1, category: 'payments', amount_minor: 1200, slack_ts: '200.0001' })
-    expect(h.slack[0].body).toMatchObject({ channel: 'C0PAY', text: 'glot.it · New subscription' })
+    expect(h.slack[0].body).toMatchObject({ channel: 'C0PAY', text: '💳 glot.it: New subscription' })
   })
 
   it('answers 200 with the stored event for a repeated dedupe_key, and posts once', async () => {
@@ -179,6 +179,19 @@ describe('POST /v1/ops/events', () => {
     expect((await again.json()).data.status).toBe('duplicate')
     await Promise.all(h.background)
     expect(h.slack.filter((c) => c.url.endsWith('chat.postMessage'))).toHaveLength(1)
+  })
+
+  it('drops a sandbox or test purchase: 202, nothing stored, nothing posted', async () => {
+    const h = harness()
+    const res = await h.app.request('/v1/ops/events', json({ category: 'payments', kind: 'payment.succeeded', title: 'New sale', amount_minor: 480, currency: 'JPY', sandbox: true }, asProject))
+    expect(res.status).toBe(202)
+    expect((await res.json()).data).toEqual({ status: 'dropped', reason: 'sandbox' })
+    await Promise.all(h.background)
+    expect(h.db.table('ops_events')).toHaveLength(0)
+    expect(h.slack).toHaveLength(0)
+    const real = await h.app.request('/v1/ops/events', json({ category: 'payments', kind: 'payment.succeeded', title: 'New sale', amount_minor: 480, currency: 'JPY', sandbox: false }, asProject))
+    expect(real.status).toBe(202)
+    expect(h.db.table('ops_events')).toHaveLength(1)
   })
 
   it('refuses bad bodies', async () => {
@@ -402,14 +415,44 @@ describe('Slack endpoints', () => {
     expect(h.slack.some((c) => c.body.text === 'Seen by <@U42>')).toBe(true)
   })
 
-  it('Mute 24h mutes the event’s app and says so in the thread', async () => {
+  it('Mute from the ⋯ menu mutes that alert’s kind and fingerprint only, never the app, and says so in the thread', async () => {
     const id = '66666666-6666-4666-8666-666666666666'
-    const h = harness({ ops_events: [{ id, organization_id: ORG, project_id: P2, category: 'alerts', severity: 'warn', title: 'x', occurred_at: '2026-11-17T01:00:00Z', acked_at: null, slack_ts: '2.2', slack_channel: 'C0ALR' }] })
-    const body = form({ payload: JSON.stringify({ type: 'block_actions', trigger_id: 'tm', team: { id: 'T0TEAM' }, user: { id: 'U42' }, actions: [{ action_id: 'ops_mute', value: id }] }) })
+    const h = harness({ ops_events: [{ id, organization_id: ORG, project_id: P2, category: 'alerts', severity: 'warn', kind: 'deploy.failed', thread_key: 'fp:deploy.failed:android release failed', title: 'x', occurred_at: '2026-11-17T01:00:00Z', acked_at: null, slack_ts: '2.2', slack_channel: 'C0ALR' }] })
+    const body = form({ payload: JSON.stringify({ type: 'block_actions', trigger_id: 'tm', team: { id: 'T0TEAM' }, user: { id: 'U42' }, actions: [{ type: 'overflow', action_id: 'ops_more', selected_option: { value: `ops_mute:${id}` } }] }) })
     await h.app.request('/v1/ops/slack/interactions', { method: 'POST', headers: await signed(body), body })
     await Promise.all(h.background)
-    expect(h.db.table('ops_mutes')[0]).toMatchObject({ organization_id: ORG, project_id: P2, until: '2026-11-18T05:00:00.000Z', muted_by: 'slack:U42' })
-    expect(h.slack.some((c) => String(c.body.text).startsWith('🔕 Muted here for 24 hours'))).toBe(true)
+    expect(h.db.table('ops_mutes')).toHaveLength(1)
+    expect(h.db.table('ops_mutes')[0]).toMatchObject({ organization_id: ORG, project_id: P2, scope: 'alerts:deploy.failed:fp:deploy.failed:android release failed', until: '2026-11-18T05:00:00.000Z', muted_by: 'slack:U42' })
+    expect(h.slack.some((c) => String(c.body.text).includes('muted this alert here for 24 hours. Other alerts, releases and payments'))).toBe(true)
+  })
+
+  it('the legacy Mute 24h button also mutes only the alert; a payment or a release is never muted from Slack', async () => {
+    const alert = '66666666-6666-4666-8666-666666666667'
+    const payment = '66666666-6666-4666-8666-666666666668'
+    const release = '66666666-6666-4666-8666-666666666669'
+    const h = harness({
+      ops_events: [
+        { id: alert, organization_id: ORG, project_id: P2, category: 'alerts', severity: 'urgent', kind: 'uptime.down', thread_key: 'uptime:https://a.test', title: 'down', occurred_at: '2026-11-17T01:00:00Z', acked_at: null },
+        { id: payment, organization_id: ORG, project_id: P2, category: 'payments', severity: 'info', kind: 'payment.succeeded', thread_key: null, title: 'sale', occurred_at: '2026-11-17T01:00:00Z', acked_at: null },
+        { id: release, organization_id: ORG, project_id: P2, category: 'releases', severity: 'info', kind: 'deploy.succeeded', thread_key: null, title: 'v1', occurred_at: '2026-11-17T01:00:00Z', acked_at: null },
+      ],
+    })
+    for (const [i, id] of [alert, payment, release].entries()) {
+      const body = form({ payload: JSON.stringify({ type: 'block_actions', trigger_id: `tl${i}`, team: { id: 'T0TEAM' }, user: { id: 'U42' }, actions: [{ action_id: 'ops_mute', value: id }] }) })
+      await h.app.request('/v1/ops/slack/interactions', { method: 'POST', headers: await signed(body), body })
+    }
+    await Promise.all(h.background)
+    expect(h.db.table('ops_mutes').map((m) => m.scope)).toEqual(['alerts:uptime.down:uptime:https://a.test'])
+  })
+
+  it('reads a click: Acknowledge, the menu’s Mute, the legacy button; links and junk are nothing', () => {
+    const id = '66666666-6666-4666-8666-666666666666'
+    expect(ops.opsClick({ action_id: 'ops_ack', value: id })).toEqual({ kind: 'ack', eventId: id })
+    expect(ops.opsClick({ action_id: 'ops_more', selected_option: { value: `ops_mute:${id}` } })).toEqual({ kind: 'mute', eventId: id })
+    expect(ops.opsClick({ action_id: 'ops_mute', value: id })).toEqual({ kind: 'mute', eventId: id })
+    expect(ops.opsClick({ action_id: 'ops_more', selected_option: { value: 'ops_open_console' } })).toBeNull()
+    expect(ops.opsClick({ action_id: 'ops_open' })).toBeNull()
+    expect(ops.opsClick({ action_id: 'ops_ack', value: 'not-a-uuid' })).toBeNull()
   })
 
   it('the internal Sentry hop takes the service role only, and records for an org whose bot is on', async () => {
