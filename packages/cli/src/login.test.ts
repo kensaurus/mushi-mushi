@@ -38,6 +38,14 @@ describe('chooseProjectNonInteractive', () => {
 
   it('creates a new project when the user has none', () => {
     expect(chooseProjectNonInteractive([], 'blog')).toEqual({ kind: 'new', name: 'blog' })
+    expect(chooseProjectNonInteractive([], 'kenji', false)).toEqual({ kind: 'new', name: 'kenji' })
+  })
+
+  it('outside an app folder, asks instead of creating a project named after the folder', () => {
+    // `mushi login` from the home folder created a stray "kenji" project (2026-11-20).
+    expect(chooseProjectNonInteractive(PROJECTS, 'kenji', false)).toEqual({ kind: 'ask' })
+    // A matching project is still reused there.
+    expect(chooseProjectNonInteractive(PROJECTS, 'storefront', false)).toEqual({ kind: 'existing', id: 'p-2', name: 'Storefront' })
   })
 })
 import type { pollDeviceToken } from './device-auth.js'
