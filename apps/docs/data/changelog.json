@@ -8,6 +8,18 @@
       {
         "title": "A Claude Code worker's account check reads properly",
         "description": "`claude auth status` answers in JSON, so the console showed `checked 2 min ago: \"{\"`. It now reads \"logged in (claude.ai)\" or \"logged out\", and never includes the account's e-mail."
+      },
+      {
+        "title": "A screenshot is never sent without the reporter seeing it.",
+        "description": "With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line \"Check the screenshot below, then press Send again\", and the second Send sends it."
+      },
+      {
+        "title": "A removed screenshot stays removed.",
+        "description": "With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed."
+      },
+      {
+        "title": "The selected element's text follows the privacy rules.",
+        "description": "Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber."
       }
     ],
     "packages": []
