@@ -18,8 +18,9 @@
  *
  *          Multiple accounts stay signed in at once (their sessions are
  *          persisted by accountSessions.ts); switching swaps the live Supabase
- *          session via setSession() and reloads into /dashboard. The rose
- *          sign-out icon remains as a fast "sign out of everything".
+ *          session via setSession() and reloads into /dashboard. Sign-out is
+ *          only in this menu, behind a confirmation: the card has no one-tap
+ *          sign-out icon next to the sidebar's other controls (2026-11-20).
  *
  *          Identity derivation (provider / initials / avatar) is shared with
  *          the session store via lib/authIdentity.ts so both render the same.
@@ -411,14 +412,17 @@ export function SidebarUserCard({ user, signOut, menuTop }: SidebarUserCardProps
           </div>
         )}
 
-        <div className="group flex items-center gap-2">
+        {/* Sign-out lives only in the menu above (owner, 2026-11-20: it sat
+            one tap from the old Collapse row). The card is one button. */}
+        <div className="flex items-center">
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-haspopup="menu"
             aria-expanded={open}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-edge"
-            title={menuTop ? 'Account and display settings' : 'Switch account'}
+            aria-label={`${user?.email ?? 'No email'}: ${menuTop ? 'account, display and sign out' : 'switch account or sign out'}`}
+            className="flex min-h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-surface-overlay/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-edge"
+            title={menuTop ? 'Account, display settings and sign out' : 'Switch account or sign out'}
           >
             <Avatar
               avatarUrl={(user?.user_metadata as { avatar_url?: string })?.avatar_url ?? null}
@@ -438,15 +442,6 @@ export function SidebarUserCard({ user, signOut, menuTop }: SidebarUserCardProps
             <ChevronGlyph
               className={`shrink-0 text-fg-faint motion-safe:transition-transform ${open ? '' : 'rotate-180'}`}
             />
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-rose hover:bg-rose-muted/60 hover:text-rose motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose/50"
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            <SignOutGlyph />
           </button>
         </div>
         <PlanBadge density="sidebar" />

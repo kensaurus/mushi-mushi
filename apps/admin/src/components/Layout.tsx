@@ -10,7 +10,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconMenu, IconClose,
-  IconSignOut, IconBell, IconEye, IconChevronRight,
+  IconSignOut, IconBell, IconEye, IconChevronRight, IconSidebar,
 } from './icons'
 import { useNavCounts, toneForBacklog } from '../lib/useNavCounts'
 import { navSlicesForPaths, renderNavBadge, resolveNavBadge } from '../lib/navBadges'
@@ -478,11 +478,55 @@ export function Layout({ children }: { children: ReactNode }) {
     return compact ? renderRailLink(item) : renderFullNavLink(item)
   }
 
+  // Desktop collapse / expand toggle. It lives at the TOP of the sidebar, by
+  // the brand, as in Linear, Notion and GitHub (owner, 2026-11-20: "collapse
+  // and expand button is too near logout"). It used to be a full-width row
+  // under the account card, about 60px below the red sign-out icon. Expanded,
+  // it is an icon button at the right of the brand row; collapsed, it is the
+  // first rail tile under the mark, so expanding stays one obvious click.
+  // `[` toggles it from anywhere (the hotkey above).
+  const renderSidebarToggle = (compact: boolean) => (
+    <Tooltip
+      side="right"
+      portal
+      content={
+        <NavRailFlyout
+          title={compact ? 'Expand sidebar' : 'Collapse sidebar'}
+          description={
+            compact
+              ? 'Brings back the full nav with section names and labels.'
+              : 'Shrinks the nav to an icon rail.'
+          }
+          hint="Press [ to toggle"
+        />
+      }
+    >
+      <button
+        type="button"
+        onClick={() => setSidebarCollapsed((value) => !value)}
+        aria-expanded={!compact}
+        aria-controls="desktop-sidebar"
+        aria-keyshortcuts="["
+        aria-label={compact ? 'Expand sidebar' : 'Collapse sidebar'}
+        data-testid="sidebar-toggle"
+        className={
+          compact
+            ? 'nav-rail-item'
+            : 'ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-surface-overlay/40 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+        }
+      >
+        <IconSidebar className={compact ? 'nav-rail-icon' : 'h-4 w-4'} />
+      </button>
+    </Tooltip>
+  )
+
   // `compact` collapses the sidebar to an icon rail (~48px wide) — same
   // content tree, but section headers, item labels, mode toggle, and most
   // footer chrome are hidden in favour of `title` tooltips. Mobile always
-  // gets `compact: false` because the mobile sidebar is a full overlay.
-  const renderSidebarContent = (compact: boolean) => (
+  // gets `compact: false` because the mobile sidebar is a full overlay, and
+  // `desktop: false` because the drawer has its own close button instead of
+  // the collapse toggle.
+  const renderSidebarContent = (compact: boolean, desktop = false) => (
     <>
       {/* Brand — the mark (a magnifier over a ladybug on the vermillion tile,
           a small Mushi-chan face peeking in; it stays readable at 24 px, where
@@ -505,7 +549,7 @@ export function Layout({ children }: { children: ReactNode }) {
               </a>
             </h1>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2">
               <h1 className="text-sm font-bold tracking-tight leading-none">
                 <a
                   href={MUSHI_CANONICAL_URLS.home}
@@ -531,9 +575,15 @@ export function Layout({ children }: { children: ReactNode }) {
               >
                 <Badge tone="brandSubtle" className="hover:brightness-110">Beta</Badge>
               </Link>
+              {desktop && renderSidebarToggle(false)}
             </div>
           )}
         </div>
+        {/* The rail has no room beside the mark, so Expand is the first tile
+            under it: top of the rail, far from sign-out at the bottom. */}
+        {desktop && compact && (
+          <div className="px-2.5 pb-2">{renderSidebarToggle(true)}</div>
+        )}
       </div>
 
       {/* Navigation — ghost scrollbar at rest; thin bar on hover/focus only. */}
@@ -789,12 +839,14 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop sidebar — `sidebarCollapsed` toggles between a 240px nav
-          (w-60) and a 48px icon rail (w-12). Toggle button is rendered
-          INSIDE the sidebar (sticky bottom) so it survives both states.
-          Hidden entirely in focus mode; the floating exit pill below
-          replaces all sidebar affordances when focus mode is on. */}
+          (w-60) and a 64px icon rail (w-16). The toggle sits at the top, in
+          the brand area (renderSidebarToggle), so it survives both states
+          and stays away from sign-out at the bottom. Hidden entirely in
+          focus mode; the floating exit pill below replaces all sidebar
+          affordances when focus mode is on. */}
       {!focusMode && (
         <aside
+          id="desktop-sidebar"
           // Collapsed rail is w-16 (64px): a 44px hit area (WCAG 2.5.5) plus
           // 10px gutters either side. At the old w-14 the row cleared the rail
           // border by 6px, which is what made an otherwise fine icon column
@@ -802,47 +854,7 @@ export function Layout({ children }: { children: ReactNode }) {
           className={`hidden md:flex flex-shrink-0 min-h-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-16' : 'w-60'}`}
           data-collapsed={sidebarCollapsed ? 'true' : 'false'}
         >
-          {renderSidebarContent(sidebarCollapsed)}
-          {/* Collapse toggle — pinned to the bottom of the rail so the
-              affordance is always findable in either state. Uses the same
-              chevron icon component as the rest of the app's icon buttons
-              (rotated per state) instead of a bare text glyph, and a rich
-              Tooltip instead of a native `title` so it reads as a real
-              button and matches every other collapsed-rail control. The
-              `[` hotkey mirrors Linear's. */}
-          <Tooltip
-            side="right"
-            portal
-            content={
-              sidebarCollapsed ? (
-                <NavRailFlyout
-                  title="Expand sidebar"
-                  description="Brings back the full nav with section names and labels."
-                  hint="Press [ to toggle"
-                />
-              ) : (
-                'Collapse to icon rail  ·  ['
-              )
-            }
-          >
-            {/* mushi-ui: chrome icon button — Btn variant TBD (collapse row uses nav-link density + chevron label) */}
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((value) => !value)}
-              aria-pressed={sidebarCollapsed}
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={`group flex w-full items-center gap-2 border-t border-edge/60 text-2xs text-fg-faint hover:text-fg-muted hover:bg-surface-overlay/40 motion-safe:transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'h-11 justify-center px-2.5' : 'justify-between px-3 py-1.5'}`}
-            >
-              <IconChevronRight
-                className={`h-3.5 w-3.5 shrink-0 motion-safe:transition-transform ${sidebarCollapsed ? '' : 'rotate-180'}`}
-              />
-              {!sidebarCollapsed && (
-                <span className="text-2xs text-fg-secondary font-semibold">
-                  Collapse
-                </span>
-              )}
-            </button>
-          </Tooltip>
+          {renderSidebarContent(sidebarCollapsed, true)}
         </aside>
       )}
 
