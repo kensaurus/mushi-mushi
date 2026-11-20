@@ -23,6 +23,7 @@ on that. Every row links to the page with the mechanism and the evidence.
 
 | Control | What it means for you | Status | Details |
 | --- | --- | --- | --- |
+| **Filtering in the browser** | Network bodies and headers are never read. Secrets and contact details are scrubbed from text before sending. Screenshots black out password, card and `data-private` areas, and the web widget shows the reporter every screenshot before it is sent | Live (web SDK) | [What leaves the browser](/security/what-leaves-the-browser) |
 | **Data residency** | Pick a region (US, EU or JP) at project creation | All hosted data is in one Tokyo (`ap-northeast-1`) project today, whatever region you pick. Dedicated US and EU clusters are planned, not live | [Data residency](/security/data-residency) |
 | **Bring-your-own-key (BYOK)** | Diagnoses run against *your* Anthropic / OpenAI / OpenRouter account. Keys are stored in Vault, never shown back in plaintext, and nothing is billed to Mushi Mushi's provider account | Live | [BYOK](/security/byok) |
 | **BYO storage** | Screenshots and crash dumps pinned to your own S3 / R2 / GCS / MinIO bucket; URLs signed server-side | Live | [BYO storage](/security/byo-storage) |
