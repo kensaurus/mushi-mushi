@@ -203,8 +203,8 @@ export const KENSAURUS_MANIFEST = {
       brand: 'Tsumagoi Work&Camp 嬬恋牧場',
       aliases: [],
       tagline: {
-        ja: '標高1,444mのワーケーションキャンプ場。光ファイバー、焚き火、満天の星。',
-        en: 'Physical coworking camp and digital-nomad base at 1,444 m in Gunma, Japan — fiber internet, campfires, starlit skies near Kusatsu Onsen.',
+        ja: '山で働く。冬でも、夜通しでも。寝るのは、自分の車かテント。',
+        en: 'Work in the mountains. Even in winter. Even all night. You sleep in your own car or a tent.',
       },
       web: 'https://tsumagoi.kensaur.us/',
       icon: 'https://tsumagoi.kensaur.us/apple-touch-icon.png',

@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'npm:hono@4'
 import { makeFakeDb, type FakeDb, type Row } from './__stubs__/fake-supabase.ts'
 import { proxyToFunction } from '../../supabase/functions/_shared/edge-proxy.ts'
+import { MAIL_SENDER } from '../../supabase/functions/_shared/kensaurus-spine/mail.ts'
 
 const state = vi.hoisted(() => ({
   db: null as unknown,
@@ -265,8 +266,9 @@ describe('POST /v1/public/production-check', () => {
     expect(state.emails[0].text).toContain(`https://kensaur.us/mushi-mushi/docs/check?id=${data.id}`)
     expect(state.emails[0].text).toContain('1 to fix first, 1 to fix soon.')
     expect(state.emails[0].subject).toBe('acme.app: 2 things to fix (Production Check)')
-    // The HTML twin carries the same report link as a button, and no image (no tracking pixel).
-    expect(state.emails[0].html).toContain(`href="https://kensaur.us/mushi-mushi/docs/check?id=${data.id}"`)
+    // The HTML twin carries the same report link as a button (the KENSAURUS
+    // email kit tags it for analytics), and no image (no tracking pixel).
+    expect(state.emails[0].html).toContain(`href="https://kensaur.us/mushi-mushi/docs/check?id=${data.id}&amp;utm_source=email&amp;utm_medium=transactional`)
     expect(state.emails[0].html).toContain('Open the full report')
     expect(state.emails[0].html).not.toMatch(/<img/i)
     const finished = state.events.find((e) => e.eventName === 'production_check_finished')
@@ -483,6 +485,30 @@ describe('buildReportEmail', () => {
     expect(slow.text).not.toContain('your visitors most likely cannot either')
     expect(slow.html).toContain('Check again')
     expect(buildUnreachableEmail('gone.app', 'id-5', 'https://gone.app/', 'dns').text).toContain('your visitors most likely cannot either')
+  })
+
+  it('renders on the KENSAURUS email kit: sender footer, no cross-app row, no phone number', () => {
+    const mails = [
+      buildReportEmail('shop.app', 'id-1', { findings: [finding('high', 'H1')] }),
+      buildReportEmail('ok.app', 'id-2', { findings: [] }),
+      buildUnreachableEmail('gone.app', 'id-5', 'https://gone.app/', 'dns'),
+    ]
+    expect(mails.map((m) => m.subject)).toEqual([
+      'shop.app: 1 thing to fix (Production Check)',
+      'ok.app passed the Production Check',
+      'We could not reach gone.app (Production Check)',
+    ])
+    for (const mail of mails) {
+      for (const fact of [MAIL_SENDER.legalNameEn, MAIL_SENDER.email]) {
+        expect(mail.html).toContain(fact)
+        expect(mail.text).toContain(fact)
+      }
+      expect(mail.html).not.toContain('More from KENSAURUS')
+      expect(mail.html).not.toMatch(/<img/i)
+      expect(/070|\+81|\+65|8459/.test(mail.html + mail.text)).toBe(false)
+    }
+    // The check-again link keeps the pasted address, then the kit's tags.
+    expect(mails[2].html).toContain('href="https://kensaur.us/mushi-mushi/docs/check?url=https%3A%2F%2Fgone.app%2F&amp;utm_source=email')
   })
 
   it('escapes what a site controls (finding titles) in the HTML', () => {

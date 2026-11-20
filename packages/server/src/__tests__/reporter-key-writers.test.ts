@@ -141,6 +141,11 @@ function scan(): Set<string> {
     const rel = relative(FUNCTIONS, file).replace(/\\/g, '/')
     // reporter-token.ts defines the keying; it writes nothing.
     if (rel === '_shared/reporter-token.ts') continue
+    // The vendored KENSAURUS spine (yen-yen ADR 0014 / 0100, hash-locked by
+    // check:spine) writes no database row. Its events client builds an
+    // `anon_id` envelope that it POSTs to the cross-app ingest, and the edge
+    // functions import only its mail kit (mail.ts) from it.
+    if (rel.startsWith('_shared/kensaurus-spine/')) continue
     // No comment stripping: a regex for /* … */ mangles these files (it ate
     // three quarters of sessions.ts), and prose about a column does not sit
     // inside a write call's parentheses anyway. The dotted-assignment scan

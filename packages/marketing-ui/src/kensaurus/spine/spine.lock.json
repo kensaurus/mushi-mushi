@@ -5,10 +5,11 @@
     "updated": "2026-10-15"
   },
   "files": {
-    "apps.generated.ts": "2f4e6a578e26464dbc6f28a6b1aa76863d0d6b1b367f5593ddc822fb70086962",
+    "apps.generated.ts": "8d6142b7f236a823cb81cb764178be86434d2bebe26dd93cac183bdc7fe2013c",
     "account.ts": "a00cb4f34fa6b43849644042e751a446f94de5e6d7fb7bacb933e9b4dbc66f17",
     "events.ts": "34f23d53af8db17a3d3104e0440694fc994cdc4302ac022f46b74ac15377bb22",
     "links.ts": "ffdd3dcb251cc4f33da94d9d02fc8e06a5376ad1a5edb576eacfb0930739cf1b",
+    "mail.ts": "4eb1c7233e2d86d92fd1082a14fecf4a25f4d426799f21cb48a42f430275126e",
     "check-spine.mjs": "e753ba0f57ae09571c69f617ae1f5240b63a26c235156104c16220654541807f"
   }
 }

@@ -38,6 +38,7 @@ import { sendTransactionalEmail } from '../_shared/email.ts'
 import { runLlmBudgetAlerts } from '../_shared/llm-budget-alerts.ts'
 import { sendBotMessage } from '../_shared/slack.ts'
 import { consolePageUrl } from '../_shared/console-page-url.ts'
+import { buildBudgetAlertEmail, buildQuotaAlertEmail, type AlertEmail } from '../_shared/usage-alert-email.ts'
 
 const aLog = log.child('usage-alerts')
 
@@ -51,79 +52,22 @@ const CONSOLE_URL = (Deno.env.get('MUSHI_CONSOLE_URL') ?? consolePageUrl('')).re
  * missing RESEND_FROM_EMAIL / RESEND_API_KEY or a Resend error is logged and
  * the alert is skipped. The caller still stamps the once-per-month dedup
  * column (unchanged behavior), so the warning is the only signal — keep the
- * sender configured.
+ * sender configured. The layout is the KENSAURUS email kit
+ * (_shared/usage-alert-email.ts).
  */
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const result = await sendTransactionalEmail({ to, subject, html })
+async function sendEmail(to: string, build: () => AlertEmail): Promise<void> {
+  let mail: AlertEmail
+  try {
+    mail = build()
+  } catch (err) {
+    // The kit refuses a non-https link (a self-hosted http console URL).
+    aLog.warn('usage alert email not built', { error: err instanceof Error ? err.message : String(err) })
+    return
+  }
+  const result = await sendTransactionalEmail({ to, subject: mail.subject, html: mail.html, text: mail.text })
   if (!result.ok) {
-    aLog.warn('usage alert email skipped', { reason: result.reason, error: result.error, subject })
+    aLog.warn('usage alert email skipped', { reason: result.reason, error: result.error, subject: mail.subject })
   }
-}
-
-function buildAlertEmail(opts: {
-  projectName: string
-  diagnosesUsed: number
-  diagnosesLimit: number
-  pct: number
-  planName: string
-  spendCapUsd: number | null
-  projectId: string
-  alertTier: 50 | 80 | 100
-  /** Annual subscription: no overage item, so diagnoses stop at the limit. */
-  noOverage?: boolean
-}): { subject: string; html: string } {
-  const isOver = opts.alertTier >= 100
-  const threshold = `${opts.alertTier}%`
-  const accentColor = isOver ? '#dc2626' : opts.alertTier >= 80 ? '#d97706' : '#2563eb'
-  const used = opts.diagnosesUsed.toLocaleString()
-  const limit = opts.diagnosesLimit.toLocaleString()
-  const capNote = opts.noOverage
-    ? `<p>Annual plans include a fixed number of diagnoses each month and have no overage, so nothing is charged above your plan price. For more diagnoses, switch to monthly or to Pro with <strong>Change plan</strong> in <a href="${CONSOLE_URL}/billing">Billing</a>.</p>`
-    : opts.spendCapUsd
-    ? `<p>Your spend cap is set to <strong>$${opts.spendCapUsd}</strong>/month. Diagnoses will pause gracefully once you reach the cap — no surprise charges.</p>`
-    : `<p><strong>Tip:</strong> Set a hard spend cap in <a href="${CONSOLE_URL}/billing">Billing settings</a> to prevent surprise charges.</p>`
-
-  const subject = isOver
-    ? `⚠️ Diagnosis quota reached — ${opts.projectName}`
-    : opts.alertTier === 50
-      ? `Early heads-up: ${opts.projectName} is at ${threshold} of monthly diagnoses`
-      : `Heads up: ${opts.projectName} is at ${threshold} of monthly diagnoses`
-
-  const html = `<!DOCTYPE html>
-<html>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 24px;">
-  <div style="border-left: 4px solid ${accentColor}; padding-left: 16px; margin-bottom: 24px;">
-    <h2 style="margin: 0 0 8px; font-size: 20px;">${isOver ? '⚠️ Quota reached' : '📊 Quota alert'}</h2>
-    <p style="margin: 0; color: #555; font-size: 14px;">${opts.projectName} · ${opts.planName} plan</p>
-  </div>
-
-  <p>Your team has used <strong>${used} of ${limit} diagnoses</strong> this month (${opts.pct}%).</p>
-
-  ${isOver
-    ? `<p style="color: ${accentColor}; font-weight: 600;">New reports will continue to be received, but diagnoses (Stage-2 AI analysis) will pause until you upgrade or a new billing month starts.</p>`
-    : opts.alertTier === 50
-      ? `<p>You've crossed half your monthly diagnosis quota. You still have room — this is an early heads-up so you can adjust your spend cap or upgrade before triage pauses.</p>`
-      : `<p>You are approaching your monthly diagnosis quota. Once you hit 100%, new bug reports will still be captured but won't receive AI triage until the cycle resets.</p>`
-  }
-
-  ${capNote}
-
-  <div style="margin: 24px 0;">
-    <a href="${CONSOLE_URL}/billing?project=${opts.projectId}"
-       style="background: #111; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600;">
-      ${isOver ? 'Upgrade plan' : 'View usage'}
-    </a>
-  </div>
-
-  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
-  <p style="color: #999; font-size: 12px;">
-    Mushi Mushi · <a href="${CONSOLE_URL}/billing?project=${opts.projectId}">Manage billing</a> ·
-    You're receiving this because you're an owner of the team <strong>${opts.projectName}</strong>.
-  </p>
-</body>
-</html>`
-
-  return { subject, html }
 }
 
 Deno.serve(withSentry('usage-alerts', async (req) => {
@@ -136,8 +80,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
   // a month with no diagnoses, and the budget can still be spent by chat.
   const budget = await runLlmBudgetAlerts(db, {
     email: async (to, subject, text) => {
-      const html = `<p>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n\n/g, '</p><p>')}</p>`
-      await sendEmail(to, subject, html)
+      await sendEmail(to, () => buildBudgetAlertEmail(subject, text))
     },
     slack: async (projectId, channel, text) => {
       const r = await sendBotMessage({ db, projectId, channel, text })
@@ -303,7 +246,8 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
 
     // Build and send email.
     if (toEmail) {
-      const { subject, html } = buildAlertEmail({
+      await sendEmail(toEmail, () => buildQuotaAlertEmail({
+        consoleUrl: CONSOLE_URL,
         projectName: teamName,
         diagnosesUsed: diagUsed,
         diagnosesLimit: diagLimit,
@@ -313,8 +257,7 @@ Deno.serve(withSentry('usage-alerts', async (req) => {
         projectId,
         alertTier,
         noOverage: !!sub && !diagnosisOverageBillable(sub),
-      })
-      await sendEmail(toEmail, subject, html)
+      }))
       aLog.info('usage alert sent', { orgId, pct, toEmail })
       sent++
     }
