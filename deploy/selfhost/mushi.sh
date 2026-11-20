@@ -123,12 +123,18 @@ case "$cmd" in
     # A local server needs no key, but the OpenAI path runs only with one set.
     [ -n "$(env_get OPENAI_API_KEY)" ] || set_env OPENAI_API_KEY local
     case "$url" in http://*) set_env MUSHI_ALLOW_PRIVATE_LLM_BASE_URL true ;; esac
-    docker compose up -d --wait functions >/dev/null
+    docker compose up -d --wait functions >/dev/null 2>&1 || { echo "mushi.sh: the functions did not restart; see: sh mushi.sh logs functions" >&2; exit 1; }
     printf 'Chat model: %s at %s\n' "$model" "$url"
-    if curl -fsS --max-time 10 "$(printf '%s' "$url" | sed 's|host.docker.internal|127.0.0.1|')/models" >/dev/null 2>&1; then
-      echo "The server answers. New reports are diagnosed with it."
+    # Ask from a container, as the functions do (host.docker.internal is the host).
+    tools
+    models=$(docker run --rm --add-host host.docker.internal:host-gateway --entrypoint wget "$TOOLS_IMAGE" \
+      -q -T 10 -O - "$url/models" 2>/dev/null || true)
+    if [ -z "$models" ]; then
+      echo "Could not reach $url/models from a container. Is the server running and listening beyond 127.0.0.1 (Ollama on Linux: OLLAMA_HOST=0.0.0.0)?" >&2
+    elif printf '%s' "$models" | grep -q "\"$model\""; then
+      echo "The server answers and serves $model. New reports are diagnosed with it."
     else
-      echo "Could not reach $url/models from this machine; check the server is running and listening for Docker." >&2
+      echo "The server answers but does not list $model; pull it there first (ollama pull $model)." >&2
     fi
     ;;
 

@@ -124,6 +124,13 @@ services:
     ports: !override
       - 127.0.0.1:${POSTGRES_PORT}:5432
       - 127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION}:6543
+    # Supavisor's start script runs `ulimit -n 100000` and exits when the
+    # container's hard limit is lower, which is Docker's default on many Linux
+    # hosts (a GitHub runner, 2026-11-20). Docker sets this limit as root.
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
 
 volumes:
   mushi_caddy_data:
