@@ -123,7 +123,12 @@ describe('createConsoleCapture', () => {
   it('stops listening for window errors after destroy', () => {
     capture = createConsoleCapture();
     capture.destroy();
+    // Vitest's jsdom reports a window error as uncaught when no listener is
+    // attached; this stand-in listener is the page's own, not the capture's.
+    const pageListener = () => {};
+    window.addEventListener('error', pageListener);
     window.dispatchEvent(new ErrorEvent('error', { error: new Error('late'), message: 'late' }));
+    window.removeEventListener('error', pageListener);
     expect(capture.getEntries()).toHaveLength(0);
   });
 });
