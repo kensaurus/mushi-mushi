@@ -11,6 +11,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 ### Highlights
 
 - **A Claude Code worker's account check reads properly** — `claude auth status` answers in JSON, so the console showed `checked 2 min ago: "{"`. It now reads "logged in (claude.ai)" or "logged out", and never includes the account's e-mail.
+- **`search_mushi_docs` finds the new "What leaves the browser" page** — what the web SDK sends with a report, where each part is filtered, and how to keep private pages out of reports.
 - **A screenshot is never sent without the reporter seeing it.** — With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line "Check the screenshot below, then press Send again", and the second Send sends it.
 - **A removed screenshot stays removed.** — With `'auto'` or `'on-report'`, pressing Remove and then Send took a new screenshot and sent it. Remove now holds until that report is sent or closed.
 - **The selected element's text follows the privacy rules.** — Pointing at an element sent up to 200 characters of its text unscrubbed, even inside `data-private`. Text from inside (or around) a redacted, masked or blocked area is now left out, and the rest goes through the PII scrubber.

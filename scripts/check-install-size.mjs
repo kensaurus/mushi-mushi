@@ -116,7 +116,9 @@ export const BUDGETS = [
   // 2026-11-19: unpacked 1,025 → 1,035 kB: `--help` / `--version` text (stdio-args.ts) and the
   // docs index gained the curl, Bolt and Replit quickstarts and the reach-first pricing copy
   // (ADR 0063). Text only, no dependency change; measured 260.6 kB packed, 1,026.4 kB unpacked.
-  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 262_000, unpacked: 1_035_000 },
+  // 2026-11-20: packed 262 → 265 kB: the docs index gained the "What leaves the browser"
+  // security page (#1198). Text only, no code or dependency change; measured 262.1 kB packed.
+  { name: '@mushi-mushi/mcp', dir: 'packages/mcp', packed: 265_000, unpacked: 1_035_000 },
   // 2026-10-28: packed 262 → 270 kB: release 5's version bump adds its CHANGELOG
   // entries (the changelog ships in the tarball), measured 265.4 kB packed.
   // 2026-10-29: 990 → 995 kB unpacked: `mushi doctor` reads the Health check

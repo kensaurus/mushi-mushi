@@ -10,6 +10,10 @@
         "description": "`claude auth status` answers in JSON, so the console showed `checked 2 min ago: \"{\"`. It now reads \"logged in (claude.ai)\" or \"logged out\", and never includes the account's e-mail."
       },
       {
+        "title": "`search_mushi_docs` finds the new \"What leaves the browser\" page",
+        "description": "what the web SDK sends with a report, where each part is filtered, and how to keep private pages out of reports."
+      },
+      {
         "title": "A screenshot is never sent without the reporter seeing it.",
         "description": "With `capture.screenshot: 'on-report'`, pressing Send took the screenshot and sent it in the same moment, so the reporter never saw it. Send now takes it, shows it with Mark up and Remove and the line \"Check the screenshot below, then press Send again\", and the second Send sends it."
       },
