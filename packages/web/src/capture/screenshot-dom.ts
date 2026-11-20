@@ -105,7 +105,7 @@ const MAX_INLINED_BYTES = 12 * 1024 * 1024;
 
 const MEDIA_SELECTOR = 'img, video, canvas, iframe, object, embed';
 
-export async function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Promise<Element> {
+async function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Promise<Element> {
   const live = document.documentElement;
   const clone = live.cloneNode(true) as Element;
   // Each <link> sheet's text goes where its <link> was (see inlineDocumentStyles).
