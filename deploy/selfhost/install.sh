@@ -14,12 +14,16 @@
 # Sign-up stays closed; add people with `sh mushi.sh add-user <email>`.
 # Needs Docker with Compose 2.24.4+, git, openssl and curl. Linux or macOS
 # (on Windows, run it inside WSL).
+# Options: --dir, --url, --email, --version TAG, --image-prefix REGISTRY/NAME
+#   (a fork or a mirror; default ghcr.io/kensaurus/mushi-mushi), --yes.
+# Also from the environment: SUPABASE_KIT_REF, MUSHI_REPO, MUSHI_REF.
 set -eu
 
 SUPABASE_KIT_REF=${SUPABASE_KIT_REF:-self-hosted/v0.8.4}
 MUSHI_REPO=${MUSHI_REPO:-https://github.com/kensaurus/mushi-mushi}
 MUSHI_REF=${MUSHI_REF:-master}
 MUSHI_VERSION=${MUSHI_VERSION:-latest}
+MUSHI_IMAGE_PREFIX=${MUSHI_IMAGE_PREFIX:-ghcr.io/kensaurus/mushi-mushi}
 DIR=mushi
 PUBLIC_URL=http://localhost:3000
 EMAIL=
@@ -34,6 +38,7 @@ while [ $# -gt 0 ]; do
     --url) PUBLIC_URL=$2; shift 2 ;;
     --email) EMAIL=$2; shift 2 ;;
     --version) MUSHI_VERSION=$2; shift 2 ;;
+    --image-prefix) MUSHI_IMAGE_PREFIX=$2; shift 2 ;;
     -y|--yes) YES=1; shift ;;
     -h|--help) sed -n '2,19p' "$0" 2>/dev/null || true; exit 0 ;;
     *) die "unknown option: $1 (try --help)" ;;
@@ -112,7 +117,7 @@ set_env DISABLE_SIGNUP true
 # Set SMTP_* in .env for password-reset and invite emails.
 set_env ENABLE_EMAIL_AUTOCONFIRM true
 set_env FUNCTIONS_VERIFY_JWT false
-sed -e "s|@MUSHI_VERSION@|$MUSHI_VERSION|"     -e "s|@MUSHI_PUBLIC_URL@|$PUBLIC_URL|"     -e "s|@MUSHI_INTERNAL_CALLER_SECRET@|$(openssl rand -hex 32)|"     mushi.env.example >> .env
+sed -e "s|@MUSHI_VERSION@|$MUSHI_VERSION|"     -e "s|@MUSHI_IMAGE_PREFIX@|$MUSHI_IMAGE_PREFIX|"     -e "s|@MUSHI_PUBLIC_URL@|$PUBLIC_URL|"     -e "s|@MUSHI_INTERNAL_CALLER_SECRET@|$(openssl rand -hex 32)|"     mushi.env.example >> .env
 chmod 600 .env
 
 # --- 4. start ---------------------------------------------------------------
