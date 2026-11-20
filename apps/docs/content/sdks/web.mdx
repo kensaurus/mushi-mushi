@@ -85,11 +85,21 @@ Types live on `MushiConfig` in `mushi-mushi/core`.
 
 ## Screenshot preview & consent (1.19+)
 
-When screenshot capture is enabled (`capture.screenshot: 'on-report'` or
-`'auto'`), the report screen shows a **visible preview** of the image that will
-be attached, not just a "Screenshot attached ✓" label. Reporters can **Remove**
-the screenshot before submit and optionally read a **privacy caption** beneath
-the preview.
+The reporter sees every screenshot before it is sent: a **visible preview** of
+the image, **Mark up** to blur parts of it, **Remove**, and an optional
+**privacy caption**. When the screenshot is taken depends on
+`capture.screenshot`:
+
+| Value | Taken |
+| --- | --- |
+| not set | Only when the reporter presses the camera button |
+| `'on-report'` | When the reporter presses **Send**. The report stays open with the preview and a "check it, then press Send again" line; the second **Send** sends it (1.38+; earlier versions sent it unseen) |
+| `'auto'` | When the report opens |
+| `'off'` | Never; the camera button is hidden |
+
+A screenshot the reporter removed is never taken again for that report (1.38+).
+What else a report carries, and how to keep private areas out of it:
+[What leaves the browser](/security/what-leaves-the-browser).
 
 ```typescript
 Mushi.init({

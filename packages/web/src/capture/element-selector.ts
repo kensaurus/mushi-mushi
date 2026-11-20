@@ -7,7 +7,16 @@ export interface ElementSelector {
   isActive(): boolean;
 }
 
-export function createElementSelector(): ElementSelector {
+/**
+ * @param privateSelector CSS selector for areas whose text never leaves the
+ *   page (the screenshot redaction list). An element inside one, or holding
+ *   one, is reported without its text.
+ * @param scrubText Runs over the element text that is kept (the PII scrubber).
+ */
+export function createElementSelector(
+  privateSelector: () => string = () => '',
+  scrubText: (text: string) => string = (text) => text,
+): ElementSelector {
   let active = false;
   let overlay: HTMLDivElement | null = null;
   let captureLayer: HTMLDivElement | null = null;
@@ -54,6 +63,20 @@ export function createElementSelector(): ElementSelector {
     return '//' + parts.join('/');
   }
 
+  function elementText(el: Element): string | undefined {
+    const selector = privateSelector();
+    if (selector) {
+      try {
+        if (el.closest(selector) || el.querySelector(selector)) return undefined;
+      } catch {
+        // A host selector the browser rejects: keep nothing rather than guess.
+        return undefined;
+      }
+    }
+    const text = el.textContent?.trim().slice(0, 200);
+    return text ? scrubText(text) : undefined;
+  }
+
   function captureElement(el: Element): MushiSelectedElement {
     const rect = el.getBoundingClientRect();
     // SVG elements expose className as SVGAnimatedString, not string —
@@ -64,7 +87,7 @@ export function createElementSelector(): ElementSelector {
       tagName: el.tagName.toLowerCase(),
       id: el.id || undefined,
       className: className || undefined,
-      textContent: el.textContent?.trim().slice(0, 200) || undefined,
+      textContent: elementText(el),
       xpath: getXPath(el),
       rect: {
         x: Math.round(rect.x),
