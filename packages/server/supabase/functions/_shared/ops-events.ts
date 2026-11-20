@@ -367,7 +367,7 @@ export async function deliverOpsEvent(db: Db, event: OpsEventRow, deps: OpsDeps 
     if (hookUrl) {
       // An incoming webhook takes no button clicks: keep only the links (a menu's link becomes a button).
       const msg = buildOpsMessage(event, ctx)
-      const blocks = msg.blocks.flatMap((b) => {
+      const blocks = msg.blocks.flatMap((b): unknown[] => {
         const block = b as { type?: string; elements?: Array<{ type?: string; url?: string; options?: Array<{ text: unknown; url?: string; value?: string }> }> }
         if (block.type !== 'actions') return [block]
         const links = (block.elements ?? []).flatMap((el): unknown[] => {
