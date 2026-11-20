@@ -169,6 +169,13 @@ describe('Slack message for one event (one format, 2026-11-20)', () => {
     expect(msg.text).toBe('🚀 glot.it: Admin console 0.1.700 is live')
     expect(stripLeadingMark('⚠️ ⚠️ Disk full')).toBe('Disk full')
     expect(stripLeadingMark('🚀')).toBe('🚀')
+    // CI and release markers steer pipelines; a reader never sees them (2026-11-20).
+    expect(stripLeadingMark('help her take photo web is live · fix(events): retry once [skip ota]')).toBe(
+      'help her take photo web is live · fix(events): retry once',
+    )
+    expect(stripLeadingMark('🚀 yen-yen web is live · fix: x [skip mobile] [skip ota]')).toBe('yen-yen web is live · fix: x')
+    expect(stripLeadingMark('release: v1.17.0 [release:all] event camera')).toBe('release: v1.17.0 event camera')
+    expect(stripLeadingMark('[skip ci]')).toBe('[skip ci]')
   })
 
   it('names the environment only when the sender verified it, and never says production otherwise', () => {
