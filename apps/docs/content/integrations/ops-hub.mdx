@@ -183,7 +183,7 @@ For teams with the Slack bot on, Mushi Mushi adds these with no app code:
 
 | Source | Becomes | Needs |
 | --- | --- | --- |
-| A GitHub production deployment (`deployment_status`) | `releases` "<sha> is live in production" with the commit subject; a failure is an urgent `alerts` event, resolved by the next good deploy. When the app posts its own release for the same commit (a `Commit` fact) within 30 minutes, only the app's post stays | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
+| A GitHub production deployment (`deployment_status`) | `releases` "`<sha>` is live in production" with the commit subject; a failure is an urgent `alerts` event, resolved by the next good deploy. When the app posts its own release for the same commit (a `Commit` fact) within 30 minutes, only the app's post stays | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
 | A new Sentry issue at level error or fatal, or a regression ("Regressed: …", with the first-seen date) | `alerts`, threaded per issue; resolving it in Sentry posts the resolve. The title is the error's first line, at most 120 characters, with any JSON moved into the body | Sentry connected (webhook or auto-import). Events from another environment than production are skipped; an event with no environment shows "Environment: not set", never production. |
 | An edge canary going down (second failed run in a row) and back up | urgent `alerts`, then `resolved` in the same thread | Edge canaries set up for the app |
 
