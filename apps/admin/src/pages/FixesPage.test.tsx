@@ -287,6 +287,15 @@ describe('FixesPage', () => {
     expect(box().disabled).toBe(false)
   })
 
+  it('the tab title counts every attempt, not the loaded page (2026-11-20)', async () => {
+    // It read "200 fixes · 228 failed": 200 loaded of 639 attempts, beside a count of stopped reports.
+    mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
+    mocks.total = 639
+    mocks.summary = { ...EMPTY_SUMMARY, inProgress: 1 }
+    await render('/fixes')
+    expect(mocks.pageSummary).toMatch(/^639 attempts · 1 in flight · \d+ stopped$/)
+  })
+
   it('a pending attempt is in flight in the tab title, the card and the filter', async () => {
     mocks.fixes = [fix({ id: 'a', status: 'pending', report_fix_state: 'in_flight', retryable: false })]
     mocks.total = 1

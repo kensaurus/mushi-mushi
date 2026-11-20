@@ -815,13 +815,15 @@ export function FixesPage() {
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
   // makes sense when `failedFixes.length > 0`). The summary is the browser
-  // tab title. Failed matches the banner (B3); in flight matches the card.
+  // tab title. Stopped matches the banner (B3); in flight matches the card.
+  // Attempts are the total, not the loaded page: the title read "200 fixes ·
+  // 228 failed" (200 loaded of 639 attempts, 228 stopped reports, 2026-11-20).
   usePublishPageContext({
     route: '/fixes',
     title: projectName ? `Fixes · ${projectName}` : 'Fixes',
     summary: loading
       ? 'Loading fix pipeline…'
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} failed`,
+      : `${pluralizeWithCount(Math.max(fixesTotal ?? 0, fixes.length), 'attempt')} · ${inFlightCount} in flight · ${Math.max(bucketCounts.failed, fixesStats.failed)} stopped`,
     filters: {
       bucket: statusBucket,
     },
