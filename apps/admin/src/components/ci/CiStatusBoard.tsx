@@ -17,6 +17,12 @@
  *            4. Where does each app's time go? Bars for wait and run, a pass-rate bar, and the
  *               main delay as a status pill.
  *          The one-sentence status stays for screen readers (role=status). Data: lib/ciStatus.ts.
+ *
+ *          2026-11-19: every failed row has "Why?" and every live row "Inspect" (the debug drawer,
+ *          CiJobDebug.tsx). With All apps and two or more apps, "Running now" and "What broke"
+ *          become one section per app (AppGroupSection, lib/ciDebug buildCiAppGroups): worst app
+ *          first, its cards, live jobs and failures under it, healthy apps collapsed. Causes and
+ *          cards that span apps are said once, above the apps.
  */
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -37,6 +43,11 @@ import {
   machinePresenceWord,
 } from '../../lib/ciStatus'
 import type { RecentFailure } from '../../lib/ciAttention'
+import type { CiAlert } from '../../lib/ciAlerts'
+import { buildCiAppGroups, type CiAppGroup } from '../../lib/ciDebug'
+import { AppGroupSection } from '../ui/app-group'
+import { CiAlertStrip } from './CiAlertStrip'
+import { CiWhyButton } from './CiJobDebug'
 import { fixLinkKey, type CiFixLinks } from '../../lib/ciView'
 import { ciJobKey, ciJobKeys, ciRepoKey, ciRunnerKey, useCiLink, type CiKey } from '../../lib/ciHighlight'
 import { LINK_ACCENT } from '../../lib/chipTone'
@@ -245,6 +256,7 @@ function RunningRow({ r, fixLinks, hideOrigin = false }: { r: RunningNow; fixLin
         {!hideOrigin && <span className={CHIP}>{r.app}</span>}
         {!hideOrigin && r.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{r.job.prNumber}</span>}
         <FixLink job={r.job} fixLinks={fixLinks} />
+        <CiWhyButton jobId={r.job.id} label="Inspect" title="The live steps, and Cancel run" />
       </span>
       {r.elapsedS != null && <RunBar elapsedS={r.elapsedS} usualS={r.usualS} label={runLabel(r)} />}
     </li>
@@ -262,6 +274,7 @@ function WaitingRow({ w, fixLinks, hideOrigin = false }: { w: WaitingNow; fixLin
       {!hideOrigin && w.job.prNumber != null && <span className={`${CHIP} font-mono`}>#{w.job.prNumber}</span>}
       <FixLink job={w.job} fixLinks={fixLinks} />
       <span className="ml-auto font-mono text-2xs font-bold text-st-waiting-ink tabular-nums">{durationWords(w.waitS)}</span>
+      <CiWhyButton jobId={w.job.id} label="Inspect" title="What it waits for, and Cancel run" />
     </li>
   )
 }
@@ -366,7 +379,8 @@ function CauseCard({ c }: { c: FailureCause }) {
         <span className="font-mono text-2xs font-bold text-st-failed-ink tabular-nums">
           {prs} PRs · {c.apps.length} {c.apps.length === 1 ? 'app' : 'apps'}
         </span>
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1">
+          <CiWhyButton jobId={c.hits[0]?.failure.job.id} />
           <LogsMenu hits={c.hits} />
         </span>
       </div>
@@ -401,11 +415,14 @@ function SingleRow({ group: g, failure: f, step }: { group: FailureGroup; failur
       <span className={`${CHIP} font-mono`}>{g.prNumber != null ? `#${g.prNumber}` : g.branch ?? 'branch'}</span>
       <span className="truncate text-xs font-bold text-fg">{f.job.jobName}</span>
       <span className="truncate text-2xs text-fg-secondary">{what}</span>
-      {f.job.htmlUrl && (
-        <a href={f.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={`ml-auto ${LINK_ACCENT}`} aria-label={`Log: ${f.job.jobName}`} title="Open the log on GitHub">
-          <IconExternalLink size={12} />
-        </a>
-      )}
+      <span className="ml-auto flex items-center gap-1.5">
+        <CiWhyButton jobId={f.job.id} />
+        {f.job.htmlUrl && (
+          <a href={f.job.htmlUrl} target="_blank" rel="noopener noreferrer" className={LINK_ACCENT} aria-label={`Log: ${f.job.jobName}`} title="Open the log on GitHub">
+            <IconExternalLink size={12} />
+          </a>
+        )}
+      </span>
     </li>
   )
 }
@@ -515,7 +532,142 @@ function AppTimeCard({ a, maxWait, maxRun, showDelay }: { a: CiStatus['apps'][nu
   )
 }
 
-export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fixLinks?: CiFixLinks }) {
+/** An app group's right side: its pass rate as a bar, its slow wait, and "Open" (switches to that app). */
+function AppGroupSummary({ g, onOpenApp }: { g: CiAppGroup; onOpenApp?: (id: string) => void }) {
+  const pass = g.passRate == null ? null : Math.round(g.passRate * 100)
+  return (
+    <span className="flex items-center gap-2">
+      {pass != null && <BarCell value={pass} max={100} tone={pass < 80 ? 'danger' : 'ok'} text={nw(`${pass}% pass`)} widthClass="w-14" />}
+      {g.waitP95S != null && g.waitP95S >= 60 && (
+        <span className="font-mono text-2xs font-bold text-fg-secondary tabular-nums" title="1 job in 20 waits this long for a machine">
+          wait {durationWords(g.waitP95S)}
+        </span>
+      )}
+      {onOpenApp && (
+        <button type="button" className={`text-2xs font-medium ${LINK_ACCENT}`} onClick={() => onOpenApp(g.id)} aria-label={`Open ${g.name} only`} data-testid={`ci-app-open-${g.id}`}>
+          Open →
+        </button>
+      )}
+    </span>
+  )
+}
+
+/** One app: its cards, live jobs and failures, worst first. */
+function AppGroupBody({ g, overview, status, now, fixLinks }: { g: CiAppGroup; overview: CiOverview; status: CiStatus; now: number; fixLinks?: CiFixLinks }) {
+  const live = g.running.length + g.waiting.length > 0
+  const broke = g.causes.length + g.singles.length > 0
+  return (
+    <div className="flex flex-col gap-2 pt-0.5">
+      {g.alerts.length > 0 && (
+        <CiAlertStrip overview={overview} status={status} now={now} alerts={g.alerts} emptyText={null} testIdPrefix={`ci-app-${g.id}`} maxShown={3} columns={3} showPinned={false} />
+      )}
+      {g.causes.length > 0 && (
+        <ul className="flex flex-col gap-2" data-testid={`ci-app-causes-${g.id}`}>
+          {g.causes.map((c) => (
+            <CauseCard key={c.key} c={c} />
+          ))}
+        </ul>
+      )}
+      {g.singles.length > 0 && (
+        <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid={`ci-app-broke-${g.id}`}>
+          {g.singles.slice(0, 8).map((s) => (
+            <SingleRow key={`${s.group.key}|${s.failure.job.id}`} {...s} />
+          ))}
+          {g.singles.length > 8 && <li className="px-2.5 py-1 text-2xs text-fg-secondary">+{g.singles.length - 8} more in the queue below</li>}
+        </ul>
+      )}
+      {live && (
+        <ul className="divide-y divide-edge-subtle rounded-md border border-edge-subtle" data-testid={`ci-app-live-${g.id}`}>
+          {g.running.map((r) => (
+            <RunningRow key={r.job.id} r={r} fixLinks={fixLinks} hideOrigin />
+          ))}
+          {g.waiting.map((w) => (
+            <WaitingRow key={w.job.id} w={w} fixLinks={fixLinks} hideOrigin />
+          ))}
+        </ul>
+      )}
+      {!live && !broke && g.alerts.length === 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
+          <StatusMark status="passed" size={10} /> Nothing broke in the last 2 hours; nothing running.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * "Right now" for All apps, one section per app (2026-11-19). The app holding the worst row leads;
+ * a healthy app starts collapsed. A cause seen in several apps is said once, above them.
+ */
+function AppGroups({
+  overview,
+  status,
+  now,
+  alerts,
+  causes,
+  singles,
+  fixLinks,
+  onOpenApp,
+}: {
+  overview: CiOverview
+  status: CiStatus
+  now: number
+  alerts: readonly CiAlert[]
+  causes: FailureCause[]
+  singles: Array<{ group: FailureGroup; failure: RecentFailure; step: string | null }>
+  fixLinks?: CiFixLinks
+  onOpenApp?: (id: string) => void
+}) {
+  const groups = useMemo(() => buildCiAppGroups({ overview, status, alerts, causes, singles }), [overview, status, alerts, causes, singles])
+  return (
+    <section aria-labelledby="ci-by-app" className={`min-w-0 ${BOARD_SPAN}`} data-testid="ci-by-app">
+      <h3 id="ci-by-app" className={H3}>
+        By app
+        <span className="font-normal text-fg-secondary">worst first</span>
+      </h3>
+      {groups.shared.causes.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 text-2xs font-semibold text-fg-secondary">Across apps</p>
+          <ul className="flex flex-col gap-2" data-testid="ci-causes-shared">
+            {groups.shared.causes.map((c) => (
+              <CauseCard key={c.key} c={c} />
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="flex flex-col">
+        {groups.apps.map((g) => (
+          <AppGroupSection
+            // Re-keyed when its health flips: AppGroupSection reads defaultOpen once, and an app that
+            // turns red on the next poll must open, not stay collapsed.
+            key={`${g.id}:${g.healthy}`}
+            app={{ id: g.id, name: g.name }}
+            counts={g.counts}
+            countLabels={{ cancelled: 'stopped', slow: 'slow', waiting: 'waiting' }}
+            summary={<AppGroupSummary g={g} onOpenApp={onOpenApp} />}
+            defaultOpen={!g.healthy}
+            data-testid={`ci-app-group-${g.id}`}
+          >
+            <AppGroupBody g={g} overview={overview} status={status} now={now} fixLinks={fixLinks} />
+          </AppGroupSection>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+interface CiStatusBoardProps {
+  overview: CiOverview
+  fixLinks?: CiFixLinks
+  /** All apps with two or more apps: "Running now" and "What broke" become one section per app. */
+  groupByApp?: boolean
+  /** The page's ranked cards, filed under their app when grouped. */
+  alerts?: readonly CiAlert[]
+  /** "Open →" on an app's group: switch the page to that app. */
+  onOpenApp?: (id: string) => void
+}
+
+export function CiStatusBoard({ overview, fixLinks, groupByApp = false, alerts = [], onOpenApp }: CiStatusBoardProps) {
   const now = useNow(30_000)
   const status = useMemo(() => buildCiStatus(overview, now), [overview, now])
   const grouped = useMemo(() => groupFailures(overview, now), [overview, now])
@@ -565,7 +717,12 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
           <MissingLabelsLine shared={sharedMissing} />
         </section>
 
+        {groupByApp && (
+          <AppGroups overview={overview} status={status} now={now} alerts={alerts} causes={causes} singles={singles} fixLinks={fixLinks} onOpenApp={onOpenApp} />
+        )}
+
         {/* 2. When will each job finish, and what waits? */}
+        {!groupByApp && (
         <section aria-labelledby="ci-running-now" className="min-w-0">
           <h3 id="ci-running-now" className={H3}>
             Running now
@@ -592,8 +749,10 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
             </ul>
           )}
         </section>
+        )}
 
         {/* 3. What broke, and where? */}
+        {!groupByApp && (
         <section aria-labelledby="ci-broke" className="min-w-0">
           <h3 id="ci-broke" className={H3}>
             What broke in the last 2 hours
@@ -631,6 +790,7 @@ export function CiStatusBoard({ overview, fixLinks }: { overview: CiOverview; fi
             </p>
           )}
         </section>
+        )}
 
         {/* 4. Where does each app's time go this week? */}
         <section aria-labelledby="ci-time" className={BOARD_SPAN}>

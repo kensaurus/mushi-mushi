@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { StatusGlyph } from '../signal/StatusGlyph'
 import { STAGE_LABELS, type PromptVersion } from './types'
 import { stepTest } from './promptLabCounts'
+import { trafficWords } from './VersionStateMark'
 
 export interface StageRow {
   stage: string
@@ -38,7 +39,7 @@ function VersionCell({ p, anyGrades }: { p: PromptVersion; anyGrades: boolean })
   const g = grade(p, anyGrades)
   return (
     <>
-      <span className="font-mono">{p.version}</span>
+      <span className="font-mono text-fg-muted">{p.version}</span>
       {g ? <> · <span className="tabular-nums">{g}</span></> : null}
     </>
   )
@@ -50,8 +51,8 @@ export function stageVerdict(row: StageRow): { text: string; tone: 'ok' | 'warn'
   const a = row.active?.avg_judge_score
   const c = row.candidate.avg_judge_score
   // A test at 0% of traffic is not running: no report reaches it, so no grade ever will.
-  if (!(row.candidate.traffic_percentage > 0)) return { text: 'Not started: 0% of traffic', tone: 'warn' }
-  if (c == null) return { text: `Test at ${row.candidate.traffic_percentage}% of traffic, waiting for grades`, tone: 'muted' }
+  if (!(row.candidate.traffic_percentage > 0)) return { text: 'Not started: gets no reports', tone: 'warn' }
+  if (c == null) return { text: `Testing on ${trafficWords(row.candidate.traffic_percentage)}, waiting for grades`, tone: 'muted' }
   if (a == null) return { text: 'Test has grades, the version in use has none', tone: 'muted' }
   const diff = Math.round((c - a) * 100)
   if (diff > 0) return { text: `Test is ahead by ${diff} points: consider promoting it`, tone: 'ok' }

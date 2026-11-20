@@ -21,6 +21,7 @@ import {
   clearStoredInstanceConfig,
   getStoredInstanceConfig,
   CLOUD_SUPABASE_URL,
+  isAcceptableSelfHostUrl,
   type InstanceMode,
 } from '../../lib/env'
 import { CHIP_TONE } from '../../lib/chipTone'
@@ -45,8 +46,8 @@ export function BackendModePanel() {
   function validate(): boolean {
     let ok = true
     if (draftMode === 'self-hosted') {
-      if (!draftUrl.trim().startsWith('https://')) {
-        setUrlErr('Enter a valid https:// Supabase project URL')
+      if (!isAcceptableSelfHostUrl(draftUrl)) {
+        setUrlErr('Enter your backend URL: https://… or, for Docker Compose on this machine, http://localhost:<port>')
         ok = false
       } else {
         setUrlErr('')

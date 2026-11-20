@@ -3,8 +3,9 @@
  * console journeys 2026-10-27).
  *
  * Each story gets one entry per UTC day, oldest first, today last. Only runs
- * that finished count: skipped, pending and running runs are left out, so a
- * skipped story is never drawn as failing. The list route reads the runs in
+ * that finished count as passed or failed, so a skipped story is never drawn
+ * as failing; skipped runs are counted apart (2026-11-19) and pending and
+ * running runs are left out. The list route reads the runs in
  * pages (PostgREST stops at 1,000 rows) and leaves the strip out (null) when
  * that read fails, instead of drawing empty days.
  */
@@ -73,12 +74,17 @@ describe('buildRunStrips', () => {
     )
     const s1 = strips.get('s1')!
     expect(s1.map((d) => d.day)).toEqual(['2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27'])
-    expect(s1[0]).toEqual({ day: '2026-10-21', passed: 0, failed: 1 })
-    expect(s1[6]).toEqual({ day: '2026-10-27', passed: 1, failed: 1 })
-    // Skipped and running runs are not failures.
-    expect(s1[4]).toEqual({ day: '2026-10-25', passed: 0, failed: 0 })
-    // A story with only skipped runs has no strip entry of its own.
-    expect(strips.has('s2')).toBe(false)
+    expect(s1[0]).toEqual({ day: '2026-10-21', passed: 0, failed: 1, skipped: 0 })
+    expect(s1[6]).toEqual({ day: '2026-10-27', passed: 1, failed: 1, skipped: 0 })
+    // Skipped runs are not failures: they are counted on their own (2026-11-19).
+    expect(s1[3]).toEqual({ day: '2026-10-24', passed: 0, failed: 0, skipped: 1 })
+    // Running runs are left out entirely.
+    expect(s1[5]).toEqual({ day: '2026-10-26', passed: 0, failed: 0, skipped: 0 })
+    // A story with only skipped runs now gets its own strip, so the console can say each day
+    // was skipped instead of drawing seven empty days; it still has no pass or failure.
+    const s2 = strips.get('s2')!
+    expect(s2.reduce((n, d) => n + d.passed + d.failed, 0)).toBe(0)
+    expect(s2[4]).toEqual({ day: '2026-10-25', passed: 0, failed: 0, skipped: 1 })
   })
 })
 

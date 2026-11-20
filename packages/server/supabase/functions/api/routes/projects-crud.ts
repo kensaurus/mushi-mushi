@@ -1022,7 +1022,7 @@ export function registerProjectsCrudRoutes(app: Hono<{ Variables: Variables }>):
       );
 
     // Auto-mint a report:write SDK ingest key so the user gets everything
-    // they need on one screen — no need to navigate to Settings → API Keys.
+    // they need on one screen — no need to navigate to Settings → AI keys.
     // The raw key is returned exactly once and never stored in plain text.
     let autoKey: string | null = null;
     let autoKeyPrefix: string | null = null;

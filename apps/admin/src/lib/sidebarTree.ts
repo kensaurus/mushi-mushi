@@ -19,6 +19,7 @@
 import { LAB_FEATURES } from './labs'
 import {
   CHECK_GROUPS,
+  CHECK_SUB_GROUPS,
   coreNavPathsFor,
   NAV_REGISTRY,
   NAV_SECTION_META,
@@ -35,6 +36,15 @@ import {
 export const NAV_CHILDREN: Readonly<Record<string, readonly string[]>> = {
   '/portfolio': ['/projects'],
   '/checks': CHECK_GROUPS.flatMap((g) => g.paths),
+}
+
+/**
+ * Headed groups for a parent's sub-pages. Checks used to list 13 pages in one
+ * flat run that mixed the user's app, their CI and Mushi Mushi itself
+ * (owner, 2026-11-19); the sidebar now prints each group's title above it.
+ */
+export const NAV_CHILD_GROUPS: Readonly<Record<string, ReadonlyArray<{ id: string; title: string; paths: readonly string[] }>>> = {
+  '/checks': CHECK_GROUPS.map((g) => ({ id: g.id, title: CHECK_SUB_GROUPS[g.id].title, paths: g.paths })),
 }
 
 /** Pages the sidebar footer links to itself, so "More pages" leaves them out. */

@@ -16,6 +16,11 @@
  * Four "Slow to start · 1 job in 20 waits N min" cards were the same sentence four times: every
  * app that waits long now shares ONE "Queue wait" card, drawn as a bar per app. Apps failing
  * often share one card per severity the same way. A different cause keeps its own card.
+ *
+ * 2026-11-19: a job that keeps failing in two or more apps (the same job name, e.g. "Check Mushi
+ * SDK freshness") is ONE card with a bar per app, not a card per app. Every card carries the app's
+ * id when it is about one app (the All apps view files it under that app) and the newest job
+ * behind it (`debugJobId`), so "Why it failed" opens that job's log and explanation in place.
  */
 
 import type { CiJob, CiOverview } from './ciTypes'
@@ -30,8 +35,12 @@ export interface CiAlert {
   severity: CiAlertSeverity
   /** Short words for the severity: "Keeps failing", "Running long". */
   label: string
-  /** The app it is about, when it is one app. */
+  /** The app it is about, when it is one app ("2 apps" on a card merged across apps). */
   app: string | null
+  /** The app's project id when the card is about one app; null for a machine or several apps. */
+  projectId: string | null
+  /** The overview job (`jobs[].id`) "Why it failed" opens: the newest failing job behind the card. */
+  debugJobId: string | null
   title: string
   detail: string
   metric: { value: string; unit: string }
@@ -118,14 +127,30 @@ function appOf(overview: Pick<CiOverview, 'repos'>, repo: string): string {
   return r?.projectName || repoShortName(repo)
 }
 
-/** The newest job matching `pred` that has a log. */
-function newestLog(jobs: CiJob[], pred: (j: CiJob) => boolean): string | null {
+/** The project id of a repo (repos first, then any job of it). */
+function projectOf(overview: Pick<CiOverview, 'repos' | 'jobs'>, repo: string): string | null {
+  return overview.repos.find((x) => x.repo === repo)?.projectId ?? overview.jobs.find((j) => j.repo === repo)?.projectId ?? null
+}
+
+/** The newest job matching `pred`. */
+function newestJob(jobs: CiJob[], pred: (j: CiJob) => boolean): CiJob | null {
   let best: CiJob | null = null
   for (const j of jobs) {
-    if (!j.htmlUrl || !pred(j)) continue
+    if (!pred(j)) continue
     if (!best || Date.parse(j.createdAt) > Date.parse(best.createdAt)) best = j
   }
-  return best?.htmlUrl ?? null
+  return best
+}
+
+/** The newest job matching `pred` that has a log. */
+function newestLog(jobs: CiJob[], pred: (j: CiJob) => boolean): string | null {
+  return newestJob(jobs, (j) => !!j.htmlUrl && pred(j))?.htmlUrl ?? null
+}
+
+/** The one project every job matching `pred` belongs to; null when none or several. */
+function onlyProject(jobs: CiJob[], pred: (j: CiJob) => boolean): string | null {
+  const ids = new Set(jobs.filter(pred).map((j) => j.projectId))
+  return ids.size === 1 ? [...ids][0]! : null
 }
 
 export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number): CiAlert[] {
@@ -139,6 +164,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'critical',
       label: 'Machine down',
       app: null,
+      projectId: null,
+      debugJobId: null,
       title: `${host.hostname} stopped reporting`,
       detail: 'Jobs that need this machine will wait until it is back.',
       metric: mins(silentS),
@@ -150,19 +177,58 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
     })
   }
 
-  // A job type that fails at least half of its runs, twice or more.
+  // A job type that fails at least half of its runs, twice or more. The same job failing in two or
+  // more apps is one card with a bar per app (2026-11-19: "Check Mushi SDK freshness" on three cards).
   const keepsFailing = (overview.stats.byJob ?? []).filter((t) => t.codeFailures >= 2 && (t.failRate ?? 0) >= KEEPS_FAILING_RATE)
+  const nameOf = (t: { job: string }) => t.job.trim().toLowerCase()
+  const byName = new Map<string, typeof keepsFailing>()
+  for (const t of keepsFailing) byName.set(nameOf(t), [...(byName.get(nameOf(t)) ?? []), t])
+  const mergedNames = new Set([...byName].filter(([, types]) => new Set(types.map((t) => t.repo)).size >= 2).map(([name]) => name))
+  for (const name of mergedNames) {
+    const types = byName.get(name)!
+    const failingJob = (j: CiJob) => types.some((t) => j.repo === t.repo && j.jobName === t.job) && jobOutcome(j) === 'code_failure'
+    const worst = [...types].sort((x, y) => (y.failRate ?? 0) - (x.failRate ?? 0))[0]!
+    const apps = new Set(types.map((t) => t.repo)).size
+    const fails = types.reduce((n, t) => n + t.codeFailures, 0)
+    const runs = types.reduce((n, t) => n + t.runs, 0)
+    out.push({
+      id: `fails-many:${name}`,
+      severity: 'critical',
+      label: 'Keeps failing',
+      app: `${apps} apps`,
+      projectId: null,
+      debugJobId: newestJob(overview.jobs, failingJob)?.id ?? null,
+      title: `${worst.job} keeps failing`,
+      detail: `${fails} of ${runs} runs failed across ${apps} apps.`,
+      metric: { value: String(Math.round((worst.failRate ?? 0) * 100)), unit: '% fail' },
+      keys: [...types.map((t) => ciJobKey(t.repo, t.job)), ...new Set(types.map((t) => ciRepoKey(t.repo)))],
+      href: newestLog(overview.jobs, failingJob),
+      jump: '#ci-job-times',
+      bars: types.map((t) => ({
+        key: ciRepoKey(t.repo),
+        label: appOf(overview, t.repo),
+        value: t.failRate ?? 0,
+        display: `${Math.round((t.failRate ?? 0) * 100)}%`,
+        severity: 'critical' as const,
+      })),
+      score: 2 + Math.min(1, types.reduce((m, t) => Math.max(m, t.codeFailures * (t.failRate ?? 0)), 0) / 10),
+    })
+  }
   for (const t of keepsFailing) {
+    if (mergedNames.has(nameOf(t))) continue
+    const failingJob = (j: CiJob) => j.repo === t.repo && j.jobName === t.job && jobOutcome(j) === 'code_failure'
     out.push({
       id: `fails:${t.repo}|${t.workflow}|${t.job}`,
       severity: 'critical',
       label: 'Keeps failing',
       app: appOf(overview, t.repo),
+      projectId: projectOf(overview, t.repo),
+      debugJobId: newestJob(overview.jobs, failingJob)?.id ?? null,
       title: `${t.job} keeps failing`,
       detail: `${t.codeFailures} of its last ${t.runs} runs failed${t.workflow ? ` · ${t.workflow}` : ''}.`,
       metric: { value: String(Math.round((t.failRate ?? 0) * 100)), unit: '% fail' },
       keys: [ciJobKey(t.repo, t.job), ciRepoKey(t.repo)],
-      href: newestLog(overview.jobs, (j) => j.repo === t.repo && j.jobName === t.job && jobOutcome(j) === 'code_failure'),
+      href: newestLog(overview.jobs, failingJob),
       jump: '#ci-job-times',
       rate: t.failRate ?? 0,
       score: 2 + Math.min(1, (t.codeFailures * (t.failRate ?? 0)) / 10),
@@ -184,6 +250,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity,
       label: 'Failing often',
       app: one ? appOf(overview, worst.r.repo) : null,
+      projectId: one ? worst.r.projectId : null,
+      debugJobId: one ? (newestJob(overview.jobs, (j) => j.repo === worst.r.repo && jobOutcome(j) === 'code_failure')?.id ?? null) : null,
       title: one ? `Pass rate ${Math.round(worst.passRate * 100)}%` : `${group.length} apps fail ${severity === 'critical' ? 'over 30%' : 'over 20%'} of checks`,
       detail: one
         ? `${Math.round((1 - worst.passRate) * 100)}% of its finished jobs fail · ${worst.r.jobs7d} jobs in ${overview.window.days} days.`
@@ -214,6 +282,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'serious',
       label: 'Running long',
       app: r.app,
+      projectId: r.job.projectId,
+      debugJobId: r.job.id,
       title: `${r.job.jobName} is running long`,
       detail: `${minWords(r.elapsedS ?? 0)} so far, usually ${minWords(r.usualS ?? 0)}${r.machine ? ` · ${r.machine.name}` : ''}.`,
       metric: { value: `+${mins(Math.max(0, over)).value}`, unit: mins(Math.max(0, over)).unit },
@@ -233,6 +303,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'serious',
       label: 'Waiting',
       app: waitingRepos.length === 1 ? appOf(overview, waitingRepos[0]!) : null,
+      projectId: waitingRepos.length === 1 ? projectOf(overview, waitingRepos[0]!) : null,
+      debugJobId: null,
       title: `${status.waiting} job${status.waiting === 1 ? '' : 's'} waiting for a machine`,
       detail: status.waitWhy ?? `The oldest has waited ${minWords(status.oldestWaitS)}.`,
       metric: mins(status.oldestWaitS),
@@ -253,6 +325,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'serious',
       label: 'Machine stopped',
       app: null,
+      projectId: onlyProject(overview.jobs, (j) => jobOutcome(j) === 'infra'),
+      debugJobId: newestJob(overview.jobs, (j) => jobOutcome(j) === 'infra')?.id ?? null,
       // The window, named: the newest jobs read (the list under Machines), not the week's count the summary gives.
       title: `${overview.stats.infraFailures} of the newest ${overview.stats.jobs.toLocaleString('en-US')} jobs never finished`,
       detail: 'Not code failures: the test machine stopped. Re-run them.',
@@ -279,6 +353,8 @@ export function rankCiAlerts(overview: CiOverview, status: CiStatus, now: number
       severity: 'serious',
       label: 'Queue wait',
       app: slowStart.length === 1 ? appOf(overview, slowStart[0]!.repo) : null,
+      projectId: slowStart.length === 1 ? slowStart[0]!.projectId : null,
+      debugJobId: null,
       title: slowStart.length === 1 ? `1 job in 20 waits ${minWords(worstS)}` : `${slowStart.length} apps wait for a machine`,
       detail: 'Too few machines take their jobs at busy times (1 job in 20 waits this long).',
       metric: mins(worstS),

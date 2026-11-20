@@ -4,15 +4,22 @@
  * FILE: packages/cli/src/commands/selfhost.ts
  * PURPOSE: `mushi selfhost up` / `mushi selfhost doctor` / `mushi selfhost secrets`
  *
- * `mushi selfhost up` wraps the Supabase CLI steps from docs/SELF_HOSTED.md into
- * one command, run from a clone of the mushi-mushi repo:
+ * `mushi selfhost up` wraps the Supabase CLI steps of the self-hosting docs
+ * (apps/docs/content/self-hosting) into one command, run from a clone of the
+ * mushi-mushi repo:
  *   1. supabase link --project-ref <ref>   (when --project-ref is given)
  *   2. supabase db push                    (all migrations)
- *   3. supabase secrets set --env-file     (MUSHI_INTERNAL_CALLER_SECRET, LLM keys, ADMIN_BASE_URL)
+ *   3. supabase secrets set --env-file     (MUSHI_INTERNAL_CALLER_SECRET, MUSHI_INSTANCE_MODE,
+ *                                           LLM keys, ADMIN_BASE_URL + MUSHI_ADMIN_ORIGIN_ALLOWLIST)
  *   4. supabase db query --file            (mushi_runtime_config: supabase_url,
  *                                           service_role_key, internal_caller_token;
  *                                           and the private `screenshots` bucket)
- *   5. supabase functions deploy           (every function; config.toml decides verify_jwt)
+ *   5. supabase functions deploy           (every function; config.toml decides verify_jwt).
+ *                                           _shared/deploy-info.ts is stamped with the
+ *                                           commit first and restored after, with the
+ *                                           clone's own scripts/deploy-edge-function.mjs
+ *                                           (deployInfoSource), so GET /health reports
+ *                                           the deployed commit instead of "dev"
  *   6. save endpoint + consoleUrl to the CLI config
  *   7. proof step: GET <endpoint>/health
  *
@@ -32,8 +39,10 @@
  * random Postgres password, JWT secret, internal caller secret, and anon /
  * service_role JWTs minted from the JWT secret.
  *
- * `mushi selfhost doctor` calls GET /v1/admin/doctor and prints results in the
- * same OK/WARN/FAIL format as `mushi doctor`.
+ * `mushi selfhost doctor` calls GET /v1/admin/doctor, adds what only the CLI
+ * can see (the console answers at its address; /health reports a stamped,
+ * self-hosted deploy) and prints OK/INFO/WARN/FAIL lines. INFO is an optional
+ * thing not set up and never changes the exit code.
  */
 
 import type { Command } from 'commander'
@@ -42,6 +51,7 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { probeEndpointHealth } from '../cli-shared.js'
 import { CONFIG_PATH, loadConfig, saveConfig } from '../config.js'
 import { assertEndpoint } from '../endpoint.js'
@@ -83,6 +93,8 @@ export interface SelfhostStep {
   critical?: boolean
   /** Files the step reads: written with mode 0600 before it runs, deleted after. */
   files?: Array<{ path: string; content: string }>
+  /** Stamp _shared/deploy-info.ts with the commit while this step runs (the function deploy). */
+  stampDeployInfo?: boolean
 }
 
 /** @internal Exported for tests only. The copy-pasteable command line `--print-commands` shows for a step. */
@@ -204,6 +216,9 @@ export const SELFHOST_PLAN_SQL = [
 /** The Mushi Mushi Cloud project: `selfhost up` must never run against it. */
 const CLOUD_PROJECT_REF = 'dxptnwrhwsqckaftyymj'
 
+/** The self-hosting docs; CLI hints link here. */
+const SELF_HOST_DOCS = 'https://kensaur.us/mushi-mushi/docs/self-hosting'
+
 /** @internal Exported for tests only. Inputs of {@link buildSelfhostSteps}, already resolved. */
 export interface SelfhostPlanInput {
   projectRef?: string
@@ -278,10 +293,18 @@ export function buildSelfhostSteps(
 
   // Function secrets. Print mode never shows a real value.
   const token = printOnly ? '<YOUR_INTERNAL_CALLER_SECRET>' : internalToken
-  const secretLines = [`MUSHI_INTERNAL_CALLER_SECRET=${token}`]
+  // MUSHI_INSTANCE_MODE: the server says "self-hosted" on /health even behind a
+  // custom domain (_shared/instance-mode.ts), so the console and doctor agree.
+  const secretLines = [`MUSHI_INTERNAL_CALLER_SECRET=${token}`, 'MUSHI_INSTANCE_MODE=self-hosted']
   if (input.anthropicKey) secretLines.push(`ANTHROPIC_API_KEY=${printOnly ? 'sk-ant-...' : input.anthropicKey}`)
   if (input.openaiKey) secretLines.push(`OPENAI_API_KEY=${printOnly ? 'sk-...' : input.openaiKey}`)
-  if (input.consoleUrl) secretLines.push(`ADMIN_BASE_URL=${input.consoleUrl}`)
+  if (input.consoleUrl) {
+    // ADMIN_BASE_URL: links and the CLI sign-in page open your console.
+    // MUSHI_ADMIN_ORIGIN_ALLOWLIST: the api answers the console's browser
+    // calls (CORS); the server's defaults cover only kensaur.us and localhost dev ports.
+    secretLines.push(`ADMIN_BASE_URL=${input.consoleUrl}`)
+    secretLines.push(`MUSHI_ADMIN_ORIGIN_ALLOWLIST=${new URL(input.consoleUrl).origin}`)
+  }
   const secretsFile = join(tmpDir, 'mushi-secrets.env')
   steps.push({
     label: `set function secrets (${secretLines.map((l) => l.split('=')[0]).join(', ')})`,
@@ -302,7 +325,7 @@ export function buildSelfhostSteps(
     // No names: the CLI deploys every directory under supabase/functions
     // (`_shared` has no entrypoint and is skipped) and reads each function's
     // verify_jwt from config.toml, the same as the production deploy.
-    steps.push({ label: 'deploy every edge function', args: ['functions', 'deploy'] })
+    steps.push({ label: 'deploy every edge function', args: ['functions', 'deploy'], stampDeployInfo: true })
   }
 
   return { ok: true, steps }
@@ -321,6 +344,90 @@ export function selfhostConfigPatch(
 ): { endpoint: string; consoleUrl?: string } | null {
   if (existing.apiKey && existing.endpoint !== endpoint) return null
   return consoleUrl ? { endpoint, consoleUrl } : { endpoint }
+}
+
+// ─── deploy stamp ────────────────────────────────────────────────────────────
+
+/** The file every function bundles; GET /health reads its `sha` (relative to the repo root). @internal Exported for tests. */
+export const DEPLOY_INFO_PATH = join('packages', 'server', 'supabase', 'functions', '_shared', 'deploy-info.ts')
+
+/** @internal Exported for tests only. What scripts/deploy-edge-function.mjs exports for stamping. */
+export interface DeployStamper {
+  deployInfoSource(sha: string, deployedAt: string): string
+  resolveDeploySha(cwd?: string): string
+}
+
+/**
+ * @internal Exported for tests only.
+ * The stamping helpers of the clone being deployed: the stamp's format lives
+ * next to the file it overwrites, so it is never copied into the CLI. Null
+ * for an older clone without them (the deploy then reports "dev").
+ */
+export async function loadDeployStamper(root: string): Promise<DeployStamper | null> {
+  const script = join(root, 'scripts', 'deploy-edge-function.mjs')
+  if (!existsSync(script)) return null
+  try {
+    const mod = (await import(pathToFileURL(script).href)) as Partial<DeployStamper>
+    return typeof mod.deployInfoSource === 'function' && typeof mod.resolveDeploySha === 'function'
+      ? (mod as DeployStamper)
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * @internal Exported for tests only.
+ * Writes the stamped deploy-info.ts and returns how to put the checked-in
+ * file back (idempotent). Null when the file is missing.
+ */
+export function stampDeployInfo(
+  root: string,
+  stamper: DeployStamper,
+  now: Date = new Date(),
+): { sha: string; restore: () => void } | null {
+  const file = join(root, DEPLOY_INFO_PATH)
+  let original: string
+  try {
+    original = readFileSync(file, 'utf8')
+  } catch {
+    return null
+  }
+  const sha = stamper.resolveDeploySha(root)
+  writeFileSync(file, stamper.deployInfoSource(sha, now.toISOString()))
+  let restored = false
+  return {
+    sha,
+    restore: () => {
+      if (restored) return
+      restored = true
+      writeFileSync(file, original)
+    },
+  }
+}
+
+/** Runs one step with deploy-info.ts stamped, and always restores it (also on Ctrl-C). */
+function runStamped(
+  step: SelfhostStep,
+  root: string,
+  stamper: DeployStamper | null,
+  run: () => { ok: boolean; stderr: string },
+): { ok: boolean; stderr: string } {
+  const stamp = step.stampDeployInfo && stamper ? stampDeployInfo(root, stamper) : null
+  if (!stamp) return run()
+  const onSignal = () => {
+    stamp.restore()
+    process.exit(130)
+  }
+  process.once('SIGINT', onSignal)
+  process.once('exit', stamp.restore)
+  try {
+    return run()
+  } finally {
+    stamp.restore()
+    process.removeListener('SIGINT', onSignal)
+    process.removeListener('exit', stamp.restore)
+  }
 }
 
 // ─── selfhost up ─────────────────────────────────────────────────────────────
@@ -381,7 +488,7 @@ function printNoLlmNote(): void {
   console.log('  and get a rule-based category and severity. Without a key there is no')
   console.log('  plain-English diagnosis, no fix drafts and no duplicate detection.')
   console.log('  Add one later: supabase secrets set ANTHROPIC_API_KEY=… (or OPENAI_API_KEY=…),')
-  console.log('  or per project in the console under Settings → API Keys.')
+  console.log('  or per app in the console under Settings → AI keys.')
 }
 
 async function runSelfhostUp(opts: UpOptions): Promise<void> {
@@ -480,6 +587,11 @@ async function runSelfhostUp(opts: UpOptions): Promise<void> {
         console.log('# LLM key (optional): add ANTHROPIC_API_KEY=… or OPENAI_API_KEY=… to mushi-secrets.env')
         console.log('')
       }
+      if (!opts.skipDeploy) {
+        console.log('# A plain `supabase functions deploy` leaves _shared/deploy-info.ts unstamped, so')
+        console.log('# /health reports version "dev". `mushi selfhost up` stamps the commit for you.')
+        console.log('')
+      }
       console.log('─────────────────────────────────────────────────')
       console.log('Then point the CLI at it and check it:')
       console.log(`  mushi config endpoint ${endpoint}`)
@@ -509,9 +621,13 @@ async function runSelfhostUp(opts: UpOptions): Promise<void> {
     console.log('')
 
     const secrets = [internalToken, llm.anthropicKey ?? '', llm.openaiKey ?? '']
+    const stamper = built.steps.some((s) => s.stampDeployInfo) ? await loadDeployStamper(root) : null
+    if (!stamper && !opts.skipDeploy) {
+      console.log('  This clone cannot stamp the deploy (no scripts/deploy-edge-function.mjs helpers): /health will report "dev".')
+    }
     let failed = false
     for (const step of built.steps) {
-      const result = runSupabase(step, { cwd: serverDir, secrets })
+      const result = runStamped(step, root, stamper, () => runSupabase(step, { cwd: serverDir, secrets }))
       if (result.ok) continue
       process.stderr.write(`    ${result.stderr.split('\n').slice(0, 3).join('\n    ')}\n`)
       if (step.critical) {
@@ -541,6 +657,8 @@ async function runSelfhostUp(opts: UpOptions): Promise<void> {
     } else {
       console.log(`  OK    /health ${probe.status} ${probe.latencyMs}ms`)
     }
+    const health = await serverHealthCheck(endpoint, fetch)
+    for (const line of formatSelfhostCheck(health)) console.log(`  ${line}`)
 
     console.log('')
     if (failed) {
@@ -551,7 +669,7 @@ async function runSelfhostUp(opts: UpOptions): Promise<void> {
     console.log('')
     console.log('Next steps:')
     if (!consoleUrl) {
-      console.log('  0. Serve the admin console (docs/SELF_HOSTED.md, step 4), then:')
+      console.log(`  0. Serve the admin console (${SELF_HOST_DOCS}/admin-spa), then:`)
       console.log('       mushi config consoleUrl <console url>')
       console.log('     Without it, `mushi login` opens the Mushi Mushi Cloud console.')
     }
@@ -644,38 +762,165 @@ function runSelfhostSecrets(opts: { out: string; force?: boolean; publicUrl?: st
 
 // ─── selfhost doctor ─────────────────────────────────────────────────────────
 
+
 interface DoctorOptions {
   endpoint?: string
+  consoleUrl?: string
   json?: boolean
+}
+
+/** @internal Exported for tests only. One line of `mushi selfhost doctor`. */
+export interface SelfhostCheck {
+  name: string
+  status: 'pass' | 'info' | 'warn' | 'fail'
+  label?: string
+  summary: string
+  hint?: string
+  appName?: string | null
+}
+
+/** @internal Exported for tests only. 1 any failure, 2 warnings only, 0 otherwise (info never counts). */
+export function selfhostDoctorExitCode(checks: ReadonlyArray<Pick<SelfhostCheck, 'status'>>): 0 | 1 | 2 {
+  if (checks.some((c) => c.status === 'fail')) return 1
+  if (checks.some((c) => c.status === 'warn')) return 2
+  return 0
+}
+
+/** @internal Exported for tests only. True for Mushi Mushi Cloud's own API. */
+export function isCloudEndpoint(endpoint: string): boolean {
+  return endpoint.includes(CLOUD_PROJECT_REF) || /^https:\/\/kensaur\.us\//.test(endpoint)
+}
+
+const HOSTED_CONSOLE = 'https://kensaur.us/mushi-mushi/admin'
+
+/**
+ * @internal Exported for tests only.
+ * Does the console answer where the CLI will send `mushi login`? No saved
+ * address, or Mushi Mushi Cloud's console for a self-hosted API, means the
+ * sign-in happens on the wrong instance.
+ */
+export async function consoleCheck(
+  consoleUrl: string | undefined,
+  endpoint: string,
+  doFetch: typeof fetch,
+): Promise<SelfhostCheck | null> {
+  if (isCloudEndpoint(endpoint)) return null
+  const base = { name: 'console_reachable', label: 'Console answers' }
+  const url = consoleUrl?.trim().replace(/\/+$/, '')
+  if (!url) {
+    return {
+      ...base,
+      status: 'info',
+      summary: 'No console address saved, so `mushi login` opens Mushi Mushi Cloud.',
+      hint: 'mushi config consoleUrl <your console url>',
+    }
+  }
+  if (url.startsWith(HOSTED_CONSOLE)) {
+    return {
+      ...base,
+      status: 'warn',
+      summary: 'The saved console is Mushi Mushi Cloud\u2019s, but the API is yours: `mushi login` would sign you in on Cloud.',
+      hint: 'mushi config consoleUrl <your console url>',
+    }
+  }
+  try {
+    const res = await doFetch(url, { signal: AbortSignal.timeout(8_000), redirect: 'follow' })
+    const type = res.headers.get('content-type') ?? ''
+    if (res.ok && type.includes('text/html')) return { ...base, status: 'pass', summary: `${url} answers (HTTP ${res.status}).` }
+    return {
+      ...base,
+      status: 'warn',
+      summary: `${url} returned HTTP ${res.status}${type ? ` (${type.split(';')[0]})` : ''}, not the console page.`,
+      hint: `Serve apps/admin/dist there with an index.html fallback (${SELF_HOST_DOCS}/admin-spa).`,
+    }
+  } catch (err) {
+    return {
+      ...base,
+      status: 'warn',
+      summary: `${url} did not answer: ${err instanceof Error ? err.message : String(err)}.`,
+      hint: `Check the console is served at that address (${SELF_HOST_DOCS}/admin-spa).`,
+    }
+  }
+}
+
+/**
+ * @internal Exported for tests only.
+ * GET /health: the deploy is stamped with a commit and says it is self-hosted.
+ */
+export async function serverHealthCheck(endpoint: string, doFetch: typeof fetch): Promise<SelfhostCheck> {
+  const base = { name: 'server_deploy', label: 'Server deploy' }
+  try {
+    const res = await doFetch(`${endpoint.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(8_000) })
+    if (!res.ok) {
+      return { ...base, status: 'fail', summary: `/health returned HTTP ${res.status}.`, hint: 'Check the `api` function deployed and its logs.' }
+    }
+    const body = (await res.json().catch(() => ({}))) as { version?: unknown; mode?: unknown }
+    const version = typeof body.version === 'string' ? body.version : null
+    if (body.mode === 'hosted' && !isCloudEndpoint(endpoint)) {
+      return {
+        ...base,
+        status: 'warn',
+        summary: 'The server says it is Mushi Mushi Cloud, so the console labels this instance wrongly.',
+        hint: 'supabase secrets set MUSHI_INSTANCE_MODE=self-hosted (selfhost up sets it).',
+      }
+    }
+    if (!version || version === 'dev' || version === 'unknown') {
+      return {
+        ...base,
+        status: 'info',
+        summary: 'The deploy is not stamped with a commit (/health says "dev"), so you cannot tell which code runs.',
+        hint: 'Supabase: re-run `npx mushi-mushi selfhost up`; it stamps the commit. Compose builds are unstamped; compare the image with `git log -1`.',
+      }
+    }
+    return { ...base, status: 'pass', summary: `Running commit ${version.slice(0, 7)}.` }
+  } catch (err) {
+    return {
+      ...base,
+      status: 'fail',
+      summary: `/health did not answer: ${err instanceof Error ? err.message : String(err)}.`,
+      hint: `Check that ${endpoint} is deployed and reachable.`,
+    }
+  }
+}
+
+const TAG: Record<SelfhostCheck['status'], string> = { pass: 'OK  ', info: 'INFO', warn: 'WARN', fail: 'FAIL' }
+
+/** @internal Exported for tests only. A check as printed lines: label first, the raw id never leads. */
+export function formatSelfhostCheck(check: SelfhostCheck): string[] {
+  const title = `${check.label ?? check.name}${check.appName ? ` (${check.appName})` : ''}`
+  const lines = [`${TAG[check.status]}  ${title}: ${check.summary}`]
+  if (check.hint && check.status !== 'pass') lines.push(`      \u2192 ${check.hint}`)
+  return lines
 }
 
 async function runSelfhostDoctor(opts: DoctorOptions): Promise<void> {
   const config = loadConfig()
-  const endpoint = opts.endpoint || config.endpoint
+  const endpoint = (opts.endpoint || config.endpoint)?.replace(/\/+$/, '')
   if (!endpoint) {
-    process.stderr.write(
-      'error: endpoint required — pass --endpoint or run `mushi login` first.\n',
-    )
+    process.stderr.write('error: endpoint required — pass --endpoint or run `mushi login` first.\n')
     process.exit(1)
   }
 
-  // Fetch server-side doctor
-  let serverChecks: Array<{ name: string; status: 'pass' | 'warn' | 'fail'; summary: string; hint?: string }> = []
+  let serverChecks: SelfhostCheck[] = []
   try {
     const res = await fetch(`${endpoint}/v1/admin/doctor`, {
       headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {},
       signal: AbortSignal.timeout(15_000),
     })
     if (res.ok) {
-      const body = (await res.json()) as { data?: { checks?: typeof serverChecks } }
+      const body = (await res.json()) as { data?: { checks?: SelfhostCheck[] } }
       serverChecks = body.data?.checks ?? []
     } else {
       serverChecks = [
         {
           name: 'server_doctor',
+          label: 'Server doctor',
           status: 'fail',
           summary: `/v1/admin/doctor returned HTTP ${res.status}`,
-          hint: '401 → check API key scope (needs mcp:read or admin); 403 → key not owner of this project',
+          hint:
+            res.status === 401 || res.status === 403
+              ? `Sign the CLI in to this server: mushi login --endpoint ${endpoint} (the key needs mcp:read).`
+              : 'Check the `api` function logs.',
         },
       ]
     }
@@ -683,6 +928,7 @@ async function runSelfhostDoctor(opts: DoctorOptions): Promise<void> {
     serverChecks = [
       {
         name: 'server_doctor',
+        label: 'Server doctor',
         status: 'fail',
         summary: `unreachable: ${err instanceof Error ? err.message : String(err)}`,
         hint: `Check that ${endpoint} is deployed and reachable.`,
@@ -690,28 +936,23 @@ async function runSelfhostDoctor(opts: DoctorOptions): Promise<void> {
     ]
   }
 
+  const [health, consoleLine] = await Promise.all([
+    serverHealthCheck(endpoint, fetch),
+    consoleCheck(opts.consoleUrl || config.consoleUrl, endpoint, fetch),
+  ])
+  const checks = [health, ...(consoleLine ? [consoleLine] : []), ...serverChecks]
+  const code = selfhostDoctorExitCode(checks)
+
   if (opts.json) {
-    const overallStatus = serverChecks.some((c) => c.status === 'fail')
-      ? 'fail'
-      : serverChecks.some((c) => c.status === 'warn')
-        ? 'warn'
-        : 'pass'
-    console.log(JSON.stringify({ status: overallStatus, checks: serverChecks }, null, 2))
+    console.log(JSON.stringify({ status: code === 1 ? 'fail' : code === 2 ? 'warn' : 'pass', checks }, null, 2))
   } else {
-    for (const check of serverChecks) {
-      const tag =
-        check.status === 'pass' ? 'OK  ' : check.status === 'warn' ? 'WARN' : 'FAIL'
-      console.log(`${tag}  ${check.name}  ${check.summary}`)
-      if (check.hint && check.status !== 'pass') {
-        console.log(`      → Fix: ${check.hint}`)
-      }
+    // Problems first; OK lines last.
+    const rank = { fail: 0, warn: 1, info: 2, pass: 3 } as const
+    for (const check of [...checks].sort((a, b) => rank[a.status] - rank[b.status])) {
+      for (const line of formatSelfhostCheck(check)) console.log(line)
     }
   }
-
-  const hasFailure = serverChecks.some((c) => c.status === 'fail')
-  const hasWarn = serverChecks.some((c) => c.status === 'warn')
-  if (hasFailure) process.exit(1)
-  if (hasWarn) process.exit(2)
+  if (code !== 0) process.exit(code)
 }
 
 // ─── registration ─────────────────────────────────────────────────────────────
@@ -783,18 +1024,19 @@ Examples:
       '--endpoint <url>',
       `Mushi API endpoint (default: from ${CONFIG_PATH})`,
     )
+    .option('--console-url <url>', 'Console address to check (default: consoleUrl from the CLI config)')
     .option('--json', 'Machine-readable JSON output')
     .addHelpText(
       'after',
       `
-Exit codes: 0 all pass · 2 warnings only · 1 any hard failure
+Exit codes: 0 healthy (INFO lines are optional extras) · 2 warnings only · 1 any hard failure
 
 Examples:
   mushi selfhost doctor
   mushi selfhost doctor --endpoint https://<ref>.supabase.co/functions/v1/api
   mushi selfhost doctor --json | jq '.checks[] | select(.status != "pass")'`,
     )
-    .action(async (opts: { endpoint?: string; json?: boolean }) => {
+    .action(async (opts: DoctorOptions) => {
       await runSelfhostDoctor(opts)
     })
 }

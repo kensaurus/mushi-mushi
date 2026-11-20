@@ -7,6 +7,8 @@
  *            Where your data lives  Mushi Cloud or your own Supabase
  *            Install the widget     per-framework install snippet
  *            API address            the URL your SDK sends reports to
+ *          Above them, on a self-hosted server only, the Self-host setup
+ *          checklist (SelfHostSetupChecklist).
  */
 
 import { useState } from 'react'
@@ -19,6 +21,7 @@ import { usePersistentState } from '../../lib/usePersistentState'
 import { ConnectionStatus as BackendDiagnostics } from '../ConnectionStatus'
 import { BackendModePanel, currentBackendLabel } from './BackendModePanel'
 import { SettingsList, SettingsRow, type RowStatusValue } from './SettingsRow'
+import { SelfHostSetupChecklist } from './SelfHostSetupChecklist'
 
 interface HealthPanelProps {
   projectId: string
@@ -39,6 +42,7 @@ export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
 
   return (
     <>
+      <SelfHostSetupChecklist />
       <SettingsList
         title="Check the connection"
         description={`Check that bug reports from ${project.name} reach Mushi Mushi and come out the other end.`}

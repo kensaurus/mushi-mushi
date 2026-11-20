@@ -29,6 +29,7 @@ import {
   ACTIVE_PROJECT_QUERY_PARAM,
   getActiveProjectIdSnapshot,
   isValidProjectId,
+  pickActiveProject,
   useActiveProjectSignal,
 } from './activeProject'
 
@@ -226,6 +227,18 @@ export function useSetProjectScopeMode(): (mode: ProjectScopeMode) => void {
     },
     [setSearchParams],
   )
+}
+
+/**
+ * A person chose one app from a combined view (AppGroupSection's "Open →"): leave All apps
+ * and pin that app, as picking it in the header switcher does. All-apps mode lives in
+ * storage, so a plain link to `?project=<id>` would land on the combined page again.
+ * Pair it with a link whose URL carries `?project=<id>` and no `?apps=all`.
+ */
+export function openAppOnly(projectId: string): void {
+  if (!isValidProjectId(projectId)) return
+  setStoredProjectScopeMode('project')
+  pickActiveProject(projectId)
 }
 
 /** A copy of `params` with `?apps=` set for `mode` (removed for one app). */

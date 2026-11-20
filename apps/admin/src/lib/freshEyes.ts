@@ -48,7 +48,7 @@ interface FreshEyesFindingSummary {
   sessions: number[]
 }
 
-export type FreshEyesRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'stopped'
+type FreshEyesRunStatus = 'queued' | 'running' | 'done' | 'failed' | 'stopped'
 
 export interface FreshEyesRunListItem {
   local_run_id: string
@@ -142,14 +142,6 @@ export function ttfvTrend(points: readonly FreshEyesTrendPoint[]): number[] {
   return points.filter((p) => p.metric_name === 'fresh_eyes.ttfv_seconds').map((p) => p.value)
 }
 
-export const RUN_STATUS_META: Record<FreshEyesRunStatus, { label: string; tone: 'infoSubtle' | 'okSubtle' | 'dangerSubtle' | 'warnSubtle' | 'neutral' }> = {
-  queued: { label: 'Waiting', tone: 'warnSubtle' },
-  running: { label: 'Running', tone: 'infoSubtle' },
-  done: { label: 'Done', tone: 'okSubtle' },
-  failed: { label: 'Failed', tone: 'dangerSubtle' },
-  stopped: { label: 'Stopped', tone: 'neutral' },
-}
-
 /**
  * What the Run now card says about the user's computers: a plain sentence,
  * whether Run now can work, and the one thing to do when it cannot.
@@ -197,6 +189,72 @@ export function runnerMark(r: FreshEyesRunner | null | undefined): { status: 'pa
   }
 }
 
+/**
+ * The one fix for a computer that cannot run the test, copied in one click from the status
+ * block at the top (2026-11-19: "alienwarex16 offline" blocked Run now with no command to
+ * copy). Null when the computer can run it, or when the fix is a switch in Workers (paused).
+ */
+export function runnerFix(r: FreshEyesRunner | null | undefined): { command: string; label: string; after: string | null } | null {
+  if (r == null) return null
+  const host = r.hostname ?? 'your computer'
+  switch (r.state) {
+    case 'offline':
+      return { command: 'mushi work --daemon', label: 'Copy the start command', after: `Run it on ${host}.` }
+    case 'none':
+      return { command: 'mushi worker install', label: 'Copy the install command', after: 'Run it once on the computer that should run the test.' }
+    case 'outdated':
+      return { command: 'npm i -g @mushi-mushi/cli@latest', label: 'Copy the update command', after: `Run it on ${host}, then restart the worker (mushi work --daemon).` }
+    default:
+      return null
+  }
+}
+
+/** A test in the history as one state mark: reached ✓, stalled ✕, running ●, waiting ◷, stopped ⊘. */
+export function runMark(r: Pick<FreshEyesRunListItem, 'status' | 'reached' | 'dry_run' | 'stalled_at'>): 'passed' | 'failed' | 'running' | 'waiting' | 'cancelled' | 'idle' {
+  switch (r.status) {
+    case 'queued':
+      return 'waiting'
+    case 'running':
+      return 'running'
+    case 'failed':
+      return 'failed'
+    case 'stopped':
+      return 'cancelled'
+    case 'done':
+      if ((r.reached ?? 0) > 0) return 'passed'
+      // A look-around test stops at the sign-up page by design: no verdict, not a failure.
+      if (r.dry_run && (!r.stalled_at || r.stalled_at.reason === 'signup_wall')) return 'idle'
+      return 'failed'
+  }
+}
+
+/**
+ * The page's lead sentence: the computer first (nothing runs without it, and its own words
+ * say what to do), then how the last finished test went. The numbers sit in the metrics.
+ */
+export function freshEyesStatus(
+  runner: FreshEyesRunner | null | undefined,
+  latest: Pick<FreshEyesRunListItem, 'reached' | 'counts' | 'stalled_at'> | null,
+  now: number = Date.now(),
+): { tone: 'ok' | 'warn' | 'danger' | 'info' | 'neutral'; sentence: string } {
+  const machine = runnerMessage(runner, now)
+  if (!machine.canRun) return { tone: machine.tone === 'warn' ? 'warn' : 'info', sentence: machine.text.replace(/:$/, '.') }
+  if (!latest) return { tone: 'neutral', sentence: 'No finished test yet. Run one to see where a new visitor gets stuck.' }
+  const sessions = latest.counts?.sessions ?? 0
+  const reached = latest.reached ?? 0
+  if (reached === 0) {
+    return {
+      tone: 'danger',
+      sentence: latest.stalled_at
+        ? `No visitor reached the goal in the last test: stuck at ${latest.stalled_at.screen} (${STALL_LABEL[latest.stalled_at.reason].toLowerCase()}).`
+        : 'No visitor reached the goal in the last test.',
+    }
+  }
+  return reached < sessions
+    ? { tone: 'warn', sentence: `${reached} of ${sessions} visitors reached the goal in the last test.` }
+    : { tone: 'ok', sentence: 'Every visitor reached the goal in the last test.' }
+}
+
 function agoText(iso: string, now: number): string {
   const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000))
   if (!Number.isFinite(min)) return 'a while ago'
@@ -211,10 +269,10 @@ function agoText(iso: string, now: number): string {
  * without one, fixing the fields would not help.
  */
 export function runNowBlocker(input: { runnerCanRun: boolean; runnerSetup: 'install' | 'workers' | 'update' | null; url: string; goal: string }): string | null {
-  // The computer step is drawn as step 1 above the form and says what to do;
+  // The computer's state and its fix lead the page (the status block at the top);
   // the button only points at it, so the instruction is not said twice
-  // (round-2 sweep 2026-11-18).
-  if (!input.runnerCanRun) return 'Finish step 1 first.'
+  // (round-2 sweep 2026-11-18, moved to the top 2026-11-19).
+  if (!input.runnerCanRun) return 'Fix your computer first (top of the page).'
   if (!input.url.trim()) return 'Add a start page.'
   if (!isStartUrl(input.url)) return 'Use a start page that starts with https://'
   const goal = input.goal.trim()

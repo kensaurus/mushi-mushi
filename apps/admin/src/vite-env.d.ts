@@ -10,6 +10,8 @@ declare const __SDK_REACT_VERSION__: string
 declare const __SERVER_VERSION__: string
 declare const __BUILD_SHA__: string
 declare const __BUILD_DATE__: string
+/** ISO instant of the build (UTC). Format with lib/buildInfo.ts. */
+declare const __BUILD_TIME__: string
 // Extended SDK catalog — added to surface the full package list in VersionBadge
 declare const __SDK_CORE_VERSION__: string
 declare const __SDK_VUE_VERSION__: string

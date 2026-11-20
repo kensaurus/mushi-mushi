@@ -42,7 +42,7 @@ import {
   type LessonsStats,
   type LessonsTabId,
 } from '../components/lessons/LessonsStatsTypes'
-import { IconChevronRight } from '../components/icons'
+import { LessonRuleRows } from '../components/lessons/LessonRuleRows'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { CHIP_TONE } from '../lib/chipTone'
@@ -178,13 +178,10 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-sm text-fg-muted">
-            Rules learned from bugs that kept coming back. Mushi Mushi follows them when it diagnoses and fixes a new report,
-            and your editor can read them with the <code className="text-xs bg-surface-overlay px-1 rounded font-mono border border-edge/40">lessons.query</code> MCP tool.
-          </p>
-        </div>
+      <div className="mb-2 flex items-center justify-between gap-4 flex-wrap">
+        <p className="min-w-0 flex-1 basis-64 text-xs text-fg-muted" title="Your editor can read these rules with the lessons.query MCP tool.">
+          Retire a rule that no longer applies.
+        </p>
         <SegmentedControl
           value={showRetired}
           onChange={(v) => setShowRetired(v as 'active' | 'retired')}
@@ -208,59 +205,14 @@ function LessonsTab({ onChanged, canEditProject }: { onChanged: () => void; canE
       )}
 
       {lessons.length > 0 && (
-        <div className="space-y-2">
-          {lessons.map((lesson) => (
-            <div
-              key={lesson.id}
-              // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-              className="flex items-start gap-3 p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 cursor-pointer motion-safe:transition-opacity"
-              onClick={() => setSelectedLesson(lesson)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <SeverityBadge severity={lesson.severity} />
-                  <span className="text-xs text-fg-faint">seen {lesson.frequency} {lesson.frequency === 1 ? 'time' : 'times'}</span>
-                  {lesson.mistake_clusters?.name && (
-                    <span className="text-xs text-fg-faint">
-                      from: {lesson.mistake_clusters.name}
-                    </span>
-                  )}
-                  {lesson.retired_at && (
-                    <Badge className="bg-surface-raised text-fg-muted">retired</Badge>
-                  )}
-                </div>
-                <p className="text-sm font-medium text-fg line-clamp-2">
-                  {lesson.rule_text}
-                </p>
-                {lesson.anti_pattern && (
-                  <p className="text-xs text-fg-muted mt-1 line-clamp-1">
-                    Avoid: {lesson.anti_pattern}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-fg-faint hidden sm:block">
-                  <RelativeTime value={lesson.last_reinforced_at} />
-                </span>
-                <Btn
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-fg-faint hover:text-fg !border-transparent hover:!border-edge shadow-none hover:-translate-y-0"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRetire(lesson.id, !!lesson.retired_at)
-                  }}
-                  disabled={retiring === lesson.id || !canEditProject}
-                  title={canEditProject ? undefined : 'Viewers can read lessons but cannot change them.'}
-                >
-                  {lesson.retired_at ? 'Restore' : 'Retire'}
-                </Btn>
-                <IconChevronRight className="w-4 h-4 text-fg-faint" />
-              </div>
-            </div>
-          ))}
-        </div>
+        <LessonRuleRows
+          // Most-seen first: the rule that fires most is the one worth reading.
+          rows={[...lessons].sort((x, y) => y.frequency - x.frequency)}
+          retiring={retiring}
+          canEdit={canEditProject}
+          onRetire={(l) => handleRetire(l.id, !!l.retired_at)}
+          onOpen={setSelectedLesson}
+        />
       )}
 
       {selectedLesson && (
@@ -379,7 +331,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
     <div
       key={cluster.id}
       // mushi-mushi-allowlist: hand-rolled surface (cn/template; not Card tile)
-      className="p-4 rounded-lg border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
+      className="px-3 py-2 rounded-md border border-edge hover:bg-surface-overlay/50 motion-safe:transition-opacity"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
@@ -428,7 +380,7 @@ function ClustersTab({ onChanged, canEditProject }: { onChanged: () => void; can
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+      <div className="mb-2 flex items-center justify-between gap-4 flex-wrap">
         <p
           className="min-w-0 flex-1 basis-64 text-sm text-fg-muted text-pretty"
           title="Bugs that keep coming back with the same cause. Promote one and its suggested rule becomes a rule Mushi Mushi follows on every new report."
@@ -745,6 +697,7 @@ export function LessonsPage() {
                 statsFetchedAt={statsFetchedAt}
                 statsValidating={statsValidating}
                 statLabels={copy?.statLabels}
+                onTab={setActiveTab}
               />
             ),
           },

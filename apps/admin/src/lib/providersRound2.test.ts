@@ -16,13 +16,13 @@ const account = (id: string, status: Partial<NonNullable<ProviderAccount['status
 describe('providers columns', () => {
   it('hides Balance and Incidents when no row has a value, and says so once', () => {
     const cols = providerColumns([account('a'), account('b')], new Map())
-    expect(cols).toEqual({ balance: false, incidents: false, note: 'Balance: not checked on any account yet · no open incidents' })
+    expect(cols).toEqual({ balance: false, incidents: false, note: 'Balance: no account has reported one yet · no open incidents' })
   })
 
   it('keeps Incidents once one account has one open', () => {
     const cols = providerColumns([account('a'), account('b')], new Map([['b', { total: 1 }]]))
     expect(cols.incidents).toBe(true)
-    expect(cols.note).toBe('Balance: not checked on any account yet')
+    expect(cols.note).toBe('Balance: no account has reported one yet')
   })
 })
 

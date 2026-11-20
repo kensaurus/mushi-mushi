@@ -104,6 +104,31 @@ describe('PageStatus', () => {
   })
 })
 
+describe('PageStatus metric visual (2026-11-19)', () => {
+  it('draws an optional picture between the value and its label', async () => {
+    const metrics: PageStatusMetrics = [
+      { label: 'Agreed', value: '42%', visual: createElement('span', { 'data-testid': 'metric-visual' }, 'bar') },
+      { label: 'Ready', value: 3 },
+    ]
+    await render(createElement(PageStatus, { sentence: 'Grades.', metrics }))
+    const visual = container.querySelector('[data-testid="metric-visual"]')!
+    expect(visual).not.toBeNull()
+    // In the same metric as its value and label, in a dd of its own.
+    const item = visual.closest('dd')!.parentElement!
+    expect(item.textContent).toContain('42%')
+    expect(item.textContent).toContain('Agreed')
+    // A metric without one renders as before: one dd (the value) and the label.
+    const plain = [...container.querySelectorAll('dt')].find((dt) => dt.textContent?.includes('Ready'))!.parentElement!
+    expect(plain.querySelectorAll('dd')).toHaveLength(1)
+  })
+
+  it('still drops all-empty numbers even when they carry a visual', async () => {
+    const metrics: PageStatusMetrics = [{ label: 'Agreed', value: 0, visual: createElement('span', { 'data-testid': 'metric-visual' }) }]
+    await render(createElement(PageStatus, { sentence: 'Nothing yet.', metrics }))
+    expect(container.querySelector('[data-testid="metric-visual"]')).toBeNull()
+  })
+})
+
 // A fourth metric is a type error, not a style choice.
 // @ts-expect-error — at most three metrics
 const _tooMany: PageStatusMetrics = [

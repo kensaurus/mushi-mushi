@@ -1,9 +1,9 @@
 # FILE: docker-compose.yml
-# PURPOSE: Self-hosted Mushi Mushi, every service in Docker. EXPERIMENTAL —
-#          the supported path is your own Supabase project + `mushi selfhost up`
-#          (docs/SELF_HOSTED.md). Known gaps: no Realtime service (the console's
-#          live updates fall back to reloads), no email delivery (sign-up is
-#          auto-confirmed), and no Studio.
+# PURPOSE: Self-hosted Mushi Mushi, every service in Docker, no Supabase account.
+#          Proved end to end on a clean machine on 2026-11-19 (#1168). Guide:
+#          https://kensaur.us/mushi-mushi/docs/self-hosting/docker-compose
+#          Known gaps: no Realtime service (the console's live updates fall back
+#          to reloads), no email delivery (sign-up is auto-confirmed), no Studio.
 #
 # Usage (from the repo root):
 #   ./deploy/generate-secrets.sh            # or: npx mushi-mushi selfhost secrets
@@ -161,13 +161,17 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?run deploy/generate-secrets.sh first}
       SUPABASE_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:?run deploy/generate-secrets.sh first}@db:5432/postgres
       MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET:?run deploy/generate-secrets.sh first}
+      # GET /health says "self-hosted", so the console labels this instance right
+      # whatever the public URL looks like (_shared/instance-mode.ts).
+      MUSHI_INSTANCE_MODE: self-hosted
+      # Caddy serves the console at / on the public origin.
       ADMIN_BASE_URL: ${MUSHI_PUBLIC_URL:-http://localhost}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
-      # Optional headless bootstrap (POST /v1/admin/bootstrap; docs/SELF_HOSTED.md).
+      # Optional headless bootstrap (POST /v1/admin/bootstrap; docs: Self-hosting → Operate).
       MUSHI_INIT_OWNER_EMAIL: ${MUSHI_INIT_OWNER_EMAIL:-}
       MUSHI_INIT_ORG_NAME: ${MUSHI_INIT_ORG_NAME:-}
       MUSHI_INIT_PROJECT_NAME: ${MUSHI_INIT_PROJECT_NAME:-}

@@ -104,7 +104,8 @@ export function RecipeHeaderSummary({
     <Card className="flex flex-col gap-3 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-xs font-medium text-fg-secondary">Overall</span>
+          {/* The page's lead (PageStatus) carries the risk checks; without them this card is the blueprint alone. */}
+          <span className="text-xs font-medium text-fg-secondary">{risk ? 'Overall' : 'Blueprint'}</span>
           <span className="flex flex-wrap items-center gap-2">
             {riskLeads && risk ? (
               <span className={`inline-flex items-center gap-1 text-xs font-semibold ${TONE_INK[risk.tone]}`} data-testid="recipe-overall-risk">

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 243 pages, generated from llms.txt. @internal Exported for tests. */
+/** 245 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -111,7 +111,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/ci",
     markdown: "admin/ci.md",
     keywords: ["admin", "ci", "runners"],
-    headings: ["Spend less on CI", "How it reads your runs", "Right now", "Test machine or your code", "Queue and wait", "Machines", "What would make fixes land sooner", "Your real bill"],
+    headings: ["Spend less on CI", "How it reads your runs", "Right now", "All apps", "Why it failed", "Test machine or your code", "Queue and wait", "Machines"],
     excerpt: "The CI runners page in the Mushi Mushi console shows where tests run, how long they wait for a machine, and whether a red check was your code or the machine.",
   },
   {
@@ -291,7 +291,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/health",
     markdown: "admin/health.md",
     keywords: ["admin", "health"],
-    headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Recent LLM calls log", "Recommended actions", "Related pages"],
+    headings: ["Time window", "LLM health summary", "Provider probes", "Cron job health", "Stuck reports", "Recent LLM calls log", "Recommended actions", "Server doctor (operators only)"],
     excerpt: "The Mushi Mushi health page shows whether Mushi Mushi itself works (AI calls, background jobs, provider connections), so you catch a degraded integration early.",
   },
   {
@@ -354,7 +354,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/judge",
     markdown: "admin/judge.md",
     keywords: ["admin", "judge", "triage", "grading"],
-    headings: ["Tabs", "Prompt promotion", "Drift alerts", "See also"],
+    headings: ["Reviewing a disagreement", "Tabs", "Prompt promotion", "Drift alerts", "See also"],
     excerpt: "The Triage grading page in the Mushi Mushi console shows how often a second AI agrees with each diagnosis, week by week, and the worst recent disagreements.",
   },
   {
@@ -480,7 +480,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/qa-coverage",
     markdown: "admin/qa-coverage.md",
     keywords: ["admin", "qa-coverage", "coverage", "scheduled", "tests"],
-    headings: ["Story lifecycle", "Execution providers", "Creating a story", "Story cards", "Story drawer", "Manual run", "Filters", "Related pages"],
+    headings: ["The status line", "Story lifecycle", "Execution providers", "Creating a story", "Story cards", "Story drawer", "Manual run", "Filters"],
     excerpt: "Scheduled tests in the Mushi Mushi console turn plain-English user flows into browser tests on a schedule, so you find out when login or checkout breaks.",
   },
   {
@@ -543,7 +543,7 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     route: "/admin/reports",
     markdown: "admin/reports.md",
     keywords: ["admin", "reports", "bugs"],
-    headings: ["Diagnosis + Fix hero", "Compact diagnosis preview", "Merging a fix from report detail"],
+    headings: ["Diagnosis + Fix hero", "Compact diagnosis preview", "Pipeline strip on report detail", "Merging a fix from report detail"],
     excerpt: "The Bugs page is the Mushi Mushi bug list. Filter by status, severity, category and component, and start with the recommended action at the top.",
   },
   {
@@ -2050,40 +2050,49 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Mushi Mushi's SOC 2 readiness, not certification. Nightly evidence for access, retention, DSAR and availability controls, retention per project, DSAR tracking.",
   },
   {
-    title: "Self-hosting",
+    title: "Self-hosting quickstart",
     url: docUrl("/self-hosting"),
     route: "/self-hosting",
     markdown: "self-hosting/index.md",
-    keywords: ["self-hosting", "self", "hosting"],
-    headings: ["What you'll deploy", "Quickstart: your own Supabase project", "Docker Compose (experimental)"],
-    excerpt: "Run Mushi Mushi on your own Supabase project with one command, mushi selfhost up. Your own keys, AGPLv3 server, MIT SDKs, no usage limits.",
+    keywords: ["self-hosting", "self", "hosting", "quickstart"],
+    headings: ["Before you start", "Clone the repo", "Deploy the server", "Serve the console", "Sign up", "Sign the CLI in and run the doctor", "Get your first diagnosis", "Next"],
+    excerpt: "Run Mushi Mushi on your own Supabase project, from zero to the first diagnosis, with one command. Every feature on, no usage limits.",
   },
   {
-    title: "Admin SPA deploy",
+    title: "Host the console",
     url: docUrl("/self-hosting/admin-spa"),
     route: "/self-hosting/admin-spa",
     markdown: "self-hosting/admin-spa.md",
-    keywords: ["self-hosting", "self", "hosting", "admin-spa", "admin", "spa", "deploy"],
-    headings: ["Build", "Deploy options", "SPA routing", "First-run setup"],
-    excerpt: "Build and deploy the Mushi Mushi admin console yourself. A static Vite and React app that talks to your Supabase project, and the env vars it needs.",
+    keywords: ["self-hosting", "self", "hosting", "admin-spa", "admin", "spa", "host", "console"],
+    headings: ["Pick how you serve it", "Static build", "Docker image", "After it is up"],
+    excerpt: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open.",
   },
   {
-    title: "Docker Compose (experimental)",
+    title: "Docker Compose",
     url: docUrl("/self-hosting/docker-compose"),
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
-    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "experimental"],
-    headings: ["Generate the secrets", "Bring the stack up", "Open the console", "What's running", "Not included", "Production notes"],
-    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Experimental. Postgres, auth, storage, every edge function, the console and Caddy.",
+    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose"],
+    headings: ["Generate the secrets", "Start the stack", "Sign up and sign the CLI in", "What's running", "Upgrade", "Not included", "Production notes"],
+    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Postgres, auth, storage, every edge function, the console and Caddy, on one machine.",
   },
   {
-    title: "Edge Functions deploy",
+    title: "Edge functions",
     url: docUrl("/self-hosting/edge-functions"),
     route: "/self-hosting/edge-functions",
     markdown: "self-hosting/edge-functions.md",
-    keywords: ["self-hosting", "self", "hosting", "edge-functions", "edge", "functions", "deploy"],
-    headings: ["Minimal required (ingest + classify)", "Checking what is deployed", "Common optional functions", "Function inventory (core pipeline)", "Required secrets", "JWT verification"],
-    excerpt: "Deploy the Mushi Mushi Supabase Edge Functions for a self-hosted install. The minimal ingest and classification set, the full list, and the secrets they need.",
+    keywords: ["self-hosting", "self", "hosting", "edge-functions", "edge", "functions"],
+    headings: ["Redeploy one function", "Check what is deployed", "Function inventory (core pipeline)", "JWT verification"],
+    excerpt: "What the Mushi Mushi Supabase Edge Functions do, how they authenticate, and how to redeploy one. selfhost up deploys all of them.",
+  },
+  {
+    title: "Environment variables",
+    url: docUrl("/self-hosting/environment"),
+    route: "/self-hosting/environment",
+    markdown: "self-hosting/environment.md",
+    keywords: ["self-hosting", "self", "hosting", "environment", "variables"],
+    headings: ["Set by the platform", "Function secrets", "Core (selfhost up sets these)", "AI keys (optional; one turns on the plain-English diagnosis and fix…", "Operator notices and Slack routing (optional)", "Discord triage feed (optional)", "Code index (optional)", "Public diagram pages (optional)"],
+    excerpt: "Every environment variable a self-hosted Mushi Mushi reads, where to set it, and whether it is required. Generated from the .env.example templates.",
   },
   {
     title: "Langfuse + Sentry",
@@ -2095,13 +2104,22 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Wire Langfuse LLM tracing and Sentry error tracking into a self-hosted Mushi Mushi server. The Edge Function secrets and what each trace records.",
   },
   {
-    title: "Supabase setup",
+    title: "Operate and upgrade",
+    url: docUrl("/self-hosting/operate"),
+    route: "/self-hosting/operate",
+    markdown: "self-hosting/operate.md",
+    keywords: ["self-hosting", "self", "hosting", "operate", "upgrade"],
+    headings: ["Check health", "Upgrade", "Headless bootstrap (MUSHIINIT)", "Who counts as the operator", "Extra cron jobs", "Integrations", "Security notes", "Multi-region (Helm, not yet proven end to end)"],
+    excerpt: "Keep a self-hosted Mushi Mushi healthy. The doctor, upgrades, headless bootstrap, extra cron jobs, integrations, security notes and multi-region.",
+  },
+  {
+    title: "Supabase by hand",
     url: docUrl("/self-hosting/supabase"),
     route: "/self-hosting/supabase",
     markdown: "self-hosting/supabase.md",
-    keywords: ["self-hosting", "self", "hosting", "supabase", "setup"],
-    headings: ["Required extensions", "Required custom functions", "RLS pattern", "Seed data and runtime config", "Verifying the setup"],
-    excerpt: "Set up a Supabase project for self-hosted Mushi Mushi. Link the CLI, push every migration, and check the Postgres extensions the server needs.",
+    keywords: ["self-hosting", "self", "hosting", "supabase", "hand"],
+    headings: ["1. Link and push the migrations", "2. Set the function secrets", "3. Point cron at your project", "4. Deploy the functions", "5. Check it", "Row-level security"],
+    excerpt: "Set up Supabase for self-hosted Mushi Mushi by hand: link, push migrations, set secrets, point cron at your project, deploy the functions.",
   },
   {
     title: "Use cases & comparisons",

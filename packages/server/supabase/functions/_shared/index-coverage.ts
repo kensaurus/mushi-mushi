@@ -517,6 +517,12 @@ export interface IndexDoctorCheck {
   status: 'pass' | 'warn' | 'fail'
   summary: string
   hint?: string
+  /** Human check name; the console and CLI show it instead of `name`. */
+  label: string
+  projectId: string
+  /** The app's name, so a row never leads with a uuid (null when unknown). */
+  appName: string | null
+  fixHref: string
 }
 
 /**
@@ -525,13 +531,19 @@ export interface IndexDoctorCheck {
  * the generic error branch: it gets its coverage numbers and the reason, not
  * only "Index issue".
  */
-export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRepo | null | undefined): IndexDoctorCheck {
-  const name = `codebase_index:${projectId}`
+export function codebaseIndexDoctorCheck(
+  projectId: string,
+  repo: IndexDoctorRepo | null | undefined,
+  appName: string | null = null,
+): IndexDoctorCheck {
+  return { ...codebaseIndexVerdict(repo), name: `codebase_index:${projectId}`, label: 'Code index', projectId, appName, fixHref: '/explore' }
+}
+
+function codebaseIndexVerdict(repo: IndexDoctorRepo | null | undefined): Pick<IndexDoctorCheck, 'status' | 'summary' | 'hint'> {
   // A partial sweep (plan cap, or still filling) sets index_swept_at only.
   const sweptAt = repo ? latestIso(repo.last_indexed_at, repo.index_swept_at) : null
   if (!repo || !sweptAt) {
     return {
-      name,
       status: 'fail',
       summary: 'Codebase indexing is enabled but no sweep has completed — diagnoses run without code context.',
       hint: 'Re-run the sweep from the console Integrations card, and verify the GitHub App installation.',
@@ -548,7 +560,6 @@ export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRep
   if (state === 'stalled') {
     const reason = repo.last_index_error ? repo.last_index_error.replace(/^stalled:\s*/, '').slice(0, 200) : null
     return {
-      name,
       status: 'warn',
       summary: `Index stalled: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).${reason ? ` Reason: ${reason}` : ''}`,
       hint: 'The last sweep added no file. Fix the reason, then re-run the sweep from the Integrations card; until then it is retried daily.',
@@ -556,7 +567,6 @@ export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRep
   }
   if (repo.last_index_error) {
     return {
-      name,
       status: 'warn',
       summary: `Index issue: ${repo.last_index_error.slice(0, 200)}${coverage ? ` (coverage: ${coverage})` : ''}`,
       hint: repo.last_index_error.startsWith('partial:')
@@ -566,7 +576,6 @@ export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRep
   }
   if (state === 'filling' || state === 'capped') {
     return {
-      name,
       status: 'warn',
       summary: `Partly indexed: ${coverage ?? 'coverage unknown'} (last sweep ${sweptAt}).`,
       hint: state === 'capped'
@@ -575,7 +584,6 @@ export function codebaseIndexDoctorCheck(projectId: string, repo: IndexDoctorRep
     }
   }
   return {
-    name,
     status: 'pass',
     summary: coverage ? `Indexed: ${coverage} (last sweep ${sweptAt}).` : `Indexed (last sweep ${sweptAt}).`,
   }

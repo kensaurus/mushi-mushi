@@ -185,6 +185,8 @@ export interface AlertCardsProps {
   keyLabel?: (key: HighlightKey) => string
   /** Let a card with no keys pin by its id (the CI page's behaviour before the kit). */
   pinWithoutKeys?: boolean
+  /** Draw the "Pinned" trail here (default). Off for a second strip on the same page, so it shows once. */
+  showPinned?: boolean
 }
 
 export function AlertCards({
@@ -197,6 +199,7 @@ export function AlertCards({
   testIdPrefix = 'signal',
   keyLabel,
   pinWithoutKeys = false,
+  showPinned = true,
 }: AlertCardsProps) {
   const [all, setAll] = useState(false)
   const { pinned, clear } = usePinned()
@@ -207,7 +210,7 @@ export function AlertCards({
       ? 'grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3 @min-[96rem]:grid-cols-6'
       : 'grid grid-cols-1 gap-2 @xl:grid-cols-2 @4xl:grid-cols-3'
 
-  if (alerts.length === 0 && emptyText == null && !pinned) return null
+  if (alerts.length === 0 && emptyText == null && !(pinned && showPinned)) return null
 
   return (
     <section aria-label={label} className="flex flex-col gap-2" data-testid={`${testIdPrefix}-alerts`}>
@@ -248,7 +251,7 @@ export function AlertCards({
           </div>
         </>
       )}
-      {pinned && (
+      {pinned && showPinned && (
         <p
           className="ci-rise flex items-center gap-2 rounded-md border border-dashed border-accent bg-accent-muted/40 px-2.5 py-1 text-xs"
           aria-live="polite"

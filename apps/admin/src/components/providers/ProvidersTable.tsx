@@ -8,7 +8,10 @@
  */
 
 import type { ProviderAccount } from '../../lib/kensaurusOpsTypes'
-import { accountLabel, ageLabel, allSharedAccounts, dependentApps, PROVIDER_STATUS, providerColumns, providerGauge, providerState, type Gauge } from '../../lib/providersView'
+import { accountLabel, ageLabel, allSharedAccounts, appUses, balanceWhy, PROVIDER_STATE_WORD, PROVIDER_STATUS, providerColumns, providerGauge, providerNeeds, providerState, type Gauge } from '../../lib/providersView'
+import type { SetupProject } from '../../lib/useSetupStatus'
+import { faviconSourceFromProject } from '../../lib/resolveProjectDomain'
+import { ProjectFavicon } from '../ProjectFavicon'
 import { Btn, Toggle } from '../ui'
 import { IconSliders } from '../icons'
 import { Chip } from '../signal/Chip'
@@ -26,12 +29,12 @@ const COL = {
   on: 'md:w-24 md:shrink-0',
 } as const
 
-function GaugeCell({ gauge }: { gauge: Gauge | null }) {
-  // No balance reading: unknown, hatched, never an empty bar.
+function GaugeCell({ gauge, why }: { gauge: Gauge | null; why: string }) {
+  // No balance reading: hatched with the reason ("key check only"), never an empty bar.
   if (!gauge)
     return (
       <span className="ci-nodata inline-flex items-center rounded-sm border border-edge-subtle px-1.5 text-3xs whitespace-nowrap text-fg-secondary" data-testid="gauge-not-checked">
-        not checked
+        {why}
       </span>
     )
   const fill = gauge.max > 0 ? gauge.value / gauge.max : 0
@@ -48,11 +51,28 @@ export interface ProvidersTableProps {
   onEditThresholds: (account: ProviderAccount) => void
   /** The console's name for an ops app slug (makeAppNamer); the slug itself when none matches. */
   appName?: (app: string) => string
+  /** The console's project for an ops app slug (makeAppProjectFinder), for the chip's icon. */
+  appProject?: (app: string) => SetupProject | null
+}
+
+/** One app that uses the account: its icon and console name; the features on hover. */
+function AppChip({ app, features, name, project }: { app: string; features: string[]; name: string; project: SetupProject | null }) {
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised px-1 py-px text-2xs font-medium text-fg"
+      title={features.length > 0 ? `${name}: ${features.join(', ')}` : name}
+      data-testid="provider-app"
+      data-app={app}
+    >
+      {project ? <ProjectFavicon {...faviconSourceFromProject(project)} size={12} /> : null}
+      <span className="truncate">{name}</span>
+    </span>
+  )
 }
 
 export const providerPendingKey = (id: string) => `provider:${id}`
 
-export function ProvidersTable({ providers, incidents, now, pending, onToggle, onEditThresholds, appName = (a) => a }: ProvidersTableProps) {
+export function ProvidersTable({ providers, incidents, now, pending, onToggle, onEditThresholds, appName = (a) => a, appProject = () => null }: ProvidersTableProps) {
   if (providers.length === 0) return <p className="text-xs text-fg-muted">No provider accounts yet.</p>
   // Balance and Incidents draw only once some row has a value; the note says it once otherwise.
   const cols = providerColumns(providers, incidents)
@@ -80,22 +100,29 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         const shown = accountLabel(p, sharedAll)
         const inc = incidents.get(p.id)
         const busy = pending.has(providerPendingKey(p.id))
-        const apps = dependentApps(p)
+        const apps = appUses(p, appName)
         const probed = ageLabel(p.status?.last_probe_at, now)
+        const age = ageLabel(p.status?.state_since, now)
+        const needs = providerNeeds(p, now)
         return (
           <li
             key={p.id}
-            className={`flex flex-col gap-x-3 gap-y-1 bg-surface px-2.5 py-1.5 hover:bg-surface-hover md:flex-row md:items-center ${p.enabled ? '' : 'opacity-60'}`}
+            className="flex flex-col gap-x-3 gap-y-1 bg-surface px-2.5 py-1.5 hover:bg-surface-hover md:flex-row md:flex-wrap md:items-center"
             data-testid={`provider-row-${p.id}`}
             data-state={state}
           >
             <span className={COL.state}>
-              {/* "ok for 12h": a bare "ok · 12h" beside "Probed 8m" read as two ages of one thing (round 3). */}
+              {/* A plain word beside the glyph ("Working", "Not checked"); how long it held on hover. */}
               <StatusPill
-                status={PROVIDER_STATUS[state]}
-                label={ageLabel(p.status?.state_since, now) ? `${state} for ${ageLabel(p.status?.state_since, now)}` : state}
-                title={ageLabel(p.status?.state_since, now) ? `In this state for ${ageLabel(p.status?.state_since, now)}` : undefined}
+                status={p.enabled ? PROVIDER_STATUS[state] : 'cancelled'}
+                label={p.enabled ? PROVIDER_STATE_WORD[state] : 'Off'}
+                title={age ? `In this state for ${age}` : undefined}
               />
+              {age ? (
+                <span className="ml-1 font-mono text-3xs text-fg-muted tabular-nums" title={`In this state for ${age}`}>
+                  {age}
+                </span>
+              ) : null}
             </span>
             <span className={`flex min-w-0 items-center gap-1.5 ${COL.account}`}>
               <span className="truncate text-sm font-bold text-fg" title={p.status?.detail ?? p.label}>
@@ -107,7 +134,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
             </span>
             {cols.balance && (
               <span className={COL.balance}>
-                <GaugeCell gauge={providerGauge(p)} />
+                <GaugeCell gauge={providerGauge(p)} why={balanceWhy(p)} />
               </span>
             )}
             {/* On a phone there is no header row, so each value carries its own words. */}
@@ -140,13 +167,10 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
               )}
             </span>
             )}
-            {/* Plain names, not ink pills: they are not buttons. The console's app names, the slug on hover. */}
-            <span className={`flex min-w-0 flex-wrap gap-x-1.5 text-2xs text-fg-secondary ${COL.apps}`} aria-label="Apps that use it">
-              {apps.map((a, n) => (
-                <span key={a} title={a} data-testid="provider-app">
-                  {appName(a)}
-                  {n < apps.length - 1 ? ',' : ''}
-                </span>
+            {/* One chip per app with its icon; the features it calls this account for on hover. */}
+            <span className={`flex min-w-0 flex-wrap gap-1 ${COL.apps}`} aria-label="Apps that use it">
+              {apps.map((a) => (
+                <AppChip key={a.app} app={a.app} features={a.features} name={appName(a.app)} project={appProject(a.app)} />
               ))}
             </span>
             <span className={`flex items-center justify-end gap-1.5 ${COL.on}`}>
@@ -165,6 +189,16 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
                 <IconSliders size={14} />
               </Btn>
             </span>
+            {needs ? (
+              <p className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-secondary md:pl-32" data-testid="provider-needs">
+                <span className="min-w-0">{needs.text}</span>
+                {needs.action === 'turn_on' ? (
+                  <Btn size="sm" variant="primary" disabled={busy} onClick={() => onToggle(p, true)}>
+                    Turn on
+                  </Btn>
+                ) : null}
+              </p>
+            ) : null}
           </li>
         )
       })}

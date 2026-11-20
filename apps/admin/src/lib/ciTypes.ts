@@ -219,3 +219,68 @@ export interface CiRerunResult {
   rerun: Array<{ runId: number }>
   headSha: string
 }
+
+// ── Job debug panel (`api/routes/ci-job-debug.ts`, `_shared/ci-job-debug.ts`) ──────────────────
+
+type CiExplanationKind = 'code' | 'flaky' | 'infra' | 'cancelled'
+
+/** A failed job in plain English: from its verdict (`rule`) or the model reading the log (`ai`). */
+export interface CiJobExplanation {
+  cause: string
+  nextStep: string
+  kind: CiExplanationKind
+  source: 'rule' | 'ai'
+  model: string | null
+  createdAt: string
+}
+
+export type CiJobLogStatus = 'ok' | 'running' | 'no_token' | 'not_bound' | 'forbidden' | 'unavailable'
+
+/** `GET /v1/admin/ci/jobs/:id/debug` (`id` = the overview's `jobs[].id`). */
+export interface CiJobDebug {
+  job: {
+    id: string
+    projectId: string
+    repo: string
+    runId: number
+    runAttempt: number
+    jobId: number
+    jobName: string
+    workflowName: string | null
+    prNumber: number | null
+    headBranch: string | null
+    status: string
+    conclusion: string | null
+    ciKind: string
+    infra: boolean
+    infraDetail: string | null
+    htmlUrl: string | null
+    runUrl: string
+    completedAt: string | null
+    durationSeconds: number | null
+  }
+  steps: Array<{ name: string; conclusion: string | null; seconds: number | null }>
+  failedStep: string | null
+  /** The screened excerpt around the failure (never stored server-side). */
+  log: { status: CiJobLogStatus; excerpt: string | null; linesDropped: number }
+  annotations: string[]
+  explanation: CiJobExplanation | null
+  actions: {
+    rerun: boolean
+    cancel: boolean
+    explain: boolean
+    ciRepair: { fixId: string; reportId: string | null } | null
+  }
+}
+
+/** `POST /v1/admin/ci/jobs/:id/explain` body (`data`). */
+export interface CiExplainResult {
+  explanation: CiJobExplanation
+  cached: boolean
+}
+
+/** `POST /v1/admin/ci/jobs/:id/rerun` and `/cancel` body (`data`). */
+export interface CiRunActionResult {
+  runId: number
+  action: 'rerun' | 'cancel'
+}

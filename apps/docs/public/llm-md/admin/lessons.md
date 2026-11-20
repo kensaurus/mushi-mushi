@@ -21,6 +21,11 @@ In Mushi Mushi, a lesson is a structured coding rule extracted from a cluster of
 bug reports. Once promoted, your editor agent can read it before it writes a fix: through
 the MCP tools `query_lessons` and `list_lessons`, or from `.mushi/lessons.json` in your repo.
 
+**First on the page:** one line on what the rules do and how things stand, with one
+button: **Promote N** when a recurring bug is ready to become a rule, **Review rules**
+when a critical rule is in use, or **Try a change** (see which rules apply to a diff)
+when rules are in use and nothing is ready.
+
 ---
 
 ## The lifecycle: how a report becomes a rule
@@ -64,10 +69,12 @@ A pattern of 2 reports isn't reliable enough to write a codebase rule: it reads
 
 ## Tab: Rules in use (`?tab=lessons`)
 
-Your active coding rules. Each row shows the severity, how many times it was seen,
-the pattern it came from, and the first two lines of the rule text.
+Your active coding rules as dense rows, the most-seen first. Each row shows the
+severity as a glyph (▲ critical, ◆ warning, ■ note), a **seen N×** bar on one scale for
+the whole list, the rule clamped to two lines (**More** expands it in place, with what to
+avoid), when it was last seen, and **Retire**.
 
-**Click any row** to open the detail drawer with the full content:
+**›** opens the detail drawer with the full content:
 
 - **Rule** — the positive instruction (e.g. *"Always await the form submit handler
   before accessing `event.target` values in Safari"*)

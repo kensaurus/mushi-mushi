@@ -122,6 +122,14 @@ describe('server doctor in the registry', () => {
     expect(fromDoctorCheck(null, { name: 'platform_slack_oauth', status: 'fail', summary: 'missing' }, AT)).toMatchObject({ audience: 'platform', blocks: [] })
     expect(fromDoctorCheck(P, { name: 'codebase_index:p', status: 'pass', summary: 'ok' }, AT)).toMatchObject({ id: 'codebase_index', status: 'ok' })
   })
+
+  it('an info line (optional, not set up) is never a problem, and the label is the title', () => {
+    expect(fromDoctorCheck(null, { name: 'observability', status: 'info', label: 'Tracing and error tracking', summary: 'Langfuse: off; Sentry: off.', hint: 'Set them.' }, AT)).toMatchObject({
+      status: 'ok',
+      title: 'Tracing and error tracking',
+      fix: null,
+    })
+  })
 })
 
 describe('lists', () => {
