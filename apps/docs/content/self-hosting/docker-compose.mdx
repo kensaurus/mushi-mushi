@@ -106,6 +106,12 @@ Examples as of November 2026, from Ollama's library:
 | 16 GB | `gemma4:26b-a4b-it-qat` or `gpt-oss:20b` | 16 GB, 14 GB |
 | 8–12 GB | `gemma4:12b-it-qat` | 7.2 GB |
 
+Ollama serves a 4,096-token context unless told otherwise and cuts longer
+prompts without an error. A diagnosis prompt is larger, so give the model
+room: set `OLLAMA_CONTEXT_LENGTH=32768` for the Ollama server, or make a copy
+of the model with a Modelfile (`FROM <model>` and `PARAMETER num_ctx 32768`,
+then `ollama create <name> -f Modelfile`) and give `mushi.sh llm` that name.
+
 On Linux, Ollama listens on `127.0.0.1` only, which containers cannot reach.
 Set `OLLAMA_HOST=0.0.0.0` (and keep port 11434 closed at your firewall), or
 run Ollama in Docker on the same network. Docker Desktop (macOS, Windows)
