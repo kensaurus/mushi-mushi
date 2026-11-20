@@ -28,20 +28,42 @@ import { execFileSync } from 'node:child_process'
 
 const APP = 'Mushi Mushi'
 
+/** @internal "is" or "are": "Edge functions are live", "Docs site 0.1.705 is live" (2026-11-20). */
+export function liveVerb(what) {
+  return /s$/i.test(String(what).trim()) ? 'are' : 'is'
+}
+
+/**
+ * @internal The PR title a squash merge leaves as the subject: "feat(x): y (#12)" → "feat(x): y".
+ * A "Merge pull request #N from …" subject carries no title, so it gives "".
+ */
+export function shippedTitle(subject) {
+  const s = String(subject || '').split('\n')[0].trim()
+  if (/^Merge pull request #\d+/.test(s)) return ''
+  return s.replace(/\s+\(#\d+\)$/, '').slice(0, 100)
+}
+
+/** @internal The environment a ref deploys to: main/master is production, anything else names itself. */
+export function deployEnvironment(refName) {
+  const r = String(refName || '').trim()
+  return !r || r === 'main' || r === 'master' ? 'production' : r
+}
+
 /** @internal Exported for tests. The Slack payload for one deploy result, or null when there is nothing to say. */
-export function buildReleaseMessage({ status, what, version, detail, commitSubject, runUrl }) {
+export function buildReleaseMessage({ status, what, version, detail, commitSubject, runUrl, environment = 'production' }) {
   const label = `${what}${version ? ` ${version}` : ''}`
+  const shipped = shippedTitle(commitSubject)
   if (status === 'success') {
-    const headline = `${APP} · 🚀 ${label} is live`
+    const headline = `${APP} · 🚀 ${label} ${liveVerb(what)} live${shipped ? ` · ${shipped}` : ''}`
     return {
       channel: 'releases',
-      payload: payload(headline, (detail || commitSubject || '').slice(0, 300), '#22c55e', runUrl),
+      payload: payload(headline, (detail || '').slice(0, 300), runUrl, environment),
     }
   }
   if (status === 'failure') {
-    const headline = `${APP} · 🔴 ${what} deploy failed`
+    const headline = `${APP} · 🔴 ${what} deploy to ${environment} failed`
     const body = `Nothing new went live from this run; the previous version is still serving. Open the run to see which step failed.${commitSubject ? `\nCommit: ${commitSubject.slice(0, 200)}` : ''}`
-    return { channel: 'alerts', payload: payload(headline, body, '#ef4444', runUrl) }
+    return { channel: 'alerts', payload: payload(headline, body, runUrl, environment) }
   }
   return null
 }
@@ -50,8 +72,9 @@ export function buildReleaseMessage({ status, what, version, detail, commitSubje
  * @internal Exported for tests. The Ops hub event for one deploy result, or null. The app name
  * comes from the key's project, so the title leaves it out. A retried run posts once.
  */
-export function buildOpsEvent({ status, what, version, detail, commitSubject, runUrl, repo, runId, attempt, sha }) {
+export function buildOpsEvent({ status, what, version, detail, commitSubject, runUrl, repo, runId, attempt, sha, environment = 'production' }) {
   const label = `${what}${version ? ` ${version}` : ''}`
+  const shipped = shippedTitle(commitSubject)
   const slug = String(what).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'deploy'
   const base = {
     url: runUrl && runUrl.startsWith('https://') ? runUrl : undefined,
@@ -60,17 +83,17 @@ export function buildOpsEvent({ status, what, version, detail, commitSubject, ru
     // Environment and Commit (2026-11-20): the Ops hub shows the verified environment, and the
     // Commit lets it drop the GitHub deployment's own "… is live" post for the same commit.
     facts: [
-      { label: 'Environment', value: 'production' },
+      { label: 'Environment', value: environment },
       { label: 'Where', value: 'GitHub Actions' },
       ...(/^[0-9a-f]{7,40}$/i.test(sha || '') ? [{ label: 'Commit', value: String(sha).slice(0, 7) }] : []),
     ],
   }
   if (status === 'success') {
-    return { ...base, category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `${label} is live`.slice(0, 150), body: (detail || commitSubject || '').slice(0, 600) || undefined }
+    return { ...base, category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `${label} ${liveVerb(what)} live${shipped ? ` · ${shipped}` : ''}`.slice(0, 150), body: (detail || '').slice(0, 600) || undefined }
   }
   if (status === 'failure') {
     const body = `Nothing new went live from this run; the previous version is still serving. Open the run to see which step failed.${commitSubject ? `\nCommit: ${commitSubject.slice(0, 200)}` : ''}`
-    return { ...base, category: 'alerts', severity: 'urgent', kind: 'deploy.failed', title: `${what} deploy failed`.slice(0, 150), body: body.slice(0, 600) }
+    return { ...base, category: 'alerts', severity: 'urgent', kind: 'deploy.failed', title: `${what} deploy to ${environment} failed`.slice(0, 150), body: body.slice(0, 600) }
   }
   return null
 }
@@ -98,11 +121,14 @@ async function sendToOpsHub(env, event) {
   }
 }
 
-function payload(headline, body, color, runUrl) {
-  const blocks = [{ type: 'section', text: { type: 'mrkdwn', text: `*${headline}*${body ? `\n${body}` : ''}` } }]
-  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: 'production · GitHub Actions' }] })
+// Top-level blocks, no legacy attachment (2026-11-20): with an attachment Slack showed `text` and
+// the attachment's bold headline, so every post read twice. `text` stays as the notification fallback.
+function payload(headline, body, runUrl, environment) {
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const blocks = [{ type: 'section', text: { type: 'mrkdwn', text: `*${esc(headline)}*${body ? `\n${esc(body)}` : ''}` } }]
+  blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `${esc(environment)} · GitHub Actions` }] })
   if (runUrl) blocks.push({ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Open the run' }, url: runUrl }] })
-  return { text: headline, attachments: [{ color, blocks }] }
+  return { text: headline, blocks }
 }
 
 function commitSubject() {
@@ -123,6 +149,7 @@ async function main() {
     detail: env.DETAIL || '',
     commitSubject: commitSubject(),
     runUrl,
+    environment: deployEnvironment(env.GITHUB_REF_NAME),
   }
   const msg = buildReleaseMessage(input)
   if (!msg) return
