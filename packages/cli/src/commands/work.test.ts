@@ -10,6 +10,7 @@ import {
   inLocalCooldown,
   installCommand,
   windowsInstaller,
+  signInDetail,
   freeBranchName,
   isMissingModuleFailure,
   failureTail,
@@ -683,5 +684,20 @@ describe('pushWithHooks', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('signInDetail (the console account check line)', () => {
+  it('summarises Claude Code\'s JSON status, never with the e-mail', () => {
+    // The console read `checked 2 min ago: "{"` (2026-11-20).
+    const json = '{\n  "loggedIn": true,\n  "authMethod": "claude.ai",\n  "email": "someone@example.com"\n}'
+    expect(signInDetail(json)).toBe('logged in (claude.ai)')
+    expect(signInDetail('{"loggedIn": false}')).toBe('logged out')
+    expect(signInDetail(json)).not.toContain('@')
+  })
+
+  it('keeps the first line of a plain answer (cursor-agent status)', () => {
+    expect(signInDetail('✓ Logged in as a***@g***.com\nmore')).toBe('✓ Logged in as a***@g***.com')
+    expect(signInDetail('{ not json')).toBe('{ not json')
   })
 })

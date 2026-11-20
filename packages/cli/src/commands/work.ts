@@ -1243,6 +1243,28 @@ const CURSOR_STATUS_RETRY_DELAY_MS = 5_000
  * one machine the old single 60 s check reported "not signed in" 5 times in
  * one lane while `cursor-agent status` said "Logged in" (Mushi report 7880503f).
  */
+/**
+ * @internal Exported for tests only. One line for the console's account check.
+ * `claude auth status` answers in JSON, so its first line was "{" and the
+ * console read `checked 2 min ago: "{"` (2026-11-20). A JSON answer becomes
+ * "logged in (claude.ai)"; the account's e-mail never goes into it.
+ */
+export function signInDetail(text: string): string {
+  const start = text.indexOf('{')
+  if (start >= 0) {
+    try {
+      const j = JSON.parse(text.slice(start)) as { loggedIn?: unknown; authMethod?: unknown }
+      if (typeof j.loggedIn === 'boolean') {
+        const how = typeof j.authMethod === 'string' && /^[\w.-]{1,30}$/.test(j.authMethod) ? ` (${j.authMethod})` : ''
+        return j.loggedIn ? `logged in${how}` : 'logged out'
+      }
+    } catch {
+      // Not JSON after all: the first line below.
+    }
+  }
+  return text.split('\n')[0]?.slice(0, 200) ?? ''
+}
+
 export async function checkAgentSignIn(
   agent: LocalAgent,
   run: (cmd: string, args: readonly string[], opts: { timeoutMs: number }) => Promise<Proc> = runProc,
@@ -1256,7 +1278,7 @@ export async function checkAgentSignIn(
     const state = spec.signInState(p)
     const detail = p.timedOut
       ? `timed out after ${CURSOR_STATUS_TIMEOUT_MS / 1000} s`
-      : stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim().split('\n')[0]?.slice(0, 200) || `exit ${p.code}`
+      : signInDetail(stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).trim()) || `exit ${p.code}`
     last = { state, detail, output: stripVTControlCharacters(`${p.stdout}\n${p.stderr}`).slice(0, 2000) }
     if (state === 'signed_in' || state === 'missing') break
   }
