@@ -634,6 +634,15 @@ export function IconChevronRight(p: IconProps) {
   </>)
 }
 
+// Panel with a left column — "show / hide the sidebar" (the glyph Linear,
+// Notion and VS Code use for the same toggle).
+export function IconSidebar(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+    <path d="M6 2.5v11" />
+  </>)
+}
+
 // Inbox tray — "Inbox": arrow dropping into a tray.
 // (used by Notifications) so the two items always read differently in the sidebar.
 export function IconInbox(p: IconProps) {
