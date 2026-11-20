@@ -225,3 +225,18 @@ Deno.test(
     assertEquals(revoked.keyStatus, 'auth_failed');
   },
 );
+
+Deno.test('validateOpenAiBaseUrl takes an operator model server only when allowed', () => {
+  // Default: a local http server is refused (a user-stored base URL never gets the flag).
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1').ok, false);
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1', [], {}).ok, false);
+  // Operator opted in (MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true): http, any host and port.
+  assertEquals(validateOpenAiBaseUrl('http://ollama:11434/v1/', [], { allowPrivateServer: true }), {
+    ok: true,
+    value: 'http://ollama:11434/v1',
+  });
+  // Still no credentials, query, fragment or other schemes.
+  for (const bad of ['http://u:p@ollama:11434/v1', 'http://ollama:11434/v1?x=1', 'file:///etc/passwd', 'ftp://ollama/v1']) {
+    assertEquals(validateOpenAiBaseUrl(bad, [], { allowPrivateServer: true }).ok, false, bad);
+  }
+});

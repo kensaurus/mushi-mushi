@@ -2068,13 +2068,13 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     excerpt: "Serve the Mushi Mushi console yourself: a static build, a Docker image or Compose. Build it with your backend address, or connect it on first open.",
   },
   {
-    title: "Docker Compose",
+    title: "Docker (one-command install)",
     url: docUrl("/self-hosting/docker-compose"),
     route: "/self-hosting/docker-compose",
     markdown: "self-hosting/docker-compose.md",
-    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose"],
-    headings: ["Generate the secrets", "Start the stack", "Sign up and sign the CLI in", "What's running", "Upgrade", "Not included", "Production notes"],
-    excerpt: "Run the whole Mushi Mushi stack in Docker Compose with no Supabase account. Postgres, auth, storage, every edge function, the console and Caddy, on one machine.",
+    keywords: ["self-hosting", "self", "hosting", "docker-compose", "docker", "compose", "one-command", "install"],
+    headings: ["One-command install", "Run the installer", "Open the console", "Add an AI key (optional)", "HTTPS on your own domain", "Your own model server (Ollama, vLLM, LM Studio)", "Day to day", "Point your app and tools at it"],
+    excerpt: "Run all of Mushi Mushi on your own server with one command, no Supabase account. Closed sign-up, HTTPS, backups and updates included.",
   },
   {
     title: "Edge functions",

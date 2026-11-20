@@ -84,6 +84,7 @@ for (const rel of [
   'apps/admin/.env.example',
   'packages/server/.env.example',
   'deploy/.env.example',
+  'deploy/selfhost/mushi.env.example',
   'apps/docs/.env.example',
   'examples/react-demo/.env.example',
 ]) {

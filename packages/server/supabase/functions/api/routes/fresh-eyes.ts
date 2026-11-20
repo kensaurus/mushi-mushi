@@ -33,6 +33,7 @@ import { FILE_REPORT_RATE_SCOPE, FILED_REPORTS_PER_HOUR } from '../../_shared/re
 import { UX_CAPTURES_BUCKET } from '../../_shared/ux-runs.ts'
 import { isWorkerOnlyKey } from '../../_shared/work-claims.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
+import { toPublicSupabaseUrl } from '../../_shared/public-url.ts'
 import {
   blocksRefile,
   FRESH_EYES_FILE_CAP,
@@ -322,7 +323,7 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
       if (!path) return jsonError(c, 'VALIDATION_ERROR', `Bad screenshot name "${name.slice(0, 80)}"`)
       const { data, error: signErr } = await db.storage.from(UX_CAPTURES_BUCKET).createSignedUploadUrl(path, { upsert: true })
       if (signErr || !data) return jsonError(c, 'UPSTREAM_ERROR', 'Could not mint an upload URL. Retry in a moment.', 502)
-      uploads.push({ name, signedUrl: data.signedUrl })
+      uploads.push({ name, signedUrl: toPublicSupabaseUrl(data.signedUrl) })
     }
     return c.json({ ok: true, data: { uploads } })
   })
@@ -474,7 +475,7 @@ export function registerFreshEyesRoutes(app: Hono<{ Variables: Variables }>): vo
     const paths = names.map((n) => freshEyesShotPath(projectId, r.id, n)).filter((p): p is string => !!p)
     if (paths.length) {
       const { data: signed } = await db.storage.from(UX_CAPTURES_BUCKET).createSignedUrls(paths, READ_URL_TTL_SEC)
-      for (const s of signed ?? []) if (s.path && s.signedUrl) shots[s.path.split('/').pop()!] = s.signedUrl
+      for (const s of signed ?? []) if (s.path && s.signedUrl) shots[s.path.split('/').pop()!] = toPublicSupabaseUrl(s.signedUrl)
     }
     const { data: reports, error: repErr } = await db
       .from('reports')

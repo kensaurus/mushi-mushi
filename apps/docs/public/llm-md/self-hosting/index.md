@@ -11,7 +11,7 @@ description: "Run Mushi Mushi on your own Supabase project, from zero to the fir
 
 Run the whole Mushi Mushi server on your own [Supabase](https://supabase.com) project. The free tier is enough. Self-host turns every feature on and lifts every plan limit ([ADR 0063](https://github.com/kensaurus/mushi-mushi/blob/master/docs/adr/0063-reach-first-free-plan-and-free-self-host.md)). It is the same code Mushi Mushi Cloud runs: the server is AGPLv3 and the SDKs are MIT ([Open source & licensing](/concepts/open-source)).
 
-This page takes you from nothing to your first diagnosis. Prefer containers and no Supabase account? Use [Docker Compose](/self-hosting/docker-compose) instead.
+This page takes you from nothing to your first diagnosis. Prefer one command on your own server and no Supabase account? Use the [Docker install](/self-hosting/docker-compose) instead. It sets up Supabase's self-host kit, Realtime included, with the Mushi images.
 
 ## Before you start
 
@@ -89,7 +89,7 @@ You should see: a test report under **Reports**, with a plain-English diagnosis 
 | I want to… | Go to |
 | --- | --- |
 | See every setting and where it goes | [Environment variables](/self-hosting/environment) |
-| Run everything in containers, no Supabase account | [Docker Compose](/self-hosting/docker-compose) |
+| Run everything in containers with one command, no Supabase account | [Docker (one command)](/self-hosting/docker-compose) |
 | Run each step myself, or understand what `selfhost up` did | [Supabase by hand](/self-hosting/supabase) |
 | Put the console on a real domain | [Host the console](/self-hosting/admin-spa) |
 | Add Langfuse traces and Sentry errors | [Observability](/self-hosting/observability) |

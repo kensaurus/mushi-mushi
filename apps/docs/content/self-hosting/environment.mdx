@@ -196,6 +196,14 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `OPENAI_BASE_URL` | Optional | — | — |
 | `OPENAI_WEBHOOK_SECRET` | Optional | — | — |
 | `MUSHI_OPENAI_BASE_URL_ALLOWLIST` | Optional | — | — |
+| `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL` | Optional | — | Self-host: true lets OPENAI_BASE_URL (this server-wide setting only, never a per-key base URL) be your own http model server, e.g. http://ollama:11434/v1. |
+| `MUSHI_OPENAI_MODEL_MAP` | Optional | — | Rename Mushi's OpenAI model ids for that server: gpt-6-luna=qwen3:8b,gpt-6.1-terra=qwen3:14b |
+
+### Self-host public address (optional; unset on the hosted platform)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `SUPABASE_PUBLIC_URL` | Optional | — | The address people use. Signed Storage links are rewritten to it when SUPABASE_URL is an internal gateway. |
 
 ### QA crawl providers (optional; project BYOK wins when set)
 

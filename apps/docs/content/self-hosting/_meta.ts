@@ -4,7 +4,7 @@
 export default {
   index: 'Quickstart',
   environment: 'Environment variables',
-  'docker-compose': 'Docker Compose',
+  'docker-compose': 'Docker (one command)',
   supabase: 'Supabase by hand',
   'admin-spa': 'Host the console',
   observability: 'Langfuse + Sentry',
