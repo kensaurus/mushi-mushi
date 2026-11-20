@@ -145,7 +145,11 @@ export const BUDGETS = [
   // config upsert, plan limits lifted, `selfhost secrets`) and the easier first run (init.ts:
   // `--dry-run`, the sample bug, the MCP key upgrade). No new dependencies; measured 294.4 kB
   // packed, 1,087.6 kB unpacked (59 files).
-  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 300_000, unpacked: 1_100_000 },
+  // 2026-11-20: packed 300 → 310 kB, unpacked 1,100 → 1,130 kB: a Windows worker that runs
+  // without administrator rights (the Startup-folder launcher when schtasks is refused), pnpm
+  // found on PATH, the heartbeat naming its agent, and `mushi login` asking outside an app
+  // folder. No new dependencies; measured 300.4 kB packed, 1,097.1 kB unpacked (59 files).
+  { name: '@mushi-mushi/cli', dir: 'packages/cli', packed: 310_000, unpacked: 1_130_000 },
   // 2026-11-13 (ADR 0060): `mushi-mushi` is the one package users install and
   // the `npx mushi-mushi` launcher. Its own tarball is the bin plus thin
   // re-exports and the four small framework adapters bundled in; measured
