@@ -8,7 +8,8 @@
 #                                      file storage and .env into backups/
 #   sh mushi.sh restore FILE           put a backup back (replaces current data)
 #   sh mushi.sh update [VERSION]       back up, pull images, restart; migrations
-#                                      apply on start. VERSION: latest or sha-xxxxxxx
+#                                      apply on start. VERSION: latest (weekly), a
+#                                      release such as 1.37.2-selfhost.3, or sha-xxxxxxx
 #   sh mushi.sh https DOMAIN           serve on https://DOMAIN with Caddy (auto TLS)
 #   sh mushi.sh llm URL MODEL [EMBED]  use any OpenAI-compatible endpoint and model
 #                                      (Ollama, vLLM, NVIDIA NIM, OpenRouter, ...)
