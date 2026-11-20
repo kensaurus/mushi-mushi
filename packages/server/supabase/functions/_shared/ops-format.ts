@@ -425,6 +425,14 @@ export function muteCovers(scope: string | null | undefined, e: Pick<OpsEventRow
   return s === '' || s === opsMuteScope(e)
 }
 
+/** The slack_error prefix of a GitHub release post that the app's own post for the same commit replaced. */
+export const OPS_SUPERSEDED_PREFIX = 'superseded by'
+
+/** True for a release row the app's own post replaced: counted and listed once, as the app's post. */
+export function isSupersededRelease(e: { slack_error?: string | null }): boolean {
+  return String(e.slack_error ?? '').startsWith(OPS_SUPERSEDED_PREFIX)
+}
+
 /** The short sha an event names (its `Commit` fact), lowercased, else null. */
 export function eventCommit(e: Pick<OpsEventRow, 'facts'>): string | null {
   const f = (e.facts ?? []).find((x) => /^commit$/i.test(x.label.trim()))

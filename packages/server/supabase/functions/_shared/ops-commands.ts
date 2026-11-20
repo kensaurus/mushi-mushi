@@ -16,6 +16,7 @@ import {
   escapeMrkdwn,
   formatMoney,
   isRefundKind,
+  isSupersededRelease,
   matchApp,
   opsEmoji,
   opsHelpText,
@@ -332,7 +333,7 @@ export async function loadApps(db: Db, orgId: string): Promise<OpsApp[]> {
   return (data as OpsApp[] | null) ?? []
 }
 
-const FEED_COLUMNS = 'id, project_id, category, severity, kind, title, url, occurred_at, thread_key, acked_at'
+const FEED_COLUMNS = 'id, project_id, category, severity, kind, title, url, occurred_at, thread_key, acked_at, slack_error'
 
 async function loadFeed(db: Db, orgId: string, category: string, since: Date, limit: number): Promise<FeedRow[]> {
   const { data, error } = await db
@@ -344,7 +345,8 @@ async function loadFeed(db: Db, orgId: string, category: string, since: Date, li
     .order('occurred_at', { ascending: false })
     .limit(limit)
   throwIf(error, 'ops_events')
-  return (data as FeedRow[] | null) ?? []
+  // A GitHub release post the app's own post replaced is the same release: list it once.
+  return ((data as Array<FeedRow & { slack_error?: string | null }> | null) ?? []).filter((r) => !isSupersededRelease(r))
 }
 
 async function loadMutes(db: Db, orgId: string): Promise<Array<{ project_id: string; until: string }>> {

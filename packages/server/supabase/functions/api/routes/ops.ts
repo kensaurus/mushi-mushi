@@ -39,6 +39,7 @@ import { verifySlackRequest } from '../../_shared/slack-verify.ts'
 import { createWebhookMiddleware, RateLimitError, ReplayAttackError } from '../../_shared/webhook-middleware.ts'
 import {
   findEventPii,
+  isSupersededRelease,
   OPS_ACTION_ACK,
   OPS_ACTION_MORE,
   OPS_ACTION_MUTE,
@@ -444,7 +445,7 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
   const [apps, cov, today, alerts, mutes, settings] = await Promise.all([
     orgApps(db, org.orgId),
     db.rpc('ops_coverage', { p_organization_id: org.orgId }),
-    db.from('ops_events').select('category, kind, amount_minor, currency').eq('organization_id', org.orgId).gte('occurred_at', dayStart).limit(10_000),
+    db.from('ops_events').select('category, kind, amount_minor, currency, slack_error').eq('organization_id', org.orgId).gte('occurred_at', dayStart).limit(10_000),
     db.from('ops_events').select('project_id, severity, thread_key, acked_at, occurred_at').eq('organization_id', org.orgId).eq('category', 'alerts').gte('occurred_at', new Date(now.getTime() - 7 * 86_400_000).toISOString()).limit(2000),
     // `*`: the scope column may not exist yet; a scoped (one alert) mute is not an app mute.
     db.from('ops_mutes').select('*').eq('organization_id', org.orgId),
@@ -458,8 +459,9 @@ async function coverage(c: Ctx, deps: OpsRouteDeps): Promise<Response> {
   }
   const payments: Record<string, number> = {}
   let releases = 0
-  for (const e of (today.data as Array<{ category: string; kind: string; amount_minor: number | null; currency: string | null }> | null) ?? []) {
-    if (e.category === 'releases') releases++
+  for (const e of (today.data as Array<{ category: string; kind: string; amount_minor: number | null; currency: string | null; slack_error: string | null }> | null) ?? []) {
+    // A GitHub release post the app's own post replaced is the same release.
+    if (e.category === 'releases' && !isSupersededRelease(e)) releases++
     if (e.category === 'payments' && e.amount_minor != null && e.currency) {
       const refund = /refund|chargeback|reversal/i.test(e.kind)
       payments[e.currency] = (payments[e.currency] ?? 0) + (refund ? -Math.abs(e.amount_minor) : Math.abs(e.amount_minor))

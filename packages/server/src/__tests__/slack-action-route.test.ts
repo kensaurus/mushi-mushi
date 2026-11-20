@@ -41,13 +41,14 @@ describe('routing a Slack click', () => {
     expect(opsInteractionsUrl(null, null)).toBeNull()
     const raw = body([{ action_id: 'ops_ack', value: 'e1' }])
     const fetchImpl = vi.fn(async () => new Response(null, { status: 200 })) as unknown as typeof fetch
-    const headers = new Headers({ 'content-type': 'application/x-www-form-urlencoded', 'x-slack-signature': 'v0=abc', 'x-slack-request-timestamp': '1795000000' })
+    const headers = new Headers({ 'content-type': 'application/x-www-form-urlencoded', 'x-slack-signature': 'v0=abc', 'x-slack-request-timestamp': '1795000000', 'cf-connecting-ip': '203.0.113.7' })
     const res = await forwardOpsInteraction({ headers }, raw, url!, fetchImpl)
     expect(res.status).toBe(200)
     const [calledUrl, init] = (fetchImpl as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0]
     expect(calledUrl).toBe(url)
     expect(init.body).toBe(raw)
-    expect(init.headers).toMatchObject({ 'x-slack-signature': 'v0=abc', 'x-slack-request-timestamp': '1795000000' })
+    // The client IP goes along: the Ops route rate-limits per IP.
+    expect(init.headers).toMatchObject({ 'x-slack-signature': 'v0=abc', 'x-slack-request-timestamp': '1795000000', 'cf-connecting-ip': '203.0.113.7' })
   })
 
   it('a failed hop answers Slack’s empty 200 (nothing retried, nothing posted twice)', async () => {

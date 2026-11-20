@@ -67,7 +67,8 @@ export async function forwardOpsInteraction(
   fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
   const headers: Record<string, string> = { 'Content-Type': req.headers.get('content-type') ?? 'application/x-www-form-urlencoded' }
-  for (const h of ['x-slack-signature', 'x-slack-request-timestamp']) {
+  // The client IP headers too: the Ops route rate-limits per IP.
+  for (const h of ['x-slack-signature', 'x-slack-request-timestamp', 'cf-connecting-ip', 'x-forwarded-for']) {
     const v = req.headers.get(h)
     if (v) headers[h] = v
   }

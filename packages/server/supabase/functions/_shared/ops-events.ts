@@ -38,6 +38,7 @@ import {
   clampEvent,
   eventCommit,
   muteCovers,
+  OPS_SUPERSEDED_PREFIX,
   OPS_REPEAT_WINDOW_MS,
   opsThreadKey,
   planThread,
@@ -300,7 +301,7 @@ async function supersedeGithubRelease(db: Db, event: OpsEventRow, token: string,
       log.warn('ops github release not removed', { id: r.id, err: del.error })
       continue
     }
-    await setSlackState(db, r.id, { slack_ts: null, slack_error: `superseded by the app's own release post ${event.id}` })
+    await setSlackState(db, r.id, { slack_ts: null, slack_error: `${OPS_SUPERSEDED_PREFIX} the app's own release post ${event.id}` })
   }
 }
 
