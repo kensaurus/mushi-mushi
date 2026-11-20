@@ -24,13 +24,20 @@
  *
  * Block layout (report notifications)
  * ------------------------------------
- *   header          — severity + category + project
+ *   header          — severity + category + project (the one visible heading)
  *   section         — bold summary (+ optional screenshot)
  *   context         — icon chips: location, confidence, reporter, env, page link
- *   actions         — Triage → + Dispatch fix (or Install GitHub App / Enable Autofix)
+ *   actions         — Triage →, Dispatch fix (or Install GitHub App / Enable
+ *                     Autofix), Resolve ✓, and a ⋯ menu: Reply to reporter, Dismiss…
  *   context         — report id (+ session id)
  *
- * Delivery wraps blocks in a severity-colored attachment for the left stripe.
+ * Delivery posts top-level blocks, never a legacy attachment (2026-11-20): with
+ * an attachment Slack renders the top-level `text` as a visible line above the
+ * card, so the heading showed twice. `text` stays the notification fallback.
+ *
+ * Reporter (2026-11-20): the project owner as "kenji (owner)", anyone else by
+ * initials ("K. S.") or "a user", an anonymous reporter as "anonymous", a
+ * Sentry report as "Sentry". A full name never reaches the channel.
  *
  * Security note:
  *   SLACK_BOT_TOKEN must be the Bot User OAuth Token (xoxb-*) for `chat.postMessage`.
@@ -59,6 +66,8 @@ export interface SlackReportPayload {
   reporterDisplayName?: string | null
   /** True when identity is JWT-verified */
   reporterVerified?: boolean
+  /** True when the reporter is the project's owner (end_users.email_hash = the owner's): the only name shown. */
+  reporterIsOwner?: boolean
   sessionId?: string | null
   confidence?: number | null
   component?: string | null
@@ -120,15 +129,6 @@ function adminBaseUrl(): string | null {
   return raw.replace(/\/$/, '')
 }
 
-// Severity → Slack attachment color (used on the legacy attachment path and
-// as a visual indicator in the Block Kit context row).
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#E11D48', // rose-600
-  high: '#F97316',     // orange-500
-  medium: '#EAB308',   // yellow-500
-  low: '#3B82F6',      // blue-500
-}
-
 /** Human-readable severity label for headers and fallback text. */
 function titleCaseSeverity(severity: string): string {
   if (!severity) return 'Unknown'
@@ -165,13 +165,31 @@ function pageLinkLabel(pageUrl: string): string {
   }
 }
 
-function reporterLabel(payload: SlackReportPayload): string {
-  if (payload.reporterDisplayName) {
-    return payload.reporterVerified
-      ? `${payload.reporterDisplayName} ✓`
-      : `${payload.reporterDisplayName} (unverified)`
-  }
-  return `\`${payload.reporterToken.slice(0, 8)}…\` (anon)`
+/** Initials of a display name ("Kenji Sakuramoto" → "K. S."), or null when it has no letters. */
+function initials(name: string): string | null {
+  const firsts = name
+    .trim()
+    .split(/\s+/)
+    .map((w) => Array.from(w.replace(/[^\p{L}\p{N}]/gu, ''))[0])
+    .filter((ch): ch is string => Boolean(ch))
+  return firsts.length ? firsts.slice(0, 3).map((ch) => `${ch.toUpperCase()}.`).join(' ') : null
+}
+
+/**
+ * Who reported it, without a stranger's name: the project owner by first name
+ * ("kenji (owner)"), anyone else by initials or "a user", no identity as
+ * "anonymous", Mushi Mushi's own intakes by their source.
+ * @internal Exported for tests.
+ */
+export function reporterLabel(payload: Pick<SlackReportPayload, 'reporterDisplayName' | 'reporterIsOwner' | 'reporterToken'>): string {
+  const token = payload.reporterToken ?? ''
+  if (token === 'sentry-webhook') return 'Sentry'
+  if (token === 'voice-intake') return 'voice note'
+  if (token.startsWith('cron:')) return 'scheduled check'
+  const name = payload.reporterDisplayName?.trim()
+  if (name && payload.reporterIsOwner) return `${name.split(/\s+/)[0].toLowerCase()} (owner)`
+  if (name) return initials(name) ?? 'a user'
+  return 'anonymous'
 }
 
 /** Plain-text fallback for notifications — short; details live in blocks only. */
@@ -195,7 +213,7 @@ function buildMetaContextLine(payload: SlackReportPayload): string {
   if (payload.confidence != null) {
     parts.push(`:brain: ${Math.round(payload.confidence * 100)}%`)
   }
-  parts.push(`:bust_in_silhouette: ${reporterLabel(payload)}`)
+  parts.push(`:bust_in_silhouette: Reporter: ${reporterLabel(payload)}`)
   parts.push(inferEnvironmentLabel(payload.pageUrl))
 
   if (payload.pageUrl) {
@@ -209,7 +227,7 @@ function buildMetaContextLine(payload: SlackReportPayload): string {
   }
   const release = payload.sentryRelease ?? payload.appVersion
   if (release) {
-    parts.push(`:package: ${truncate(release, 24)}`)
+    parts.push(`:package: ${truncate(release, 100)}`)
   }
 
   return parts.join('  ·  ')
@@ -234,20 +252,9 @@ function buildEvidenceContextLine(payload: SlackReportPayload): string | null {
   }
   if (payload.sdkPackage) {
     const sdk = payload.sdkVersion ? `${payload.sdkPackage}@${payload.sdkVersion}` : payload.sdkPackage
-    parts.push(`:electric_plug: ${truncate(sdk, 40)}`)
+    parts.push(`:electric_plug: ${truncate(sdk, 100)}`)
   }
   return parts.length > 0 ? parts.join('  ·  ') : null
-}
-
-/** Wrap blocks in a colored attachment for the severity sidebar stripe. */
-export function wrapReportAttachment(
-  payload: SlackReportPayload,
-  blocks: unknown[],
-): unknown[] {
-  return [{
-    color: severityAttachmentColor(payload.severity),
-    blocks,
-  }]
 }
 
 /** Admin deep link for a report; carries `?project=` so the console opens in
@@ -371,17 +378,6 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
       })
     }
 
-    // Answer the person who reported it, from the channel (Plan 018 §3).
-    // Only for reports filed through the SDK widget: nobody else can read it.
-    if (/^rk1_[0-9a-f]{64}$/.test(payload.reporterToken ?? '')) {
-      actionElements.push({
-        type: 'button',
-        text: { type: 'plain_text', text: 'Reply to reporter', emoji: true },
-        action_id: `reply_reporter:${payload.reportId}`,
-        value: payload.reportId,
-      })
-    }
-
     // Routine calls straight from the channel — no console round-trip.
     // Handled by the slack-interactions edge function via the shared
     // report-transition contract (same side effects as the console PATCH).
@@ -391,21 +387,20 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
       action_id: `resolve_report:${payload.reportId}`,
       value: payload.reportId,
     })
-    actionElements.push({
-      type: 'button',
-      text: { type: 'plain_text', text: 'Dismiss', emoji: true },
-      action_id: `dismiss_report:${payload.reportId}`,
-      value: payload.reportId,
-      confirm: {
-        title: { type: 'plain_text', text: 'Dismiss this report?' },
-        text: {
-          type: 'mrkdwn',
-          text: 'Marks the report dismissed (noise / duplicate / won’t fix). The reporter is notified.',
-        },
-        confirm: { type: 'plain_text', text: 'Dismiss' },
-        deny: { type: 'plain_text', text: 'Cancel' },
-      },
-    })
+
+    // Three buttons at most; the rest in a ⋯ menu. A menu option carries no
+    // confirm, so Dismiss… adds a "Dismiss / Cancel" row under the card's
+    // buttons first (slack-interactions, `dismiss_report_ask`).
+    const more: unknown[] = []
+    // Answer the person who reported it, from the channel (Plan 018 §3).
+    // Only for reports filed through the SDK widget: nobody else can read it.
+    if (/^rk1_[0-9a-f]{64}$/.test(payload.reporterToken ?? '')) {
+      more.push({ text: { type: 'plain_text', text: 'Reply to reporter', emoji: true }, value: `reply_reporter:${payload.reportId}` })
+    }
+    more.push({ text: { type: 'plain_text', text: 'Dismiss…', emoji: true }, value: `dismiss_report_ask:${payload.reportId}` })
+    // Slack refuses an overflow menu with fewer than two options (invalid_blocks).
+    if (more.length < 2) more.push({ text: { type: 'plain_text', text: 'Open in Mushi Mushi', emoji: true }, value: `open_report:${payload.reportId}`, url: reportUrl })
+    actionElements.push({ type: 'overflow', action_id: `report_more:${payload.reportId}`, options: more })
 
     blocks.push({
       type: 'actions',
@@ -427,10 +422,6 @@ export function buildReportBlocks(payload: SlackReportPayload): unknown[] {
   return blocks
 }
 
-/** Build the Slack attachment color for an incoming report (used on legacy paths). */
-export function severityAttachmentColor(severity: string): string {
-  return SEVERITY_COLOR[severity] ?? '#64748B'
-}
 
 // ─── QA story run Block Kit builder ───────────────────────────────────────────
 
@@ -607,12 +598,8 @@ async function postToSlack(webhookUrl: string, body: object): Promise<void> {
 
 export async function sendSlackNotification(webhookUrl: string, payload: SlackPayload): Promise<void> {
   if (isReportPayload(payload)) {
-    const blocks = buildReportBlocks(payload)
-    const fallback = buildReportFallbackText(payload)
-    await postToSlack(webhookUrl, {
-      text: fallback,
-      attachments: wrapReportAttachment(payload, blocks),
-    })
+    // Top-level blocks: an attachment would show `text` as a second heading.
+    await postToSlack(webhookUrl, { text: buildReportFallbackText(payload), blocks: buildReportBlocks(payload) })
     return
   }
   await postToSlack(webhookUrl, { text: payload.text })
@@ -786,9 +773,10 @@ export async function sendReportNotification(
     projectId?: string
   },
 ): Promise<string | null> {
+  // Top-level blocks, never an attachment: with one, Slack shows `text` as a
+  // visible line above the card and the heading reads twice.
   const blocks = buildReportBlocks(payload)
   const fallback = buildReportFallbackText(payload)
-  const attachments = wrapReportAttachment(payload, blocks)
 
   // Try the bot path first: sendBotMessage resolves explicit token → per-
   // project vault → SLACK_BOT_TOKEN env, so a project-scoped OAuth install
@@ -799,7 +787,7 @@ export async function sendReportNotification(
   if (canTryBot) {
     const result = await sendBotMessage({
       channel: opts.channelId ?? undefined,
-      attachments,
+      blocks,
       text: fallback,
       db: opts.db,
       projectId: opts.projectId ?? payload.projectId ?? undefined,
@@ -809,7 +797,7 @@ export async function sendReportNotification(
   }
   // Legacy webhook fallback
   if (opts.webhookUrl) {
-    await postToSlack(opts.webhookUrl, { text: fallback, attachments })
+    await postToSlack(opts.webhookUrl, { text: fallback, blocks })
   }
   return null
 }

@@ -339,6 +339,8 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
       host: { ...deps.host, takes: deps.freshEyes ? ['fresh_eyes'] : [], can: deps.cursorLogin ? ['cursor_login'] : [] },
       status: {
         state: hostState,
+        // Which coding agent the lanes run, so the console names its account (not always Cursor).
+        agent: deps.agent ?? 'cursor',
         agents: agents(),
         ...(guards ? { maxAgents: guards.max_agents } : {}),
         ...(lastReadings?.memAvailableGb != null ? { memAvailableGb: lastReadings.memAvailableGb } : {}),
@@ -894,6 +896,13 @@ export function createHostReadings(o: {
   }
 }
 
+/** @internal Exported for tests only. How to stop the daemon where it runs: Windows has no systemctl. */
+export function stopHint(platform: NodeJS.Platform): string {
+  if (platform === 'linux') return 'Stop with Ctrl-C or systemctl --user stop mushi-worker.'
+  if (platform === 'win32') return 'Stop with Ctrl-C, or end its node.exe in Task Manager; `mushi worker revoke` removes it.'
+  return 'Stop with Ctrl-C.'
+}
+
 export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent; anyRepo?: boolean } = {}): Promise<void> {
   const cfg = loadWorkerConfig(opts.configPath)
   // `mushi work --daemon --agent` wins over worker.json's `agent`.
@@ -989,7 +998,7 @@ export async function runDaemon(opts: { configPath?: string; agent?: LocalAgent;
   })
   live.agents = daemon.agents
   onInterrupt((signal) => daemon.shutdown(signal))
-  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}, agent ${agentSpec(agent).label} (${agentSpec(agent).bin}); heartbeat every ${HEARTBEAT_MS / 1000} s. Stop with Ctrl-C or systemctl --user stop mushi-worker.\n`)
+  process.stdout.write(`mushi worker: ${cfg.lanes.length} lane(s) on ${platform}, agent ${agentSpec(agent).label} (${agentSpec(agent).bin}); heartbeat every ${HEARTBEAT_MS / 1000} s. ${stopHint(process.platform)}\n`)
 
   while (!daemon.stopped) {
     await daemon.tick().catch((err: unknown) => process.stdout.write(`worker: tick failed: ${err instanceof Error ? err.message : String(err)}\n`))
