@@ -10,6 +10,7 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
+- **`diagnose_setup` with an account key** — it now diagnoses instead of failing with `ORG_KEY_NOT_ALLOWED`. An account key (from `mushi setup` in account mode) cannot ingest, so the SDK ingest check refused it and the whole tool errored in `full` and `ingest` mode. The ingest steps are now read for the named project (`projectId`, or the configured one) from the new `GET /v1/admin/projects/:id/ingest-setup`. Without a project, the tool asks for `projectId`.
 - **Scroll position** — the capture shows the part of the page the user had scrolled to, including pages that scroll inside an app shell (`<main>`) and sticky headers. It used to always show the top of the page.
 - **Layout** — sections above the viewport keep their live size, so the visible part no longer drifts out of frame on long pages. Each stylesheet's own text is used, in document order. Chrome's CSSOM dropped `font: … var()` shorthands, and the old order broke `@layer` cascades. CSS-in-JS rules added with `insertRule` are kept.
 - **Images and canvases** — they are embedded at their natural size and keep transparency, so pixel sprites no longer turn into black boxes. CSS background images (sprites, hero art, icons) are embedded too. Running animations keep their current frame. Unreadable media becomes a grey box of the same size.
