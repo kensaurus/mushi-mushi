@@ -16855,16 +16855,39 @@ so one route is enough.
 
 ### Your own model server (Ollama, vLLM, LM Studio)
 
+Any OpenAI-compatible server works, with any model it serves. Mushi names no
+model: open models change every few weeks, so you pick, and switch later with
+the same command.
+
 ```bash
-OPENAI_API_KEY=local                      # any value; your server ignores it
-OPENAI_BASE_URL=http://host.docker.internal:11434/v1
-MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true
-MUSHI_OPENAI_MODEL_MAP=gpt-6-luna=qwen3:8b,gpt-6.1-terra=qwen3:14b,gpt-6.1-sol=qwen3:32b
+sh mushi.sh llm http://host.docker.internal:11434/v1 <model>
+# optional third argument: an embedding model that returns 1536-dimension vectors
 ```
 
-Then choose OpenAI as the organization's AI provider in the console. Only this
-server-wide setting accepts a private `http://` address; base URLs stored with
-a user's own key stay limited to https providers.
+It sets `OPENAI_BASE_URL`, `MUSHI_OPENAI_MODEL` (used for every step: filter,
+diagnosis, judge, fixes), `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL=true` for an
+`http://` address, and a placeholder `OPENAI_API_KEY`, then restarts the
+functions. For a different model per step, set `MUSHI_OPENAI_MODEL_MAP`
+(`gpt-6-luna=small-model,gpt-6.1-terra=big-model`), which wins over
+`MUSHI_OPENAI_MODEL`.
+
+The model gets text only (the report, console and network events, code
+context) and must answer in JSON, so pick one that follows instructions well.
+Examples as of November 2026, from Ollama's library:
+
+| GPU memory | Example | Download |
+| --- | --- | --- |
+| 24 GB | `qwen3.8:27b` | 18 GB |
+| 16 GB | `gemma4:26b-a4b-it-qat` or `gpt-oss:20b` | 16 GB, 14 GB |
+| 8–12 GB | `gemma4:12b-it-qat` | 7.2 GB |
+
+On Linux, Ollama listens on `127.0.0.1` only, which containers cannot reach.
+Set `OLLAMA_HOST=0.0.0.0` (and keep port 11434 closed at your firewall), or
+run Ollama in Docker on the same network. Docker Desktop (macOS, Windows)
+needs nothing extra.
+
+Only this server-wide setting accepts a private `http://` address; base URLs
+stored with a user's own key in the console stay limited to https providers.
 
 ### Day to day
 
@@ -16876,6 +16899,7 @@ a user's own key stay limited to https providers.
 | `sh mushi.sh restore FILE` | Puts a backup back (asks first) |
 | `sh mushi.sh update [VERSION]` | Backs up, pulls `latest` or a pinned version, restarts; migrations apply on start |
 | `sh mushi.sh https DOMAIN` | HTTPS with Caddy, as above |
+| `sh mushi.sh llm URL MODEL` | Your own model server and model, as above; run again to switch |
 | `sh mushi.sh secrets` | The URLs and keys the SDK, CLI and MCP need |
 
 A backup contains `.env`, which holds your secrets: keep it off the server and
@@ -17323,7 +17347,9 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `OPENAI_WEBHOOK_SECRET` | Optional | — | — |
 | `MUSHI_OPENAI_BASE_URL_ALLOWLIST` | Optional | — | — |
 | `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL` | Optional | — | Self-host: true lets OPENAI_BASE_URL (this server-wide setting only, never a per-key base URL) be your own http model server, e.g. http://ollama:11434/v1. |
-| `MUSHI_OPENAI_MODEL_MAP` | Optional | — | Rename Mushi's OpenAI model ids for that server: gpt-6-luna=qwen3:8b,gpt-6.1-terra=qwen3:14b |
+| `MUSHI_OPENAI_MODEL` | Optional | — | The model that server serves, for every chat call (any name, e.g. qwen3.8:27b). |
+| `MUSHI_OPENAI_EMBEDDING_MODEL` | Optional | — | Its embedding model; must return 1536-dimension vectors. Unset = OpenAI's id. |
+| `MUSHI_OPENAI_MODEL_MAP` | Optional | — | Per-tier renames, which win over MUSHI_OPENAI_MODEL: gpt-6-luna=small,gpt-6.1-terra=large |
 
 ### Self-host public address (optional; unset on the hosted platform)
 

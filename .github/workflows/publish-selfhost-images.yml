@@ -73,7 +73,9 @@ jobs:
       - name: Logs on failure
         if: failure()
         working-directory: ${{ runner.temp }}/mushi
-        run: docker compose logs --tail 80 mushi-migrate functions mushi-admin mushi-caddy auth db || true
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail 80 || true
 
   publish:
     name: Build & push edge + admin + migrate images

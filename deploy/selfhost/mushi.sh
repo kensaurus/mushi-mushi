@@ -10,6 +10,8 @@
 #   sh mushi.sh update [VERSION]       back up, pull images, restart; migrations
 #                                      apply on start. VERSION: latest or sha-xxxxxxx
 #   sh mushi.sh https DOMAIN           serve on https://DOMAIN with Caddy (auto TLS)
+#   sh mushi.sh llm URL MODEL [EMBED]  use your own OpenAI-compatible model server
+#                                      (Ollama, vLLM, LM Studio); any model it serves
 #   sh mushi.sh secrets                print the URLs and keys you need
 set -eu
 
@@ -111,6 +113,25 @@ case "$cmd" in
     echo "Serving $url (Caddy is getting the certificate; DNS for $domain must point here)."
     ;;
 
+  llm)
+    url=${1:?usage: sh mushi.sh llm http://host.docker.internal:11434/v1 MODEL [EMBEDDING_MODEL]}
+    model=${2:?usage: sh mushi.sh llm URL MODEL [EMBEDDING_MODEL]  (MODEL: a name your server serves)}
+    case "$url" in http://*|https://*) ;; *) echo "mushi.sh: URL must start with http:// or https://" >&2; exit 1 ;; esac
+    set_env OPENAI_BASE_URL "$url"
+    set_env MUSHI_OPENAI_MODEL "$model"
+    set_env MUSHI_OPENAI_EMBEDDING_MODEL "${3:-}"
+    # A local server needs no key, but the OpenAI path runs only with one set.
+    [ -n "$(env_get OPENAI_API_KEY)" ] || set_env OPENAI_API_KEY local
+    case "$url" in http://*) set_env MUSHI_ALLOW_PRIVATE_LLM_BASE_URL true ;; esac
+    docker compose up -d --wait functions >/dev/null
+    printf 'Chat model: %s at %s\n' "$model" "$url"
+    if curl -fsS --max-time 10 "$(printf '%s' "$url" | sed 's|host.docker.internal|127.0.0.1|')/models" >/dev/null 2>&1; then
+      echo "The server answers. New reports are diagnosed with it."
+    else
+      echo "Could not reach $url/models from this machine; check the server is running and listening for Docker." >&2
+    fi
+    ;;
+
   secrets)
     printf 'Public URL:        %s\n' "$(env_get MUSHI_PUBLIC_URL)"
     printf 'API (SDK/CLI/MCP): %s/functions/v1/api\n' "$(env_get MUSHI_PUBLIC_URL)"
@@ -119,5 +140,5 @@ case "$cmd" in
     printf 'Studio password:   %s\n' "$(env_get DASHBOARD_PASSWORD)"
     ;;
 
-  *) sed -n '2,15p' "$0" ;;
+  *) sed -n '2,17p' "$0" ;;
 esac

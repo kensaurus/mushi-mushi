@@ -40,6 +40,10 @@ services:
     depends_on:
       mushi-migrate:
         condition: service_completed_successfully
+    # Your own model server on this machine (`sh mushi.sh llm`): Docker Desktop
+    # knows this name; on Linux it has to be mapped to the host.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
       VERIFY_JWT: "false"
       MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET}
@@ -60,6 +64,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       MUSHI_ALLOW_PRIVATE_LLM_BASE_URL: ${MUSHI_ALLOW_PRIVATE_LLM_BASE_URL:-false}
+      MUSHI_OPENAI_MODEL: ${MUSHI_OPENAI_MODEL:-}
+      MUSHI_OPENAI_EMBEDDING_MODEL: ${MUSHI_OPENAI_EMBEDDING_MODEL:-}
       MUSHI_OPENAI_MODEL_MAP: ${MUSHI_OPENAI_MODEL_MAP:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Optional integrations

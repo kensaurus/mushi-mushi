@@ -199,7 +199,9 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `OPENAI_WEBHOOK_SECRET` | Optional | — | — |
 | `MUSHI_OPENAI_BASE_URL_ALLOWLIST` | Optional | — | — |
 | `MUSHI_ALLOW_PRIVATE_LLM_BASE_URL` | Optional | — | Self-host: true lets OPENAI_BASE_URL (this server-wide setting only, never a per-key base URL) be your own http model server, e.g. http://ollama:11434/v1. |
-| `MUSHI_OPENAI_MODEL_MAP` | Optional | — | Rename Mushi's OpenAI model ids for that server: gpt-6-luna=qwen3:8b,gpt-6.1-terra=qwen3:14b |
+| `MUSHI_OPENAI_MODEL` | Optional | — | The model that server serves, for every chat call (any name, e.g. qwen3.8:27b). |
+| `MUSHI_OPENAI_EMBEDDING_MODEL` | Optional | — | Its embedding model; must return 1536-dimension vectors. Unset = OpenAI's id. |
+| `MUSHI_OPENAI_MODEL_MAP` | Optional | — | Per-tier renames, which win over MUSHI_OPENAI_MODEL: gpt-6-luna=small,gpt-6.1-terra=large |
 
 ### Self-host public address (optional; unset on the hosted platform)
 
