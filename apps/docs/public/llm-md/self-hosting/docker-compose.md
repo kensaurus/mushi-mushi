@@ -149,6 +149,14 @@ A backup contains `.env`, which holds your secrets: keep it off the server and
 private. To update Supabase's own services, use the kit's `update.sh`
 ([guide](https://supabase.com/docs/guides/self-hosting/updating)).
 
+**When `latest` moves.** New images come out once a week (Thursday evening,
+Japan time) when anything in them changed, tagged
+`-selfhost.` and `latest`, and with every release of the
+`mushi-mushi` package. Each one installs from scratch in CI before it is
+pushed. `latest` does not follow every change to the code, because
+`mushi.sh update` applies migrations as it starts. To stay on a version, pass
+it: `sh mushi.sh update 1.37.2-selfhost.3`.
+
 ### Point your app and tools at it
 
 ```bash
