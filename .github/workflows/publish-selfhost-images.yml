@@ -11,7 +11,8 @@
 # WHEN:    Only on release tags and manual dispatch. Never on pull requests or
 #          branch pushes (Actions minutes are billed; see ci-cost rules).
 #          Tags created by the Release workflow's GITHUB_TOKEN do not trigger
-#          other workflows, so after a release run:
+#          other workflows, so release.yml's `selfhost-images` job dispatches
+#          this one with the released `mushi-mushi` version. By hand:
 #            gh workflow run "Publish self-host images" --ref master -f version=<x.y.z>
 #          or push a `selfhost-v<x.y.z>` tag yourself.
 #
@@ -73,7 +74,9 @@ jobs:
       - name: Logs on failure
         if: failure()
         working-directory: ${{ runner.temp }}/mushi
-        run: docker compose logs --tail 80 mushi-migrate functions mushi-admin mushi-caddy auth db || true
+        run: |
+          docker compose ps -a || true
+          docker compose logs --tail 80 || true
 
   publish:
     name: Build & push edge + admin + migrate images

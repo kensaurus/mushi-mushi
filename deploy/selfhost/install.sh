@@ -123,10 +123,21 @@ else
   docker compose pull --quiet
 fi
 say "Starting Mushi Mushi and applying migrations..."
-docker compose up -d --wait || {
-  docker compose logs --tail 40 mushi-migrate functions >&2 || true
-  die "the stack did not become healthy; see the logs above, then: sh mushi.sh status"
-}
+# On a first boot several services migrate the same new database at once, and
+# one can crash and restart (restart: unless-stopped). Look again before
+# giving up: `up --wait` is safe to repeat.
+tries=0
+until docker compose up -d --wait; do
+  tries=$((tries + 1))
+  if [ $tries -ge 3 ]; then
+    for s in $(docker compose ps -a --format '{{.Service}} {{.Status}}' | awk '/unhealthy|Restarting|Exited \([1-9]/ {print $1}'); do
+      docker compose logs --tail 40 "$s" >&2 || true
+    done
+    die "the stack did not become healthy; see the logs above, then: sh mushi.sh status"
+  fi
+  say "Not healthy yet ($(docker compose ps -a --format '{{.Service}} {{.Status}}' | awk '/unhealthy|Restarting|Exited \([1-9]/ {print $1}' | tr '\n' ' ')); checking again..."
+  sleep 10
+done
 # The first request to each function downloads its dependencies; wait for the API.
 say "Waiting for the API (first start downloads function dependencies)..."
 gw_port=$(sed -n 's/^API_GW_HTTP_PORT=//p' .env | tail -1)

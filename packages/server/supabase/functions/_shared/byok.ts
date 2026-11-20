@@ -805,7 +805,7 @@ function validatedPlatformOpenAiBaseUrl(projectId: string): string | undefined {
   // Self-host: the operator's own model server (http://ollama:11434/v1).
   // Only this env-level URL can opt in; per-key base URLs stay https-only.
   const allowPrivateServer = Deno.env.get('MUSHI_ALLOW_PRIVATE_LLM_BASE_URL') === 'true';
-  const validation = validateOpenAiBaseUrl(configured, openAiCompatibleHostAllowlist(), { allowPrivateServer });
+  const validation = validateOpenAiBaseUrl(configured, openAiCompatibleHostAllowlist(), { allowPrivateServer, operatorConfigured: true });
   if (validation.ok) return validation.value;
 
   log.error('Ignoring unsafe OPENAI_BASE_URL platform configuration', {

@@ -630,6 +630,37 @@ jobs:
           echo "::warning::sdk_versions catalog not confirmed fresh after ${max_attempts} attempts; the daily sdk-versions-cron run is the backstop."
           exit 0
 
+  selfhost-images:
+    name: Start the self-host image publish
+    # When `mushi-mushi` ships a version, publish the matching self-host images
+    # (publish-selfhost-images.yml: smoke install first, then amd64+arm64 with
+    # that version and `latest`). The release tags changesets/action pushes
+    # with GITHUB_TOKEN start no workflows; workflow_dispatch is the documented
+    # exception, so this job dispatches it. It needs only actions: write.
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.published == 'true' && contains(needs.release.outputs.publishedPackages, '"mushi-mushi"') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Dispatch "Publish self-host images" for the released version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ${{ needs.release.outputs.publishedPackages }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r '.[] | select(.name == "mushi-mushi") | .version' <<<"$PUBLISHED")
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::Unexpected mushi-mushi version: '$version'"; exit 1
+          fi
+          gh workflow run publish-selfhost-images.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f version="$version"
+          echo "::notice::Dispatched the self-host image publish for $version"
+
   sbom:
     name: SBOMs for published packages
     # A CycloneDX SBOM per published package, generated from the tarball npm
