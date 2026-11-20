@@ -40,6 +40,10 @@ services:
     depends_on:
       mushi-migrate:
         condition: service_completed_successfully
+    # Your own model server on this machine (`sh mushi.sh llm`): Docker Desktop
+    # knows this name; on Linux it has to be mapped to the host.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
       VERIFY_JWT: "false"
       MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET}
@@ -59,7 +63,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      MUSHI_OPENAI_BASE_URL_ALLOWLIST: ${MUSHI_OPENAI_BASE_URL_ALLOWLIST:-}
       MUSHI_ALLOW_PRIVATE_LLM_BASE_URL: ${MUSHI_ALLOW_PRIVATE_LLM_BASE_URL:-false}
+      MUSHI_OPENAI_MODEL: ${MUSHI_OPENAI_MODEL:-}
+      MUSHI_OPENAI_EMBEDDING_MODEL: ${MUSHI_OPENAI_EMBEDDING_MODEL:-}
       MUSHI_OPENAI_MODEL_MAP: ${MUSHI_OPENAI_MODEL_MAP:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       # Optional integrations
@@ -118,6 +125,13 @@ services:
     ports: !override
       - 127.0.0.1:${POSTGRES_PORT}:5432
       - 127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION}:6543
+    # Supavisor's start script runs `ulimit -n 100000` and exits when the
+    # container's hard limit is lower, which is Docker's default on many Linux
+    # hosts (a GitHub runner, 2026-11-20). Docker sets this limit as root.
+    ulimits:
+      nofile:
+        soft: 100000
+        hard: 100000
 
 volumes:
   mushi_caddy_data:
