@@ -44,7 +44,9 @@ It creates `./mushi` with Supabase's kit and Mushi's layer, generates every
 secret (database password, JWT secret, API keys, the internal caller secret,
 the Studio password), pulls `ghcr.io/kensaurus/mushi-mushi-{edge,admin,migrate}`,
 starts the stack, applies the migrations and creates your admin account. It
-prints the password once.
+prints the password once. Pulling from a fork or your own registry mirror?
+Add `--image-prefix registry.example.com/you/mushi-mushi` (stored as
+`MUSHI_IMAGE_PREFIX` in `.env`); `--version` pins a tag instead of `latest`.
 
 ### Open the console
 

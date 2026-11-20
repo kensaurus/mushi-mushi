@@ -13,7 +13,7 @@
 
 services:
   mushi-migrate:
-    image: ghcr.io/kensaurus/mushi-mushi-migrate:${MUSHI_VERSION:-latest}
+    image: ${MUSHI_IMAGE_PREFIX:-ghcr.io/kensaurus/mushi-mushi}-migrate:${MUSHI_VERSION:-latest}
     restart: "no"
     depends_on:
       db:
@@ -32,7 +32,7 @@ services:
       MUSHI_INTERNAL_CALLER_SECRET: ${MUSHI_INTERNAL_CALLER_SECRET:?run install.sh or set MUSHI_INTERNAL_CALLER_SECRET in .env}
 
   functions:
-    image: ghcr.io/kensaurus/mushi-mushi-edge:${MUSHI_VERSION:-latest}
+    image: ${MUSHI_IMAGE_PREFIX:-ghcr.io/kensaurus/mushi-mushi}-edge:${MUSHI_VERSION:-latest}
     # The code is in the image; keep only the dependency cache. The kit's
     # command (no --port) keeps the runtime on 9000, where its gateway looks.
     volumes: !override
@@ -80,7 +80,7 @@ services:
       LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
 
   mushi-admin:
-    image: ghcr.io/kensaurus/mushi-mushi-admin:${MUSHI_VERSION:-latest}
+    image: ${MUSHI_IMAGE_PREFIX:-ghcr.io/kensaurus/mushi-mushi}-admin:${MUSHI_VERSION:-latest}
     container_name: mushi-admin
     restart: unless-stopped
     environment:
