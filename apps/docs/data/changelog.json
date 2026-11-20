@@ -1,29 +1,22 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "Unreleased",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.37",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.37.3",
+      "1.37.2",
+      "1.37.1",
+      "1.37.0"
+    ],
     "highlights": [
       {
-        "title": "`mushi worker install` on Windows without administrator rights",
-        "description": "the logon task (`schtasks /SC ONLOGON`) answered \"Access is denied\" and the worker was left with no service. The installer now falls back to a hidden launcher in your Startup folder, starts the worker straight away, and logs to `~/.cache/mushi-work/logs/worker.log`. `mushi worker status` shows it, and `mushi worker revoke` removes it."
+        "title": "App version.",
+        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
       },
       {
-        "title": "pnpm repos on a Windows worker",
-        "description": "the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`."
-      },
-      {
-        "title": "The worker's stop hint",
-        "description": "on Windows it no longer says `systemctl`."
-      },
-      {
-        "title": "`mushi login` outside an app folder",
-        "description": "run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead."
-      },
-      {
-        "title": "`diagnose_setup` with an account key",
-        "description": "it now diagnoses instead of failing with `ORG_KEY_NOT_ALLOWED`. An account key (from `mushi setup` in account mode) cannot ingest, so the SDK ingest check refused it and the whole tool errored in `full` and `ingest` mode. The ingest steps are now read for the named project (`projectId`, or the configured one) from the new `GET /v1/admin/projects/:id/ingest-setup`. Without a project, the tool asks for `projectId`."
+        "title": "`loadMyReports()`.",
+        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
       },
       {
         "title": "Scroll position",
@@ -48,31 +41,6 @@
       {
         "title": "Speed and size",
         "description": "off-screen media is never read. The capture code is a separate chunk that loads with the first screenshot, so the core bundle is smaller (88.5 KB budget)."
-      },
-      {
-        "title": "The worker's heartbeat names its coding agent",
-        "description": "`mushi work --daemon` now sends which agent its lanes run (`cursor` or `claude`). The console uses it to show a Claude Code worker's account. Before, it read \"Cursor account: not checked yet\" and offered a Cursor account switch that does nothing for Claude Code."
-      }
-    ],
-    "packages": []
-  },
-  {
-    "majorMinor": "1.37",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "1.37.2",
-      "1.37.1",
-      "1.37.0"
-    ],
-    "highlights": [
-      {
-        "title": "App version.",
-        "description": "`reports.app_version` now comes from the new `appVersion` option, then `expo-application` (version and build) or `react-native-device-info`. It never falls back to the OS version, which made Expo apps report Android's `36`."
-      },
-      {
-        "title": "`loadMyReports()`.",
-        "description": "It resolves `null` when the list could not be loaded, so the report sheet shows an error with Retry instead of \"no reports\". `listMyReports()` keeps returning `[]` on failure."
       }
     ],
     "packages": [
@@ -82,7 +50,7 @@
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "1.37.0"
+        "version": "1.37.3"
       },
       {
         "name": "mushi-mushi",
@@ -1371,17 +1339,31 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.40.5",
       "0.40.4",
       "0.40.3",
       "0.40.2",
       "0.40.1",
       "0.40.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "pnpm repos on a Windows worker",
+        "description": "the worker looked for pnpm only beside `node.exe`, so a global `npm i -g pnpm` was never found and pnpm repos ran with no dependencies (no tests, failing commit hooks). It now also looks on PATH, including a standalone `pnpm.exe`."
+      },
+      {
+        "title": "The worker's stop hint",
+        "description": "on Windows it no longer says `systemctl`."
+      },
+      {
+        "title": "`mushi login` outside an app folder",
+        "description": "run from a folder with no `package.json` or `.git` (your home folder, say) by an account that already has projects, it no longer creates a new project named after the folder. It lists your projects with their `--project-id` instead."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.40.4"
+        "version": "0.40.5"
       }
     ]
   },
@@ -1536,6 +1518,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.31.7",
       "0.31.6",
       "0.31.5",
       "0.31.4",
@@ -1552,7 +1535,7 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.31.6"
+        "version": "0.31.7"
       }
     ]
   },
