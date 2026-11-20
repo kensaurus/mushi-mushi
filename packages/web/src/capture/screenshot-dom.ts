@@ -113,7 +113,7 @@ export async function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Pr
   const cloneLinks = clone.querySelectorAll('link');
   const linkSlots = new Map<Node, Element>();
   if (liveLinks.length === cloneLinks.length) liveLinks.forEach((l, i) => linkSlots.set(l, cloneLinks[i]!));
-  const { offscreen, pins } = replayLiveState(live, clone);
+  const { offscreen, pins, backgrounds } = replayLiveState(live, clone);
   fillScriptedStyleElements(live, clone);
 
   // Pair live and cloned media before anything is removed: the clone keeps
@@ -132,6 +132,7 @@ export async function buildPrivacySafeDocument(privacy?: MushiPrivacyConfig): Pr
     (el) => offscreen.has(el) || hidden.some((selector) => matchesOrInside(el, selector)),
   );
   pinOffscreen(pins);
+  await inlineBackgrounds(backgrounds.filter((bg) => !hidden.some((selector) => matchesOrInside(bg.live, selector))));
 
   // The SDK host is a zero-size pass-through shell — strip it from the
   // SVG foreignObject serialisation so capture doesn't fail on shadow DOM.
@@ -190,12 +191,13 @@ const ANIMATED_PROPERTIES = [
  * It also finds the subtrees wholly outside the viewport, to be pinned to
  * their live size (see pinOffscreen).
  */
-function replayLiveState(live: Element, clone: Element): { offscreen: Set<Element>; pins: Pin[] } {
+function replayLiveState(live: Element, clone: Element): LiveState {
   const offscreen = new Set<Element>();
   const pins: Pin[] = [];
+  const backgrounds: Background[] = [];
   const liveAll = [live, ...Array.from(live.querySelectorAll('*'))];
   const cloneAll = [clone, ...Array.from(clone.querySelectorAll('*'))];
-  if (liveAll.length !== cloneAll.length) return { offscreen, pins };
+  if (liveAll.length !== cloneAll.length) return { offscreen, pins, backgrounds };
   const animated = animationTargets();
   const styles: CSSStyleDeclaration[] = [];
   const scroller = document.scrollingElement;
@@ -206,12 +208,29 @@ function replayLiveState(live: Element, clone: Element): { offscreen: Set<Elemen
     decls.set(prop, value);
   };
   const scrolled: number[] = [];
+  const withBackground: number[] = [];
+  let inBody = false;
 
   for (let i = 0; i < liveAll.length; i++) {
     const liveEl = liveAll[i]!;
     const cloneEl = cloneAll[i]!;
     const computed = getComputedStyle(liveEl);
     styles.push(computed);
+    if (liveEl === document.body) inBody = true;
+    if (inBody) {
+      // What hides an element on the page hides it in the capture. Rules
+      // behind media queries the SVG evaluates differently (hover-only
+      // controls under `(hover: hover)`) otherwise showed up.
+      if (computed.display === 'none') set(cloneEl, 'display', 'none');
+      else {
+        const parent = liveEl.parentElement;
+        if (computed.visibility !== 'visible' && parent && getComputedStyle(parent).visibility === 'visible') {
+          set(cloneEl, 'visibility', computed.visibility);
+        }
+        if (computed.opacity === '0') set(cloneEl, 'opacity', '0');
+        if (computed.backgroundImage.includes('url(')) withBackground.push(i);
+      }
+    }
     // Hold each running animation's current frame.
     if (animated.has(liveEl)) {
       for (const p of ANIMATED_PROPERTIES) set(cloneEl, p, computed.getPropertyValue(p));
@@ -259,7 +278,94 @@ function replayLiveState(live: Element, clone: Element): { offscreen: Set<Elemen
   }
 
   findOffscreen(liveAll, cloneAll, styles, offscreen, pins);
-  return { offscreen, pins };
+  for (const i of withBackground) {
+    if (!offscreen.has(liveAll[i]!)) {
+      backgrounds.push({ live: liveAll[i]!, clone: cloneAll[i]!, value: styles[i]!.backgroundImage });
+    }
+  }
+  return { offscreen, pins, backgrounds };
+}
+
+interface LiveState {
+  offscreen: Set<Element>;
+  pins: Pin[];
+  backgrounds: Background[];
+}
+
+interface Background {
+  live: Element;
+  clone: Element;
+  /** Computed background-image: absolute url()s, possibly several layers. */
+  value: string;
+}
+
+const MAX_BACKGROUND_URLS = 40;
+const MAX_BACKGROUND_BYTES = 6 * 1024 * 1024;
+const MAX_BACKGROUND_IMAGE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * CSS background images (sprites, hero art, icons) are subresources, which an
+ * SVG drawn as an image never loads, so they vanished. Like html-to-image,
+ * fetch each one (from the HTTP cache the page just filled) and embed it as
+ * a data: URL, for visible elements only and within a size budget. A URL
+ * that can't be read (cross-origin without CORS, CSP connect-src) is left
+ * for stripTaintSources to remove.
+ */
+async function inlineBackgrounds(backgrounds: Background[]): Promise<void> {
+  const urls = new Map<string, Promise<string | null>>();
+  let bytes = 0;
+  const load = (url: string) => {
+    let pending = urls.get(url);
+    if (!pending) {
+      pending = urls.size >= MAX_BACKGROUND_URLS
+        ? Promise.resolve(null)
+        : readAsDataUrl(url).then((data) => {
+            if (!data || bytes + data.length > MAX_BACKGROUND_BYTES) return null;
+            bytes += data.length;
+            return data;
+          });
+      urls.set(url, pending);
+    }
+    return pending;
+  };
+  await Promise.all(
+    backgrounds.map(async (bg) => {
+      const refs = Array.from(bg.value.matchAll(CSS_URL), (m) => m[2]!.trim()).filter((u) => !u.startsWith('data:'));
+      if (refs.length === 0) return;
+      const data = await Promise.all(refs.map(load));
+      let value = bg.value;
+      refs.forEach((ref, k) => {
+        if (data[k]) value = value.split(ref).join(data[k]!);
+      });
+      if (value !== bg.value) {
+        bg.clone.setAttribute('style', `${bg.clone.getAttribute('style') ?? ''};background-image:${value}!important`);
+      }
+    }),
+  );
+}
+
+const CSS_URL = /url\(\s*(['"]?)([^)'"]+)\1\s*\)/gi;
+
+async function readAsDataUrl(url: string): Promise<string | null> {
+  if (typeof fetch !== 'function') return null;
+  const abort = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => abort?.abort(), SHEET_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { cache: 'force-cache', signal: abort?.signal });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size > MAX_BACKGROUND_IMAGE_BYTES || !blob.type.startsWith('image/')) return null;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return `data:${blob.type};base64,${btoa(binary)}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface Pin {

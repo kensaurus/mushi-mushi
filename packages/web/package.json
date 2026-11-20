@@ -154,7 +154,7 @@
     {
       "name": "On-demand chunk: DOM screenshot capture (gzipped)",
       "path": "dist/chunks/screenshot-dom-*.js",
-      "limit": "7 KB",
+      "limit": "8 KB",
       "gzip": true
     },
     {

@@ -328,6 +328,26 @@ describe('capture markup is valid XML and keeps the page whole', () => {
     }
   });
 
+  it('embeds visible CSS background images, which the SVG cannot load', async () => {
+    document.body.innerHTML = '<span id="sprite" style="background-image:url(/sennin/sheet.png)"></span>';
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const svg = await capturedSvg();
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/sennin/sheet.png'), expect.objectContaining({ cache: 'force-cache' }));
+      expect(svg).toMatch(/id="sprite"[^>]*background-image:url\(("|&quot;)?data:image\/png;base64,/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps what the page hides hidden, even where the SVG reads media queries differently', async () => {
+    document.body.innerHTML = '<button id="hide" style="opacity:0">×</button><p id="gone" style="display:none">x</p>';
+    const svg = await capturedSvg();
+    expect(svg).toMatch(/id="hide"[^>]*opacity:0!important/);
+    expect(svg).toMatch(/id="gone"[^>]*display:none!important/);
+  });
+
   it('falls back to the CSSOM when the sheet text cannot be fetched', async () => {
     document.body.innerHTML = '<p class="x">Hi</p>';
     const sheet = { href: 'https://app.example/a.css', ownerNode: document.createElement('link'), disabled: false, media: { mediaText: '' }, cssRules: [{ cssText: '.x { color: red; }' }] };
