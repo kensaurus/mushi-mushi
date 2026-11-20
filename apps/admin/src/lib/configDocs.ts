@@ -2110,9 +2110,9 @@ const SDK_INSTALL: ConfigDoc[] = [
     id: 'sdk-install.screenshot_mode',
     label: 'Screenshot mode',
     summary:
-      'When the SDK captures a screenshot — when the report opens, always (continuous), or never.',
+      'When the SDK takes a screenshot on its own: when the reporter presses Send, when the report opens, or never. The reporter always sees it before it is sent.',
     howItWorks:
-      '`on-report` is the default and respects user privacy. `auto` captures every few seconds (more diagnostic context, but storage-heavy). `off` disables screenshots entirely (compliance-friendly).',
+      '`on-report` (the default) leaves the app\'s own `capture.screenshot` setting in charge; with none set, a screenshot is taken only when the reporter presses the camera button. An app set to `on-report` takes one when the reporter presses Send, shows it, and sends it on a second Send. `auto` takes one when the report opens. Every screenshot is previewed with Mark up (blur) and Remove, and a removed one is never taken again for that report. `off` turns screenshots off, including the camera button.',
     default: { value: 'on-report' },
     recommended: {
       value: "on-report",
@@ -2122,7 +2122,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       ],
     },
     whenToChange:
-      'Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps where any screenshot is a privacy risk.',
+      'Stay on `on-report` for most apps. Switch to `auto` for hard-to-repro intermittent bugs. Switch to `off` for HIPAA-style apps, or for pages where any screenshot is a privacy risk; to hide only parts of a page, mark them `data-private` instead.',
   },
   {
     id: 'sdk-install.screenshot_sensitive_hint',

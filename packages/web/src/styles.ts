@@ -425,6 +425,7 @@ export function getWidgetStyles(theme: MushiThemeMode, accent = '', accentText =
     .mushi-annotate-host:empty { display: none; }
     .mushi-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--_muted); }
     .mushi-error-inline, .mushi-warn { color: var(--_err); }
+    .mushi-screenshot-review { color: var(--_fg); font-weight: 600; }
     .mushi-empty { margin: 0; padding: 24px 8px; text-align: center; color: var(--_muted); }
     .mushi-link-btn { min-height: 24px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
     .mushi-btn, .mushi-submit { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }

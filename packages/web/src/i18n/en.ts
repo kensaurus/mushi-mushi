@@ -47,6 +47,7 @@ export const en: MushiLocale = {
     screenshotShareTab: 'Share this tab instead',
     notSentBlocked: 'Not sent. This report was filtered out before sending. Your text is still here; add a little more detail and try again.',
     notSentThrottled: 'Not sent. Too many reports in a short time. Your text is still here; wait a minute and try again.',
+    screenshotReview: 'Check the screenshot below, then press Send again.',
     screenshotErrors: {
       permission: 'Screen capture was blocked. Allow it, then try again.',
       unsupported: 'This browser can\'t capture the page. Describe it instead.',

@@ -31,7 +31,7 @@ function docUrl(route: string): string {
   return route === '/' ? MUSHI_DOCS_BASE : MUSHI_DOCS_BASE + route
 }
 
-/** 245 pages, generated from llms.txt. @internal Exported for tests. */
+/** 246 pages, generated from llms.txt. @internal Exported for tests. */
 export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
   {
     title: "Mushi Mushi — one place to improve your AI-built app",
@@ -2048,6 +2048,15 @@ export const MUSHI_DOCS_INDEX: DocIndexEntry[] = [
     keywords: ["security", "soc2", "soc", "readiness"],
     headings: ["Automated controls", "Audit dashboard", "Generating evidence manually", "Data retention policies", "DSAR (Data Subject Access Request)"],
     excerpt: "Mushi Mushi's SOC 2 readiness, not certification. Nightly evidence for access, retention, DSAR and availability controls, retention per project, DSAR tracking.",
+  },
+  {
+    title: "What leaves the browser",
+    url: docUrl("/security/what-leaves-the-browser"),
+    route: "/security/what-leaves-the-browser",
+    markdown: "security/what-leaves-the-browser.md",
+    keywords: ["security", "what-leaves-the-browser", "leaves", "browser"],
+    headings: ["What a report carries", "Screenshots", "The pattern scrubber", "Related"],
+    excerpt: "What the Mushi Mushi web SDK sends with a bug report, where each part is filtered, and how to keep private pages out of reports.",
   },
   {
     title: "Self-hosting quickstart",
