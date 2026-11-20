@@ -4,10 +4,10 @@
  *          (`renderMail`, yen-yen ADR 0100), so a template written as an
  *          EmailDoc moves to the kit without rewriting its words.
  *
- * The kit has no severity pill, check list or monospace block, so:
+ * The kit has no severity pill or check list, so:
  *   findings  → one paragraph per row, "[Fix first] <title>" then the detail
  *   checks    → one paragraph of "- <item>" lines
- *   pre       → a paragraph that keeps its line breaks
+ *   pre       → the kit's monospace code block (line breaks kept)
  *   link      → a "<label>: <url>" line (the kit has one button style)
  *   footer    → small notes above the kit's fixed sender footer
  * Text parts keep email-layout.ts's shapes ("[Fix first] …", "- …"), so the
@@ -49,7 +49,7 @@ export function docToMailBlocks(doc: EmailDoc): MailBlock[] {
         out.push({ type: 'paragraph', text: b.items.map((i) => `- ${i}`).join('\n') })
         break
       case 'pre':
-        out.push({ type: 'paragraph', text: b.text })
+        out.push({ type: 'code', mono: true, value: b.text })
         break
       case 'button':
         out.push({ type: 'button', label: b.label, url: b.url })

@@ -37,7 +37,8 @@ Deno.test('lifecycle mail: same subjects, the signed unsubscribe URL byte for by
     const mail = buildLifecycleEmail({ key, adminUrl: ADMIN, unsubscribeUrl: unsub, signedUpOn: '2026-09-14' })
     assertEquals(mail.subject, SUBJECTS[key])
     // The one-click header and the visible opt-out link are the signed URL itself.
-    assertEquals(mail.headers['List-Unsubscribe'].split(', ')[0], `<${unsub}>`)
+    assertEquals(mail.headers['List-Unsubscribe'], `<${unsub}>`)
+    assert(!/mailto:/i.test(JSON.stringify(mail.headers)), `${key} carries a mailto unsubscribe`)
     assertEquals(mail.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
     assert(mail.html.includes(`href="${escapeMailHtml(unsub)}"`), `${key} opt-out href`)
     assert(mail.text.includes(`Unsubscribe: ${unsub}`), `${key} text opt-out`)
@@ -46,6 +47,9 @@ Deno.test('lifecycle mail: same subjects, the signed unsubscribe URL byte for by
     assertFooter(key, mail)
     assert(new TextEncoder().encode(mail.html).length < 60_000)
   }
+  // Install snippets render as the kit's monospace block.
+  const day0 = buildLifecycleEmail({ key: 'day0_welcome', adminUrl: ADMIN, unsubscribeUrl: unsub })
+  assert(/<pre[^>]*>npx mushi-mushi setup --ide cursor<\/pre>/.test(day0.html), 'snippet is a <pre>')
 })
 
 Deno.test('usage alerts: same subjects, the billing link, footer', () => {

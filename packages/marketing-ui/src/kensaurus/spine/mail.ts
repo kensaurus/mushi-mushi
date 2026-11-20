@@ -24,10 +24,26 @@
  *                  `crossLinks: false` (payment mail)
  *   marketing      announcements: cross-links, a required `unsubscribeUrl`,
  *                  a visible opt-out line, and the RFC 8058 header pair
+ *   operator       owner-only mail (digests, alerts): no cross-links, no UTM,
+ *                  no sender block; a one-line footer naming the app and
+ *                  what triggers the mail (a required `trigger`)
  *
- * Every footer carries the sender facts 特定電子メール法 asks of mail that
- * can carry an ad: the legal name, the address and a contact. Never a phone
- * number, and never any other company.
+ * Transactional and marketing footers carry the sender facts
+ * 特定電子メール法 asks of mail that can carry an ad: the legal name, the
+ * address and a contact. Security mail carries one line instead (the brand
+ * or domain and why it was sent; owner 2026-10-14: a company name in a
+ * sign-in mail reads like a scam), and operator mail goes only to the owner.
+ * Never a phone number, and never any other company.
+ *
+ * `neutral: true` renders brand-free (a thin accent bar, the domain instead
+ * of the brand name). `image.width` centres a small picture; `code.mono`
+ * is a monospace snippet that keeps its line breaks.
+ *
+ * Report blocks (`status`, `rows`, `table`) serve any kind; operator mail is
+ * built from them. `mailTags()` and `mailIdempotencyKey()` shape the Resend
+ * `tags` field and `Idempotency-Key` header; an operator mail given an
+ * `entityRefId` returns an `X-Entity-Ref-ID` header so Gmail does not thread
+ * alerts that share a subject.
  */
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -46,7 +62,33 @@ export type MailAppId =
   | 'portfolio'
 
 export type MailLang = 'ja' | 'en'
-export type MailKind = 'security' | 'transactional' | 'marketing'
+export type MailKind = 'security' | 'transactional' | 'marketing' | 'operator'
+
+/** Report tone: always shown with a word or glyph as well as a colour. */
+export type MailTone = 'ok' | 'warn' | 'bad'
+
+export interface MailRow {
+  readonly label: string
+  readonly value: string
+  /** Colours the value and prefixes a glyph (✓ ▲ ✕). */
+  readonly tone?: MailTone
+  /** A small muted line under the value. */
+  readonly note?: string
+}
+
+export interface MailTableColumn {
+  readonly label: string
+  /** 'right' for numbers. Defaults to 'left'. */
+  readonly align?: 'left' | 'right'
+}
+
+/** A `table` block holds at most this many rows (renderMail throws past it). */
+export const MAIL_TABLE_MAX_ROWS = 12
+/** …and at most this many columns, so it still fits a 320px screen. */
+export const MAIL_TABLE_MAX_COLUMNS = 5
+
+/** An `image` block's `width` runs from this to the 544px body width. */
+export const MAIL_IMAGE_MIN_WIDTH = 40
 
 export interface MailBrand {
   readonly id: MailAppId
@@ -90,7 +132,15 @@ export type MailBlock =
       readonly items: readonly [string, string] | readonly [string, string, string]
       readonly id?: string
     }
-  | ({ readonly type: 'image'; readonly id?: string } & MailImage)
+  | ({
+      readonly type: 'image'
+      readonly id?: string
+      /**
+       * Display width in px (MAIL_IMAGE_MIN_WIDTH–544), centred: a mascot at
+       * 160–240 instead of a full-width picture. Omitted = full width.
+       */
+      readonly width?: number
+    } & MailImage)
   | {
       readonly type: 'imagePair'
       readonly images: readonly [MailImage, MailImage]
@@ -100,10 +150,43 @@ export type MailBlock =
       readonly type: 'code'
       readonly value: string
       readonly label?: string
+      /**
+       * true = a left-aligned monospace block that keeps line breaks (an
+       * install snippet). Omitted = the big centred sign-in code.
+       */
+      readonly mono?: boolean
       readonly id?: string
     }
   | { readonly type: 'divider'; readonly id?: string }
   | { readonly type: 'note'; readonly text: string; readonly id?: string }
+  | {
+      /** A banner: coloured left bar, a tone word, the headline and an optional detail. */
+      readonly type: 'status'
+      readonly tone: MailTone
+      readonly headline: string
+      readonly detail?: string
+      /** Replaces the tone word (OK / Watch / Action needed; 正常 / 注意 / 要対応). */
+      readonly label?: string
+      readonly id?: string
+    }
+  | {
+      /** A label/value list; `title` names the section and its window ("Last 24 h"). */
+      readonly type: 'rows'
+      readonly title?: string
+      readonly rows: readonly MailRow[]
+      readonly id?: string
+    }
+  | {
+      /** A header row plus at most MAIL_TABLE_MAX_ROWS rows of plain strings. */
+      readonly type: 'table'
+      readonly title?: string
+      readonly columns: readonly MailTableColumn[]
+      readonly rows: readonly (readonly string[])[]
+      /** Shown instead of the body when `rows` is empty. Defaults to "None" / 「なし」. */
+      readonly empty?: string
+      readonly note?: string
+      readonly id?: string
+    }
 
 interface MailInputBase {
   readonly app: MailAppId
@@ -120,9 +203,17 @@ interface MailInputBase {
   readonly campaign: string
   /**
    * The "More from KENSAURUS" row: false hides it (payment mail), a list
-   * picks the apps (up to 3). Ignored on security mail, which never has it.
+   * picks the apps (up to 3). Ignored on security and operator mail, which
+   * never have it.
    */
   readonly crossLinks?: boolean | readonly MailAppId[]
+  /**
+   * Brand-free mail (the-wanting-mind's neutral passport): a thin accent bar
+   * instead of the logo and wordmark, the domain (`kensaur.us`) wherever the
+   * brand name would appear, the web link at the domain root, and no
+   * cross-link row. The caller keeps the product name out of the blocks.
+   */
+  readonly neutral?: boolean
 }
 
 export type MailInput =
@@ -135,13 +226,25 @@ export type MailInput =
       /** https one-click endpoint; also the footer's visible opt-out link. */
       readonly unsubscribeUrl: string
     })
+  | (MailInputBase & {
+      readonly kind: 'operator'
+      readonly unsubscribeUrl?: undefined
+      /** What sends this mail, for the footer: "Daily at 09:05 JST", "Stripe webhook". */
+      readonly trigger: string
+      /**
+       * A value unique to this send (the caller's `crypto.randomUUID()`):
+       * returned as `X-Entity-Ref-ID` so Gmail never threads two alerts that
+       * share a subject. Omit it on mail that should thread (a daily digest).
+       */
+      readonly entityRefId?: string
+    })
 
 export interface RenderedMail {
   readonly subject: string
   readonly preheader: string
   readonly html: string
   readonly text: string
-  /** The RFC 8058 pair on marketing mail; empty otherwise. */
+  /** The RFC 8058 pair on marketing mail; `X-Entity-Ref-ID` on operator mail given one; empty otherwise. */
   readonly headers: Readonly<Record<string, string>>
 }
 
@@ -322,7 +425,8 @@ function checkedHref(raw: string, what: string): URL {
  * The link as the mail prints it: on our own domains, utm_source=email,
  * utm_medium=<kind>, utm_campaign, utm_content set through the URL API (an
  * existing query or #fragment is kept; never a second `?`). Other hosts,
- * mailto and `track: false` links are returned untouched.
+ * mailto, `track: false` links and operator mail (the owner is not a
+ * campaign audience) are returned untouched.
  */
 export function mailHref(
   raw: string,
@@ -330,7 +434,8 @@ export function mailHref(
   track = true,
 ): string {
   const url = checkedHref(raw, 'link')
-  if (!track || url.protocol !== 'https:' || !isOwnMailHost(url.hostname)) return url.toString()
+  if (!track || utm.kind === 'operator') return url.toString()
+  if (url.protocol !== 'https:' || !isOwnMailHost(url.hostname)) return url.toString()
   url.searchParams.set('utm_source', 'email')
   url.searchParams.set('utm_medium', utm.kind)
   url.searchParams.set('utm_campaign', utm.campaign)
@@ -370,6 +475,85 @@ export function listUnsubscribeHeaders(
   }
 }
 
+// ── Resend send options ──────────────────────────────────────────────────────
+// Resend send-email API (read 2026-11-20): a tag name and value may hold only
+// ASCII letters, digits, `_` and `-`, at most 256 characters each. The
+// `Idempotency-Key` request header takes at most 256 characters and Resend
+// keeps it for 24 hours: the same key within a day sends once.
+
+export interface MailTag {
+  readonly name: string
+  readonly value: string
+}
+
+const TAG_MAX = 256
+
+function tagSafe(value: string, what: string): string {
+  const safe = value
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, '_')
+    .slice(0, TAG_MAX)
+  if (safe.replace(/_/g, '') === '')
+    throw new Error(`mailTags: ${what} is empty: ${JSON.stringify(value)}`)
+  return safe
+}
+
+/**
+ * The Resend `tags` for one mail: app, kind and template, plus any extras.
+ * Characters Resend rejects become `_` (`glot.it` → `glot_it`); an empty
+ * value throws instead of sending an untagged mail.
+ */
+export function mailTags(input: {
+  readonly app: MailAppId
+  readonly kind: MailKind
+  readonly template: string
+  readonly extra?: Readonly<Record<string, string>>
+}): readonly MailTag[] {
+  const pairs: [string, string][] = [
+    ['app', input.app],
+    ['kind', input.kind],
+    ['template', input.template],
+    ...Object.entries(input.extra ?? {}),
+  ]
+  return pairs.map(([name, value]) => ({
+    name: tagSafe(name, 'tag name'),
+    value: tagSafe(value, name),
+  }))
+}
+
+const IDEMPOTENCY_MAX = 256
+
+/** FNV-1a, 32-bit, as 8 hex characters: a stable suffix for an over-long key (no crypto import). */
+function fnv1a(value: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash.toString(16).padStart(8, '0')
+}
+
+/**
+ * A Resend `Idempotency-Key` from its parts, joined with `/`:
+ * `mailIdempotencyKey(['glot-ops-digest', '2026-11-20'])` →
+ * `glot-ops-digest/2026-11-20`. Each part must be non-empty; anything but
+ * printable ASCII becomes `_`. A key longer than 256 characters keeps its
+ * start plus a hash of the whole, so two long keys stay distinct.
+ */
+export function mailIdempotencyKey(parts: readonly (string | number)[]): string {
+  if (parts.length === 0) throw new Error('mailIdempotencyKey: needs at least one part')
+  const clean = parts.map((part) => {
+    const value = String(part)
+      .trim()
+      .replace(/[^\x21-\x7E]/g, '_')
+    if (value === '') throw new Error('mailIdempotencyKey: a part is empty')
+    return value
+  })
+  const key = clean.join('/')
+  if (key.length <= IDEMPOTENCY_MAX) return key
+  return `${key.slice(0, IDEMPOTENCY_MAX - 9)}~${fnv1a(key)}`
+}
+
 // ── Escaping ─────────────────────────────────────────────────────────────────
 
 export function escapeMailHtml(value: string): string {
@@ -394,8 +578,10 @@ const COPY = {
     more: 'KENSAURUS のほかのアプリ',
     code: '確認コード',
     why: {
+      // Security mail's whole footer (owner 2026-10-14: a company name in a
+      // sign-in mail reads like a scam), so it carries the brand or domain only.
       security: (b: string) =>
-        `${b}のアカウント操作にあわせて自動でお送りしています。お心当たりがない場合は、このメールを破棄してください。`,
+        `${b} から、このメールアドレスでのサインインのご依頼があったためお送りしています。お心当たりがない場合は、このメールを破棄してください。`,
       transactional: (b: string) => `${b}のご利用内容についてのお知らせです。`,
       marketing: (b: string) => `${b}のお知らせの受け取りに登録された方にお送りしています。`,
     },
@@ -404,13 +590,16 @@ const COPY = {
     contact: 'お問い合わせ',
     sender: '送信者',
     address: '所在地',
+    operator: (b: string, trigger: string) => `KENSAURUS 運営者あて · ${b} · ${trigger}`,
+    tone: { ok: '正常', warn: '注意', bad: '要対応' },
+    empty: 'なし',
   },
   en: {
     more: 'More from KENSAURUS',
     code: 'Your code',
     why: {
       security: (b: string) =>
-        `${b} sent this automatically because of a request on your account. If it wasn't you, you can ignore this email.`,
+        `${b} sent this because someone asked to sign in with this address. If it wasn't you, ignore it.`,
       transactional: (b: string) => `This email is about your use of ${b}.`,
       marketing: (b: string) => `You get this because you signed up for news from ${b}.`,
     },
@@ -419,6 +608,9 @@ const COPY = {
     contact: 'Contact',
     sender: 'Sender',
     address: 'Address',
+    operator: (b: string, trigger: string) => `Sent to the KENSAURUS operator · ${b} · ${trigger}`,
+    tone: { ok: 'OK', warn: 'Watch', bad: 'Action needed' },
+    empty: 'None',
   },
 } as const
 
@@ -436,6 +628,50 @@ const C = {
   onAccent: '#FFFFFF',
 } as const
 
+/**
+ * Report tones. `ink` is the tone word and a toned value: ≥ 4.5:1 on both
+ * `bg` and the white card (mail.test.mjs checks it). `dark*` are the
+ * prefers-color-scheme versions. No pure black or white anywhere.
+ */
+export const MAIL_TONES: Readonly<
+  Record<
+    MailTone,
+    {
+      readonly bar: string
+      readonly bg: string
+      readonly ink: string
+      readonly glyph: string
+      readonly darkBg: string
+      readonly darkInk: string
+    }
+  >
+> = {
+  ok: {
+    bar: '#2E7D4F',
+    bg: '#EDF6F0',
+    ink: '#1F6B41',
+    glyph: '✓',
+    darkBg: '#18271E',
+    darkInk: '#86D6A6',
+  },
+  warn: {
+    bar: '#C27C0E',
+    bg: '#FDF3E1',
+    ink: '#875200',
+    glyph: '▲',
+    darkBg: '#2B2414',
+    darkInk: '#F0B85C',
+  },
+  bad: {
+    bar: '#C0392B',
+    bg: '#FCEBE9',
+    ink: '#A12A1F',
+    glyph: '✕',
+    darkBg: '#2E1A18',
+    darkInk: '#F49B90',
+  },
+}
+
 const FONT = {
   ja: "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic','Meiryo',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
   en: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,'Hiragino Sans','Meiryo',sans-serif",
@@ -449,8 +685,19 @@ const STYLE =
   '.km-stack-gap{padding:0 0 12px!important}.km-btn,.km-btn a{display:block!important;text-align:center!important}}' +
   '@media (prefers-color-scheme:dark){.km-outer{background:#121110!important}.km-card{background:#1C1B19!important;border-color:#34312B!important}' +
   '.km-text{color:#ECEAE5!important}.km-muted{color:#ABA69C!important}.km-tint{background:#27251F!important}' +
-  '.km-foot{background:#171614!important;border-color:#34312B!important}.km-link{color:#ECEAE5!important}}' +
-  '[data-ogsc] .km-text{color:#ECEAE5!important}[data-ogsc] .km-muted{color:#ABA69C!important}[data-ogsc] .km-link{color:#ECEAE5!important}'
+  '.km-foot{background:#171614!important;border-color:#34312B!important}.km-link{color:#ECEAE5!important}' +
+  '.km-line{border-color:#34312B!important}' +
+  (Object.keys(MAIL_TONES) as MailTone[])
+    .map(
+      (t) =>
+        `.km-bg-${t}{background:${MAIL_TONES[t].darkBg}!important}.km-ink-${t}{color:${MAIL_TONES[t].darkInk}!important}`,
+    )
+    .join('') +
+  '}' +
+  '[data-ogsc] .km-text{color:#ECEAE5!important}[data-ogsc] .km-muted{color:#ABA69C!important}[data-ogsc] .km-link{color:#ECEAE5!important}' +
+  (Object.keys(MAIL_TONES) as MailTone[])
+    .map((t) => `[data-ogsc] .km-ink-${t}{color:${MAIL_TONES[t].darkInk}!important}`)
+    .join('')
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -513,8 +760,17 @@ function blockHtml(ctx: Ctx, block: MailBlock, id: string): string {
         .join('')
       return `<table role="presentation" class="km-tint" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 20px;background:${C.tint};border-radius:6px;"><tr>${cells}</tr></table>`
     }
-    case 'image':
-      return `<div style="margin:0 0 20px;">${imageCell(ctx, block, 544)}</div>`
+    case 'image': {
+      if (block.width === undefined) {
+        return `<div style="margin:0 0 20px;">${imageCell(ctx, block, 544)}</div>`
+      }
+      const w = checkedImageWidth(block.width)
+      return (
+        `<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 20px;"><tr>` +
+        `<td align="center" width="${w}" style="width:${w}px;max-width:100%;text-align:center;">${imageCell(ctx, block, w)}</td>` +
+        `</tr></table>`
+      )
+    }
     case 'imagePair': {
       const [a, b] = block.images
       return (
@@ -525,6 +781,14 @@ function blockHtml(ctx: Ctx, block: MailBlock, id: string): string {
       )
     }
     case 'code': {
+      if (block.mono) {
+        return (
+          `<table role="presentation" class="km-tint" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 20px;background:${C.tint};border-radius:6px;"><tr><td style="padding:14px 16px;">` +
+          (block.label ? p(ctx, esc(block.label), 12, C.muted, 'km-muted', '0 0 6px') : '') +
+          `<pre class="km-text" style="margin:0;font-family:${MONO};font-size:13px;line-height:1.55;color:${C.ink};white-space:pre-wrap;word-break:break-all;">${esc(block.value)}</pre>` +
+          `</td></tr></table>`
+        )
+      }
       const label = block.label ?? COPY[ctx.lang].code
       return (
         `<table role="presentation" class="km-tint" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 20px;background:${C.tint};border-radius:6px;"><tr><td align="center" style="padding:18px 12px;">` +
@@ -533,7 +797,115 @@ function blockHtml(ctx: Ctx, block: MailBlock, id: string): string {
         `</td></tr></table>`
       )
     }
+    case 'status': {
+      const t = MAIL_TONES[block.tone]
+      const label = block.label ?? COPY[ctx.lang].tone[block.tone]
+      return (
+        `<table role="presentation" class="km-bg-${block.tone}" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;background:${t.bg};border-left:4px solid ${t.bar};border-radius:6px;"><tr><td style="padding:14px 16px;">` +
+        `<p class="km-ink-${block.tone}" style="margin:0 0 4px;font-family:${ctx.font};font-size:12px;line-height:1.4;letter-spacing:0.06em;font-weight:700;color:${t.ink};">${esc(t.glyph)} ${esc(label)}</p>` +
+        `<p class="km-text" style="margin:0;font-family:${ctx.font};font-size:17px;line-height:1.45;font-weight:700;color:${C.ink};">${esc(block.headline)}</p>` +
+        (block.detail ? p(ctx, escLines(block.detail), 14, C.muted, 'km-muted', '6px 0 0') : '') +
+        `</td></tr></table>`
+      )
+    }
+    case 'rows': {
+      const rows = block.rows
+        .map((row, i) => {
+          const last = i === block.rows.length - 1
+          const line = last ? '' : `border-bottom:1px solid ${C.line};`
+          const t = row.tone ? MAIL_TONES[row.tone] : null
+          const value = (t ? `${esc(t.glyph)} ` : '') + esc(row.value)
+          const note = row.note
+            ? `<br><span class="km-muted" style="font-size:12px;font-weight:400;color:${C.muted};">${esc(row.note)}</span>`
+            : ''
+          return (
+            `<tr><td class="km-muted km-line" valign="top" style="padding:8px 12px 8px 0;${line}font-family:${ctx.font};font-size:14px;line-height:1.5;color:${C.muted};">${esc(row.label)}</td>` +
+            `<td class="${t ? `km-ink-${row.tone}` : 'km-text'} km-line" valign="top" align="right" style="padding:8px 0;${line}font-family:${ctx.font};font-size:14px;line-height:1.5;font-weight:700;color:${t ? t.ink : C.ink};text-align:right;">${value}${note}</td></tr>`
+          )
+        })
+        .join('')
+      return (
+        sectionTitle(ctx, block.title) +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;border-collapse:collapse;">${rows}</table>`
+      )
+    }
+    case 'table': {
+      checkTable(block)
+      const cols = block.columns
+      // Outer cells sit flush with the card padding; inner cells get 10px each side.
+      const cell = (j: number) => ({
+        align: cols[j]?.align === 'right' ? 'right' : 'left',
+        right: j === cols.length - 1 ? '0' : '10px',
+        left: j === 0 ? '0' : '10px',
+      })
+      const head = cols
+        .map((col, j) => {
+          const { align, right, left } = cell(j)
+          return `<th class="km-muted km-line" align="${align}" style="padding:6px ${right} 6px ${left};border-bottom:1px solid ${C.line};font-family:${ctx.font};font-size:12px;line-height:1.4;font-weight:700;color:${C.muted};text-align:${align};">${esc(col.label)}</th>`
+        })
+        .join('')
+      const body =
+        block.rows.length === 0
+          ? `<tr><td colspan="${cols.length}" class="km-muted" style="padding:10px 0;font-family:${ctx.font};font-size:13px;color:${C.muted};">${esc(block.empty ?? COPY[ctx.lang].empty)}</td></tr>`
+          : block.rows
+              .map((row, i) => {
+                const line = i === block.rows.length - 1 ? '' : `border-bottom:1px solid ${C.line};`
+                return (
+                  '<tr>' +
+                  row
+                    .map((value, j) => {
+                      const { align, right, left } = cell(j)
+                      const nowrap =
+                        align === 'right' ? 'white-space:nowrap;' : 'word-break:break-word;'
+                      return `<td class="km-text km-line" align="${align}" valign="top" style="padding:7px ${right} 7px ${left};${line}font-family:${ctx.font};font-size:13px;line-height:1.5;color:${C.ink};text-align:${align};${nowrap}font-variant-numeric:tabular-nums;">${esc(value)}</td>`
+                    })
+                    .join('') +
+                  '</tr>'
+                )
+              })
+              .join('')
+      const note = block.note
+        ? p(ctx, escLines(block.note), 12, C.muted, 'km-muted', '6px 0 0')
+        : ''
+      return (
+        sectionTitle(ctx, block.title) +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;"><tr>${head}</tr>${body}</table>` +
+        `<div style="margin:0 0 22px;">${note}</div>`
+      )
+    }
   }
+}
+
+function sectionTitle(ctx: Ctx, title: string | undefined): string {
+  if (!title) return ''
+  return `<h3 class="km-text" style="margin:0 0 6px;font-family:${ctx.font};font-size:13px;line-height:1.4;letter-spacing:0.04em;font-weight:700;color:${C.ink};">${esc(title)}</h3>`
+}
+
+/** An image width the body can hold, as an integer number of px. */
+function checkedImageWidth(width: number): number {
+  if (!Number.isInteger(width) || width < MAIL_IMAGE_MIN_WIDTH || width > 544) {
+    throw new Error(
+      `renderMail: image width must be an integer from ${MAIL_IMAGE_MIN_WIDTH} to 544, got ${width}`,
+    )
+  }
+  return width
+}
+
+/** A table that would break the layout or hide data throws instead. */
+function checkTable(block: Extract<MailBlock, { type: 'table' }>): void {
+  const n = block.columns.length
+  if (n === 0 || n > MAIL_TABLE_MAX_COLUMNS) {
+    throw new Error(`renderMail: a table needs 1–${MAIL_TABLE_MAX_COLUMNS} columns, got ${n}`)
+  }
+  if (block.rows.length > MAIL_TABLE_MAX_ROWS) {
+    throw new Error(
+      `renderMail: a table holds at most ${MAIL_TABLE_MAX_ROWS} rows, got ${block.rows.length}`,
+    )
+  }
+  block.rows.forEach((row, i) => {
+    if (row.length !== n)
+      throw new Error(`renderMail: table row ${i + 1} has ${row.length} cells, not ${n}`)
+  })
 }
 
 function blockText(ctx: Ctx, block: MailBlock, id: string): string {
@@ -556,12 +928,44 @@ function blockText(ctx: Ctx, block: MailBlock, id: string): string {
         .map((img) => [`[${img.alt}]`, img.caption].filter(Boolean).join(' '))
         .join('\n')
     case 'code':
+      if (block.mono) return block.label ? `${block.label}:\n${block.value}` : block.value
       return `${block.label ?? COPY[ctx.lang].code}: ${block.value}`
+    case 'status':
+      return [
+        `${MAIL_TONES[block.tone].glyph} [${block.label ?? COPY[ctx.lang].tone[block.tone]}] ${block.headline}`,
+        block.detail,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    case 'rows':
+      return [
+        ...(block.title ? [block.title] : []),
+        ...block.rows.map(
+          (row) =>
+            `・${row.label}: ${row.tone ? `${MAIL_TONES[row.tone].glyph} ` : ''}${row.value}${row.note ? ` (${row.note})` : ''}`,
+        ),
+      ].join('\n')
+    case 'table': {
+      checkTable(block)
+      const lines = block.rows.length
+        ? [
+            block.columns.map((c) => c.label).join(' | '),
+            ...block.rows.map((row) => row.join(' | ')),
+          ]
+        : [block.empty ?? COPY[ctx.lang].empty]
+      return [
+        ...(block.title ? [block.title] : []),
+        ...lines,
+        ...(block.note ? [block.note] : []),
+      ].join('\n')
+    }
   }
 }
 
 function pickCrossLinks(input: MailInput): readonly MailBrand[] {
-  if (input.kind === 'security' || input.crossLinks === false) return []
+  if (input.kind === 'security' || input.kind === 'operator' || input.crossLinks === false)
+    return []
+  if (input.neutral) return []
   const allowed = mailSiblings(input.app)
   const chosen = Array.isArray(input.crossLinks)
     ? allowed.filter((b) => (input.crossLinks as readonly MailAppId[]).includes(b.id))
@@ -591,7 +995,17 @@ export function renderMail(input: MailInput): RenderedMail {
   if (input.kind === 'marketing' && !input.unsubscribeUrl) {
     throw new Error('renderMail: marketing mail needs an unsubscribeUrl')
   }
-  const headers = input.kind === 'marketing' ? listUnsubscribeHeaders(input.unsubscribeUrl) : {}
+  const trigger = input.kind === 'operator' ? oneLine(input.trigger ?? '') : ''
+  if (input.kind === 'operator' && trigger === '') {
+    throw new Error('renderMail: operator mail needs a trigger (what sends it)')
+  }
+  let headers: Record<string, string> = {}
+  if (input.kind === 'marketing') headers = { ...listUnsubscribeHeaders(input.unsubscribeUrl) }
+  if (input.kind === 'operator' && input.entityRefId !== undefined) {
+    const ref = oneLine(input.entityRefId)
+    if (ref === '') throw new Error('renderMail: entityRefId is empty')
+    headers = { 'X-Entity-Ref-ID': ref }
+  }
 
   const lang = input.lang
   const copy = COPY[lang]
@@ -609,11 +1023,15 @@ export function renderMail(input: MailInput): RenderedMail {
   const cross = pickCrossLinks(input)
   const unsubscribe =
     input.kind === 'marketing' ? checkedHref(input.unsubscribeUrl, 'unsubscribeUrl').toString() : ''
-  const webHref = href(ctx, brand.web, 'footer-web')
-  const webLabel = brand.web.replace(/^https:\/\//, '').replace(/\/$/, '')
+  // Neutral mail names the domain, never the product, and links its root.
+  const neutral = input.neutral === true
+  const webRoot = neutral ? `${parseUrl(brand.web, 'brand web').origin}/` : brand.web
+  const sender = neutral ? new URL(webRoot).hostname : brand.name
+  const webHref = href(ctx, webRoot, 'footer-web')
+  const webLabel = webRoot.replace(/^https:\/\//, '').replace(/\/$/, '')
 
   // ── text ──
-  const textParts: string[] = [brand.name, '']
+  const textParts: string[] = neutral ? [] : [brand.name, '']
   if (input.eyebrow) textParts.push(input.eyebrow, '')
   input.blocks.forEach((block, i) => textParts.push(blockText(ctx, block, blockId(block, i)), ''))
   if (cross.length > 0) {
@@ -626,26 +1044,34 @@ export function renderMail(input: MailInput): RenderedMail {
       '',
     )
   }
-  textParts.push(
-    '――――――――',
-    copy.why[input.kind](brand.name),
-    ...(input.kind === 'marketing' ? [`${copy.optOutLead} ${copy.optOut}: ${unsubscribe}`] : []),
-    `${copy.sender}: ${MAIL_SENDER.legalNameJa} / ${MAIL_SENDER.legalNameEn}`,
-    `${copy.address}: ${MAIL_SENDER.address}`,
-    `${copy.contact}: ${MAIL_SENDER.email}`,
-    webHref,
-  )
+  if (input.kind === 'operator') {
+    textParts.push('――――――――', copy.operator(sender, trigger))
+  } else if (input.kind === 'security') {
+    // A sign-in mail carries no company name, address or reply address.
+    textParts.push('――――――――', copy.why.security(sender))
+  } else {
+    textParts.push(
+      '――――――――',
+      copy.why[input.kind](sender),
+      ...(input.kind === 'marketing' ? [`${copy.optOutLead} ${copy.optOut}: ${unsubscribe}`] : []),
+      `${copy.sender}: ${MAIL_SENDER.legalNameJa} / ${MAIL_SENDER.legalNameEn}`,
+      `${copy.address}: ${MAIL_SENDER.address}`,
+      `${copy.contact}: ${MAIL_SENDER.email}`,
+      webHref,
+    )
+  }
   const text = textParts.join('\n')
 
   // ── html ──
-  const header =
-    `<tr><td class="km-pad" bgcolor="${brand.accentInk}" style="background:${brand.accentInk};padding:16px 28px;">` +
-    `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
-    (brand.logo
-      ? `<td valign="middle" style="padding-right:10px;">${logoImg(brand, 28)}</td>`
-      : '') +
-    `<td valign="middle"><a href="${esc(webHref)}" style="text-decoration:none;">${wordmark(ctx, brand, 16, C.onAccent)}</a></td>` +
-    `</tr></table></td></tr>`
+  const header = neutral
+    ? `<tr><td bgcolor="${brand.accentInk}" style="background:${brand.accentInk};height:6px;font-size:0;line-height:0;">&nbsp;</td></tr>`
+    : `<tr><td class="km-pad" bgcolor="${brand.accentInk}" style="background:${brand.accentInk};padding:16px 28px;">` +
+      `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>` +
+      (brand.logo
+        ? `<td valign="middle" style="padding-right:10px;">${logoImg(brand, 28)}</td>`
+        : '') +
+      `<td valign="middle"><a href="${esc(webHref)}" style="text-decoration:none;">${wordmark(ctx, brand, 16, C.onAccent)}</a></td>` +
+      `</tr></table></td></tr>`
   const hero = input.hero
     ? `<tr><td style="padding:0;"><img src="${esc(checkedImage(input.hero.src, input.hero.alt))}" width="600" alt="${esc(input.hero.alt)}" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>`
     : ''
@@ -688,20 +1114,32 @@ export function renderMail(input: MailInput): RenderedMail {
           '0 0 8px',
         )
       : ''
+  const senderFacts = p(
+    ctx,
+    `${esc(MAIL_SENDER.legalNameJa)} / ${esc(MAIL_SENDER.legalNameEn)}<br>${esc(MAIL_SENDER.address)}<br>` +
+      `${esc(copy.contact)}: <a class="km-link" href="mailto:${MAIL_SENDER.email}" style="color:${C.muted};">${MAIL_SENDER.email}</a>&nbsp;&nbsp;` +
+      `<a class="km-link" href="${esc(webHref)}" style="color:${C.muted};">${esc(webLabel)}</a>`,
+    12,
+    C.faint,
+    'km-muted',
+    '0',
+  )
+  // Operator mail: one line naming the app and the trigger. Security mail:
+  // one line, the brand or domain and why (no company, address or contact).
+  // Transactional and marketing: why they got it, the opt-out on marketing,
+  // and the 特定電子メール法 sender facts.
+  const oneLineFooter = input.kind === 'operator' || input.kind === 'security'
+  const footerInner =
+    input.kind === 'operator'
+      ? p(ctx, esc(copy.operator(sender, trigger)), 12, C.muted, 'km-muted', '0')
+      : input.kind === 'security'
+        ? p(ctx, esc(copy.why.security(sender)), 12, C.muted, 'km-muted', '0')
+        : p(ctx, esc(copy.why[input.kind](sender)), 12, C.muted, 'km-muted', '0 0 8px') +
+          optOut +
+          senderFacts
   const footer =
-    `<tr><td class="km-foot km-pad" style="padding:18px 28px 22px;background:${C.foot};border-top:1px solid ${C.line};">` +
-    p(ctx, esc(copy.why[input.kind](brand.name)), 12, C.muted, 'km-muted', '0 0 8px') +
-    optOut +
-    p(
-      ctx,
-      `${esc(MAIL_SENDER.legalNameJa)} / ${esc(MAIL_SENDER.legalNameEn)}<br>${esc(MAIL_SENDER.address)}<br>` +
-        `${esc(copy.contact)}: <a class="km-link" href="mailto:${MAIL_SENDER.email}" style="color:${C.muted};">${MAIL_SENDER.email}</a>&nbsp;&nbsp;` +
-        `<a class="km-link" href="${esc(webHref)}" style="color:${C.muted};">${esc(webLabel)}</a>`,
-      12,
-      C.faint,
-      'km-muted',
-      '0',
-    ) +
+    `<tr><td class="km-foot km-pad" style="padding:${oneLineFooter ? '14px 28px 16px' : '18px 28px 22px'};background:${C.foot};border-top:1px solid ${C.line};">` +
+    footerInner +
     `</td></tr>`
   const filler = '&#847;&zwnj;&nbsp;'.repeat(40)
   const html =

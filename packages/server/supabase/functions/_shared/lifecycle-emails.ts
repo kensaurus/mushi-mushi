@@ -145,14 +145,14 @@ type Block =
 
 /**
  * The kit's blocks: the first link is the button, any later one a line of
- * text with its URL. A command or snippet (`pre`) keeps its line breaks; the
- * kit has no monospace block, so it renders as its own paragraph.
+ * text with its URL. A command or snippet (`pre`) is the kit's monospace
+ * code block, line breaks kept.
  */
 function blocksToMail(blocks: Block[]): MailBlock[] {
   let buttoned = false
   return blocks.map((b, i): MailBlock => {
     if ('p' in b) return { type: 'paragraph', text: b.p }
-    if ('pre' in b) return { type: 'paragraph', text: b.pre, id: `snippet-${i + 1}` }
+    if ('pre' in b) return { type: 'code', mono: true, value: b.pre, id: `snippet-${i + 1}` }
     if (!buttoned) {
       buttoned = true
       return { type: 'button', label: b.label ?? b.link, url: b.link }
@@ -261,7 +261,13 @@ export function buildLifecycleEmail(input: LifecycleEmailInput): LifecycleEmailC
       },
     ],
   })
-  // The kit's RFC 8058 pair: List-Unsubscribe <signed https>, <mailto>, and
-  // List-Unsubscribe-Post. _shared/email.ts passes them to Resend as headers.
-  return { subject: mail.subject, text: mail.text, html: mail.html, headers: { ...mail.headers } }
+  // RFC 8058 one-click only: the signed https endpoint and List-Unsubscribe-Post.
+  // No mailto: nobody processes unsubscribe-by-mail requests (lead, 2026-11-20).
+  // _shared/email.ts passes these to Resend as headers.
+  return {
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    headers: { 'List-Unsubscribe': `<${unsub}>`, 'List-Unsubscribe-Post': mail.headers['List-Unsubscribe-Post'] },
+  }
 }

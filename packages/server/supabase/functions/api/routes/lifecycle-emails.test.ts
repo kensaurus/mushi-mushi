@@ -14,7 +14,6 @@ import {
   timingSafeEqualString,
   verifyUnsubscribeToken,
 } from '../../_shared/lifecycle-unsubscribe.ts'
-import { MAIL_SENDER } from '../../_shared/kensaurus-spine/mail.ts'
 
 const HOUR = 60 * 60 * 1000
 const confirmedAt = new Date('2026-09-14T09:00:00Z')
@@ -82,8 +81,8 @@ Deno.test('templates carry the deep links, plain text + html, and List-Unsubscri
 
   for (const key of LIFECYCLE_EMAIL_KEYS) {
     const email = buildLifecycleEmail({ key, adminUrl: admin, unsubscribeUrl: unsub, signedUpOn: '2026-09-14' })
-    // RFC 8058 pair from the kit: the signed https URL first, then a mailto.
-    assertEquals(email.headers['List-Unsubscribe'], `<${unsub}>, <mailto:${MAIL_SENDER.email}?subject=unsubscribe>`)
+    // RFC 8058 one-click pair: the signed https URL only (no mailto).
+    assertEquals(email.headers['List-Unsubscribe'], `<${unsub}>`)
     assertEquals(email.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click')
     assert(email.text.includes(unsub))
     assert(email.html.includes('href="https://api.test/v1/public/email/unsubscribe?t=abc"'))
