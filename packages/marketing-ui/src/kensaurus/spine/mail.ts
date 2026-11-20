@@ -216,9 +216,21 @@ interface MailInputBase {
   readonly neutral?: boolean
 }
 
+/**
+ * Why a security mail was sent, for its one-line footer. 'sign-in' (the
+ * default) for codes and magic links; 'account' for everything else that
+ * follows account activity: password or email changed, MFA added, recovery.
+ */
+export type MailSecurityReason = 'sign-in' | 'account'
+
 export type MailInput =
   | (MailInputBase & {
-      readonly kind: 'security' | 'transactional'
+      readonly kind: 'security'
+      readonly unsubscribeUrl?: undefined
+      readonly securityReason?: MailSecurityReason
+    })
+  | (MailInputBase & {
+      readonly kind: 'transactional'
       readonly unsubscribeUrl?: undefined
     })
   | (MailInputBase & {
@@ -582,6 +594,8 @@ const COPY = {
       // sign-in mail reads like a scam), so it carries the brand or domain only.
       security: (b: string) =>
         `${b} から、このメールアドレスでのサインインのご依頼があったためお送りしています。お心当たりがない場合は、このメールを破棄してください。`,
+      securityAccount: (b: string) =>
+        `${b} のアカウント操作にあわせて自動でお送りしています。お心当たりがない場合は、このメールを破棄してください。`,
       transactional: (b: string) => `${b}のご利用内容についてのお知らせです。`,
       marketing: (b: string) => `${b}のお知らせの受け取りに登録された方にお送りしています。`,
     },
@@ -600,6 +614,8 @@ const COPY = {
     why: {
       security: (b: string) =>
         `${b} sent this because someone asked to sign in with this address. If it wasn't you, ignore it.`,
+      securityAccount: (b: string) =>
+        `${b} sent this automatically because of activity on your account. If it wasn't you, ignore it.`,
       transactional: (b: string) => `This email is about your use of ${b}.`,
       marketing: (b: string) => `You get this because you signed up for news from ${b}.`,
     },
@@ -1027,6 +1043,17 @@ export function renderMail(input: MailInput): RenderedMail {
   const neutral = input.neutral === true
   const webRoot = neutral ? `${parseUrl(brand.web, 'brand web').origin}/` : brand.web
   const sender = neutral ? new URL(webRoot).hostname : brand.name
+  let securityLine = ''
+  if (input.kind === 'security') {
+    const reason = input.securityReason ?? 'sign-in'
+    if (reason !== 'sign-in' && reason !== 'account') {
+      throw new Error(
+        `renderMail: securityReason must be sign-in or account, got ${String(reason)}`,
+      )
+    }
+    securityLine =
+      reason === 'account' ? copy.why.securityAccount(sender) : copy.why.security(sender)
+  }
   const webHref = href(ctx, webRoot, 'footer-web')
   const webLabel = webRoot.replace(/^https:\/\//, '').replace(/\/$/, '')
 
@@ -1048,7 +1075,7 @@ export function renderMail(input: MailInput): RenderedMail {
     textParts.push('――――――――', copy.operator(sender, trigger))
   } else if (input.kind === 'security') {
     // A sign-in mail carries no company name, address or reply address.
-    textParts.push('――――――――', copy.why.security(sender))
+    textParts.push('――――――――', securityLine)
   } else {
     textParts.push(
       '――――――――',
@@ -1133,7 +1160,7 @@ export function renderMail(input: MailInput): RenderedMail {
     input.kind === 'operator'
       ? p(ctx, esc(copy.operator(sender, trigger)), 12, C.muted, 'km-muted', '0')
       : input.kind === 'security'
-        ? p(ctx, esc(copy.why.security(sender)), 12, C.muted, 'km-muted', '0')
+        ? p(ctx, esc(securityLine), 12, C.muted, 'km-muted', '0')
         : p(ctx, esc(copy.why[input.kind](sender)), 12, C.muted, 'km-muted', '0 0 8px') +
           optOut +
           senderFacts
