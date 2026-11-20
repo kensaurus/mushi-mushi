@@ -81,22 +81,24 @@ the command name. The owner's bot is called `kensaurus`.
     Answer within 3 s with an ephemeral Block Kit message. Anything slower goes through `response_url`.
   - **`POST /v1/ops/slack/interactions`.** Buttons:
     - **Acknowledge**: set `acked_*`, add a ✅ reaction and a thread reply "Seen by @user".
-    - **Mute 24h**: set an `ops_mutes` row and reply in the thread.
-    - **Open in Mushi Mushi**: a link button.
+    - **Mute this alert for 24 h** (the alert's ⋯ menu, or a lone `Mute 24h` button): an `ops_mutes` row scoped to that alert's category, kind and fingerprint (`scope`, 20261120090000), and a thread reply. Never the whole app, never payments or releases (2026-11-20). `mute <app>` writes the empty scope: the whole app.
+    - **Open in Mushi Mushi**: a link.
+    - `slack-interactions` forwards any `ops_*` action here, body and signature untouched (`_shared/slack-action-route.ts`).
 
     Use the existing `_shared/slack-verify.ts`. Reject timestamps older than 5 minutes. Read the raw body before parsing.
 
 ### 3. Slack delivery (`_shared/ops-slack.ts`)
 - **Bot token.** Use `chat.postMessage` with the org's bot token from Vault. Store the returned `ts` on the event.
-- **Layout.**
-  - Context line: the app's icon (`projects.app_icon` public URL, if present) and the app name in lowercase as the team writes it.
-  - Section: `*<emoji> <title>*` and the body.
-  - Context: facts as `label: value · …`.
-  - Actions: Acknowledge, Mute 24h and Open (event `url`), plus "Open in Mushi Mushi" (the console feed).
-  - `text` fallback: `<app> · <title>`.
+- **Layout** (one format for every kind, 2026-11-20; Block Kit only, never legacy attachments).
+  - `text` (notification and fallback): `<emoji> <app>: <title>`, plus ` (<environment>)` for an alert whose sender stated it.
+  - Context: the app's icon, then `app · Category · environment · time` (`<!date^…>`). The environment only when an `Environment` fact states it; never assumed.
+  - Header (plain_text): `<emoji> <title>`, the title once. A sender's leading mark ("🚀 …") is not doubled.
+  - Section: the body (mrkdwn, escaped).
+  - Section fields: up to 4 facts (the amount first); the rest on one context line.
+  - Actions, at most 3: an open alert gets Acknowledge, Open and a ⋯ menu (Open in Mushi Mushi, Mute this alert for 24 h); a release, a payment or a resolve gets Open and Open in Mushi Mushi. A menu with one item is a plain button (Slack needs two options).
   - Emoji: 💳 payment, ↩️ refund, ⚠️ warn, 🔴 urgent, 🚀 release, ✅ resolved.
-- **Threads.** If an earlier event of the same app has the same `thread_key`, post as a reply (`thread_ts`).
-  - A `resolved` event is broadcast to the channel (`reply_broadcast`) and also edits the parent with `chat.update`. Example: "✅ fixed by the next deploy · <time>".
+- **Threads.** If an earlier event of the same app has the same `thread_key` and its root is from the last 24 h, post as a reply (`thread_ts`). An alert with no `thread_key` gets `fp:<kind>:<title>`. A release is always its own message.
+  - A `resolved` event replies in the thread (no broadcast) and edits the parent with `chat.update`, however old: the mark becomes ✅ and a "✅ Resolved: <title> · <time>" line goes under the title.
   - Example thread keys:
     - `deploy:<repo>:<env>`: a failed deploy, then the next good one
     - `invoice:<id>`: payment failed, then recovered

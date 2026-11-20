@@ -22,7 +22,7 @@ edge canaries (down / up) ─┘                                                
 Why a bot and not an incoming webhook: a webhook cannot thread, edit its own message,
 take a button click or answer a command, because Slack returns no message id for it.
 The bot can. A failed deploy and the next good one sit in one thread, and the fix edits
-the original message to say "✅ fixed by the next deploy".
+the original message's mark to ✅ with a "Resolved: …" line.
 
 Slack is the alert; Mushi Mushi is the record. Slack's free plan shows 90 days of history,
 and the Ops page keeps everything.
@@ -32,9 +32,13 @@ and the Ops page keeps everything.
 - **Ops page** (`/ops`): today's payments per currency, releases and open alerts; a matrix
   of when each app last sent each kind of event (a hatched row has never sent one); and the
   feed, with follow-ups nested under the event that opened their thread.
-- **Slack messages**: the app's icon and name, an emoji headline (💳 payment, ↩️ refund,
-  🚀 release, ⚠️ warning, 🔴 urgent, ✅ resolved), the facts on one line, and buttons:
-  **Acknowledge**, **Mute 24h**, **Open** and **Open in Mushi Mushi**.
+- **Slack messages**, one format for every kind: a line with the app's icon, name,
+  category, environment (only when the sender stated it) and time; the title once, with an
+  emoji (💳 payment, ↩️ refund, 🚀 release, ⚠️ warning, 🔴 urgent, ✅ resolved); the summary;
+  up to four facts as fields (the rest on one line); and at most three buttons. An alert
+  gets **Acknowledge**, **Open** and a ⋯ menu with **Open in Mushi Mushi** and **Mute this
+  alert for 24 h**. A release, a payment or a resolve gets **Open** and **Open in Mushi
+  Mushi**: nothing to acknowledge or mute.
 - **A slash command** with the name you pick (the example below uses `/kensaurus`).
 
 | Command | Answers |
@@ -146,6 +150,7 @@ curl -X POST "$MUSHI_API_URL/v1/ops/events" \
 | `thread_key` | no | Groups an incident with its follow-ups within this app, for example `invoice:in_123` or `deploy::production` |
 | `dedupe_key` | no | A retried request with the same key from the same app stores and posts once (answers `200` with `status: duplicate`). Two apps may use the same key |
 | `occurred_at` | no | ISO time, within the last 30 days |
+| `sandbox` | no | `true` for a store sandbox or test purchase: answered `202` with `status: dropped` and never stored or posted, so it never reaches `#payments` or the sales totals |
 
 Answers: `202` once stored (the Slack post happens right after), `400 VALIDATION_ERROR`,
 `422 PII_REJECTED` when a field holds an email address or a phone number (send the
@@ -154,10 +159,17 @@ per app, `503` when the limit cannot be checked (retry).
 
 ### Threads
 
-Events with the same `thread_key` in the same category share one Slack thread: the first
-one is the message, the rest reply under it. A `resolved` event is also shown in the
-channel and edits the first message, so a failed payment followed by a recovered one, or a
-failed deploy followed by a good one, reads as one story.
+Events with the same `thread_key` in the same category share one Slack thread for 24 hours:
+the first one is the message, the rest reply under it. An alert with no `thread_key`
+threads with the same `kind` and title, so a release that fails three times in an hour is
+one message and two replies. A `resolved` event replies in the thread and edits the first
+message (✅ and "Resolved: …"), however old it is, so a failed payment followed by a
+recovered one, or a failed deploy followed by a good one, reads as one story. A release is
+always its own message.
+
+**Mute this alert for 24 h** silences that alert only: its `kind` and thread. The app's other
+alerts, its releases and its payments still post. `/kensaurus mute ` pauses the whole
+app.
 
 ## Mushi Mushi's own sources
 
@@ -165,8 +177,8 @@ For teams with the Slack bot on, Mushi Mushi adds these with no app code:
 
 | Source | Becomes | Needs |
 | --- | --- | --- |
-| A GitHub production deployment (`deployment_status`) | `releases` "Deployed …"; a failure is an urgent `alerts` event, resolved by the next good deploy | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
-| A new Sentry issue at level error or fatal, or a regression | `alerts`, threaded per issue; resolving it in Sentry posts the resolve | Sentry connected (webhook or auto-import). Events from another environment than production are skipped; an event with no environment counts as production. |
+| A GitHub production deployment (`deployment_status`) | `releases` "`` is live in production" with the commit subject; a failure is an urgent `alerts` event, resolved by the next good deploy. When the app posts its own release for the same commit (a `Commit` fact) within 30 minutes, only the app's post stays | The repo connected through the Mushi Mushi GitHub App (a personal token does not receive deployment events) |
+| A new Sentry issue at level error or fatal, or a regression ("Regressed: …", with the first-seen date) | `alerts`, threaded per issue; resolving it in Sentry posts the resolve. The title is the error's first line, at most 120 characters, with any JSON moved into the body | Sentry connected (webhook or auto-import). Events from another environment than production are skipped; an event with no environment shows "Environment: not set", never production. |
 | An edge canary going down (second failed run in a row) and back up | urgent `alerts`, then `resolved` in the same thread | Edge canaries set up for the app |
 
 Names and email addresses in these are cut down to the email's domain before they are

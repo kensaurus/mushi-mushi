@@ -7,8 +7,10 @@
  *   - the Slack message for one event (app icon and name, emoji headline,
  *     body, facts, buttons), and the edit a parent gets when its incident
  *     resolves;
- *   - where a new event goes in Slack: a new message, a reply in its thread,
- *     or a resolve that is broadcast to the channel and edits the parent;
+ *   - where a new event goes in Slack: a new message, a reply in its thread
+ *     (repeats of one fingerprint within 24 h), or a resolve that replies in
+ *     the thread and edits the parent's mark to ✅;
+ *   - Sentry-style error messages as titles (cleanErrorTitle);
  *   - the slash command grammar.
  *
  * Dependency-free on purpose: `api` (Sentry webhook), webhooks-github-indexer
@@ -211,43 +213,165 @@ export interface OpsMessageContext {
 }
 
 export const OPS_ACTION_ACK = 'ops_ack'
+/** The legacy Mute 24h button (messages posted before 2026-11-20). Muted the whole app; now mutes the alert. */
 export const OPS_ACTION_MUTE = 'ops_mute'
+/** The ⋯ menu on an alert: "Open in Mushi Mushi" (a link) and "Mute this alert for 24 h" (`ops_mute:<event id>`). */
+export const OPS_ACTION_MORE = 'ops_more'
+/** The overflow option value that mutes one alert: `ops_mute:<event id>`. */
+export const OPS_MUTE_OPTION_PREFIX = 'ops_mute:'
 
-/** The facts line: `label: value · …`, the amount first when there is one. */
-export function factsLine(e: Pick<OpsEventRow, 'facts' | 'amount_minor' | 'currency' | 'kind'>): string | null {
-  const parts: string[] = []
+/** At most this many fields under the summary; the rest go in one context line. */
+const OPS_FIELDS_MAX = 4
+/** At most this many elements in the actions row. */
+const OPS_ACTIONS_MAX = 3
+/** Repeats of one fingerprint thread under the first post for this long. */
+export const OPS_REPEAT_WINDOW_MS = 24 * 60 * 60_000
+
+const CATEGORY_LABEL: Record<OpsCategory, string> = { payments: 'Payments', releases: 'Releases', alerts: 'Alerts' }
+
+/** Every mark opsEmoji uses, so a title that already starts with one is not marked twice. */
+const OPS_MARKS = ['✅', '🔴', '⚠️', '⚠', '🚀', '↩️', '↩', '💳', '🔔']
+
+/**
+ * The title without a leading mark the renderer adds itself (mushi-mushi's own
+ * release posts arrived as "🚀 Admin console 0.1.700 is live" and rendered as
+ * "🚀 🚀 …"). Never empty: an all-emoji title keeps its text.
+ * @internal Exported for tests.
+ */
+export function stripLeadingMark(title: string): string {
+  let t = title.trim()
+  for (let i = 0; i < 3; i++) {
+    const mark = OPS_MARKS.find((m) => t.startsWith(m))
+    if (!mark) break
+    t = t.slice(mark.length).replace(/^\uFE0F/, '').trimStart()
+  }
+  return t || title.trim()
+}
+
+/** The environment the sender verified (an `Environment` fact), else null. Never assumed. */
+function eventEnvironment(e: Pick<OpsEventRow, 'facts'>): string | null {
+  const f = (e.facts ?? []).find((x) => /^environment$/i.test(x.label.trim()))
+  const v = f?.value.trim()
+  return v && !/^(not set|unknown|none)$/i.test(v) ? v : null
+}
+
+/** A fact label as mrkdwn bold, minus the characters that would break the bold. */
+function boldLabel(label: string): string {
+  const clean = escapeMrkdwn(label.replace(/[*_~`]/g, '').trim()) || 'Detail'
+  return `*${clean}*`
+}
+
+/** The amount first, then the sender's facts, minus the Environment the context line shows. */
+function eventFacts(e: Pick<OpsEventRow, 'facts' | 'amount_minor' | 'currency' | 'kind'>): OpsFact[] {
+  const out: OpsFact[] = []
   if (e.amount_minor != null && e.currency) {
     const sign = isRefundKind(e.kind) ? '−' : ''
-    parts.push(`*Amount:* ${sign}${formatMoney(Math.abs(e.amount_minor), e.currency)}`)
+    out.push({ label: 'Amount', value: `${sign}${formatMoney(Math.abs(e.amount_minor), e.currency)}` })
   }
-  for (const f of e.facts ?? []) parts.push(`*${escapeMrkdwn(f.label)}:* ${escapeMrkdwn(f.value)}`)
+  const env = eventEnvironment(e as Pick<OpsEventRow, 'facts'>)
+  for (const f of e.facts ?? []) {
+    // A verified environment is in the context line; "not set" stays a fact so nobody reads it as production.
+    if (env && /^environment$/i.test(f.label.trim())) continue
+    out.push(f)
+  }
+  return out
+}
+
+/** The facts line used by `/kensaurus` answers: `label: value · …`, the amount first. */
+export function factsLine(e: Pick<OpsEventRow, 'facts' | 'amount_minor' | 'currency' | 'kind'>): string | null {
+  const parts = eventFacts({ ...e, facts: e.facts ?? [] }).map((f) => `${boldLabel(f.label)}: ${escapeMrkdwn(f.value)}`)
   return parts.length ? parts.join('  ·  ').slice(0, 2900) : null
 }
 
-/** chat.postMessage `text` + `blocks` for one event. */
+/** `<!date^…>`: Slack shows the reader's local time; the fallback is UTC. */
+function slackTime(iso: string): string | null {
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return null
+  return `<!date^${Math.floor(ms / 1000)}^{date_short_pretty} {time}|${shortUtc(iso)}>`
+}
+
+/** The top-level `text`: the news in one line, for the notification and the fallback. */
+function opsNotificationText(e: Pick<OpsEventRow, 'category' | 'severity' | 'kind' | 'title' | 'facts'>, appName: string | null): string {
+  const app = escapeMrkdwn(appName ?? 'mushi mushi')
+  const env = e.category === 'alerts' ? eventEnvironment(e) : null
+  return `${opsEmoji(e)} ${app}: ${escapeMrkdwn(stripLeadingMark(e.title))}${env ? ` (${escapeMrkdwn(env)})` : ''}`
+}
+
+function button(actionId: string, text: string, extra: Record<string, unknown>): Record<string, unknown> {
+  return { type: 'button', action_id: actionId, text: { type: 'plain_text', text, emoji: true }, ...extra }
+}
+
+/**
+ * The actions row, at most three elements, by kind:
+ *   - an open alert: Acknowledge, Open (the source), and a ⋯ menu with
+ *     Open in Mushi Mushi and "Mute this alert for 24 h" (this alert's kind and
+ *     fingerprint only: never the app, never payments or releases);
+ *   - a release, a payment or a resolve: Open and Open in Mushi Mushi. Nothing
+ *     to acknowledge, nothing to mute.
+ */
+function opsActions(e: Pick<OpsEventRow, 'id' | 'category' | 'severity' | 'url' | 'project_id'>, consoleUrl: string | null): Record<string, unknown>[] {
+  const open = e.url ? button('ops_open', 'Open', { url: e.url }) : null
+  const consoleBtn = consoleUrl ? button('ops_open_console', 'Open in Mushi Mushi', { url: consoleUrl }) : null
+  if (e.category !== 'alerts' || e.severity === 'resolved') return [open, consoleBtn].filter((b): b is Record<string, unknown> => b !== null)
+
+  const out: Record<string, unknown>[] = [button(OPS_ACTION_ACK, 'Acknowledge', { value: e.id, ...(e.severity === 'urgent' ? { style: 'primary' } : {}) })]
+  if (open) out.push(open)
+  const menu: Record<string, unknown>[] = []
+  if (consoleUrl) {
+    if (open) menu.push({ text: { type: 'plain_text', text: 'Open in Mushi Mushi', emoji: true }, value: 'ops_open_console', url: consoleUrl })
+    else if (consoleBtn) out.push(consoleBtn)
+  }
+  if (e.project_id) menu.push({ text: { type: 'plain_text', text: 'Mute this alert for 24 h', emoji: true }, value: `${OPS_MUTE_OPTION_PREFIX}${e.id}` })
+  // Slack refuses an overflow menu with fewer than two options (invalid_blocks): a lone item is a button.
+  if (menu.length >= 2) out.push({ type: 'overflow', action_id: OPS_ACTION_MORE, options: menu })
+  else if (menu.length === 1) {
+    const only = menu[0] as { value: string; url?: string; text: { text: string } }
+    out.push(only.url ? button('ops_open_console', only.text.text, { url: only.url }) : button(OPS_ACTION_MUTE, 'Mute 24h', { value: e.id }))
+  }
+  return out.slice(0, OPS_ACTIONS_MAX)
+}
+
+/**
+ * chat.postMessage `text` + `blocks` for one event, one format for every kind:
+ *
+ *   text      the news in one line ("🚀 yen-yen: Android 1.22.67 sent to Google
+ *             Play", "🔴 glot.it: Practice page error (production)");
+ *   context   the app icon, then name · category · environment · time;
+ *   header    the emoji and the title, plain_text (the title is shown once,
+ *             and no sender text is ever parsed as mrkdwn bold);
+ *   section   the human summary (mrkdwn, escaped), if any;
+ *   section   up to four fields, the rest of the facts in one context line;
+ *   actions   up to three (opsActions).
+ *
+ * Block Kit only, never legacy attachments: with attachments Slack renders the
+ * top-level text as a visible line, which doubled every title.
+ */
 export function buildOpsMessage(e: OpsEventRow, ctx: OpsMessageContext): { text: string; blocks: unknown[] } {
   const app = ctx.appName ?? 'mushi mushi'
-  const head = `${opsEmoji(e)} ${escapeMrkdwn(e.title)}`
+  const title = stripLeadingMark(e.title)
+  const env = eventEnvironment(e)
   const blocks: unknown[] = []
+
+  const meta = [escapeMrkdwn(app), CATEGORY_LABEL[e.category] ?? e.category, env ? escapeMrkdwn(env) : null, slackTime(e.occurred_at)].filter(Boolean).join('  ·  ')
   const contextElements: unknown[] = []
   if (ctx.iconUrl) contextElements.push({ type: 'image', image_url: ctx.iconUrl, alt_text: app })
-  contextElements.push({ type: 'mrkdwn', text: `*${escapeMrkdwn(app)}*  ·  ${e.category}` })
+  contextElements.push({ type: 'mrkdwn', text: meta })
   blocks.push({ type: 'context', elements: contextElements })
-  blocks.push({ type: 'section', text: { type: 'mrkdwn', text: e.body ? `*${head}*\n${escapeMrkdwn(e.body)}` : `*${head}*` } })
-  const facts = factsLine(e)
-  if (facts) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: facts }] })
 
-  const buttons: unknown[] = []
-  if (e.severity !== 'resolved') {
-    buttons.push({ type: 'button', action_id: OPS_ACTION_ACK, text: { type: 'plain_text', text: 'Acknowledge' }, value: e.id, ...(e.severity === 'urgent' ? { style: 'primary' } : {}) })
-    if (e.project_id) buttons.push({ type: 'button', action_id: OPS_ACTION_MUTE, text: { type: 'plain_text', text: 'Mute 24h' }, value: e.id })
-  }
-  if (e.url) buttons.push({ type: 'button', action_id: 'ops_open', text: { type: 'plain_text', text: 'Open' }, url: e.url })
-  if (ctx.consoleUrl) buttons.push({ type: 'button', action_id: 'ops_open_console', text: { type: 'plain_text', text: 'Open in Mushi Mushi' }, url: ctx.consoleUrl })
-  if (buttons.length) blocks.push({ type: 'actions', elements: buttons.slice(0, 5) })
+  blocks.push({ type: 'header', text: { type: 'plain_text', text: `${opsEmoji(e)} ${title}`.slice(0, 150), emoji: true } })
+  if (e.body?.trim()) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: escapeMrkdwn(e.body.trim()).slice(0, 2900) } })
+
+  const facts = eventFacts(e)
+  const fields = facts.slice(0, OPS_FIELDS_MAX).map((f) => ({ type: 'mrkdwn', text: `${boldLabel(f.label)}\n${escapeMrkdwn(f.value)}`.slice(0, 2000) }))
+  if (fields.length) blocks.push({ type: 'section', fields })
+  const rest = facts.slice(OPS_FIELDS_MAX)
+  if (rest.length) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: rest.map((f) => `${boldLabel(f.label)}: ${escapeMrkdwn(f.value)}`).join('  ·  ').slice(0, 2900) }] })
+
+  const actions = opsActions(e, ctx.consoleUrl)
+  if (actions.length) blocks.push({ type: 'actions', elements: actions })
   // `text` is the notification and the fallback: escaped too, or a title such
   // as "<!channel>" from a Sentry error message would ping the whole channel.
-  return { text: `${escapeMrkdwn(app)} · ${escapeMrkdwn(e.title)}`, blocks }
+  return { text: opsNotificationText(e, app), blocks }
 }
 
 /** HH:MM UTC, short enough for a context line. */
@@ -257,14 +381,96 @@ export function shortUtc(iso: string): string {
 }
 
 /**
- * The parent's new look once its incident resolved: the original message with
- * a ✅ line on top ("✅ fixed by the next deploy · 14:02 UTC") and no buttons.
+ * The parent's new look once its incident resolved: the same message with ✅
+ * in place of its status mark, a "Resolved: …" line, and no buttons but the
+ * links. The resolve itself is a reply in the thread.
  */
 export function buildResolvedParent(parent: OpsEventRow, resolved: Pick<OpsEventRow, 'title' | 'occurred_at'>, ctx: OpsMessageContext): { text: string; blocks: unknown[] } {
   const original = buildOpsMessage({ ...parent, severity: 'resolved' }, { ...ctx })
-  const line = `✅ ${escapeMrkdwn(resolved.title)} · ${shortUtc(resolved.occurred_at)}`
-  const blocks = original.blocks.filter((b) => (b as { type?: string }).type !== 'actions')
-  return { text: `${escapeMrkdwn(ctx.appName ?? 'mushi mushi')} · ✅ ${escapeMrkdwn(resolved.title)}`, blocks: [{ type: 'context', elements: [{ type: 'mrkdwn', text: line }] }, ...blocks] }
+  const when = slackTime(resolved.occurred_at)
+  const line = `✅ Resolved: ${escapeMrkdwn(stripLeadingMark(resolved.title))}${when ? `  ·  ${when}` : ''}`
+  const blocks = [...original.blocks]
+  const headerAt = blocks.findIndex((b) => (b as { type?: string }).type === 'header')
+  blocks.splice(headerAt + 1, 0, { type: 'context', elements: [{ type: 'mrkdwn', text: line }] })
+  return { text: `✅ ${escapeMrkdwn(ctx.appName ?? 'mushi mushi')}: ${escapeMrkdwn(stripLeadingMark(parent.title))} (resolved)`, blocks }
+}
+
+// ── Fingerprints and mutes ──────────────────────────────────────────────────
+
+/**
+ * The thread an event belongs to. The sender's thread key when it gave one;
+ * else, for an alert, `fp:<kind>:<title>`, so a repeat with a fresh run id
+ * ("Android 1.22.62 release failed", three runs in 20 minutes) threads under
+ * the first post instead of posting anew. Payments and releases have none.
+ */
+export function opsThreadKey(e: Pick<OpsEventInput, 'category' | 'kind' | 'title' | 'threadKey'>): string | null {
+  if (e.threadKey) return e.threadKey.slice(0, 200)
+  if (e.category !== 'alerts') return null
+  const t = stripLeadingMark(e.title).toLowerCase().replace(/\s+/g, ' ').trim()
+  return t ? `fp:${e.kind}:${t}`.slice(0, 200) : null
+}
+
+/**
+ * What a Mute 24h on this event silences: its category, kind and fingerprint
+ * (`alerts:deploy.failed:fp:…`). The empty scope is the whole app (the
+ * `mute <app>` slash command). Only an alert can be muted from its message.
+ */
+export function opsMuteScope(e: Pick<OpsEventRow, 'category' | 'kind' | 'thread_key'>): string {
+  return `${e.category}:${e.kind}:${e.thread_key ?? ''}`.slice(0, 300)
+}
+
+/** True when a mute row with this scope silences the event. */
+export function muteCovers(scope: string | null | undefined, e: Pick<OpsEventRow, 'category' | 'kind' | 'thread_key'>): boolean {
+  const s = scope ?? ''
+  return s === '' || s === opsMuteScope(e)
+}
+
+/** The slack_error prefix of a GitHub release post that the app's own post for the same commit replaced. */
+export const OPS_SUPERSEDED_PREFIX = 'superseded by'
+
+/** True for a release row the app's own post replaced: counted and listed once, as the app's post. */
+export function isSupersededRelease(e: { slack_error?: string | null }): boolean {
+  return String(e.slack_error ?? '').startsWith(OPS_SUPERSEDED_PREFIX)
+}
+
+/** The short sha an event names (its `Commit` fact), lowercased, else null. */
+export function eventCommit(e: Pick<OpsEventRow, 'facts'>): string | null {
+  const f = (e.facts ?? []).find((x) => /^commit$/i.test(x.label.trim()))
+  const m = /^([0-9a-f]{7,40})\b/i.exec(f?.value.trim() ?? '')
+  return m ? m[1].slice(0, 7).toLowerCase() : null
+}
+
+// ── Titles from error messages ──────────────────────────────────────────────
+
+export const OPS_ERROR_TITLE_MAX = 120
+
+/** Cut at a word boundary to at most `max` characters, with "…" when cut. Text with no spaces (Japanese) is cut hard. */
+export function cutAtWord(s: string, max: number): string {
+  const t = s.trim()
+  if (t.length <= max) return t
+  const head = t.slice(0, max - 1)
+  const space = head.lastIndexOf(' ')
+  return `${(space >= max * 0.5 ? head.slice(0, space) : head).replace(/[\s,:;.-]+$/, '')}…`
+}
+
+/**
+ * An error message as a title: the first line, a JSON payload moved out into a
+ * code snippet, and at most 120 characters. "Langfuse HTTP 410:
+ * {"_deprecation":…}" → title "Langfuse HTTP 410", snippet the JSON.
+ * Empty in, empty title out: the caller picks the fallback.
+ */
+export function cleanErrorTitle(raw: string | null | undefined): { title: string; snippet: string | null } {
+  const text = (raw ?? '').replace(/\r\n?/g, '\n').trim()
+  const lines = text.split('\n')
+  let first = (lines[0] ?? '').trim()
+  let snippet: string | null = lines.length > 1 ? lines.slice(1).join('\n').trim() || null : null
+  const json = /[{[]\s*["{[]/.exec(first)
+  if (json && json.index > 0) {
+    snippet = [first.slice(json.index).trim(), snippet].filter(Boolean).join('\n')
+    first = first.slice(0, json.index).replace(/[\s:=-]+$/, '').trim()
+  }
+  first = first.replace(/^Error:\s+/, '')
+  return { title: cutAtWord(first, OPS_ERROR_TITLE_MAX), snippet: snippet ? snippet.slice(0, 400) : null }
 }
 
 // ── Threads ─────────────────────────────────────────────────────────────────
@@ -272,7 +478,7 @@ export function buildResolvedParent(parent: OpsEventRow, resolved: Pick<OpsEvent
 export interface ThreadPlan {
   /** Post as a reply under this message ts. */
   threadTs: string | null
-  /** Show the reply in the channel too (a resolve). */
+  /** Show the reply in the channel too. Always false since 2026-11-20: a resolve is a thread reply and edits the parent's mark. */
   broadcast: boolean
   /** Edit the parent with `chat.update` (a resolve under a posted parent). */
   updateParent: boolean
@@ -286,8 +492,7 @@ export interface ThreadPlan {
 export function planThread(e: Pick<OpsEventRow, 'severity'>, parent: Pick<OpsEventRow, 'slack_ts' | 'slack_channel'> | null, channel: string): ThreadPlan {
   const ts = parent && parent.slack_ts && parent.slack_channel === channel ? parent.slack_ts : null
   if (!ts) return { threadTs: null, broadcast: false, updateParent: false }
-  const resolved = e.severity === 'resolved'
-  return { threadTs: ts, broadcast: resolved, updateParent: resolved }
+  return { threadTs: ts, broadcast: false, updateParent: e.severity === 'resolved' }
 }
 
 // ── Slash command grammar ───────────────────────────────────────────────────

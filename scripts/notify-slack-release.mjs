@@ -10,7 +10,8 @@
  *
  * Route (2026-11-18): with MUSHI_OPS_KEY and MUSHI_API_URL set, the result goes to the Mushi
  * Mushi Ops hub (POST /v1/ops/events), which posts it with the team's Slack bot: threads,
- * buttons, and the record on the console's Ops page. Without them, or when the hub does not
+ * buttons, and the record on the console's Ops page. The event names its commit, so the hub
+ * drops the GitHub deployment's duplicate "… is live" post for it. Without them, or when the hub does not
  * answer 2xx, it falls back to the channel's incoming webhook as before.
  *
  * Env (from repo secrets; a missing one skips quietly):
@@ -49,17 +50,23 @@ export function buildReleaseMessage({ status, what, version, detail, commitSubje
  * @internal Exported for tests. The Ops hub event for one deploy result, or null. The app name
  * comes from the key's project, so the title leaves it out. A retried run posts once.
  */
-export function buildOpsEvent({ status, what, version, detail, commitSubject, runUrl, repo, runId, attempt }) {
+export function buildOpsEvent({ status, what, version, detail, commitSubject, runUrl, repo, runId, attempt, sha }) {
   const label = `${what}${version ? ` ${version}` : ''}`
   const slug = String(what).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'deploy'
   const base = {
     url: runUrl && runUrl.startsWith('https://') ? runUrl : undefined,
     thread_key: `deploy:${repo || 'repo'}:${slug}`.slice(0, 200),
     dedupe_key: runId ? `deploy:${repo || 'repo'}:${slug}:${runId}:${attempt || '1'}:${status}`.slice(0, 200) : undefined,
-    facts: [{ label: 'Where', value: 'production · GitHub Actions' }],
+    // Environment and Commit (2026-11-20): the Ops hub shows the verified environment, and the
+    // Commit lets it drop the GitHub deployment's own "… is live" post for the same commit.
+    facts: [
+      { label: 'Environment', value: 'production' },
+      { label: 'Where', value: 'GitHub Actions' },
+      ...(/^[0-9a-f]{7,40}$/i.test(sha || '') ? [{ label: 'Commit', value: String(sha).slice(0, 7) }] : []),
+    ],
   }
   if (status === 'success') {
-    return { ...base, category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `🚀 ${label} is live`.slice(0, 150), body: (detail || commitSubject || '').slice(0, 600) || undefined }
+    return { ...base, category: 'releases', severity: 'info', kind: 'deploy.succeeded', title: `${label} is live`.slice(0, 150), body: (detail || commitSubject || '').slice(0, 600) || undefined }
   }
   if (status === 'failure') {
     const body = `Nothing new went live from this run; the previous version is still serving. Open the run to see which step failed.${commitSubject ? `\nCommit: ${commitSubject.slice(0, 200)}` : ''}`
@@ -119,7 +126,7 @@ async function main() {
   }
   const msg = buildReleaseMessage(input)
   if (!msg) return
-  const event = buildOpsEvent({ ...input, repo: env.GITHUB_REPOSITORY || '', runId: env.GITHUB_RUN_ID || '', attempt: env.GITHUB_RUN_ATTEMPT || '1' })
+  const event = buildOpsEvent({ ...input, repo: env.GITHUB_REPOSITORY || '', runId: env.GITHUB_RUN_ID || '', attempt: env.GITHUB_RUN_ATTEMPT || '1', sha: env.GITHUB_SHA || '' })
   if (await sendToOpsHub(env, event)) return
   const url = (msg.channel === 'releases' ? env.SLACK_RELEASES_WEBHOOK_URL : env.SLACK_ALERTS_WEBHOOK_URL) || ''
   if (!url) {

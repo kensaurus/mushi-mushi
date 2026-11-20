@@ -34,11 +34,18 @@ test('detail replaces the commit subject (the npm packages published)', () => {
 
 test('with an ops key, a good deploy becomes a releases event, threaded per repo and deploy, posted once per run', async () => {
   const { buildOpsEvent } = await import('./notify-slack-release.mjs')
-  const e = buildOpsEvent({ ...base, status: 'success', repo: 'kensaurus/mushi-mushi', runId: '42', attempt: '1' })
+  const e = buildOpsEvent({ ...base, status: 'success', repo: 'kensaurus/mushi-mushi', runId: '42', attempt: '1', sha: '76f5bb1aa0c3' })
   assert.equal(e.category, 'releases')
   assert.equal(e.severity, 'info')
   assert.equal(e.kind, 'deploy.succeeded')
-  assert.equal(e.title, '🚀 Admin console 0.1.680 is live')
+  // No 🚀 in the title: the Ops hub adds the mark itself (it rendered "🚀 🚀 …" before 2026-11-20).
+  assert.equal(e.title, 'Admin console 0.1.680 is live')
+  // The commit lets the hub drop GitHub's own "… is live" post for the same deploy.
+  assert.deepEqual(e.facts, [
+    { label: 'Environment', value: 'production' },
+    { label: 'Where', value: 'GitHub Actions' },
+    { label: 'Commit', value: '76f5bb1' },
+  ])
   assert.equal(e.thread_key, 'deploy:kensaurus/mushi-mushi:admin_console')
   assert.equal(e.dedupe_key, 'deploy:kensaurus/mushi-mushi:admin_console:42:1:success')
   assert.equal(e.url, base.runUrl)
