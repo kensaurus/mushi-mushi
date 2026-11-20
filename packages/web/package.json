@@ -134,7 +134,7 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "90.8 KB",
+      "limit": "88.5 KB",
       "gzip": true
     },
     {
@@ -149,6 +149,12 @@
         "dist/chunks/display-capture-*.js"
       ],
       "limit": "2.5 KB",
+      "gzip": true
+    },
+    {
+      "name": "On-demand chunk: DOM screenshot capture (gzipped)",
+      "path": "dist/chunks/screenshot-dom-*.js",
+      "limit": "7 KB",
       "gzip": true
     },
     {
