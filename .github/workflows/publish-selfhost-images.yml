@@ -55,10 +55,14 @@ jobs:
       - name: Build the images (amd64, local)
         env:
           DOCKER_BUILDKIT: '1'
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          # The same names the publish job pushes (a fork builds its own).
+          prefix="ghcr.io/${OWNER,,}/mushi-mushi"
+          echo "MUSHI_IMAGE_PREFIX=$prefix" >> "$GITHUB_ENV"
           for image in edge admin migrate; do
-            docker build -q -f "deploy/Dockerfile.${image}" -t "ghcr.io/kensaurus/mushi-mushi-${image}:ci" .
+            docker build -q -f "deploy/Dockerfile.${image}" -t "${prefix}-${image}:ci" .
           done
 
       - name: Install

@@ -24,7 +24,7 @@ set_env() {
 }
 gw() { printf 'http://127.0.0.1:%s' "$(env_get API_GW_HTTP_PORT | sed 's/^$/8000/')"; }
 # A small image with tar that is always present: the migrator this install runs.
-tools() { TOOLS_IMAGE="ghcr.io/kensaurus/mushi-mushi-migrate:$(env_get MUSHI_VERSION | sed 's/^$/latest/')"; }
+tools() { TOOLS_IMAGE="$(env_get MUSHI_IMAGE_PREFIX | sed 's|^$|ghcr.io/kensaurus/mushi-mushi|')-migrate:$(env_get MUSHI_VERSION | sed 's/^$/latest/')"; }
 
 cmd=${1:-help}
 [ $# -gt 0 ] && shift
