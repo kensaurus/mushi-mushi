@@ -2376,6 +2376,27 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
 
   // --- Setup / admin tools -----------------------------------------------
 
+  /**
+   * The ingest steps for diagnose_setup. The SDK route answers for a project
+   * key; an account key is refused there (it cannot ingest), so for one the
+   * project is named on the admin route instead of failing the whole check.
+   */
+  async function ingestSetupCall<T>(projectIdForAccountKey: string | undefined): Promise<T> {
+    try {
+      return await apiCall<T>('/v1/sync/ingest-setup');
+    } catch (err) {
+      if (!(err instanceof MushiApiError) || err.code !== 'ORG_KEY_NOT_ALLOWED') throw err;
+      if (!projectIdForAccountKey) {
+        throw new MushiApiError(
+          400,
+          'PROJECT_ID_REQUIRED',
+          'This is an account key: pass projectId (list_projects shows them) to check a project.',
+        );
+      }
+      return apiCall<T>(`/v1/admin/projects/${encodeURIComponent(projectIdForAccountKey)}/ingest-setup`);
+    }
+  }
+
   server.registerTool(
     'diagnose_setup',
     {
@@ -2410,7 +2431,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const resolvedId = args.projectId ?? projectId;
 
       if (mode === 'ingest') {
-        const data = await apiCall<{
+        const data = await ingestSetupCall<{
           ready: boolean;
           required_complete: number;
           required_total: number;
@@ -2424,7 +2445,7 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
             hint: string;
           }>;
           diagnostic?: Record<string, unknown>;
-        }>('/v1/sync/ingest-setup');
+        }>(resolvedId);
         const failed = data.steps.filter((s) => s.required && !s.complete);
         const summary = data.ready
           ? `Ingest setup complete (${data.required_complete}/${data.required_total}) for ${data.project_name}.`
@@ -2537,11 +2558,11 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
         }
       }
 
-      const ingest = await apiCall<{
+      const ingest = await ingestSetupCall<{
         ready: boolean;
         steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>;
         project_name?: string;
-      }>('/v1/sync/ingest-setup');
+      }>(resolvedId);
       let dispatchReady = true;
       let dispatchBlock: string | undefined;
       let dispatchChecks: unknown = null;
