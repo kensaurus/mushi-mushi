@@ -225,7 +225,11 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
   // as soon as the trace starts, so an operation that throws or exits before
   // any span ends or `end()` runs still shows up in Langfuse; `end()` sends
   // the same span id again with the real end time.
-  function rootSpan(endMs: number, extra: Record<string, unknown>): OtlpSpan {
+  function rootSpan(
+    endMs: number,
+    extra: Record<string, unknown>,
+    traceExtra?: Record<string, unknown>,
+  ): OtlpSpan {
     return {
       traceId,
       spanId: rootSpanId,
@@ -235,6 +239,7 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
       endTimeUnixNano: toNanos(endMs),
       attributes: attrs({
         ...traceAttrs,
+        ...prefixed('langfuse.trace.metadata', traceExtra),
         'langfuse.observation.type': 'span',
         ...prefixed('langfuse.observation.metadata', { ...safeMetadata, ...extra }),
       }),
@@ -242,8 +247,12 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
     }
   }
 
+  // The completion export waits for this one to settle (including its
+  // retry), so a slow start export can never land after `end()` and
+  // overwrite the completed root span with its zero-length 'started' copy.
+  let rootStartExport: Promise<void> = Promise.resolve()
   if (isConfigured()) {
-    exportSpans([rootSpan(startMs, { state: 'started' })])
+    rootStartExport = exportSpans([rootSpan(startMs, { state: 'started' })])
       .catch((err) => onLangfuseIngestFailure('trace-create', err))
   }
 
@@ -334,7 +343,9 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
   async function end(): Promise<void> {
     if (isConfigured()) {
       const endMs = Date.now()
-      await exportSpans([rootSpan(endMs, { state: 'completed', completedAt: new Date(endMs).toISOString() })])
+      const completedAt = new Date(endMs).toISOString()
+      await rootStartExport
+      await exportSpans([rootSpan(endMs, { state: 'completed', completedAt }, { completedAt })])
         .catch((err) => onLangfuseIngestFailure('trace-end', err))
     }
   }
