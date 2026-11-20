@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseClaim, parseHeartbeatAnswer, parseHostGuards, parseLaneVerbs, validateWorkerConfig } from './protocol.js'
 import { hostGate, memAvailableGb, pastStop } from './guards.js'
-import { parseLanesConf, systemdUnit, windowsTaskArgs } from './install.js'
+import { parseLanesConf, systemdUnit, windowsStartupScript, windowsTaskArgs } from './install.js'
+import { stopHint } from './daemon.js'
 
 const P1 = '67a6453c-375d-41d7-833a-b33471159442'
 const LANE = '7000000a-0000-4000-8000-000000000000'
@@ -131,6 +132,22 @@ glot             glot      glot.it      542b34e0-019e-41fe-b900-7b637717bb86   c
     expect(windowsTaskArgs({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js' })).toEqual([
       '/Create', '/TN', 'Mushi worker', '/SC', 'ONLOGON', '/RL', 'LIMITED', '/F', '/TR', '"C:\\Program Files\\nodejs\\node.exe" C:\\m\\index.js work --daemon',
     ])
+  })
+
+  it('falls back to a hidden Startup-folder launcher that needs no administrator', () => {
+    // schtasks /SC ONLOGON answered "Access is denied" for an ordinary account.
+    const vbs = windowsStartupScript({ node: 'C:\\Program Files\\nodejs\\node.exe', cli: 'C:\\m\\index.js', log: 'C:\\Users\\me\\.cache\\mushi-work\\logs\\worker.log' })
+    expect(vbs).toContain(
+      'CreateObject("WScript.Shell").Run "cmd /c """"C:\\Program Files\\nodejs\\node.exe"" ""C:\\m\\index.js"" ""work"" ""--daemon"" >> ""C:\\Users\\me\\.cache\\mushi-work\\logs\\worker.log"" 2>&1""", 0, False',
+    )
+    expect(vbs).not.toMatch(/mushi_[A-Za-z0-9]/)
+  })
+
+  it('tells each platform how to stop the daemon (Windows has no systemctl)', () => {
+    expect(stopHint('linux')).toContain('systemctl')
+    expect(stopHint('win32')).not.toContain('systemctl')
+    expect(stopHint('win32')).toContain('Task Manager')
+    expect(stopHint('darwin')).toBe('Stop with Ctrl-C.')
   })
 })
 
