@@ -7,7 +7,8 @@
  * PRIVACY:
  *   - dataCollection: SENTRY_DATA_COLLECTION — SDK 11 removed sendDefaultPii and
  *     collects everything when dataCollection is unset; this keeps the old
- *     sendDefaultPii: false baseline (no user info, cookies, IP headers, bodies)
+ *     sendDefaultPii: false baseline (no user info, cookies, bodies; request
+ *     headers limited to User-Agent + Referer, as v10 sent)
  *   - replays disabled — org free-tier quota (errors-only capture retained)
  *   - beforeSend strips token-like query params from URLs before transport
  *
@@ -45,12 +46,23 @@ type SendResult = Awaited<ReturnType<Transport['send']>>
 /**
  * SDK 11 replacement for `sendDefaultPii: false`. Every field left unset in
  * `dataCollection` defaults to collecting, so each one is set explicitly.
+ *
+ * Headers: v10 sent exactly two request headers from the page (`User-Agent`,
+ * `Referer`, via the browser HttpContext integration) and no response
+ * headers. The allowlist keeps just those two (Sentry's legacy-browser and
+ * crawler filters read `User-Agent`; `Referer` has the query-param policy
+ * below applied by the SDK). Any other header name, e.g. Authorization or
+ * Cookie, is masked as `[Filtered]`. The SDK matches allow terms as
+ * case-insensitive substrings.
+ *
+ * Query params stay collected with a deny list, as before: v10 sent the full
+ * page URL, and `beforeSend` already redacts the same token-like names.
  */
-const IP_LIKE_HEADERS = ['forwarded', 'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip', 'via']
+export const SENTRY_ALLOWED_REQUEST_HEADERS = ['user-agent', 'referer']
 export const SENTRY_DATA_COLLECTION = {
   userInfo: false,
   cookies: false,
-  httpHeaders: { request: { deny: IP_LIKE_HEADERS }, response: { deny: IP_LIKE_HEADERS } },
+  httpHeaders: { request: { allow: SENTRY_ALLOWED_REQUEST_HEADERS }, response: false },
   httpBodies: [],
   urlQueryParams: { deny: ['api_key', 'apiKey', 'token', 'key', 'access_token', 'session'] },
   graphQL: { document: false, variables: false },
