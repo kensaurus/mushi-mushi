@@ -9,8 +9,11 @@
  * Handled `block_actions` action ids: pause_story, improve_story,
  * resolve_report, dismiss_report, dispatch_fix, reply_reporter (opens a
  * modal), and the voice-intake pair voice_confirm / voice_cancel (cards
- * posted by `api/routes/slack-events.ts`). Handled `view_submission`:
- * the `reply_reporter` modal (`_shared/slack-reporter-reply.ts`).
+ * posted by `api/routes/slack-events.ts`). A card's ⋯ menu (`report_more`)
+ * sends reply_reporter or dismiss_report_ask (answered with a Dismiss button
+ * that confirms) in selected_option.value. Any `ops_*` action is the Ops
+ * hub's and is forwarded to api-ext (_shared/slack-action-route.ts). Handled
+ * `view_submission`: the `reply_reporter` modal (`_shared/slack-reporter-reply.ts`).
  *
  * Security:
  *   - HMAC-SHA256 signature check per Slack's `v0` signed-request spec
@@ -48,6 +51,7 @@ import { applyReportStatusTransition } from '../_shared/report-transition.ts'
 import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../_shared/webhook-middleware.ts'
 import { verifySlackSignature } from '../_shared/slack-verify.ts'
 import { confirmVoice, cancelVoice } from '../_shared/voice-intake.ts'
+import { forwardOpsInteraction, isOpsAction, opsInteractionsUrl, peekActionId, reportAction } from '../_shared/slack-action-route.ts'
 import {
   REPLY_CALLBACK_ID,
   openReporterReplyModal,
@@ -79,6 +83,16 @@ Deno.serve(
 
     const t0 = Date.now()
     const rawBody = await req.text()
+
+    // An Ops hub click (Acknowledge, its ⋯ menu) belongs to api-ext's Ops
+    // route, which verifies it with the organization's own signing secret and
+    // audits it once. Forwarded before this function audits, so the Ops
+    // handler's replay check never sees the same trigger_id twice.
+    if (isOpsAction(peekActionId(rawBody))) {
+      const url = opsInteractionsUrl(Deno.env.get('SUPABASE_URL'), Deno.env.get('MUSHI_FUNCTION_REGION'))
+      if (url) return await forwardOpsInteraction(req, rawBody, url)
+    }
+
     const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('slack')
     const sourceIp =
       req.headers.get('CF-Connecting-IP') ??
@@ -182,10 +196,8 @@ Deno.serve(
       return ephemeral('No action in payload.')
     }
 
-    const actionId = action.action_id ?? ''
-    const colonIdx = actionId.indexOf(':')
-    const actionKind = colonIdx >= 0 ? actionId.slice(0, colonIdx) : actionId
-    const actionValue = colonIdx >= 0 ? actionId.slice(colonIdx + 1) : (action.value ?? '')
+    // A card's ⋯ menu carries its choice in selected_option.value (reportAction).
+    const { kind: actionKind, value: actionValue } = reportAction(action)
 
     const db = getServiceClient()
     const responseUrl = payload.response_url
@@ -234,6 +246,27 @@ Deno.serve(
       const opened = await openReporterReplyModal(db, { reportId: targetReportId, triggerId: payload.trigger_id })
       await auditRow.resolve('accepted', 200, Date.now() - t0, opened.ok ? undefined : 'Reply modal not opened')
       return opened.ok ? new Response(null, { status: 200 }) : ephemeral(opened.message)
+    }
+
+    // ── Report: dismiss from the ⋯ menu asks first, inside the card ──────────
+    // A menu option cannot carry a confirm dialog, and a dismiss tells the
+    // reporter. The card gains a "Dismiss / Cancel" row under its buttons
+    // (response_url, replace_original), so the Dismiss click comes from the
+    // card itself and finishStatusTransition can rewrite it as usual.
+    if (actionKind === 'dismiss_report_ask' || actionKind === 'dismiss_cancel') {
+      const targetReportId = actionValue
+      const blocks = payload.message?.blocks
+      await auditRow.resolve('accepted', 200, Date.now() - t0, targetReportId && blocks?.length ? undefined : 'Missing report ID or card')
+      if (!targetReportId || !blocks?.length || !responseUrl) return ephemeral('Open the report in Mushi Mushi to dismiss it.')
+      const next = actionKind === 'dismiss_report_ask' ? withDismissConfirm(blocks, targetReportId) : withoutDismissConfirm(blocks)
+      waitUntil(
+        fetch(responseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ replace_original: true, text: payload.message?.text ?? 'Bug report', blocks: next }),
+        }).then(() => undefined).catch((err) => log.error('dismiss confirm row failed', { err: String(err) })),
+      )
+      return new Response(null, { status: 200 })
     }
 
     // ── Report: resolve_report / dismiss_report ──────────────────────────────
@@ -297,9 +330,10 @@ Deno.serve(
 
     // ── Report: dispatch_fix ─────────────────────────────────────────────────
     if (actionKind !== 'dispatch_fix' || !actionValue) {
-      // Link-only buttons like `open_report:<id>` / `open_qa_run:<id>` don't round-trip here.
+      // Link buttons (`open_report:<id>`, `open_qa_run:<id>`, `setup_autofix:<id>`) also
+      // arrive here when clicked. Slack opens the link itself: answer an empty 200, no message.
       await auditRow.resolve('accepted', 200, Date.now() - t0, 'Nothing to do')
-      return ephemeral('Nothing to do.')
+      return new Response(null, { status: 200 })
     }
 
     const reportId = actionValue
@@ -412,12 +446,14 @@ interface SlackInteractionPayload {
   }
   response_url?: string
   user?: { id?: string }
-  actions?: Array<{ action_id?: string; value?: string }>
+  /** A button carries action_id/value; a ⋯ menu also carries selected_option. */
+  actions?: Array<{ action_id?: string; value?: string; type?: string; selected_option?: { value?: string } }>
   /** Channel + original message — Slack includes both on block_actions, which
    *  lets us rewrite the card in place without the channels:history scope. */
   channel?: { id?: string }
   message?: {
     ts?: string
+    text?: string
     blocks?: unknown[]
     attachments?: Array<{ color?: string; blocks?: unknown[] }>
   }
@@ -486,7 +522,7 @@ async function finishDispatch(input: {
 function blocksWithOutcome(blocks: unknown[], outcomeText: string): unknown[] {
   const out: unknown[] = []
   let swapped = false
-  for (const block of blocks) {
+  for (const block of withoutDismissConfirm(blocks)) {
     const b = block as { type?: string; block_id?: string }
     if (!swapped && b.type === 'actions' && String(b.block_id ?? '').startsWith('mushi_report_')) {
       out.push({ type: 'context', elements: [{ type: 'mrkdwn', text: outcomeText }] })
@@ -605,6 +641,31 @@ function ephemeral(text: string): Response {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
+}
+
+const DISMISS_CONFIRM_PREFIX = 'mushi_dismiss_confirm_'
+
+/** The card with a "Dismiss / Cancel" row right under its buttons (once). */
+function withDismissConfirm(blocks: unknown[], reportId: string): unknown[] {
+  const base = withoutDismissConfirm(blocks)
+  const row = [
+    { type: 'context', block_id: `${DISMISS_CONFIRM_PREFIX}note_${reportId}`.slice(0, 255), elements: [{ type: 'mrkdwn', text: 'Dismiss this report? It is marked noise, a duplicate or won’t fix, and the reporter is told.' }] },
+    {
+      type: 'actions',
+      block_id: `${DISMISS_CONFIRM_PREFIX}${reportId}`.slice(0, 255),
+      elements: [
+        { type: 'button', style: 'danger', text: { type: 'plain_text', text: 'Dismiss', emoji: true }, action_id: `dismiss_report:${reportId}`, value: reportId },
+        { type: 'button', text: { type: 'plain_text', text: 'Cancel', emoji: true }, action_id: `dismiss_cancel:${reportId}`, value: reportId },
+      ],
+    },
+  ]
+  const at = base.findIndex((b) => String((b as { block_id?: string }).block_id ?? '').startsWith('mushi_report_'))
+  return at >= 0 ? [...base.slice(0, at + 1), ...row, ...base.slice(at + 1)] : [...base, ...row]
+}
+
+/** The card without its "Dismiss / Cancel" row. */
+function withoutDismissConfirm(blocks: unknown[]): unknown[] {
+  return blocks.filter((b) => !String((b as { block_id?: string }).block_id ?? '').startsWith(DISMISS_CONFIRM_PREFIX))
 }
 
 /** `${sessionId}:${confirmToken}` — session ids are UUIDs, tokens are opaque. */

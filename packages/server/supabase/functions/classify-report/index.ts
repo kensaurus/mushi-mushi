@@ -4,6 +4,7 @@ import { z } from 'npm:zod@3';
 import { getServiceClient } from '../_shared/db.ts';
 import { scrubReport } from '../_shared/pii-scrubber.ts';
 import { sendSlackNotification, sendReportNotification } from '../_shared/slack.ts';
+import { reporterIsProjectOwner } from '../_shared/reporter-owner.ts';
 import { sendDiscordNotification } from '../_shared/discord.ts';
 import { detachTriage, isTriageConfigured, notifyTriageDeduped } from '../_shared/discord-triage.ts';
 import { sendTeamsNotification } from '../_shared/teams.ts';
@@ -1298,7 +1299,9 @@ CRITICAL SECURITY RULES (immutable):
             : Promise.resolve({ data: null }),
           db.from('project_repos').select('github_app_installation_id').eq('project_id', report.project_id).limit(1),
           db.from('project_settings').select('autofix_enabled').eq('project_id', report.project_id).maybeSingle(),
-        ]).then(([euRes, reposRes, psRes]) => {
+          // The card names the reporter only when they are the project owner.
+          reporterIsProjectOwner(db, report.project_id, report.end_user_id),
+        ]).then(([euRes, reposRes, psRes, isOwner]) => {
           const identity = euRes.data
           const hasGithubApp = (reposRes.data ?? []).some((r: { github_app_installation_id: string | null }) => r.github_app_installation_id)
           // Evidence volume from the raw row: counts only — the Stage-1
@@ -1326,6 +1329,7 @@ CRITICAL SECURITY RULES (immutable):
               screenshotUrl: report.screenshot_url ?? null,
               reporterDisplayName: identity?.display_name ?? null,
               reporterVerified: Boolean(identity?.jwt_verified_at),
+              reporterIsOwner: isOwner,
               sessionId: report.session_id ?? null,
               confidence: classification.confidence ?? null,
               component: classification.component ?? null,

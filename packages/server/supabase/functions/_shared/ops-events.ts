@@ -4,14 +4,21 @@
  *          (docs/execplans/ops-hub-slack.md §1-§4).
  *
  *   recordOpsEvent   insert one event; a repeated dedupe_key returns the
- *                    stored one (a retried webhook posts once). The first
- *                    event of its thread in the same category becomes its
- *                    parent (Slack threads live in one channel).
+ *                    stored one (a retried webhook posts once). An alert
+ *                    with no thread key gets its fingerprint (opsThreadKey).
+ *                    A repeat within 24 h threads under the first post of
+ *                    its thread in the same category; a resolve finds the
+ *                    open incident however old it is. A release is always
+ *                    its own message.
  *   deliverOpsEvent  post it with the org's bot (chat.postMessage, ts kept),
- *                    as a reply under its parent; a resolve is broadcast and
- *                    edits the parent. No bot token: the category's incoming
- *                    webhook, else store only. A muted app is stored, not
- *                    posted. Never throws: a Slack failure is written to
+ *                    as a reply under its parent; a resolve replies in the
+ *                    thread and edits the parent's mark to a check. No bot
+ *                    token: the category's incoming webhook, else store
+ *                    only. A muted alert (its kind and fingerprint) or a
+ *                    muted app is stored, not posted. An app's own release
+ *                    post deletes a GitHub "is live" post for the same
+ *                    commit from the last 30 minutes (one post per release).
+ *                    Never throws: a Slack failure is written to
  *                    slack_error and never fails the ingest.
  *   emitOpsEvent     what Mushi Mushi's own sources call (GitHub deploys,
  *                    Sentry, edge canaries): only for organizations with the
@@ -29,6 +36,10 @@ import {
   buildOpsMessage,
   buildResolvedParent,
   clampEvent,
+  eventCommit,
+  muteCovers,
+  OPS_REPEAT_WINDOW_MS,
+  opsThreadKey,
   planThread,
   redactEventPii,
   type OpsCategory,
@@ -144,7 +155,7 @@ export type RecordResult =
  * same URL, weeks after the first was fixed, gets its own message and its own
  * resolve edits that message, not the first one.
  */
-async function findThreadParent(db: Db, organizationId: string, projectId: string | null, threadKey: string, category: OpsCategory): Promise<OpsEventRow | null> {
+async function findThreadParent(db: Db, organizationId: string, projectId: string | null, threadKey: string, category: OpsCategory, repeat: { at: Date } | null): Promise<OpsEventRow | null> {
   const { data, error } = await sameApp(db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('organization_id', organizationId), projectId)
     .eq('thread_key', threadKey)
     .eq('category', category)
@@ -154,9 +165,15 @@ async function findThreadParent(db: Db, organizationId: string, projectId: strin
   if (error) return null
   const latest = ((data as OpsEventRow[] | null) ?? [])[0]
   if (!latest || latest.severity === 'resolved') return null
-  if (!latest.parent_id) return latest
-  const { data: root } = await db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('id', latest.parent_id).maybeSingle()
-  return (root as OpsEventRow | null) ?? latest
+  let root = latest
+  if (latest.parent_id) {
+    const { data: found } = await db.from('ops_events').select(OPS_EVENT_COLUMNS).eq('id', latest.parent_id).maybeSingle()
+    root = (found as OpsEventRow | null) ?? latest
+  }
+  // A repeat (anything but a resolve) threads under a root from the last 24 h
+  // only: an older root is buried, so the repeat starts a new message.
+  if (repeat && Date.parse(root.occurred_at) < repeat.at.getTime() - OPS_REPEAT_WINDOW_MS) return null
+  return root
 }
 
 export async function recordOpsEvent(
@@ -164,9 +181,14 @@ export async function recordOpsEvent(
   args: { organizationId: string; projectId: string | null; input: OpsEventInput },
   deps: OpsDeps = {},
 ): Promise<RecordResult> {
-  const e = clampEvent(args.input)
+  const clamped = clampEvent(args.input)
+  const e = { ...clamped, threadKey: opsThreadKey(clamped) }
   const now = (deps.now ?? (() => new Date()))()
-  const parent = e.threadKey ? await findThreadParent(db, args.organizationId, args.projectId, e.threadKey, e.category) : null
+  const at = e.occurredAt && Number.isFinite(Date.parse(e.occurredAt)) ? new Date(e.occurredAt) : now
+  // Every release is its own message in #releases, whatever thread key it carries.
+  const parent = e.threadKey && e.category !== 'releases'
+    ? await findThreadParent(db, args.organizationId, args.projectId, e.threadKey, e.category, e.severity === 'resolved' ? null : { at })
+    : null
   const row = {
     organization_id: args.organizationId,
     project_id: args.projectId,
@@ -226,11 +248,60 @@ async function setSlackState(db: Db, id: string, patch: Partial<Pick<OpsEventRow
   if (error) log.warn('ops event slack state not saved', { id, err: String(error.message ?? '') })
 }
 
-export async function isProjectMuted(db: Db, organizationId: string, projectId: string | null, now: Date): Promise<string | null> {
-  if (!projectId) return null
-  const { data } = await db.from('ops_mutes').select('until').eq('organization_id', organizationId).eq('project_id', projectId).maybeSingle()
-  const until = (data as { until?: string } | null)?.until
-  return until && Date.parse(until) > now.getTime() ? until : null
+/**
+ * When the event is muted, the latest `until` that covers it, else null. A row
+ * with the empty scope (or from before the scope column) mutes the whole app;
+ * a scoped row mutes one alert's kind and fingerprint (opsMuteScope).
+ */
+async function isEventMuted(db: Db, event: Pick<OpsEventRow, 'organization_id' | 'project_id' | 'category' | 'kind' | 'thread_key'>, now: Date): Promise<string | null> {
+  if (!event.project_id) return null
+  // `*`: the scope column arrives with 20261120090000_ops_mutes_scope; before it, every row is app-wide.
+  const { data, error } = await db.from('ops_mutes').select('*').eq('organization_id', event.organization_id).eq('project_id', event.project_id)
+  if (error) return null
+  let latest: string | null = null
+  for (const r of (data as Array<{ until?: string; scope?: string | null }> | null) ?? []) {
+    if (!r.until || Date.parse(r.until) <= now.getTime() || !muteCovers(r.scope, event)) continue
+    if (!latest || Date.parse(r.until) > Date.parse(latest)) latest = r.until
+  }
+  return latest
+}
+
+/**
+ * The project's releases for this commit from the last `windowMs`, any
+ * source: what a GitHub deployment checks before it posts "... is live".
+ */
+export async function releasesForCommit(db: Db, projectId: string, commit: string, now: Date, windowMs = 30 * 60_000): Promise<OpsEventRow[]> {
+  const sha = commit.slice(0, 7).toLowerCase()
+  const { data, error } = await db
+    .from('ops_events')
+    .select(OPS_EVENT_COLUMNS)
+    .eq('project_id', projectId)
+    .eq('category', 'releases')
+    .gte('occurred_at', new Date(now.getTime() - windowMs).toISOString())
+    .order('occurred_at', { ascending: false })
+    .limit(50)
+  if (error) return []
+  return ((data as OpsEventRow[] | null) ?? []).filter((r) => eventCommit(r) === sha)
+}
+
+/**
+ * An app's own release post for a commit replaces Mushi Mushi's GitHub
+ * "... is live" post for the same commit (posted first, seconds earlier): the
+ * GitHub one is deleted from Slack and marked superseded. Never throws.
+ */
+async function supersedeGithubRelease(db: Db, event: OpsEventRow, token: string, deps: OpsDeps, now: Date): Promise<void> {
+  const commit = eventCommit(event)
+  if (!commit || !event.project_id || event.source === 'github') return
+  const rows = await releasesForCommit(db, event.project_id, commit, now)
+  for (const r of rows) {
+    if (r.id === event.id || r.source !== 'github' || !r.slack_ts || !r.slack_channel || r.slack_channel === 'webhook') continue
+    const del = await slackApi(token, 'chat.delete', { channel: r.slack_channel, ts: r.slack_ts }, deps)
+    if (!del.ok && del.error !== 'message_not_found') {
+      log.warn('ops github release not removed', { id: r.id, err: del.error })
+      continue
+    }
+    await setSlackState(db, r.id, { slack_ts: null, slack_error: `superseded by the app's own release post ${event.id}` })
+  }
 }
 
 export async function deliverOpsEvent(db: Db, event: OpsEventRow, deps: OpsDeps = {}): Promise<DeliverResult> {
@@ -240,7 +311,7 @@ export async function deliverOpsEvent(db: Db, event: OpsEventRow, deps: OpsDeps 
     const settings = read.ok ? read.row : null
     if (!settings?.enabled) return { delivered: false, reason: 'slack_off' }
 
-    const mutedUntil = await isProjectMuted(db, event.organization_id, event.project_id, now)
+    const mutedUntil = await isEventMuted(db, event, now)
     if (mutedUntil) {
       await setSlackState(db, event.id, { slack_error: `muted until ${mutedUntil.slice(0, 16).replace('T', ' ')} UTC` })
       return { delivered: false, reason: 'muted' }
@@ -287,18 +358,22 @@ export async function deliverOpsEvent(db: Db, event: OpsEventRow, deps: OpsDeps 
         const updated = await slackApi(token, 'chat.update', { channel: parent.slack_channel, ts: parent.slack_ts, text: edit.text, blocks: edit.blocks }, deps)
         if (!updated.ok) log.warn('ops parent edit failed', { id: parent.id, err: updated.error })
       }
+      if (event.category === 'releases') await supersedeGithubRelease(db, event, token, deps, now)
       return { delivered: true, via: 'bot', ts: typeof posted.ts === 'string' ? posted.ts : undefined }
     }
 
     const hookUrl = await readVaultSecret(db, webhookSecretFor(settings, event.category))
     if (hookUrl) {
-      // An incoming webhook takes no button clicks: keep only the link buttons.
+      // An incoming webhook takes no button clicks: keep only the links (a menu's link becomes a button).
       const msg = buildOpsMessage(event, ctx)
       const blocks = msg.blocks.flatMap((b) => {
-        const block = b as { type?: string; elements?: Array<{ url?: string }> }
+        const block = b as { type?: string; elements?: Array<{ type?: string; url?: string; options?: Array<{ text: unknown; url?: string; value?: string }> }> }
         if (block.type !== 'actions') return [block]
-        const links = (block.elements ?? []).filter((el) => typeof el.url === 'string')
-        return links.length ? [{ ...block, elements: links }] : []
+        const links = (block.elements ?? []).flatMap((el): unknown[] => {
+          if (el.type === 'overflow') return (el.options ?? []).filter((o) => typeof o.url === 'string').map((o) => ({ type: 'button', action_id: String(o.value ?? 'ops_link'), text: o.text, url: o.url }))
+          return typeof el.url === 'string' ? [el] : []
+        })
+        return links.length ? [{ ...block, elements: links.slice(0, 3) }] : []
       })
       const sent = await postSlackWebhook(hookUrl, { text: msg.text, blocks }, deps)
       if (!sent.ok) {
@@ -415,10 +490,28 @@ export async function ackOpsEvent(db: Db, event: OpsEventRow, actor: AckActor, d
   return { ok: true, already: false }
 }
 
-/** Mute an app's Slack messages until `until` (events are still stored). */
-export async function muteProject(db: Db, args: { organizationId: string; projectId: string; until: Date; by: string }): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await db
-    .from('ops_mutes')
-    .upsert({ organization_id: args.organizationId, project_id: args.projectId, until: args.until.toISOString(), muted_by: args.by.slice(0, 120) }, { onConflict: 'organization_id,project_id' })
-  return error ? { ok: false, error: String(error.message ?? 'mute failed') } : { ok: true }
+/** PostgREST / Postgres "column does not exist": 20261120090000_ops_mutes_scope is not applied yet. */
+function isMissingColumn(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false
+  return err.code === '42703' || err.code === 'PGRST204' || err.code === '42P10' || /column .*(does not exist|not find)|'scope'/i.test(err.message ?? '')
+}
+
+/**
+ * Mute Slack messages until `until` (events are still stored). `scope` empty
+ * (the default) mutes the whole app, as `mute <app>` does; a scope from
+ * opsMuteScope mutes one alert's kind and fingerprint, as the Mute button
+ * does. A scoped mute never falls back to an app-wide one: before its
+ * migration it fails with `migration_pending`.
+ */
+export async function muteProject(db: Db, args: { organizationId: string; projectId: string; until: Date; by: string; scope?: string }): Promise<{ ok: boolean; error?: string }> {
+  const scope = (args.scope ?? '').slice(0, 300)
+  const row = { organization_id: args.organizationId, project_id: args.projectId, until: args.until.toISOString(), muted_by: args.by.slice(0, 120) }
+  const { error } = await db.from('ops_mutes').upsert({ ...row, scope }, { onConflict: 'organization_id,project_id,scope' })
+  if (!error) return { ok: true }
+  if (isMissingColumn(error)) {
+    if (scope) return { ok: false, error: 'migration_pending' }
+    const legacy = await db.from('ops_mutes').upsert(row, { onConflict: 'organization_id,project_id' })
+    return legacy.error ? { ok: false, error: String(legacy.error.message ?? 'mute failed') } : { ok: true }
+  }
+  return { ok: false, error: String(error.message ?? 'mute failed') }
 }

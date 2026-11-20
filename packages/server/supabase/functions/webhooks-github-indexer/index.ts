@@ -155,6 +155,27 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 /**
+ * A commit's subject (its first line) through the App installation, for the
+ * Ops release post. Null on any failure: the post then goes out without one.
+ */
+async function githubCommitSubject(repo: string, sha: string, installationId: number): Promise<string | null> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^[0-9a-f]{7,64}$/i.test(sha)) return null;
+  try {
+    const token = await mintInstallationToken(installationId);
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits/${sha}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'mushi-mushi-ops' },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { commit?: { message?: string } };
+    const subject = (body.commit?.message ?? '').split('\n')[0].trim();
+    return subject || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Mint a JWT for the App, exchange for an installation token. JWTs are tiny —
  * we sign in-process via Web Crypto rather than pulling jose into the bundle.
  */
@@ -2322,7 +2343,8 @@ app.post('/webhooks-github-indexer', async (c) => {
   if (event === 'release' || event === 'deployment_status') {
     // The Ops hub (docs/execplans/ops-hub-slack.md §4): a production deploy, or a failed one, becomes
     // a releases / alerts event for teams whose Slack bot is on. Runs after the answer; never throws.
-    if (event === 'deployment_status') runInBackground(routeGithubDeployOps(getDb() as never, JSON.parse(raw)), 'ops-deploy');
+    // The release post carries the commit subject (tsumagoi has no release post of its own).
+    if (event === 'deployment_status') runInBackground(routeGithubDeployOps(getDb() as never, JSON.parse(raw), { commitSubject: githubCommitSubject }), 'ops-deploy');
     const routed = await routeGithubShipEvent(getDb(), event, JSON.parse(raw) as GithubShipPayload);
     if (routed.projectIds[0]) await auditRow.setProject(routed.projectIds[0]);
     return c.json(routed.body, routed.status);

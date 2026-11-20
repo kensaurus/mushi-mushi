@@ -348,9 +348,10 @@ async function loadFeed(db: Db, orgId: string, category: string, since: Date, li
 }
 
 async function loadMutes(db: Db, orgId: string): Promise<Array<{ project_id: string; until: string }>> {
-  const { data, error } = await db.from('ops_mutes').select('project_id, until').eq('organization_id', orgId)
+  // `*`: the scope column may not exist yet. A one-alert mute (the Mute button) is not an app mute.
+  const { data, error } = await db.from('ops_mutes').select('*').eq('organization_id', orgId)
   throwIf(error, 'ops_mutes')
-  return (data as Array<{ project_id: string; until: string }> | null) ?? []
+  return ((data as Array<{ project_id: string; until: string; scope?: string | null }> | null) ?? []).filter((m) => !m.scope).map((m) => ({ project_id: m.project_id, until: m.until }))
 }
 
 async function loadCiToday(db: Db, projectIds: string[], now: Date): Promise<CiDayRow[]> {
