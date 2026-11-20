@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-19 · **830** routes.
+> Generated: 2026-11-20 · **831** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 226 |
+| `adminOrApiKey` | 227 |
 | `apiKeyAuth` | 60 |
 | `jwtAuth` | 423 |
 | `jwtOrApiKey` | 1 |
@@ -405,6 +405,7 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | DELETE | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | GET | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
 | POST | `/v1/admin/projects/:id/identity-secret` | `jwtAuth` | `packages/server/supabase/functions/api/routes/identity-secret.ts` |
+| GET | `/v1/admin/projects/:id/ingest-setup` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/sync.ts` |
 | GET | `/v1/admin/projects/:id/journeys` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/journeys.ts` |
 | PUT | `/v1/admin/projects/:id/journeys/recording` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/journeys.ts` |
 | POST | `/v1/admin/projects/:id/journeys/scan` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/journeys.ts` |

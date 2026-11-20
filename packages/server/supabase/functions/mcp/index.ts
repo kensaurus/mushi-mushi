@@ -1141,7 +1141,7 @@ const BASE_TOOLS: Record<string, HostedTool> = {
       const resolvedId = (args.projectId as string | undefined) ?? ctx.projectIdHint
 
       if (mode === 'ingest') {
-        const data = await apiCall<{
+        const data = await ingestSetupCall<{
           ready: boolean
           required_complete: number
           required_total: number
@@ -1149,7 +1149,7 @@ const BASE_TOOLS: Record<string, HostedTool> = {
           project_name: string
           steps: Array<{ id: string; label: string; complete: boolean; required: boolean; hint: string }>
           diagnostic?: Record<string, unknown>
-        }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
+        }>(ctx.authHeaders, resolvedId)
         const failed = data.steps.filter((s) => s.required && !s.complete)
         return {
           mode: 'ingest',
@@ -1241,10 +1241,10 @@ const BASE_TOOLS: Record<string, HostedTool> = {
         }
       }
 
-      const ingest = await apiCall<{
+      const ingest = await ingestSetupCall<{
         ready: boolean
         steps: Array<{ label: string; complete: boolean; required: boolean; hint: string }>
-      }>('/v1/sync/ingest-setup', { headers: ctx.authHeaders })
+      }>(ctx.authHeaders, resolvedId)
       let dispatchReady = true
       let dispatchBlock: string | undefined
       let dispatchPayload: unknown = null
@@ -2450,6 +2450,32 @@ async function apiCall<T = unknown>(
     return (env.data ?? ({} as T)) as T
   }
   return body as T
+}
+
+/**
+ * The ingest steps for diagnose_setup. The SDK route answers for a project
+ * key; an account key is refused there (it cannot ingest), so for one the
+ * project is named on the admin route instead of failing the whole check.
+ * Same fallback as the stdio server (packages/mcp/src/server.ts).
+ */
+async function ingestSetupCall<T>(
+  headers: Record<string, string>,
+  projectIdForAccountKey: string | undefined,
+): Promise<T> {
+  try {
+    return await apiCall<T>('/v1/sync/ingest-setup', { headers })
+  } catch (err) {
+    const code = (err as { data?: { code?: string } } | null)?.data?.code
+    if (!(err instanceof McpError) || code !== 'ORG_KEY_NOT_ALLOWED') throw err
+    if (!projectIdForAccountKey) {
+      throw new McpError(
+        ERR_INVALID_PARAMS,
+        'This is an account key: pass projectId (list_projects shows them) to check a project.',
+        { code: 'PROJECT_ID_REQUIRED' },
+      )
+    }
+    return apiCall<T>(`/v1/admin/projects/${encodeURIComponent(projectIdForAccountKey)}/ingest-setup`, { headers })
+  }
 }
 
 // ── Canonical metadata ──────────────────────────────────────────────────────
