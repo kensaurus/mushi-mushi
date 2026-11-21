@@ -118,7 +118,10 @@ export function createSwUpdater(reg: SwRegistrationLike, deps: Deps): () => void
 
 // ── Is this page already the deployed build? ────────────────────────────────
 
-/** Path of the first module script in an HTML document, or null. */
+/**
+ * Path of the first module script in an HTML document, or null.
+ * @internal Exported for tests.
+ */
 export function entryScriptPath(html: string, baseUrl: string): string | null {
   const tag = /<script\b[^>]*\btype=["']module["'][^>]*>/i.exec(html)?.[0]
   const src = tag ? /\bsrc=["']([^"']+)["']/i.exec(tag)?.[1] : undefined
