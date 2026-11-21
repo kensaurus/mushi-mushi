@@ -19,12 +19,12 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
+import { withAnthropicOrOpenAi, WalletDeniedError } from '../_shared/llm-failover.ts'
 import { validateInventoryObject } from '../_shared/inventory.ts'
 import { assertSafeOutboundUrl } from '../_shared/inventory-guards.ts'
 import { pickCrawlUrls } from '../_shared/crawl-urls.ts'
 import { firecrawlMapOwnSite, firecrawlScrapeOwnSite } from '../_shared/firecrawl.ts'
-import { STORY_MAP_EFFORT, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { STORY_MAP_EFFORT, STORY_MAP_FALLBACK, STORY_MAP_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage } from '../_shared/llm-usage.ts'
 import { createTrace } from '../_shared/observability.ts'
@@ -227,6 +227,7 @@ Deno.serve(
       const llmSpan = trace.span('propose-inventory')
 
       let proposerOutput: ProposerOutput | null = null
+      let usedModel: string = STORY_MAP_MODEL
       let lastIssues = ''
       let attempt = 0
 
@@ -236,26 +237,32 @@ Deno.serve(
           : prompt
 
         try {
-          const completion = await withLlmFailover(
+          // The app's own Claude key first, else its OpenAI pool, else the
+          // platform keys through the story-mapper route (provider and model
+          // from kenji, 2026-11-21).
+          // No `meter`: withLlmUsage writes an llm_invocations row, and
+          // logLlmInvocation takes the hosted-key debit. Passing both would
+          // charge the call twice.
+          const usageFor = (model: string, source: 'byok' | 'env') => ({
+            functionName: 'story-mapper',
+            stage: 'map-inventory',
+            projectId: project_id,
+            model,
+            keySource: source,
+            langfuseTraceId: trace.id,
+            // Billed before (withLlmFailover meter); keeps that debit.
+            billHosted: true,
+          })
+          const { result: completion, usedProvider, model: routeModel } = await withAnthropicOrOpenAi(
             db,
             project_id,
-            'anthropic',
             async (k) => {
               const { text, usage } = await withLlmUsage(
                 db,
-                {
-                  functionName: 'story-mapper',
-                  stage: 'map-inventory',
-                  projectId: project_id,
-                  model: STORY_MAP_MODEL,
-                  keySource: k.source,
-                  langfuseTraceId: trace.id,
-                  // Billed before (withLlmFailover meter); keeps that debit.
-                  billHosted: true,
-                },
+                usageFor(k.model ?? STORY_MAP_MODEL, k.source),
                 () => claudeGenerateText({
                   apiKey: k.key,
-                  model: STORY_MAP_MODEL,
+                  model: k.model ?? STORY_MAP_MODEL,
                   effort: STORY_MAP_EFFORT,
                   system: STORY_MAPPER_SYSTEM,
                   prompt: promptWithRetry,
@@ -265,10 +272,27 @@ Deno.serve(
               )
               return { text, usage }
             },
-            // No `meter`: withLlmUsage writes an llm_invocations row, and
-            // logLlmInvocation takes the hosted-key debit. Passing both would
-            // charge the call twice.
+            async (k) => {
+              const [{ openAiProvider }, { generateText }] = await Promise.all([
+                import('../_shared/openai-compat.ts'),
+                import('../_shared/ai-sdk.ts'),
+              ])
+              const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
+              const { text, usage } = await withLlmUsage(
+                db,
+                usageFor(k.model ?? STORY_MAP_FALLBACK, k.source),
+                () => generateText({
+                  model: openai(k.model ?? STORY_MAP_FALLBACK),
+                  system: STORY_MAPPER_SYSTEM,
+                  prompt: promptWithRetry,
+                  maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
+                }),
+              )
+              return { text, usage }
+            },
+            { feature: 'story-mapper', tier: 'standard' },
           )
+          usedModel = routeModel ?? (usedProvider === 'openai' ? STORY_MAP_FALLBACK : STORY_MAP_MODEL)
 
           const parsed = extractFencedJson(completion.text) as ProposerOutput
           const inventoryCandidate = parsed?.inventory ?? parsed
@@ -295,12 +319,12 @@ Deno.serve(
       }
 
       if (!proposerOutput) {
-        llmSpan.end({ model: STORY_MAP_MODEL, error: lastIssues.slice(0, 500) })
+        llmSpan.end({ model: usedModel, error: lastIssues.slice(0, 500) })
         await trace.end()
-        throw new Error(`Claude could not produce a valid inventory.yaml after ${attempt} attempts. Last issues: ${lastIssues}`)
+        throw new Error(`The model could not produce a valid inventory.yaml after ${attempt} attempts. Last issues: ${lastIssues}`)
       }
 
-      llmSpan.end({ model: STORY_MAP_MODEL })
+      llmSpan.end({ model: usedModel })
       await trace.end()
 
       // === Persist as inventory_proposals (source='live_crawl') ===
@@ -319,7 +343,7 @@ Deno.serve(
           proposed_parsed: proposerOutput.inventory,
           rationale_by_story: proposerOutput.rationale_by_story,
           observation_count: pages.length,
-          llm_model: STORY_MAP_MODEL,
+          llm_model: usedModel,
         })
         .select('id')
         .single()

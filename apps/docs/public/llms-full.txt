@@ -17268,6 +17268,7 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | --- | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | Optional | — | — |
 | `OPENAI_API_KEY` | Optional | — | Either provider works; OpenAI also powers duplicate detection, semantic search and voice |
+| `OPENROUTER_API_KEY` | Optional | — | Optional fallback for the OpenAI models when the OpenAI key is out of credit or down |
 | `AGENT_PR_REVIEW_MODEL` | Optional | `claude-opus-5-5` | Agent PR review model for every project that has not set its own (project_settings.agent_pr_review_model, ADR 0039). Default: claude-opus-5-5. |
 
 ### Operator notices and Slack routing (optional)
@@ -17410,6 +17411,14 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `KENSAURUS_WALLET_URL` | Optional | — | — |
 | `KENSAURUS_WALLET_INTERNAL_TOKEN` | Optional | — | — |
 | `MUSHI_HOSTED_LLM_PREFLIGHT_TIMEOUT_MS` | Optional | — | — |
+
+### KENSAURUS AI routes (optional; Mushi Mushi Cloud)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `KENSAURUS_ROUTES_URL` | Optional | — | Which provider and model each platform-key AI call uses comes from kenji's kensaurus_ai_routes, read with KENSAURUS_ROUTES_TOKEN (read-only; never the wallet token). Without it (a self-host) nothing calls kenji and the built-in OpenAI-first list runs. An app's own keys (BYOK) are not affected. The console edits routes on the Providers &amp; AI routes page (KENSAURUS_OPS_URL / KENSAURUS_OPS_CONSOLE_TOKEN). Default: https://jghcferpoaqntpfqvayf.supabase.co/functions/v1/kensaurus-ai-routes |
+| `KENSAURUS_ROUTES_TOKEN` | Optional | — | — |
+| `KENSAURUS_LLM_DRILL` | Optional | — | Test and smoke drills only: &lt;provider&gt;:payment fails that provider's call with Anthropic's low-credit error when the call asks for a drill. Leave unset. |
 
 ### OpenAI-compatible endpoint (optional)
 

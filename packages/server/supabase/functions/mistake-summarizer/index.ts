@@ -25,7 +25,7 @@ import { ANTHROPIC_HAIKU, MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI, THINKING_H
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { UsageByModel } from '../_shared/pricing.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
-import { projectLlmKey } from '../_shared/project-llm-key.ts'
+import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 
 Deno.serve(
   withSentry(async (req: Request) => {
@@ -72,18 +72,6 @@ Severity: ${lesson.severity}
 Sample reports:
 ${reportContext || '(none available)'}`
 
-    // The project's own keys first, the platform keys otherwise.
-    const anthropicResolved = await projectLlmKey(db, lesson.project_id as string, 'anthropic')
-    const openaiResolved = await projectLlmKey(db, lesson.project_id as string, 'openai')
-    const anthropicKey = anthropicResolved?.key
-    // Haiku 4.5 still takes the AI SDK v4 call shape; Sonnet goes through
-    // claude-messages.ts (Sonnet 5.5 rejects temperature and forced tools).
-    const anthropicFast = createAnthropic({ apiKey: anthropicKey })
-    const openaiMini = openAiProvider({
-      apiKey: openaiResolved?.key,
-      ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-    })
-
     const updates: Record<string, string> = {}
     // Per-model totals for the response; the spend itself is one
     // llm_invocations row per call, with the source of the key it used.
@@ -109,49 +97,59 @@ ${reportContext || '(none available)'}`
       }, outcome))
     }
 
-    async function callClaude(model: 'fast' | 'sonnet', prompt: string) {
-      // Before both paths: with no key, createAnthropic falls back to the
-      // ANTHROPIC_API_KEY env var, past the organization's AI provider switch.
-      if (!anthropicKey) throw new Error('No Anthropic key for this project')
-      if (model === 'fast') {
-        return generateText({ model: anthropicFast(ANTHROPIC_HAIKU), prompt, maxTokens: 200 })
-      }
-      return claudeGenerateText({
-        apiKey: anthropicKey,
-        model: MISTAKE_MODEL,
-        effort: MISTAKE_EFFORT,
-        prompt,
-        // The essay is ~800 output tokens; adaptive thinking counts toward the cap.
-        maxTokens: 1200 + THINKING_HEADROOM_TOKENS,
-      })
-    }
-
+    // The project's own keys first, then the platform keys through the
+    // mistake-summarizer route (provider and model from kenji). Haiku 4.5 on
+    // the app's own key still takes the AI SDK v4 call shape; every 5.x model
+    // (Sonnet 5.5 rejects temperature and forced tools) goes through
+    // claude-messages.ts.
     async function callLlm(model: 'fast' | 'sonnet', prompt: string): Promise<string> {
-      const claudeModel = model === 'fast' ? ANTHROPIC_HAIKU : MISTAKE_MODEL
+      const claudeDefault = model === 'fast' ? ANTHROPIC_HAIKU : MISTAKE_MODEL
       const stage = model === 'fast' ? 'lesson-summarise' : 'lesson-essay'
-      const claudeStart = Date.now()
-      try {
-        const result = await callClaude(model, prompt)
-        record(claudeModel, stage, claudeStart, { result }, claudeModel, anthropicResolved?.source ?? null)
-        return result.text.trim()
-      } catch (claudeErr) {
-        // No key means no paid call, so no row.
-        if (anthropicKey) record(claudeModel, stage, claudeStart, { error: claudeErr }, claudeModel, anthropicResolved?.source ?? null)
-        if (!openaiResolved) throw claudeErr
-        const openaiStart = Date.now()
+      const maxTokens = model === 'fast' ? 200 : 1200
+      const timed = async (
+        usedModel: string,
+        keySource: 'byok' | 'env',
+        call: () => Promise<{ text: string; usage: { promptTokens: number; completionTokens: number } }>,
+      ) => {
+        const startedAt = Date.now()
         try {
-          const result = await generateText({
-            model: openaiMini(OPENAI_MINI),
-            prompt,
-            maxTokens: model === 'fast' ? 200 : 1200,
-          })
-          record(OPENAI_MINI, stage, openaiStart, { result }, claudeModel, openaiResolved.source)
+          const result = await call()
+          record(usedModel, stage, startedAt, { result }, claudeDefault, keySource)
           return result.text.trim()
-        } catch (openaiErr) {
-          record(OPENAI_MINI, stage, openaiStart, { error: openaiErr }, claudeModel, openaiResolved.source)
-          throw openaiErr
+        } catch (err) {
+          record(usedModel, stage, startedAt, { error: err }, claudeDefault, keySource)
+          throw err
         }
       }
+      const routed = await withAnthropicOrOpenAi(
+        db,
+        lesson.project_id as string,
+        (key) => {
+          const usedModel = key.model ?? claudeDefault
+          if (!key.model && model === 'fast') {
+            const anthropicFast = createAnthropic({ apiKey: key.key })
+            return timed(usedModel, key.source, () => generateText({ model: anthropicFast(ANTHROPIC_HAIKU), prompt, maxTokens }))
+          }
+          return timed(usedModel, key.source, () => claudeGenerateText({
+            apiKey: key.key,
+            model: usedModel,
+            effort: MISTAKE_EFFORT,
+            prompt,
+            // The essay is ~800 output tokens; adaptive thinking counts toward the cap.
+            maxTokens: maxTokens + THINKING_HEADROOM_TOKENS,
+          }))
+        },
+        (key) => {
+          const usedModel = key.model ?? OPENAI_MINI
+          const openai = openAiProvider({
+            apiKey: key.key,
+            ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
+          })
+          return timed(usedModel, key.source, () => generateText({ model: openai(usedModel), prompt, maxTokens }))
+        },
+        { feature: 'mistake-summarizer', tier: 'fast' },
+      )
+      return routed.result
     }
 
     if (views.includes('rule')) {

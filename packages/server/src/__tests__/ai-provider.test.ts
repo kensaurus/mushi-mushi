@@ -149,11 +149,9 @@ describe('aiProviderForProject', () => {
   })
 })
 
-describe('platformAnthropicKey', () => {
-  it('hands out the platform Claude key only while the organization runs on Claude', async () => {
-    expect(await provider.platformAnthropicKey(fakeDb('anthropic').db, P)).toBe('sk-ant-platform')
-    provider.clearAiProviderCache()
-    expect(await provider.platformAnthropicKey(fakeDb('openai').db, P)).toBeUndefined()
+describe('the platform Claude key', () => {
+  it('is never handed out by the resolver: platform calls take it only through a KENSAURUS AI route', async () => {
+    expect(await byok.resolveLlmKeys(fakeDb('anthropic', null).db, P, 'anthropic')).toEqual([])
   })
 })
 

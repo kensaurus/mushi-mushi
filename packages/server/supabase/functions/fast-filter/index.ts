@@ -249,7 +249,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
     let keySource: 'byok' | 'env' | null = null
     let usedHeuristic = false
     try {
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const routed = await withAnthropicOrOpenAi(
         db,
         projectId,
         async (key) => {
@@ -264,13 +264,15 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
             },
             { role: 'user' as const, content: userPrompt },
           ]
-          if (stage1Choice.messagesApi) {
+          // A platform call runs the KENSAURUS AI route's model (key.model).
+          const claudeModel = key.model ?? PRIMARY_MODEL
+          if (stage1Choice.messagesApi || key.model) {
             // 5.x models reject the AI SDK v4 call shape. Stage 1 is a quick
             // sort, so low effort keeps adaptive thinking (billed as output)
             // small.
             const r = await claudeGenerateObject({
               apiKey: key.key,
-              model: PRIMARY_MODEL,
+              model: claudeModel,
               schema: stage1Schema,
               effort: 'low',
               messages,
@@ -293,18 +295,20 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
           return generateObject({
-            model: openai(FALLBACK_MODEL, { structuredOutputs: false }),
+            model: openai(key.model ?? FALLBACK_MODEL, { structuredOutputs: false }),
             schema: stage1Schema,
             system: activeSystemPrompt,
             prompt: userPrompt,
           })
         },
+        { feature: 'fast-filter', tier: 'fast' },
       )
+      const { result, usedProvider } = routed
       classification = result.object
       tokenUsage = result.usage ?? {}
-      usedModel = usedProvider === 'anthropic' ? PRIMARY_MODEL : FALLBACK_MODEL
-      fallbackUsed = usedProvider === 'openai'
-      fallbackReason = usedProvider === 'openai' ? 'anthropic_pool_exhausted' : null
+      usedModel = routed.model ?? (usedProvider === 'anthropic' ? PRIMARY_MODEL : FALLBACK_MODEL)
+      fallbackUsed = routed.fallbackUsed
+      fallbackReason = routed.fallbackUsed ? 'primary_unavailable' : null
       if (usedProvider === 'anthropic') {
         // AI SDK v4 exposes this as `experimental_providerMetadata`; v5 renamed
         // to `providerMetadata`. Reading both keeps the extraction stable

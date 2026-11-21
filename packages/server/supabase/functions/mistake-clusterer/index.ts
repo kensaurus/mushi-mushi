@@ -30,7 +30,7 @@ import { log } from '../_shared/logger.ts'
 import { MISTAKE_EFFORT, MISTAKE_MODEL, OPENAI_MINI } from '../_shared/models.ts'
 import { claudeGenerateObject } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
-import { projectLlmKey } from '../_shared/project-llm-key.ts'
+import { LlmFailoverError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { isLlmBudgetExceeded } from '../_shared/llm-account-state.ts'
 import { isQuotaMessage } from '../_shared/llm-quota.ts'
 
@@ -258,57 +258,57 @@ ${reportSummaries}
 Rate the semantic coherence of this cluster and suggest how to name and summarise it.`
 
         try {
-          let result: z.infer<typeof coherenceSchema>
-          // The project's own key first, the platform key otherwise.
-          const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
-          const anthropicKey = anthropicResolved?.key
+          // The project's own keys first, then the platform keys through the
+          // mistake-clusterer route (provider and model from kenji).
           const usageCtx = {
             functionName: 'mistake-clusterer',
             stage: 'cluster-coherence',
             projectId,
             primaryModel: MISTAKE_MODEL,
           }
-
-          const claudeStart = Date.now()
+          const record = <R,>(model: string, keySource: 'byok' | 'env', call: () => Promise<R>) => {
+            const ctx = { ...usageCtx, keySource, model, startedAt: Date.now() }
+            return call().then(
+              (generation) => {
+                void recordLlmUsage(db, ctx, { result: generation as never })
+                return generation
+              },
+              (err: unknown) => {
+                void recordLlmUsage(db, ctx, { error: err })
+                throw err
+              },
+            )
+          }
+          let result: z.infer<typeof coherenceSchema>
           try {
-            if (!anthropicKey) throw new NoProjectLlmKeyError()
-            const generation = await claudeGenerateObject({
-              apiKey: anthropicKey,
-              model: MISTAKE_MODEL,
-              effort: MISTAKE_EFFORT,
-              schema: coherenceSchema,
-              prompt,
-            })
-            void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { result: generation })
-            result = generation.object
-          } catch (claudeErr) {
-            // No key means no paid call, so no row.
-            if (anthropicKey) {
-              void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: MISTAKE_MODEL, startedAt: claudeStart }, { error: claudeErr })
-            }
-            const openaiResolved = await projectLlmKey(db, projectId, 'openai')
-            if (!openaiResolved) throw claudeErr
-            const openaiUsage = {
-              ...usageCtx,
-              keySource: openaiResolved.source,
-              model: OPENAI_MINI,
-              startedAt: Date.now(),
-              fallbackReason: anthropicKey ? 'anthropic_failed' : 'no_anthropic_key',
-            }
-            const openai = openAiProvider({
-              apiKey: openaiResolved.key,
-              ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-            })
-            const generation = await generateObject({
-              model: openai(OPENAI_MINI),
-              schema: coherenceSchema,
-              prompt,
-            }).catch((err: unknown) => {
-              void recordLlmUsage(db, openaiUsage, { error: err })
-              throw err
-            })
-            void recordLlmUsage(db, openaiUsage, { result: generation })
-            result = generation.object
+            const routed = await withAnthropicOrOpenAi(
+              db,
+              projectId,
+              (key) => record(key.model ?? MISTAKE_MODEL, key.source, () => claudeGenerateObject({
+                apiKey: key.key,
+                model: key.model ?? MISTAKE_MODEL,
+                effort: MISTAKE_EFFORT,
+                schema: coherenceSchema,
+                prompt,
+              })).then((g) => g.object as z.infer<typeof coherenceSchema>),
+              (key) => {
+                const openai = openAiProvider({
+                  apiKey: key.key,
+                  ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
+                })
+                return record(key.model ?? OPENAI_MINI, key.source, () => generateObject({
+                  model: openai(key.model ?? OPENAI_MINI),
+                  schema: coherenceSchema,
+                  prompt,
+                })).then((g) => g.object as z.infer<typeof coherenceSchema>)
+              },
+              { feature: 'mistake-clusterer', tier: 'fast' },
+            )
+            result = routed.result
+          } catch (err) {
+            // No key anywhere: the same expected state as before (skip the project).
+            if (err instanceof LlmFailoverError && err.code === 'NO_KEYS_CONFIGURED') throw new NoProjectLlmKeyError()
+            throw err
           }
 
           // Update cluster with judge result
@@ -338,10 +338,10 @@ Rate the semantic coherence of this cluster and suggest how to name and summaris
 
           await db.from('mistake_clusters').update(updatePayload).eq('id', clusterId)
         } catch (err) {
-          // No key at all, or the project is over its monthly AI budget
-          // (projectLlmKey returns null then, by design: a batch job skips
-          // the project). An expected state, not a failure: it paged as
-          // MUSHI-MUSHI-SERVER-3K once per cluster per run (2026-10-31).
+          // No key at all (withAnthropicOrOpenAi's NO_KEYS_CONFIGURED): a batch
+          // job skips the project. An expected state, not a failure: it paged as
+          // MUSHI-MUSHI-SERVER-3K once per cluster per run (2026-10-31). Over
+          // the monthly budget lands in the budget branch below.
           if (err instanceof NoProjectLlmKeyError) {
             log.warn('coherence judge skipped: no usable AI key (none set, or over the monthly budget)', {
               scope: 'mistake-clusterer',

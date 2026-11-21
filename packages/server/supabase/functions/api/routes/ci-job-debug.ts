@@ -115,26 +115,29 @@ export const defaultCiJobDebugDeps: CiJobDebugDeps = {
   },
   explainModel: async (db, projectId, prompt) => {
     // Loaded on the first explain only: api-ext sits near the edge deploy size limit.
-    const { withLlmFailover } = await import('../../_shared/llm-failover.ts')
+    const { withAnthropicOrOpenAi } = await import('../../_shared/llm-failover.ts')
     const { generateValidatedObject } = await import('../../_shared/structured-output.ts')
     const { CI_EXPLAIN_SCHEMA } = await import('../../_shared/ci-job-debug.ts')
     let keySource: 'byok' | 'env' = 'byok'
-    // OpenAI only (brief 2026-11-19: "use OpenAI for now"): never the Claude pool, so an
-    // organization still on Claude spends no Claude credit here.
-    const result = await withLlmFailover(db as never, projectId, 'openai', async (key) => {
+    let model: string = OPENAI_MINI
+    // OpenAI-compatible models only (brief 2026-11-19: "use OpenAI for now"): no
+    // Claude leg, so an organization still on Claude spends no Claude credit
+    // here. The app's own OpenAI key first, then the ci-job-explain route.
+    const { result } = await withAnthropicOrOpenAi(db as never, projectId, null, async (key) => {
       keySource = key.source
+      model = key.model ?? OPENAI_MINI
       const { openAiProvider } = await import('../../_shared/openai-compat.ts')
       const openai = openAiProvider({ apiKey: key.key, baseURL: key.baseUrl })
       return generateValidatedObject(CI_EXPLAIN_SCHEMA, {
-        model: openai(OPENAI_MINI),
+        model: openai(model),
         system: prompt.system,
         prompt: prompt.user,
         // Room for the model's reasoning before the short JSON answer (the answer itself is ~150 tokens).
         maxTokens: 2000,
       })
-    })
+    }, { feature: 'ci-job-explain', tier: 'fast' })
     const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage
-    return { object: result.object, model: OPENAI_MINI, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens, keySource }
+    return { object: result.object, model, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens, keySource }
   },
   logLlmInvocation: async (db, rec) => (await import('../../_shared/telemetry.ts')).logLlmInvocation(db as never, rec as never),
 }

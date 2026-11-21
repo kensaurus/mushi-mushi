@@ -138,11 +138,25 @@ export async function classifyVoiceIntent(
 
   try {
     // The AI SDK loads on the first model call, not at boot (ai-sdk.ts).
-    const { result, usedProvider } = await withAnthropicOrOpenAi(
+    const { result, usedProvider, fallbackUsed } = await withAnthropicOrOpenAi(
       db,
       projectId,
       async (key) => {
         keySource = key.source
+        if (key.model) {
+          // A platform call runs the voice-intent route's model: a 5.x Claude
+          // takes only the Messages call shape (claude-messages.ts).
+          const { claudeGenerateObject } = await import('./claude-messages.ts')
+          const { object, usage } = await claudeGenerateObject({
+            apiKey: key.key,
+            model: key.model,
+            schema: voiceIntentSchema,
+            effort: 'low',
+            system: INTENT_SYSTEM_PROMPT,
+            prompt,
+          })
+          return { object, usage, model: key.model }
+        }
         const { createAnthropic, generateObject } = await import('./ai-sdk.ts')
         const anthropic = createAnthropic({ apiKey: key.key })
         const { object, usage } = await generateObject({
@@ -165,14 +179,15 @@ export async function classifyVoiceIntent(
         // (ADR 0002 / MUSHI-MUSHI-SERVER-1V); tool-mode JSON is still
         // schema-validated by the AI SDK on return.
         const { object, usage } = await generateObject({
-          model: openai(OPENAI_MINI, { structuredOutputs: false }),
+          model: openai(key.model ?? OPENAI_MINI, { structuredOutputs: false }),
           schema: voiceIntentSchema,
           system: INTENT_SYSTEM_PROMPT,
           prompt,
           temperature: 0,
         })
-        return { object, usage, model: OPENAI_MINI }
+        return { object, usage, model: key.model ?? OPENAI_MINI }
       },
+      { feature: 'voice-intent', tier: 'fast' },
     )
 
     const latencyMs = Date.now() - startedAt
@@ -189,8 +204,8 @@ export async function classifyVoiceIntent(
       stage: 'intent',
       primaryModel: ANTHROPIC_HAIKU,
       usedModel: result.model,
-      fallbackUsed: usedProvider !== 'anthropic',
-      fallbackReason: usedProvider !== 'anthropic' ? 'anthropic unavailable' : null,
+      fallbackUsed,
+      fallbackReason: fallbackUsed ? `primary_unavailable (answered on ${usedProvider})` : null,
       status: 'success',
       latencyMs,
       inputTokens: result.usage?.promptTokens ?? null,

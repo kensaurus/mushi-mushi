@@ -74,10 +74,14 @@ describe('callers that held a Claude key past the switch', () => {
     expect(read('_shared/nl-query.ts')).not.toContain("Deno.env.get('ANTHROPIC_API_KEY')")
   })
 
-  it('mistake-summarizer checks the key before its Haiku fast path', () => {
+  it("mistake-summarizer takes the Haiku v4 fast path only on the app's own key, never with a route model", () => {
+    // A key always arrives from withAnthropicOrOpenAi (no empty-key fallback to
+    // ANTHROPIC_API_KEY); a platform key carries the route's 5.x model, which
+    // only claude-messages.ts can call.
     const src = read('mistake-summarizer/index.ts')
-    const fn = src.slice(src.indexOf('async function callClaude('))
-    expect(fn.indexOf("if (!anthropicKey) throw")).toBeGreaterThan(-1)
-    expect(fn.indexOf("if (!anthropicKey) throw")).toBeLessThan(fn.indexOf('anthropicFast(ANTHROPIC_HAIKU)'))
+    const fn = src.slice(src.indexOf('async function callLlm('))
+    expect(fn.indexOf("if (!key.model && model === 'fast')")).toBeGreaterThan(-1)
+    expect(fn.indexOf("if (!key.model && model === 'fast')")).toBeLessThan(fn.indexOf('anthropicFast(ANTHROPIC_HAIKU)'))
+    expect(fn).toContain('withAnthropicOrOpenAi(')
   })
 })

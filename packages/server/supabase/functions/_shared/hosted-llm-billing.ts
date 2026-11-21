@@ -436,7 +436,10 @@ export async function chargeHostedLlm(args: ChargeHostedLlmArgs): Promise<void> 
     if (!identity) return;
 
     const backend = makeMushiWalletBackend(identity);
-    const price = await getModelPrice(backend, args.provider, args.model);
+    // kenji prices the bare id: a KENSAURUS AI route can answer on OpenRouter
+    // as `openai/gpt-6-luna`, the same model at the same list price.
+    const pricedModel = args.model.includes('/') ? args.model.split('/').slice(-1)[0] : args.model;
+    const price = await getModelPrice(backend, args.provider, pricedModel);
 
     const decision = decideHostedLlmCharge({
       price,

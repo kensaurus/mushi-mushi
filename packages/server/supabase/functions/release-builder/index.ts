@@ -30,7 +30,6 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { RELEASE_NOTES_EFFORT, RELEASE_NOTES_FALLBACK, RELEASE_NOTES_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { recordLlmUsage } from '../_shared/llm-usage.ts'
-import { projectLlmKey } from '../_shared/project-llm-key.ts'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -197,7 +196,7 @@ export async function handleReleaseBuilder(req: Request, deps: ReleaseBuilderDep
   return json({ ok: true, data: { release, creditCount: creditRows.length, reportCount: reports.length } })
 }
 
-/** LLM changelog (Anthropic, then OpenAI, then the deterministic list). */
+/** LLM changelog: the project's own keys, then the release-builder route, then the deterministic list. */
 async function llmReleaseBody(input: {
   version: string
   reportSummaries: string
@@ -206,23 +205,35 @@ async function llmReleaseBody(input: {
   projectId: string
 }): Promise<string> {
   const { version, reportSummaries, reports, db, projectId } = input
-  // The project's own key first, the platform key otherwise.
-  const anthropicResolved = await projectLlmKey(db, projectId, 'anthropic')
-  const anthropicKey = anthropicResolved?.key
   const usageCtx = {
     functionName: 'release-builder',
     stage: 'release-notes',
     projectId,
     primaryModel: RELEASE_NOTES_MODEL,
   }
-  const claudeStart = Date.now()
+  const record = async <R extends { text: string }>(model: string, keySource: 'byok' | 'env', call: () => Promise<R>) => {
+    const ctx = { ...usageCtx, keySource, model, startedAt: Date.now() }
+    try {
+      const result = await call()
+      void recordLlmUsage(db, ctx, { result: result as never })
+      return result.text.trim()
+    } catch (err) {
+      void recordLlmUsage(db, ctx, { error: err })
+      throw err
+    }
+  }
   try {
-    if (!anthropicKey) throw new Error('No Anthropic key for this project')
-    const result = await claudeGenerateText({
-      apiKey: anthropicKey,
-      model: RELEASE_NOTES_MODEL,
-      effort: RELEASE_NOTES_EFFORT,
-      prompt: `You are writing a user-facing changelog for software version ${version}.
+    // Loaded here: llm-failover reads its settings from Deno env at load, and
+    // the behaviour tests import this module without Deno.
+    const { withAnthropicOrOpenAi } = await import('../_shared/llm-failover.ts')
+    const routed = await withAnthropicOrOpenAi(
+      db,
+      projectId,
+      (key) => record(key.model ?? RELEASE_NOTES_MODEL, key.source, () => claudeGenerateText({
+        apiKey: key.key,
+        model: key.model ?? RELEASE_NOTES_MODEL,
+        effort: RELEASE_NOTES_EFFORT,
+        prompt: `You are writing a user-facing changelog for software version ${version}.
 
 Fixed reports in this version:
 ${reportSummaries || '(no reports in this window)'}
@@ -234,36 +245,26 @@ Write a markdown changelog body that:
 3. If there are no reports, write a brief "No changes tracked for this release." note
 
 Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
-      // Adaptive thinking counts toward max_tokens; the reply itself stays ~600.
-      maxTokens: 600 + THINKING_HEADROOM_TOKENS,
-    })
-
-    void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { result })
-    return result.text.trim()
-  } catch (claudeErr) {
-    // No key means no paid call, so no row.
-    if (anthropicKey) {
-      void recordLlmUsage(db, { ...usageCtx, keySource: anthropicResolved?.source, model: RELEASE_NOTES_MODEL, startedAt: claudeStart }, { error: claudeErr })
-    }
-    const openaiResolved = await projectLlmKey(db, projectId, 'openai')
-    if (!openaiResolved) return deterministicReleaseBody(reports)
-    const openaiUsage = { ...usageCtx, keySource: openaiResolved.source, model: RELEASE_NOTES_FALLBACK, startedAt: Date.now() }
-    try {
-      const openai = openAiProvider({
-        apiKey: openaiResolved.key,
-        ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-      })
-      const result = await generateText({
-        model: openai(RELEASE_NOTES_FALLBACK),
-        prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,
-        maxTokens: 600,
-      })
-      void recordLlmUsage(db, openaiUsage, { result })
-      return result.text.trim()
-    } catch (openaiErr) {
-      void recordLlmUsage(db, openaiUsage, { error: openaiErr })
-      return deterministicReleaseBody(reports)
-    }
+        // Adaptive thinking counts toward max_tokens; the reply itself stays ~600.
+        maxTokens: 600 + THINKING_HEADROOM_TOKENS,
+      })),
+      (key) => {
+        const openai = openAiProvider({
+          apiKey: key.key,
+          ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
+        })
+        return record(key.model ?? RELEASE_NOTES_FALLBACK, key.source, () => generateText({
+          model: openai(key.model ?? RELEASE_NOTES_FALLBACK),
+          prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,
+          maxTokens: 600,
+        }))
+      },
+      { feature: 'release-builder', tier: 'fast' },
+    )
+    return routed.result
+  } catch {
+    // No key, over budget, or every candidate failed: the plain list still ships.
+    return deterministicReleaseBody(reports)
   }
 }
 

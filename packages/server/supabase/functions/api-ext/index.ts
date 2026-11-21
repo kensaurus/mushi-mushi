@@ -54,6 +54,7 @@ import { registerCodebaseUnderstandRoutes } from '../api/routes/codebase-underst
 import { registerModernizationHealthSuperRoutes } from '../api/routes/modernization-health-super.ts'
 import { registerSkillsRoutes } from '../api/routes/skills.ts'
 import { registerAnthropicModelRoutes } from '../api/routes/anthropic-models.ts'
+import { registerSdkUpgradeRoutes } from '../api/routes/sdk-upgrade.ts'
 import { registerQaCoverageRoutes } from '../api/routes/qa-coverage.ts'
 import { registerFullstackAuditRoutes } from '../api/routes/fullstack-audit.ts'
 import { registerUxRunsRoutes } from '../api/routes/ux-runs.ts'
@@ -114,6 +115,7 @@ registerCodebaseUnderstandRoutes(app)
 registerModernizationHealthSuperRoutes(app)
 registerSkillsRoutes(app)
 registerAnthropicModelRoutes(app)
+registerSdkUpgradeRoutes(app)
 registerQaCoverageRoutes(app)
 registerFullstackAuditRoutes(app)
 registerUxRunsRoutes(app)

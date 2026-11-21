@@ -6,11 +6,12 @@ import { createTrace } from '../_shared/observability.ts';
 import { log } from '../_shared/logger.ts';
 import { withSentry } from '../_shared/sentry.ts';
 import { requireServiceRoleAuth } from '../_shared/auth.ts';
-import { SYNTHETIC_EFFORT, SYNTHETIC_MODEL, ANTHROPIC_HAIKU } from '../_shared/models.ts';
+import { SYNTHETIC_EFFORT, SYNTHETIC_FALLBACK, SYNTHETIC_MODEL, ANTHROPIC_HAIKU, OPENAI_MINI } from '../_shared/models.ts';
 import { claudeGenerateObject } from '../_shared/claude-messages.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { recordLlmUsage } from '../_shared/llm-usage.ts';
-import { resolveLlmKey } from '../_shared/byok.ts';
+import { enforceLlmBudget } from '../_shared/byok.ts';
+import { withAnthropicOrOpenAi } from '../_shared/llm-failover.ts';
 import { LlmBudgetExceededError } from '../_shared/llm-budget.ts';
 
 // Wave T (2026-04-23): fallback template used when `prompt_versions` has no
@@ -92,24 +93,67 @@ Deno.serve(
       return new Response(JSON.stringify({ error: 'projectId required' }), { status: 400 });
     }
 
-    // The project's own Anthropic key first, the platform key otherwise.
-    let resolvedKey: Awaited<ReturnType<typeof resolveLlmKey>>;
+    // Over the project's monthly AI budget, stop before the batch.
     try {
-      resolvedKey = await resolveLlmKey(db, projectId, 'anthropic');
+      await enforceLlmBudget(db, projectId, 'anthropic');
     } catch (err) {
       if (err instanceof LlmBudgetExceededError) {
         return new Response(JSON.stringify({ error: 'Monthly AI budget reached for this project' }), { status: 402 });
       }
       throw err;
     }
-    if (!resolvedKey) {
-      return new Response(JSON.stringify({ error: 'No Anthropic key: add one under Settings → AI keys' }), { status: 503 });
-    }
-    const anthropicKey = resolvedKey.key;
-    const keySource = resolvedKey.source;
-    // The Sonnet generator goes through claude-messages.ts; the Haiku eval
-    // pass stays on the AI SDK (Haiku 4.5 still accepts its call shape).
-    const anthropic = createAnthropic({ apiKey: anthropicKey });
+    /**
+     * One recorded call on the app's own keys, else the platform keys through
+     * the feature's KENSAURUS AI route (provider and model from kenji). The
+     * Sonnet generator goes through claude-messages.ts; Haiku 4.5 on the app's
+     * own key stays on the AI SDK (it still accepts that call shape).
+     */
+    const routedObject = async <S extends z.ZodTypeAny>(args: {
+      feature: string;
+      tier: 'fast' | 'standard';
+      claudeModel: string;
+      openaiModel: string;
+      schema: S;
+      system: string;
+      prompt: string;
+      usage: Record<string, unknown> & { stage: string };
+      effort?: typeof SYNTHETIC_EFFORT;
+    }): Promise<{ object: z.infer<S>; usage?: { promptTokens?: number; completionTokens?: number }; model: string }> => {
+      const record = async <R,>(model: string, keySource: 'byok' | 'env', call: () => Promise<R>): Promise<R> => {
+        const ctx = { functionName: 'generate-synthetic', projectId, langfuseTraceId: trace.id, ...args.usage, model, keySource, startedAt: Date.now() };
+        try {
+          const result = await call();
+          void recordLlmUsage(db, ctx, { result: result as never });
+          return result;
+        } catch (err) {
+          void recordLlmUsage(db, ctx, { error: err });
+          throw err;
+        }
+      };
+      const routed = await withAnthropicOrOpenAi(
+        db,
+        projectId,
+        async (key) => {
+          const model = key.model ?? args.claudeModel;
+          const r = key.model || args.effort
+            ? await record(model, key.source, () => claudeGenerateObject({ apiKey: key.key, model, effort: args.effort ?? 'low', schema: args.schema, system: args.system, prompt: args.prompt }))
+            : await record(model, key.source, () => {
+                const anthropic = createAnthropic({ apiKey: key.key });
+                return generateObject({ model: anthropic(ANTHROPIC_HAIKU), schema: args.schema, system: args.system, prompt: args.prompt });
+              });
+          return { object: r.object as z.infer<S>, usage: r.usage, model };
+        },
+        async (key) => {
+          const model = key.model ?? args.openaiModel;
+          const { openAiProvider } = await import('../_shared/openai-compat.ts');
+          const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) });
+          const r = await record(model, key.source, () => generateObject({ model: openai(model, { structuredOutputs: false }), schema: args.schema, system: args.system, prompt: args.prompt }));
+          return { object: r.object as z.infer<S>, usage: r.usage, model };
+        },
+        { feature: args.feature, tier: args.tier },
+      );
+      return routed.result;
+    };
     const trace = createTrace('generate-synthetic', { projectId, count });
     const generated: unknown[] = [];
 
@@ -141,31 +185,20 @@ Deno.serve(
       const results = await Promise.allSettled(
         batchItems.map(async (i) => {
           const span = trace.span(`generate.${i}`);
-          const generateUsage = {
-            functionName: 'generate-synthetic',
-            stage: 'generate',
-            projectId,
-            model: SYNTHETIC_MODEL,
-            keySource,
-            startedAt: Date.now(),
-            promptVersion,
-            langfuseTraceId: trace.id,
-          } as const;
-          const generation = await claudeGenerateObject({
-            apiKey: anthropicKey,
-            model: SYNTHETIC_MODEL,
+          const generation = await routedObject({
+            feature: 'generate-synthetic',
+            tier: 'standard',
+            claudeModel: SYNTHETIC_MODEL,
+            openaiModel: SYNTHETIC_FALLBACK,
             effort: SYNTHETIC_EFFORT,
             schema: syntheticSchema,
             system: syntheticSystemPrompt,
             prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,
-          }).catch((err: unknown) => {
-            void recordLlmUsage(db, generateUsage, { error: err });
-            throw err;
+            usage: { stage: 'generate', promptVersion },
           });
-          void recordLlmUsage(db, generateUsage, { result: generation });
           const { object, usage } = generation;
           span.end({
-            model: SYNTHETIC_MODEL,
+            model: generation.model,
             inputTokens: usage?.promptTokens,
             outputTokens: usage?.completionTokens,
             promptVersion,
@@ -221,27 +254,18 @@ Deno.serve(
               // Sonnet but the eval doesn't need full context (no RAG, no
               // inventory lookup), and at 50 syntheticshs/run the cost
               // delta matters: Haiku is ~12x cheaper than Sonnet.
-              const evalUsage = {
-                functionName: 'generate-synthetic',
-                stage: 'eval',
-                projectId,
-                model: ANTHROPIC_HAIKU,
-                keySource,
-                startedAt: Date.now(),
-                // No promptVersion: this eval is not production stage2 traffic,
-                // and Prompt Lab sums cost and calls per prompt_version.
-                langfuseTraceId: trace.id,
-              } as const;
-              const evaluation = await generateObject({
-                model: anthropic(ANTHROPIC_HAIKU),
+              // No promptVersion: this eval is not production stage2 traffic,
+              // and Prompt Lab sums cost and calls per prompt_version.
+              const evaluation = await routedObject({
+                feature: 'generate-synthetic-eval',
+                tier: 'fast',
+                claudeModel: ANTHROPIC_HAIKU,
+                openaiModel: OPENAI_MINI,
                 schema: evalSchema,
                 system: stage2Prompt,
                 prompt: evalUserPrompt,
-              }).catch((err: unknown) => {
-                void recordLlmUsage(db, evalUsage, { error: err });
-                throw err;
+                usage: { stage: 'eval' },
               });
-              void recordLlmUsage(db, evalUsage, { result: evaluation });
               const actual = evaluation.object;
               const matchScore = computeMatchScore(
                 {

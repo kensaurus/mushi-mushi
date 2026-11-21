@@ -75,9 +75,10 @@ assistant (`sdk-assistant`, a feature the customer turns on), `nl-query`
 `prompt-auto-tune`, `intelligence-report`, the `classify-report` vision
 call, and embeddings. They show on Costs and count toward the monthly budget.
 
-**Keys:** every one of these uses the project's own key first
-(`resolveLlmKey`, or `_shared/project-llm-key.ts` for batch jobs, which skips
-a project over its budget) and the platform key otherwise, and records which.
+**Keys:** every one of these uses the project's own key first and the
+platform keys otherwise, through `withAnthropicOrOpenAi` (llm-failover.ts):
+on the platform keys the provider and model come from the feature's KENSAURUS
+AI route on kenji (2026-11-21). Each call records which key it used.
 Until 2026-10-04 generate-synthetic, mistake-* and release-builder read the
 platform key straight from the environment.
 
