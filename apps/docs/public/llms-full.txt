@@ -17416,7 +17416,7 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 
 | Variable | Required | Default | What it does |
 | --- | --- | --- | --- |
-| `KENSAURUS_ROUTES_URL` | Optional | — | Which provider and model each platform-key AI call uses comes from kenji's kensaurus_ai_routes, read with KENSAURUS_ROUTES_TOKEN (else KENSAURUS_WALLET_INTERNAL_TOKEN). Without a token (a self-host) nothing calls kenji and the built-in OpenAI-first list runs. An app's own keys (BYOK) are not affected. The console edits routes on the Providers &amp; AI routes page (KENSAURUS_OPS_URL / KENSAURUS_OPS_CONSOLE_TOKEN). Default: https://jghcferpoaqntpfqvayf.supabase.co/functions/v1/kensaurus-ai-routes |
+| `KENSAURUS_ROUTES_URL` | Optional | — | Which provider and model each platform-key AI call uses comes from kenji's kensaurus_ai_routes, read with KENSAURUS_ROUTES_TOKEN (read-only; never the wallet token). Without it (a self-host) nothing calls kenji and the built-in OpenAI-first list runs. An app's own keys (BYOK) are not affected. The console edits routes on the Providers &amp; AI routes page (KENSAURUS_OPS_URL / KENSAURUS_OPS_CONSOLE_TOKEN). Default: https://jghcferpoaqntpfqvayf.supabase.co/functions/v1/kensaurus-ai-routes |
 | `KENSAURUS_ROUTES_TOKEN` | Optional | — | — |
 | `KENSAURUS_LLM_DRILL` | Optional | — | Test and smoke drills only: &lt;provider&gt;:payment fails that provider's call with Anthropic's low-credit error when the call asks for a drill. Leave unset. |
 
