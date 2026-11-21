@@ -6,7 +6,12 @@
 import { describe, expect, it } from 'vitest'
 import type { AiRoute, ModelPrice, OpsAction, OpsMeta, OpsSnapshot, ProviderAccount } from './kensaurusOpsTypes'
 import {
+  batchFits,
   buildOverview,
+  chainBatch,
+  featureExpect,
+  paramsForModel,
+  paramsProblem,
   draftChanges,
   draftFrom,
   draftProblem,
@@ -425,8 +430,117 @@ describe('scoutSuggestions', () => {
         savingPct: 75,
         uses: ['glot-it/* p1', 'yen-yen/* p1'],
         chains: [apps[0]!.chains[0]!.id, apps[1]!.chains[0]!.id],
+        smaller: false,
       },
     ])
+    expect(found?.smaller).toEqual([])
+    // An older event wrote a downgrade as a swap: its size by name moves it out of the swaps.
+    const old = scoutSuggestions(
+      [{ kind: 'ai.model_scout', occurred_at: AT, body: 'anthropic claude-sonnet-5-5 ($4.00/M) → anthropic/claude-haiku-5.5 ($0.20/M, −95%), used by glot-it/judge p3' }],
+      apps,
+    )
+    expect(old?.items).toEqual([])
+    expect(old?.smaller.map((s) => s.candidate)).toEqual(['anthropic/claude-haiku-5.5'])
+    // The scout's own wording since yen-yen PR 608.
+    const now = scoutSuggestions(
+      [
+        {
+          kind: 'ai.model_scout',
+          occurred_at: AT,
+          body: 'anthropic claude-opus-5-5 ($8.00/M) has a smaller, cheaper option, not a like-for-like swap: anthropic/claude-haiku-5.5 ($0.20/M, −98%), used by glot-it/script-top p3',
+        },
+      ],
+      apps,
+    )
+    expect(now?.items).toEqual([])
+    expect(now?.smaller).toMatchObject([{ model: 'claude-opus-5-5', candidate: 'anthropic/claude-haiku-5.5', savingPct: 98, smaller: true }])
     expect(scoutSuggestions([], apps)).toBeNull()
+  })
+})
+
+describe('params a model refuses (Sol)', () => {
+  it('refuses gpt-x-sol with reasoning effort none or minimal, on OpenAI and OpenRouter only', () => {
+    expect(paramsProblem('openai', 'gpt-6.2-sol', { reasoning_effort: 'none' })).toBe('gpt-6.2-sol needs reasoning effort low or higher')
+    expect(paramsProblem('openrouter', 'openai/gpt-6.2-sol', { reasoning_effort: 'minimal' })).not.toBeNull()
+    expect(paramsProblem('openai', 'gpt-6.2-sol', { reasoning_effort: 'low' })).toBeNull()
+    expect(paramsProblem('openai', 'gpt-6-luna', { reasoning_effort: 'none' })).toBeNull()
+    expect(paramsProblem('anthropic', 'claude-opus-5-5', { effort: 'low' })).toBeNull()
+  })
+
+  it('moves the effort to low when a step switches to Sol, and says so; leaves anything else alone', () => {
+    expect(paramsForModel('openai', 'gpt-6.2-sol', { reasoning_effort: 'none', max_output_tokens: 900 })).toEqual({
+      params: { reasoning_effort: 'low', max_output_tokens: 900 },
+      note: 'gpt-6.2-sol needs reasoning effort low or higher, so it is now low.',
+    })
+    const keep = { reasoning_effort: 'none' }
+    expect(paramsForModel('openai', 'gpt-6.1-terra', keep)).toEqual({ params: keep, note: null })
+  })
+
+  it('blocks the save while a step pairs Sol with effort none, and names the settings change', () => {
+    const c = groupChains(small('glot-it', '*'))[0]!.chains[0]!
+    const d = draftFrom(c)
+    d[0] = { ...d[0]!, model: 'gpt-6.2-sol' }
+    expect(draftProblem(c, d, META)).toBe('OpenAI: gpt-6.2-sol needs reasoning effort low or higher.')
+    d[0] = { ...d[0]!, params: { reasoning_effort: 'low' } }
+    expect(draftProblem(c, d, META)).toBeNull()
+    expect(draftChanges(c, d)).toEqual(['OpenAI: gpt-6-luna → gpt-6.2-sol', 'OpenAI gpt-6.2-sol: reasoning none → low'])
+  })
+
+  it('sends the full params with a switch only when the settings changed', () => {
+    const c = groupChains(small('glot-it', '*'))[0]!.chains[0]!
+    const m = c.members[0]!
+    const d = draftFrom(c)
+    d[0] = { ...d[0]!, model: 'gpt-6.2-sol', params: { reasoning_effort: 'low' } }
+    expect(planFeature('glot-it', m, d, META).ops).toEqual([
+      { action: 'upsert_route', app: 'glot-it', feature: '*', priority: 1, provider: 'openai', model: 'gpt-6.2-sol', params: { reasoning_effort: 'low' } },
+    ])
+    // A settings-only change is an upsert with the same model.
+    const e = draftFrom(c)
+    e[2] = { ...e[2]!, params: { ...e[2]!.params, effort: 'medium' } }
+    expect(planFeature('glot-it', m, e, META).ops).toEqual([
+      { action: 'upsert_route', app: 'glot-it', feature: '*', priority: 3, provider: 'anthropic', model: 'claude-haiku-5-5', params: { effort: 'medium', thinking: { type: 'disabled' } } },
+    ])
+  })
+})
+
+describe('batch save', () => {
+  const stamp = (r: AiRoute, updated_at: string) => ({ ...r, updated_at })
+  const routes = [
+    ...small('glot-it', '*').map((r, i) => stamp(r, i === 1 ? '2026-11-21T12:10:00.654321+00:00' : '2026-11-21T12:10:00.654+00:00')),
+    ...small('glot-it', 'story', 4).map((r) => stamp(r, '2026-11-20T09:00:00+00:00')),
+  ]
+  const chain = groupChains(routes)[0]!.chains[0]!
+
+  it('expects each feature by row count and its newest updated_at, microseconds kept', () => {
+    expect(chain.members.map(featureExpect)).toEqual([
+      { feature: '*', count: 3, updated_at: '2026-11-21T12:10:00.654321+00:00' },
+      { feature: 'story', count: 3, updated_at: '2026-11-20T09:00:00+00:00' },
+    ])
+  })
+
+  it('puts every plan in one call, in order, with the edit in words', () => {
+    const d = draftFrom(chain)
+    d[0] = { ...d[0]!, model: 'gpt-6.1-terra' }
+    const plans = planChainSave(chain, d, META)
+    const b = chainBatch(chain, plans, 'OpenAI: gpt-6-luna → gpt-6.1-terra')
+    expect(b.action).toBe('batch')
+    expect(b.app).toBe('glot-it')
+    expect(b.ops.map((o) => [o.feature, 'priority' in o ? o.priority : null])).toEqual([
+      ['*', 1],
+      ['story', 4],
+    ])
+    expect(b.expect).toHaveLength(2)
+    expect(b.note).toBe('OpenAI: gpt-6-luna → gpt-6.1-terra')
+    expect(chainBatch(chain, plans, 'x'.repeat(400)).note).toHaveLength(300)
+    expect(chainBatch(chain, plans, '').note).toBeUndefined()
+  })
+
+  it('uses a batch only when upstream lists it and the call fits its limits', () => {
+    const b = chainBatch(chain, planChainSave(chain, draftFrom(chain).reverse(), META), '')
+    expect(batchFits(META, b)).toBe(false)
+    const withBatch = { ...META, actions: ['batch'], batch: { max_ops: 300, max_body_bytes: 64 * 1024 } }
+    expect(batchFits(withBatch, b)).toBe(true)
+    expect(batchFits({ ...withBatch, batch: { max_ops: 1, max_body_bytes: 64 * 1024 } }, b)).toBe(false)
+    expect(batchFits({ ...withBatch, batch: { max_ops: 300, max_body_bytes: 300 } }, b)).toBe(false)
   })
 })

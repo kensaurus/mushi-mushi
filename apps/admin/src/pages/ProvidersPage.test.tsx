@@ -257,6 +257,7 @@ function opsSnapshot(): OpsSnapshot {
       { provider: 'anthropic', model: 'claude-opus-5-5', unit_kind: 'tokens', input_per_mtok_micro: 15, output_per_mtok_micro: 75, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-09-26T00:00:00Z' },
       { provider: 'openai', model: 'gpt-6-luna', unit_kind: 'tokens', input_per_mtok_micro: 100_000, output_per_mtok_micro: 500_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
       { provider: 'openai', model: 'gpt-6.1-terra', unit_kind: 'tokens', input_per_mtok_micro: 1_000_000, output_per_mtok_micro: 5_000_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
+      { provider: 'openai', model: 'gpt-6.2-sol', unit_kind: 'tokens', input_per_mtok_micro: 2_000_000, output_per_mtok_micro: 10_000_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
       { provider: 'openai', model: 'text-embedding-3-small', unit_kind: 'tokens', input_per_mtok_micro: 20_000, output_per_mtok_micro: 0, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-08-08T00:00:00Z' },
       { provider: 'openrouter', model: 'openai/gpt-6-luna', unit_kind: 'tokens', input_per_mtok_micro: 100_000, output_per_mtok_micro: 500_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
     ],
@@ -422,7 +423,7 @@ describe('ProvidersPage routes', () => {
   it('lists only priced chat models of the step’s provider, with prices and size', async () => {
     await openChain('[data-testid="chain-glot-it-*"]')
     const options = [...d<HTMLSelectElement>('[data-testid="step-0"] [data-testid="step-model"]')!.options]
-    expect(options.map((o) => o.value)).toEqual(['gpt-6-luna', 'gpt-6.1-terra'])
+    expect(options.map((o) => o.value)).toEqual(['gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.2-sol'])
     expect(options[0]!.textContent).toBe('gpt-6-luna — $0.10 in / $0.50 out per 1M · small')
   })
 
@@ -566,5 +567,97 @@ describe('ProvidersPage providers', () => {
     await render()
     expect(container.textContent).toContain('Not connected')
     expect(q('[data-testid="providers-rows"]')).toBeNull()
+  })
+})
+
+describe('ProvidersPage routes: batch, Sol and the off pill (2026-11-21)', () => {
+  const withBatch = () => {
+    const read = opsRead()
+    read.meta = { ...read.meta!, actions: [...read.meta!.actions, 'batch'], batch: { max_ops: 300, max_body_bytes: 65536 } }
+    return read
+  }
+  const openGlot = async (read: OpsReadResponse) => {
+    await render('/providers', read)
+    await click(q<HTMLButtonElement>('[data-testid="chain-glot-it-*"] [data-testid="chain-open"]'))
+  }
+  const pick = async (sel: string, value: string) => {
+    await act(async () => {
+      choose(d<HTMLSelectElement>(sel)!, value)
+    })
+  }
+  const terra = (feature: string, priority: number) => ({ action: 'upsert_route', app: 'glot-it', feature, priority, provider: 'openai', model: 'gpt-6.1-terra' })
+
+  it('saves one chain edit as ONE batch call when upstream offers it, with what it read per feature', async () => {
+    await openGlot(withBatch())
+    await pick('[data-testid="step-0"] [data-testid="step-model"]', 'gpt-6.1-terra')
+    await click(d('[data-testid="chain-review-open"]'))
+    const readsBefore = state.reads.length
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes).toEqual([
+      {
+        action: 'batch',
+        app: 'glot-it',
+        ops: [terra('*', 1), terra('story', 1), terra('translate', 2)],
+        expect: [
+          { feature: '*', count: 2, updated_at: '2026-11-18T10:00:00Z' },
+          { feature: 'story', count: 2, updated_at: '2026-11-18T10:00:00Z' },
+          { feature: 'translate', count: 2, updated_at: '2026-11-18T10:00:00Z' },
+        ],
+        note: 'OpenAI: gpt-6-luna → gpt-6.1-terra',
+      },
+    ])
+    expect(state.reads.slice(readsBefore)).toEqual(['/v1/admin/kensaurus/ops?fresh=1', '/v1/admin/kensaurus/ops?fresh=1'])
+    expect(state.toasts).toEqual([{ tone: 'success', title: 'Saved to all 3 features of glot-it.' }])
+  })
+
+  it('a stale batch saves nothing and says so, with no part-way report', async () => {
+    await openGlot(withBatch())
+    await pick('[data-testid="step-0"] [data-testid="step-model"]', 'gpt-6.1-terra')
+    await click(d('[data-testid="chain-review-open"]'))
+    state.writeQueue = [{ ok: false, error: { code: 'stale', message: 'glot-it / story changed since it was read; nothing was saved' } }]
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes).toHaveLength(1)
+    expect(state.toasts).toEqual([{ tone: 'error', title: 'This order changed since you opened it. Nothing was saved; open it again to see the latest.' }])
+    expect(q('[data-testid="routes-save-report"]')).toBeNull()
+  })
+
+  it('falls back to one write at a time when the proxy does not know batch yet', async () => {
+    await openGlot(withBatch())
+    await pick('[data-testid="step-0"] [data-testid="step-model"]', 'gpt-6.1-terra')
+    await click(d('[data-testid="chain-review-open"]'))
+    state.writeQueue = [{ ok: false, error: { code: 'validation_failed', message: 'Unknown action.' } }]
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes.map((w) => w.action)).toEqual(['batch', 'upsert_route', 'upsert_route', 'upsert_route'])
+    expect(state.toasts).toEqual([{ tone: 'success', title: 'Saved to all 3 features of glot-it.' }])
+  })
+
+  it('picking Sol moves reasoning effort none to low, says so, and saves the new effort', async () => {
+    const read = opsRead()
+    read.snapshot.routes = read.snapshot.routes.map((r) => (r.app === 'glot-it' && r.provider === 'openai' ? { ...r, params: { reasoning_effort: 'none' } } : r))
+    await openGlot(read)
+    expect(d<HTMLSelectElement>('[data-testid="step-0"] [data-testid="step-effort"]')!.value).toBe('none')
+    await pick('[data-testid="step-0"] [data-testid="step-model"]', 'gpt-6.2-sol')
+    expect(d<HTMLSelectElement>('[data-testid="step-0"] [data-testid="step-effort"]')!.value).toBe('low')
+    expect(d('[data-testid="step-0"] [data-testid="step-effort-note"]')?.textContent).toBe('gpt-6.2-sol needs reasoning effort low or higher, so it is now low.')
+    // Setting it back to none is refused before review.
+    await pick('[data-testid="step-0"] [data-testid="step-effort"]', 'none')
+    expect(d('[data-testid="step-0"] [data-testid="step-problem"]')?.textContent).toBe('gpt-6.2-sol needs reasoning effort low or higher.')
+    expect(d<HTMLButtonElement>('[data-testid="chain-review-open"]')!.disabled).toBe(true)
+    await pick('[data-testid="step-0"] [data-testid="step-effort"]', 'low')
+    await click(d('[data-testid="chain-review-open"]'))
+    expect(d('[data-testid="chain-changes"]')?.textContent).toContain('OpenAI gpt-6.2-sol: reasoning none → low')
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes[0]).toEqual({ action: 'upsert_route', app: 'glot-it', feature: '*', priority: 1, provider: 'openai', model: 'gpt-6.2-sol', params: { reasoning_effort: 'low' } })
+    expect(state.writes).toHaveLength(3)
+  })
+
+  it('an off provider reads "Off for all apps" without a strike-through', async () => {
+    const read = opsRead()
+    read.snapshot.providers = read.snapshot.providers.map((p) => (p.id === 'kenji:anthropic' ? { ...p, enabled: false } : p))
+    await render('/providers', read)
+    const pill = q('[data-testid="provider-card-anthropic"] [data-testid="status-pill"]')!
+    expect(pill.textContent).toBe('Off for all apps')
+    expect(pill.innerHTML).not.toContain('line-through')
+    expect(q('[data-testid="matrix-cell-yen-yen-anthropic"]')?.innerHTML).not.toContain('line-through')
   })
 })
