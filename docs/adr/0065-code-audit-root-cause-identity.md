@@ -103,6 +103,10 @@ Two references show the intended shape:
    - A person's report is never closed this way. It only joins the group.
    - Stage 1 and stage 2 classification no longer set `status` back to
      `classified` on a dismissed report.
+   - The merge runs from `fast-filter` (`mergeDuplicate`, after grouping), so
+     the size-capped `api` function does not bundle it. The operator digest
+     routes moved to `api-ext` for the same reason: the split counts took `api`
+     over its upload budget (`scripts/deploy-edge-function.test.mjs`).
 5. **An honest lifecycle.**
    - **A fix PR closed without a merge never sends a report to `new`.**
      - A finding Mushi filed itself moves to `triaged` with
