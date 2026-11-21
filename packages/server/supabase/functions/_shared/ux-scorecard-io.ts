@@ -10,7 +10,7 @@
  */
 
 import { z } from 'npm:zod@3'
-import { causeReportBody, scorecardPageKey, UX_DIMENSIONS, UX_SCORECARD_PROMPT_VERSION, type UxCause, type UxPageFacts, type UxPageScore } from './ux-scorecard.ts'
+import { causeReportBody, scorecardPageKey, topCauses, UX_DIMENSIONS, UX_SCORECARD_PROMPT_VERSION, type UxCause, type UxPageFacts, type UxPageScore } from './ux-scorecard.ts'
 
 export const UX_SCORECARD_RUN_ID_RE = /^[0-9]{8}-[0-9]{6}-[a-z0-9]{4}$/
 export const UX_SCORECARD_REPORTER = 'ux-scorecard'
@@ -130,12 +130,38 @@ export const UxScorecardSnapshot = z.object({
   finished_at: z.string().datetime({ offset: true }).nullable().optional(),
   error: z.string().max(1000).nullable().optional(),
   pages: z.array(UxScorecardPage).max(UX_SCORECARD_MAX_PAGES),
-  causes: z.array(Cause).max(60).optional(),
+  /** Any number; the run keeps the top UX_SCORECARD_LIMITS.causes (parseCauses), never refuses a long list. */
+  causes: z.array(z.unknown()).max(5000).optional().transform((c) => (c === undefined ? undefined : parseCauses(c))),
 })
 export type UxScorecardSnapshot = z.infer<typeof UxScorecardSnapshot>
 
 export const UxScorecardFacts = Facts
-export const UxScorecardCauses = z.array(Cause).max(60)
+
+/**
+ * Pure: the causes in a stored or sent blob, the way every route reads them:
+ * well-formed entries only, then the top UX_SCORECARD_LIMITS.causes
+ * (topCauses). Not an array reads as none. A run stored before this guard
+ * (235 causes, 2026-11-21) reads as its top 60 instead of failing to parse.
+ */
+export function parseCauses(raw: unknown): UxCause[] {
+  if (!Array.isArray(raw)) return []
+  const ok: UxCause[] = []
+  for (const c of raw.slice(0, 5000)) {
+    const r = Cause.safeParse(c)
+    if (r.success) ok.push(r.data as UxCause)
+  }
+  return topCauses(ok)
+}
+
+/**
+ * Pure: page rows that send no screenshot names keep the ones the run already
+ * has. A server-scored run uploads each page's shots while it scores, so its
+ * final sync must never wipe them (thumbs were nulled on the first real run).
+ */
+export function keepThumbs(rows: ReadonlyArray<Record<string, unknown>>, have: ReadonlyArray<{ surface_key: string; thumbs: unknown }>): Array<Record<string, unknown>> {
+  const by = new Map(have.filter((h) => h.thumbs != null).map((h) => [h.surface_key, h.thumbs]))
+  return rows.map((r) => (r.thumbs == null && by.has(String(r.surface_key)) ? { ...r, thumbs: by.get(String(r.surface_key)) } : r))
+}
 
 /** Pure: the ux_runs row of a scorecard run. */
 export function scorecardRunRow(s: UxScorecardSnapshot, ctx: { projectId: string; localRunId: string; userId: string; now: Date }): Record<string, unknown> {

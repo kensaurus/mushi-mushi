@@ -52,6 +52,7 @@ import {
   uploadAllShots,
   type ScoreVia,
 } from './scorecard.js'
+import { topCauses } from './scorecard-rubric.js'
 import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
@@ -503,11 +504,14 @@ program
       console.log(`\n${scored.length} of ${result.pages.length} page(s) scored, average ${mean.toFixed(1)}/10; ${cross} cross-page cause(s). Scorecard: ${join(result.dir, 'scorecard.md')}`)
       if (result.groupError) console.warn(`Cross-page pass: ${result.groupError} (the code's grouping stands).`)
       if (!cfg) return
-      const uploaded = o.scoreVia === 'server' ? undefined : await uploadAllShots(cfg, runId, result.pages)
-      const err = await syncScorecard(cfg, { runId, url: o.url, viewport, scoredBy: scorer.name, startedAt, finished: true, pages: result.pages, causes: result.causes, uploaded })
+      // The server scorer uploaded each page's shots while it scored; its names go with the final sync, so it never wipes them.
+      const uploaded = scorer.uploaded ?? (await uploadAllShots(cfg, runId, result.pages))
+      // The run keeps its top causes, cross-page first; scorecard.json on this machine has them all.
+      const causes = topCauses(result.causes)
+      const err = await syncScorecard(cfg, { runId, url: o.url, viewport, scoredBy: scorer.name, startedAt, finished: true, pages: result.pages, causes, uploaded })
       console.log(err ? `Console sync did not finish: ${err}` : `On the console: ${consoleBaseUrl()}/ux-runs?view=scorecard&run=${runId}`)
       if (!o.file) return
-      const outcome = await fileScorecard(cfg, runId, { causes: result.causes, dryRun: o.dryRun })
+      const outcome = await fileScorecard(cfg, runId, { causes, dryRun: o.dryRun })
       for (const f of outcome.filed) console.log(`Filed ${f.reportId}: ${f.title}`)
       for (const u of outcome.updated) console.log(`Refreshed the pages of open report ${u.reportId} (${u.patternKey})`)
       for (const w of outcome.wouldFile ?? []) console.log(`Would file: ${w.title} (${w.pages} page(s), ${w.patternKey})`)

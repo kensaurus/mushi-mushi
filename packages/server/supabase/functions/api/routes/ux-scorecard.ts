@@ -38,6 +38,7 @@ import { claudeGenerateText } from '../../_shared/claude-messages.ts'
 import { ANTHROPIC_SONNET_LATEST, OPENAI_TERRA } from '../../_shared/models.ts'
 import {
   groupCauses,
+  topCauses,
   groupingPrompt,
   mergeGrouping,
   pageSystemPrompt,
@@ -65,7 +66,8 @@ import {
   UX_SCORECARD_OPEN_CAP,
   UX_SCORECARD_OPEN_STATUSES,
   UX_SCORECARD_RUN_ID_RE,
-  UxScorecardCauses,
+  keepThumbs,
+  parseCauses,
   UxScorecardFacts,
   UxScorecardSnapshot,
 } from '../../_shared/ux-scorecard-io.ts'
@@ -155,10 +157,12 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
       // A page the server already scored keeps its score when the CLI resends it
       // unscored. Scored and unscored rows go in two upserts, so every row of a
       // batch names the same columns (a bulk upsert nulls a column a row leaves out).
-      const rows = parsed.data.pages.map((p) => scorecardSurfaceRow(p, { projectId: a.projectId, runRowId, now }))
-      const { data: have, error: haveErr } = await db.from('ux_surfaces').select('surface_key, score').eq('run_id', runRowId)
+      const { data: have, error: haveErr } = await db.from('ux_surfaces').select('surface_key, score, thumbs').eq('run_id', runRowId)
       if (haveErr) return dbError(c, haveErr)
-      const scored = new Set(((have ?? []) as Array<{ surface_key: string; score: number | null }>).filter((r) => r.score != null).map((r) => r.surface_key))
+      const haveRows = (have ?? []) as Array<{ surface_key: string; score: number | null; thumbs: unknown }>
+      // A page synced without screenshot names keeps the ones it was scored with.
+      const rows = keepThumbs(parsed.data.pages.map((p) => scorecardSurfaceRow(p, { projectId: a.projectId, runRowId, now })), haveRows)
+      const scored = new Set(haveRows.filter((r) => r.score != null).map((r) => r.surface_key))
       const withScore = rows.filter((r) => r.score !== undefined)
       const without = rows.filter((r) => r.score === undefined && !scored.has(String(r.surface_key)))
       for (const batch of [withScore, without]) {
@@ -309,6 +313,8 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         slog.warn('cross-page pass failed; keeping the code grouping', { projectId: a.projectId, run: a.localRunId, err: String(err).slice(0, 300) })
       }
     }
+    // The run keeps its top causes, cross-page first (topCauses); the rest stay in the CLI's scorecard.json.
+    causes = topCauses(causes)
     const { error } = await db.from('ux_runs').update({ findings: causes, updated_at: new Date().toISOString() }).eq('id', run.id)
     if (error) return dbError(c, error)
     return c.json({ ok: true, data: { causes, grouped_by: modelUsed ? 'model' : 'code', model: modelUsed } })
@@ -323,9 +329,9 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     const run = await scorecardRun(c, db, a.projectId, a.localRunId)
     if (run instanceof Response) return run
     // The causes the CLI grouped (a local transport), else the ones the group route stored.
-    const parsedCauses = UxScorecardCauses.safeParse(body?.causes ?? run.findings ?? [])
-    if (!parsedCauses.success) return jsonError(c, 'VALIDATION_ERROR', 'causes: not a list of scorecard causes.')
-    const causes = parsedCauses.data as UxCause[]
+    // Any number is read; the top UX_SCORECARD_LIMITS.causes are planned (parseCauses), never a 400 for a long list.
+    if (body?.causes !== undefined && !Array.isArray(body.causes)) return jsonError(c, 'VALIDATION_ERROR', 'causes: send a list of scorecard causes.')
+    const causes = parseCauses(body?.causes ?? run.findings ?? [])
     const [open, read] = await Promise.all([openPatternKeys(db, a.projectId), scoredPages(db, run.id)])
     if ('error' in open) return dbError(c, open.error)
     if ('error' in read) return dbError(c, read.error)
@@ -446,7 +452,8 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
       .map((h) => ({ key: h.path, overall: h.score, at: startedAt.get(h.run_id) ?? '' }))
     const rows = scorecardRows(scored, history)
     const unscored = pageRows.filter((p) => !scored.some((s) => s.key === p.path)).map((p) => ({ key: p.path, label: p.label, status: p.status, note: p.note }))
-    const causesParsed = UxScorecardCauses.safeParse(run.findings ?? [])
+    // Read whatever the run stored: a blob over the limit reads as its top causes.
+    const causes = parseCauses(run.findings)
     return c.json({
       ok: true,
       data: {
@@ -454,7 +461,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         runs: list.map(strip),
         rows,
         unscored,
-        causes: causesParsed.success ? causesParsed.data : [],
+        causes,
         reports: reportsRes.data ?? [],
         viewport,
         rubricVersion: version,
