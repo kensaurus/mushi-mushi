@@ -10,7 +10,10 @@
  *   - `reasoning_effort`: OpenAI takes `reasoning_effort`, OpenRouter
  *     `reasoning: { effort }`. Luna rows say 'none' (latency and cost), Sol
  *     rows 'low' (Sol refuses 'none').
+ *   - `temperature`, `max_output_tokens`: used when the caller set none.
  *   - `body`: extra chat-completions fields from the row, merged in.
+ * Claude calls read the same params in claude-messages.ts (`thinking`,
+ * `effort`, `max_output_tokens`, `temperature`).
  * A field the caller already set wins. Only route calls carry params, so an
  * app's own key (BYOK) is never changed. Plain module (no npm), so the api
  * function's static graph stays small.
@@ -22,6 +25,12 @@ const active = new AsyncLocalStorage<Record<string, unknown>>()
 /** Run `fn` with this route candidate's params active for its requests. */
 export function runWithRouteParams<T>(params: Record<string, unknown> | undefined, fn: () => Promise<T>): Promise<T> {
   return params && Object.keys(params).length > 0 ? active.run(params, fn) : fn()
+}
+
+/**
+/** The active route candidate's params, or undefined outside a route call. */
+export function activeRouteParams(): Record<string, unknown> | undefined {
+  return active.getStore()
 }
 
 /**
@@ -37,6 +46,13 @@ export function applyRouteParams(body: Record<string, unknown>, url: string): Re
   const extra = params.body
   if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
     for (const [k, v] of Object.entries(extra as Record<string, unknown>)) if (!(k in out)) out[k] = v
+  }
+  if (typeof params.temperature === 'number' && !('temperature' in out)) out.temperature = params.temperature
+  const maxOut = params.max_output_tokens
+  if (typeof maxOut === 'number' && maxOut > 0 && !('max_tokens' in out) && !('max_completion_tokens' in out)) {
+    // OpenAI's own host takes the new name; other OpenAI-compatible hosts the old one.
+    if (/api\.openai\.com/i.test(url)) out.max_completion_tokens = maxOut
+    else out.max_tokens = maxOut
   }
   const effort = params.reasoning_effort
   if (typeof effort === 'string' && effort) {

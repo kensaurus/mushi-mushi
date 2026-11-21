@@ -996,7 +996,7 @@ export function secondReviewGate(state: SecondJudgeState, othersPass: boolean): 
   if (state.kind === 'unavailable') {
     const words = {
       off: { label: 'Second review is off', detail: 'Turn it on under Settings → Fixes → Verified merge; Mushi merges on its own only with it.' },
-      no_key: { label: 'Second review unavailable', detail: 'Add an OpenAI or OpenRouter key under Settings → AI keys; until then Mushi does not merge on its own.' },
+      no_key: { label: 'Second review unavailable', detail: 'No OpenAI or OpenRouter key could run it: add one under Settings → AI keys; until then Mushi does not merge on its own.' },
       budget: { label: 'Second review unavailable', detail: 'This app\'s monthly AI budget is used up; Mushi does not merge on its own until it resets or is raised.' },
     }[state.reason]
     return { id, status: 'unavailable', label: words.label, detail: state.detail ?? words.detail }

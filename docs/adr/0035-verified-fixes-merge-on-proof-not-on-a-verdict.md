@@ -144,3 +144,13 @@ fix card shows the gate checklist for the current head.
   click away.
 - The second review costs one more model call, and only for PRs that
   already passed the cheap gates.
+
+## Amendment 2026-11-21: the second review can run on a KENSAURUS AI route
+
+Gate 2 runs on the project's own OpenAI or OpenRouter key first, as before.
+With no key of its own, it now runs on the platform keys through the
+`fix-verifier-judge` route on kenji (ADR 0039 amendment, same date):
+OpenAI-compatible candidates only, so it stays a different model family from
+the Opus review. The gate is `unavailable` only when that route has no key
+either. These calls are recorded but not debited from the wallet (billing a
+new path is an owner pricing decision).

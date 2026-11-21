@@ -604,13 +604,12 @@ export async function withPlatformRoute<T>(
     const k = key!;
     const fn = (k.provider === 'anthropic' ? fns.anthropic : fns.openai)!;
     const drill = drilled(c.provider, route);
-    // The route row's params reach the OpenAI-family request (reasoning_effort,
-    // body); Claude calls set their own effort in claude-messages.ts.
+    // The route row's params reach the request of the candidate that runs
+    // (route-request-params.ts): OpenAI-family through the openai-compat fetch,
+    // Claude through claude-messages.ts.
     const call = drill
       ? () => Promise.reject(Object.assign(new Error(`${drill.status} ${drill.body}`), { status: drill.status }))
-      : k.provider === 'anthropic'
-        ? fn
-        : (key: ResolvedKey) => runWithRouteParams(c.params, () => fn(key));
+      : (key: ResolvedKey) => runWithRouteParams(c.params, () => fn(key));
     const outcome = await callWithTransientRetry(call, k, k.provider);
     if (outcome.ok) {
       noteOutcome(c.provider, 'ok');
