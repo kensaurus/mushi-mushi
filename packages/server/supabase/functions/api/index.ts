@@ -66,7 +66,6 @@ import { registerPortfolioFunnelRoutes } from './routes/portfolio-funnel.ts';
 import { registerStoreReviewIntakeRoutes } from './routes/store-review-intake.ts';
 import { registerWorkspaceNavMetaRoutes } from './routes/workspace-nav-meta.ts';
 import { registerActivationRoutes } from './routes/activation.ts';
-import { registerSdkUpgradeRoutes } from './routes/sdk-upgrade.ts';
 import { registerPullRequestRoutes } from './routes/pull-requests.ts';
 import { registerUxCloudRoutes } from './routes/ux-cloud.ts';
 import { registerProjectGroupRoutes } from './routes/project-groups.ts';
@@ -817,7 +816,8 @@ registerWorkspaceNavMetaRoutes(app);
 forwardToApiExt(['/v1/admin/skills', '/v1/admin/skills/*']);
 // Claude models the app's Anthropic key can use (anthropic-models.ts), for the settings model pickers.
 forwardToApiExt(['/v1/admin/byok/anthropic/models']);
-registerSdkUpgradeRoutes(app);
+// SDK upgrade PRs (sdk-upgrade.ts); api size budget, 2026-11-21 (hosted LLM order + Langfuse OTLP).
+forwardToApiExt(['/v1/admin/projects/:pid/sdk-upgrade', '/v1/admin/projects/:pid/sdk-upgrade/*']);
 registerUxCloudRoutes(app);
 forwardToApiExt([
   // ux-runs.ts; deploy size limit, 2026-10-22.
