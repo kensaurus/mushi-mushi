@@ -101,7 +101,7 @@ describe('AntiGamingPage with no tracked device', () => {
   it('names event types in words and dates them as an age', async () => {
     mockState.tracked = 3
     mockState.events = [
-      { id: 'e1', reporter_token_hash: 'abcdef0123456789', ip_address: '10.0.0.1', event_type: 'velocity_anomaly', reason: 'Velocity anomaly: 11 reports in 24h', created_at: new Date(Date.now() - 3 * 86_400_000).toISOString() },
+      { id: 'e1', reporter_token_hash: 'device-hash-1', ip_address: '10.0.0.1', event_type: 'velocity_anomaly', reason: 'Velocity anomaly: 11 reports in 24h', created_at: new Date(Date.now() - 3 * 86_400_000).toISOString() },
     ]
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(AntiGamingPage))))
