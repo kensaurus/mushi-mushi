@@ -150,12 +150,18 @@ export function StatusPill({
   label,
   title,
   className = '',
+  strike = true,
 }: {
   status: RunStatus
   /** Short words ("running 2", "3 failed"); defaults to the state's word. */
   label?: ReactNode
   title?: string
   className?: string
+  /**
+   * Strike a cancelled label through (a cancelled run). False where the words already say the
+   * state, such as a provider that is "Off for all apps": struck, that read as "not off" (2026-11-21).
+   */
+  strike?: boolean
 }) {
   const text = label ?? STATUS_WORD[status]
   return (
@@ -166,7 +172,7 @@ export function StatusPill({
       data-testid="status-pill"
     >
       <StatusMark status={status} size={10} />
-      <span className={status === 'cancelled' ? 'line-through decoration-1' : ''}>{text}</span>
+      <span className={status === 'cancelled' && strike ? 'line-through decoration-1' : ''}>{text}</span>
     </span>
   )
 }

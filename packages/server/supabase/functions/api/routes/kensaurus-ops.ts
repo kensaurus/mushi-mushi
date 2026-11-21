@@ -10,6 +10,9 @@
  *        The snapshot is held for 60 s per isolate; ?fresh=1 skips the hold.
  *   POST /v1/admin/kensaurus/ops   { action, …fields }
  *        → { ok, data: { action, result } }
+ *        `batch` (one chain save: many route changes for one app, applied in
+ *        one transaction upstream, one hub notice) may be up to 64 KB; every
+ *        other action keeps the 16 KB cap.
  *        `actor` is always `console:<user id>` from the JWT; a client actor
  *        is dropped. A write clears the held snapshot.
  *
@@ -34,8 +37,10 @@ import { requireOperator } from '../../_shared/operator-gate.ts'
 const TOKEN_HEADER = 'x-kensaurus-ops-token'
 const CACHE_TTL_MS = 60_000
 const TIMEOUT_MS = 10_000
-/** Upstream refuses a body over 16 KB (MAX_OPS_BODY_BYTES). */
+/** Upstream refuses a body over 16 KB (MAX_OPS_BODY_BYTES)… */
 const MAX_BODY_BYTES = 16 * 1024
+/** …except a `batch`, up to 64 KB (MAX_BATCH_BODY_BYTES, yen-yen kensaurus-ops 2026-11-21). */
+const MAX_BATCH_BODY_BYTES = 64 * 1024
 
 /** The writes upstream accepts (OPS_META.actions). Anything else is refused here. */
 const ACTIONS = new Set([
@@ -46,6 +51,7 @@ const ACTIONS = new Set([
   'reorder',
   'set_provider_enabled',
   'set_provider_thresholds',
+  'batch',
 ])
 
 type Ctx = Context<{ Variables: Variables }>
@@ -162,7 +168,7 @@ export function registerKensaurusOpsRoutes(
     if (denied) return denied
 
     const raw = await c.req.text()
-    if (raw.length > MAX_BODY_BYTES) return fail(c as Ctx, 413, 'body_too_large', 'The change is over 16 KB.')
+    if (raw.length > MAX_BATCH_BODY_BYTES) return fail(c as Ctx, 413, 'body_too_large', 'The change is over 64 KB.')
     let parsed: unknown
     try {
       parsed = JSON.parse(raw)
@@ -179,8 +185,9 @@ export function registerKensaurusOpsRoutes(
     }
     const userId = c.get('userId') as string
     const outgoing = JSON.stringify({ ...fields, actor: `console:${userId}` })
-    if (new TextEncoder().encode(outgoing).length > MAX_BODY_BYTES) {
-      return fail(c as Ctx, 413, 'body_too_large', 'The change is over 16 KB.')
+    const cap = action === 'batch' ? MAX_BATCH_BODY_BYTES : MAX_BODY_BYTES
+    if (new TextEncoder().encode(outgoing).length > cap) {
+      return fail(c as Ctx, 413, 'body_too_large', `The change is over ${cap / 1024} KB.`)
     }
 
     const res = await call(cfg, { method: 'POST', body: outgoing })

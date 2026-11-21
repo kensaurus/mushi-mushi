@@ -188,6 +188,25 @@ describe('kensaurus ops proxy: POST', () => {
     expect(h.calls).toHaveLength(0)
   })
 
+  it('passes a batch through with the actor set, and lets only a batch go past 16 KB, up to 64 KB', async () => {
+    const h = harness()
+    h.answer.body = { ok: true, action: 'batch', result: { applied: 2, features: 2 } }
+    const op = (feature: string) => ({ action: 'upsert_route', app: 'glot-it', feature, priority: 1, provider: 'openai', model: 'gpt-6.1-terra' })
+    const batch = { action: 'batch', app: 'glot-it', ops: [op('*'), op('story')], expect: [{ feature: '*', count: 3, updated_at: null }], actor: 'console:x' }
+    const res = await post(h, batch)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, data: { action: 'batch', result: { applied: 2, features: 2 } } })
+    expect(h.calls[0].body).toEqual({ ...batch, actor: `console:${OPERATOR}` })
+    // ~20 KB: fine for a batch, too large for anything else.
+    const big = { ...batch, ops: Array.from({ length: 160 }, (_, i) => op(`feature-${i}`)) }
+    expect(JSON.stringify(big).length).toBeGreaterThan(16 * 1024)
+    expect((await post(h, big)).status).toBe(200)
+    expect((await post(h, { ...big, action: 'upsert_route' })).status).toBe(413)
+    const huge = await post(h, { ...batch, note: 'x'.repeat(65 * 1024) })
+    expect(huge.status).toBe(413)
+    expect(h.calls).toHaveLength(2)
+  })
+
   it('passes 409 last_default_route and 422 unpriced_model through with their message', async () => {
     const h = harness()
     h.answer.status = 409

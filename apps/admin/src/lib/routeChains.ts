@@ -7,9 +7,11 @@
  *              order (primary / backup / last resort / off), health, 24 h calls and cost;
  *            - the one-line status, the kill-switch impact, "Used by" from the routes;
  *            - the price book a model picker lists (newest price in effect, token models);
- *            - a chain edit as plain-word changes, and as the ordered single-row writes that
- *              apply it to every feature in the chain (kensaurus-ops has no batch action, so
- *              the console sends one audited write at a time and stops at the first refusal);
+ *            - a chain edit as plain-word changes, and as the ordered route writes that apply
+ *              it to every feature in the chain: one `batch` call when kensaurus-ops offers it
+ *              (one transaction, one hub notice), else one audited write at a time, stopping
+ *              at the first refusal;
+ *            - the params a model refuses (gpt-6.x-sol and reasoning effort none), as upstream;
  *            - the weekly model scout's suggestions, read back from its Ops hub event.
  *          No React; every rule here is unit tested (routeChains.test.ts).
  */
@@ -377,13 +379,22 @@ export interface PricedModel {
  * @internal Exported for tests.
  */
 export function modelTier(model: string, input: number, output: number): ModelTier {
+  const named = tierByName(model)
+  if (named) return named
+  const blended = (3 * input + output) / 4
+  return blended <= 500_000 ? 'small' : blended <= 4_000_000 ? 'mid' : 'top'
+}
+
+/** The size class a model's name says, or null when it says none. */
+function tierByName(model: string): ModelTier | null {
   const m = model.toLowerCase()
   if (/(luna|haiku|mini|nano|lite|flash)/.test(m)) return 'small'
   if (/(terra|sonnet)/.test(m)) return 'mid'
   if (/(sol|opus)/.test(m)) return 'top'
-  const blended = (3 * input + output) / 4
-  return blended <= 500_000 ? 'small' : blended <= 4_000_000 ? 'mid' : 'top'
+  return null
 }
+
+const TIER_RANK: Record<ModelTier, number> = { small: 0, mid: 1, top: 2 }
 
 /**
  * The models a step on this provider can switch to: token-priced chat models with the newest
@@ -417,6 +428,44 @@ function perMillion(micro: number): string {
 /** "$0.10 in / $0.50 out per 1M · small" for a picker option. */
 export function priceLabel(p: PricedModel): string {
   return `${perMillion(p.input)} in / ${perMillion(p.output)} out per 1M · ${p.tier}`
+}
+
+// ── params a model refuses ─────────────────────────────────────────────────
+
+const SOL_RE = /(^|\/)gpt-[0-9.]+-sol$/
+
+/**
+ * The one param pairing upstream refuses (yen-yen kensaurus-ops `paramsProblem` and the routes
+ * guard trigger, 2026-11-21): gpt-6.x-sol on OpenAI or OpenRouter answers 400 to reasoning effort
+ * `none` and `minimal`, so a route never stores it. Null when the step is fine.
+ */
+export function paramsProblem(provider: string, model: string, params: RouteParams | null | undefined): string | null {
+  const effort = params?.reasoning_effort
+  if ((provider === 'openai' || provider === 'openrouter') && SOL_RE.test(model) && (effort === 'none' || effort === 'minimal')) {
+    return `${modelShort(model)} needs reasoning effort low or higher`
+  }
+  return null
+}
+
+/**
+ * The step's params after its model changes: a switch to Sol with effort none or minimal moves
+ * the effort to `low` (the cheapest it takes) and says so; anything else keeps the params.
+ */
+export function paramsForModel(provider: string, model: string, params: RouteParams): { params: RouteParams; note: string | null } {
+  if (!paramsProblem(provider, model, params)) return { params, note: null }
+  return { params: { ...params, reasoning_effort: 'low' }, note: `${modelShort(model)} needs reasoning effort low or higher, so it is now low.` }
+}
+
+const EFFORT_WORD: Record<string, string> = { reasoning_effort: 'reasoning', effort: 'effort' }
+
+/** What changed in a step's settings, in words: "reasoning none → low"; "settings changed" otherwise. */
+function settingsChange(before: RouteParams, after: RouteParams): string | null {
+  if (stableJson(before) === stableJson(after)) return null
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((k) => stableJson(before[k]) !== stableJson(after[k]))
+  if (keys.every((k) => k in EFFORT_WORD)) {
+    return keys.map((k) => `${EFFORT_WORD[k]} ${String(before[k] ?? 'unset')} → ${String(after[k] ?? 'unset')}`).join(', ')
+  }
+  return 'settings changed'
 }
 
 // ── editing a chain ─────────────────────────────────────────────────────────
@@ -455,6 +504,8 @@ export function draftChanges(chain: RouteChain, draft: readonly DraftStep[]): st
     }
     const s = chain.steps[d.origin]!
     if (d.model !== s.model) out.push(`${providerName(s.provider)}: ${modelShort(s.model)} → ${modelShort(d.model)}`)
+    const settings = settingsChange(s.params ?? {}, d.params ?? {})
+    if (settings) out.push(`${stepLabel(d)}: ${settings}`)
     if (d.enabled !== s.enabled) out.push(`Turn ${d.enabled ? 'on' : 'off'} ${stepLabel(d)}`)
   })
   const before = chain.steps.map((_, i) => i).filter((i) => kept.has(i))
@@ -470,6 +521,10 @@ export function draftProblem(chain: RouteChain, draft: readonly DraftStep[], met
   if (draft.length > max) return `At most ${max} steps.`
   if (chain.isDefault && !draft.some((d) => d.enabled)) return 'The default needs at least one step turned on.'
   if (draft.some((d) => !d.model)) return 'Pick a model for every step.'
+  for (const d of draft) {
+    const problem = paramsProblem(d.provider, d.model, d.params)
+    if (problem) return `${providerName(d.provider)}: ${problem}.`
+  }
   return null
 }
 
@@ -484,7 +539,8 @@ export interface FeaturePlan {
  * upstream's last-default guard (409) and never writes a priority a reorder has renumbered:
  *   adds (at free priorities) → turn-ons → model switches → turn-offs → deletes → one reorder.
  * Adds go after the deletes only when the chain is too full to add first. A model switch sends no
- * params, so the step keeps its stored ones (a step never changes provider: remove and add).
+ * params unless the step's settings changed too, then the step's full params (twins share them:
+ * the signature covers params). A step never changes provider: remove and add.
  * @internal Exported for tests.
  */
 export function planFeature(app: string, member: ChainMember, draft: readonly DraftStep[], meta: OpsMeta | null): FeaturePlan {
@@ -518,8 +574,14 @@ export function planFeature(app: string, member: ChainMember, draft: readonly Dr
   const existing = draft.filter((d) => d.origin != null).map((d) => ({ d, row: rows[d.origin!]! }))
   const enables: OpsAction[] = existing.filter(({ d, row }) => d.enabled && !row.enabled).map(({ row }) => ({ action: 'enable_route', ...key(row.priority) }))
   const models: OpsAction[] = existing
-    .filter(({ d, row }) => d.model !== row.model)
-    .map(({ d, row }) => ({ action: 'upsert_route', ...key(row.priority), provider: row.provider, model: d.model }))
+    .filter(({ d, row }) => d.model !== row.model || stableJson(d.params ?? {}) !== stableJson(row.params ?? {}))
+    .map(({ d, row }) => ({
+      action: 'upsert_route',
+      ...key(row.priority),
+      provider: row.provider,
+      model: d.model,
+      ...(stableJson(d.params ?? {}) !== stableJson(row.params ?? {}) ? { params: d.params } : {}),
+    }))
   const disables: OpsAction[] = existing.filter(({ d, row }) => !d.enabled && row.enabled).map(({ row }) => ({ action: 'disable_route', ...key(row.priority) }))
   const deletes: OpsAction[] = removed.map((r) => ({ action: 'delete_route', ...key(r.priority) }))
   const order = draft.map((d) => (d.origin != null ? rows[d.origin]!.priority : assigned.get(d)!))
@@ -532,6 +594,53 @@ export function planFeature(app: string, member: ChainMember, draft: readonly Dr
 /** The whole save: one plan per feature in the chain, the default first. */
 export function planChainSave(chain: RouteChain, draft: readonly DraftStep[], meta: OpsMeta | null): FeaturePlan[] {
   return chain.members.map((m) => planFeature(chain.app, m, draft, meta))
+}
+
+/** What the console read for one feature, so a batch refuses when the rows changed since. */
+interface FeatureExpect {
+  feature: string
+  count: number
+  /** The newest updated_at among its rows, exactly as the snapshot sent it; null for none. */
+  updated_at: string | null
+}
+
+/** A snapshot timestamp in microseconds (Postgres sends six fractional digits; Date keeps three). */
+function micros(t: string): number {
+  const frac = /\.(\d+)/.exec(t)?.[1] ?? ''
+  const ms = Date.parse(frac ? t.replace(/\.\d+/, `.${frac.slice(0, 3).padEnd(3, '0')}`) : t)
+  return ms * 1000 + Number(frac.slice(3, 6).padEnd(3, '0'))
+}
+
+/** The newest of the snapshot's timestamps, as sent (the server compares it exactly). */
+function newest(stamps: readonly string[]): string | null {
+  let best: string | null = null
+  for (const t of stamps) if (best === null || micros(t) > micros(best)) best = t
+  return best
+}
+
+/** @internal Exported for tests. */
+export function featureExpect(member: ChainMember): FeatureExpect {
+  return { feature: member.feature, count: member.rows.length, updated_at: newest(member.rows.map((r) => r.updated_at)) }
+}
+
+/** The batch body for a chain save: every plan's writes in order, the expect per feature, the edit in words. */
+export function chainBatch(chain: RouteChain, plans: readonly FeaturePlan[], note: string): Extract<OpsAction, { action: 'batch' }> {
+  return {
+    action: 'batch',
+    app: chain.app,
+    ops: plans.flatMap((p) => p.ops) as Extract<OpsAction, { action: 'batch' }>['ops'],
+    expect: chain.members.map(featureExpect),
+    ...(note ? { note: note.length > 300 ? `${note.slice(0, 299)}…` : note } : {}),
+  }
+}
+
+/** Whether this upstream takes a batch, and whether this one fits its limits. */
+export function batchFits(meta: OpsMeta | null, batch: Extract<OpsAction, { action: 'batch' }>): boolean {
+  if (!meta?.actions?.includes('batch')) return false
+  const maxOps = meta.batch?.max_ops ?? 300
+  const maxBytes = meta.batch?.max_body_bytes ?? 64 * 1024
+  // The server adds the actor (~45 bytes); leave room for it.
+  return batch.ops.length <= maxOps && new TextEncoder().encode(JSON.stringify(batch)).length + 200 <= maxBytes
 }
 
 export interface SaveFailure {
@@ -620,33 +729,51 @@ export interface ScoutSuggestion {
   uses: string[]
   /** Chains (ids) that try `model` on `provider` today. */
   chains: string[]
+  /**
+   * The candidate is a smaller class of model (Sonnet → Haiku): cheaper because it does less,
+   * not the same work for less. The scout ranks by price alone (2026-11-21: all three of its
+   * first suggestions were such drops), so the card says it.
+   */
+  smaller: boolean
 }
 
 // `${provider} ${model} ($X/M) → ${candidate} ($Y/M, −N%), used by a, b, c` (yen-yen
 // _shared/kensaurus-model-scout.ts scoutLines). The hub joins lines with " · " in the body.
 const SCOUT_LINE = /([a-z][a-z0-9-]*) (\S+) \((\$[0-9.]+)\/M\) → (\S+) \((\$[0-9.]+)\/M, [−-](\d+)%\), used by ([^·\n]+)/g
+// Since yen-yen PR 608 the scout words a smaller model apart, never as a swap.
+const SCOUT_SMALLER_LINE =
+  /([a-z][a-z0-9-]*) (\S+) \((\$[0-9.]+)\/M\) has a smaller, cheaper option, not a like-for-like swap: (\S+) \((\$[0-9.]+)\/M, [−-](\d+)%\), used by ([^·\n]+)/g
 
 /**
- * The newest model-scout event's "cheaper" lines, parsed, with the chains each one would touch.
- * Price-drift lines are for the price book, not a switch, so they are left out.
+ * The newest model-scout event's lines, parsed, with the chains each one would touch: `items` are
+ * like-for-like swaps (same size class or larger), `smaller` the cheaper smaller models, which
+ * are never offered as a swap. An older event wrote a downgrade as a swap line; its size by name
+ * moves it to `smaller` too. Price-drift lines are for the price book, so they are left out.
  */
-export function scoutSuggestions(events: ReadonlyArray<{ kind: string; body: string | null; occurred_at: string }>, apps: readonly AppChains[]): { at: string; items: ScoutSuggestion[] } | null {
+export function scoutSuggestions(events: ReadonlyArray<{ kind: string; body: string | null; occurred_at: string }>, apps: readonly AppChains[]): { at: string; items: ScoutSuggestion[]; smaller: ScoutSuggestion[] } | null {
   const latest = events.filter((e) => e.kind === 'ai.model_scout').sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at))[0]
   if (!latest) return null
-  const items: ScoutSuggestion[] = []
-  for (const m of (latest.body ?? '').matchAll(SCOUT_LINE)) {
-    const [, provider, model, currentPerM, candidate, candidatePerM, pct, uses] = m
-    const chains = apps.flatMap((a) => a.chains.filter((c) => c.steps.some((s) => s.provider === provider && s.model === model)).map((c) => c.id))
-    items.push({
-      provider: provider!,
-      model: model!,
-      candidate: candidate!,
-      currentPerM: currentPerM!,
-      candidatePerM: candidatePerM!,
-      savingPct: Number(pct),
-      uses: uses!.split(',').map((u) => u.trim()).filter(Boolean),
-      chains,
-    })
+  const all: ScoutSuggestion[] = []
+  const read = (re: RegExp, markedSmaller: boolean) => {
+    for (const m of (latest.body ?? '').matchAll(re)) {
+      const [, provider, model, currentPerM, candidate, candidatePerM, pct, uses] = m
+      const chains = apps.flatMap((a) => a.chains.filter((c) => c.steps.some((s) => s.provider === provider && s.model === model)).map((c) => c.id))
+      const from = tierByName(model!)
+      const to = tierByName(candidate!)
+      all.push({
+        provider: provider!,
+        model: model!,
+        candidate: candidate!,
+        currentPerM: currentPerM!,
+        candidatePerM: candidatePerM!,
+        savingPct: Number(pct),
+        uses: uses!.split(',').map((u) => u.trim()).filter(Boolean),
+        chains,
+        smaller: markedSmaller || (from !== null && to !== null && TIER_RANK[to] < TIER_RANK[from]),
+      })
+    }
   }
-  return { at: latest.occurred_at, items }
+  read(SCOUT_LINE, false)
+  read(SCOUT_SMALLER_LINE, true)
+  return { at: latest.occurred_at, items: all.filter((s) => !s.smaller), smaller: all.filter((s) => s.smaller) }
 }

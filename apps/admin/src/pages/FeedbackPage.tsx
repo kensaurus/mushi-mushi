@@ -9,6 +9,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { usePageCopy } from '../lib/copy'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -193,8 +194,9 @@ export function FeedbackPage() {
 
   usePublishPageContext({
     route: '/feedback',
-    title: 'Help & support',
-    summary: `${activeTabMeta.label} · ${stats.totalTickets} submission${stats.totalTickets === 1 ? '' : 's'} · ${stats.activeTickets} active`,
+    // The shared tab-title rule (lib/pageTitle.ts): the browser tab read
+    // "Help & support · Overview · 0 submissions · 0 active" (2026-11-21).
+    title: tabbedPageTitle('Help & support', activeTabMeta.label, activeTabMeta.id === FEEDBACK_TABS[0]!.id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.awaitingReply,
     questions: [
