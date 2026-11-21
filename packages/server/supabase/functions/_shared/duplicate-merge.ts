@@ -10,10 +10,14 @@
  *          A person's report is never closed this way: it keeps the group
  *          only, so their words are never hidden behind a bot's finding.
  *
- * No env reads and no imports beyond pure modules: the vitest suite imports it.
+ * No env reads: the vitest suite imports it. Only fast-filter imports it, so
+ * the size-capped `api` function never bundles it.
  */
 
+import type { getServiceClient } from './db.ts'
 import { isAutomatedReportSource } from './report-sources.ts'
+
+type Db = ReturnType<typeof getServiceClient>
 
 /**
  * The lowest similarity that closes a report as a duplicate. Above the
@@ -57,4 +61,42 @@ export function withDuplicateCounted(meta: Record<string, unknown> | null | unde
   const m = meta ?? {}
   const prev = Array.isArray(m.duplicate_ids) ? (m.duplicate_ids as unknown[]).filter((x): x is string => typeof x === 'string' && x !== childId) : []
   return { ...m, duplicate_count: (Number(m.duplicate_count) || 0) + 1, duplicate_ids: [...prev, childId].slice(-50) }
+}
+
+/**
+ * The DB step: close `reportId` as the duplicate child of the open report
+ * pickDuplicateParent chooses among `similar`, and count it on the parent.
+ * Returns the parent id, or null when nothing merged. A failed read or a
+ * report that changed meanwhile merges nothing.
+ */
+export async function mergeDuplicate(
+  db: Db,
+  reportId: string,
+  projectId: string,
+  similar: ReadonlyArray<{ reportId: string; similarity: number }>,
+  threshold: number,
+): Promise<string | null> {
+  if (similar.length === 0) return null
+  const { data: me } = await db.from('reports').select('id, source, status, parent_report_id').eq('id', reportId).eq('project_id', projectId).maybeSingle()
+  const incoming = me as { id: string; source: string | null; status: string; parent_report_id: string | null } | null
+  if (!incoming) return null
+  const { data: rows } = await db.from('reports').select('id, status, parent_report_id').eq('project_id', projectId).in('id', similar.map((s) => s.reportId))
+  const byId = new Map(((rows ?? []) as Array<{ id: string; status: string; parent_report_id: string | null }>).map((r) => [r.id, r]))
+  const candidates: MergeCandidate[] = similar.flatMap((s) => {
+    const r = byId.get(s.reportId)
+    return r ? [{ id: r.id, similarity: s.similarity, status: r.status, parent_report_id: r.parent_report_id }] : []
+  })
+  const parent = pickDuplicateParent(incoming, candidates, threshold)
+  if (!parent) return null
+  const { data: closed, error } = await db
+    .from('reports')
+    .update({ status: 'dismissed', closed_reason: 'duplicate', parent_report_id: parent.id, updated_at: new Date().toISOString() })
+    .eq('id', reportId)
+    .eq('status', incoming.status)
+    .is('parent_report_id', null)
+    .select('id')
+  if (error || !closed || (closed as unknown[]).length === 0) return null
+  const { data: p } = await db.from('reports').select('custom_metadata').eq('id', parent.id).maybeSingle()
+  await db.from('reports').update({ custom_metadata: withDuplicateCounted((p as { custom_metadata?: Record<string, unknown> | null } | null)?.custom_metadata, reportId) }).eq('id', parent.id)
+  return parent.id
 }

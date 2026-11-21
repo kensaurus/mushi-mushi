@@ -4,7 +4,6 @@ import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
 import { markKeyStatus, markKeyUsed, resolveLlmKey } from './byok.ts'
 import { extractLlmUsage, recordLlmUsage } from './llm-usage.ts'
-import { pickDuplicateParent, withDuplicateCounted, type MergeCandidate } from './duplicate-merge.ts'
 
 const embLog = log.child('embeddings')
 
@@ -845,60 +844,17 @@ export async function projectDedupThreshold(
   return Number.isFinite(v) && v > 0 && v <= 1 ? v : DEFAULT_DEDUP_THRESHOLD
 }
 
-/**
- * ADR 0063: an automated report that matches an OPEN report of the same app
- * closes as its duplicate child (duplicate-merge.ts). Returns the parent id,
- * or null when nothing merged. A failed read or write merges nothing:
- * grouping still runs.
- */
-async function mergeDuplicate(
-  db: ReturnType<typeof getServiceClient>,
-  reportId: string,
-  projectId: string,
-  similar: SimilarReport[],
-  threshold: number,
-): Promise<string | null> {
-  const { data: me } = await db.from('reports').select('id, source, status, parent_report_id').eq('id', reportId).eq('project_id', projectId).maybeSingle()
-  const incoming = me as { id: string; source: string | null; status: string; parent_report_id: string | null } | null
-  if (!incoming) return null
-  const { data: rows } = await db.from('reports').select('id, status, parent_report_id').eq('project_id', projectId).in('id', similar.map((s) => s.reportId))
-  const byId = new Map(((rows ?? []) as Array<{ id: string; status: string; parent_report_id: string | null }>).map((r) => [r.id, r]))
-  const candidates: MergeCandidate[] = similar.flatMap((s) => {
-    const r = byId.get(s.reportId)
-    return r ? [{ id: r.id, similarity: s.similarity, status: r.status, parent_report_id: r.parent_report_id }] : []
-  })
-  const parent = pickDuplicateParent(incoming, candidates, threshold)
-  if (!parent) return null
-  const now = new Date().toISOString()
-  const { data: closed, error } = await db
-    .from('reports')
-    .update({ status: 'dismissed', closed_reason: 'duplicate', parent_report_id: parent.id, updated_at: now })
-    .eq('id', reportId)
-    .eq('status', incoming.status)
-    .is('parent_report_id', null)
-    .select('id')
-  if (error || !closed || (closed as unknown[]).length === 0) return null
-  const { data: p } = await db.from('reports').select('custom_metadata').eq('id', parent.id).maybeSingle()
-  await db.from('reports').update({ custom_metadata: withDuplicateCounted((p as { custom_metadata?: Record<string, unknown> | null } | null)?.custom_metadata, reportId) }).eq('id', parent.id)
-  embLog.info('Duplicate merged into an open report', { reportId, parentId: parent.id, similarity: parent.similarity })
-  return parent.id
-}
-
 export async function suggestGrouping(
   reportId: string,
   projectId: string,
   threshold?: number,
-): Promise<{ groupId?: string; similarCount: number; mergedInto?: string }> {
+): Promise<{ groupId?: string; similarCount: number; similar?: SimilarReport[]; threshold?: number }> {
   const db = getServiceClient()
   // The project's Settings → General "Dedup threshold" (it was saved but never
   // read, so grouping always used the default).
   const effective = threshold ?? (await projectDedupThreshold(db, projectId))
   const similar = await findSimilarReports(reportId, projectId, effective, 3)
   if (similar.length === 0) return { similarCount: 0 }
-  const mergedInto = (await mergeDuplicate(db, reportId, projectId, similar, effective).catch((err) => {
-    embLog.warn('Duplicate merge skipped', { reportId, err: String(err) })
-    return null
-  })) ?? undefined
 
   const existingGroupId = similar.find(s => s.reportGroupId)?.reportGroupId
   if (existingGroupId) {
@@ -910,7 +866,7 @@ export async function suggestGrouping(
       .update({ report_count: similar.length + 1, updated_at: new Date().toISOString() })
       .eq('id', existingGroupId)
 
-    return { groupId: existingGroupId, similarCount: similar.length, mergedInto }
+    return { groupId: existingGroupId, similarCount: similar.length, similar, threshold: effective }
   }
 
   const { data: newGroup } = await db.from('report_groups').insert({
@@ -927,5 +883,5 @@ export async function suggestGrouping(
     }
   }
 
-  return { groupId: newGroup?.id, similarCount: similar.length, mergedInto }
+  return { groupId: newGroup?.id, similarCount: similar.length, similar, threshold: effective }
 }

@@ -67,6 +67,7 @@ import { registerSdkHealthRoutes } from '../api/routes/sdk-health.ts'
 import { registerPipelineRoutes } from '../api/routes/pipeline.ts'
 import { registerReportSentryRoutes } from '../api/routes/report-sentry.ts'
 import { registerPublishedAppsRoutes } from '../api/routes/published-apps.ts'
+import { registerDigestRoutes } from '../api/routes/digest.ts'
 import { registerTesterMarketplaceRoutes } from '../api/routes/tester-marketplace.ts'
 import { registerProjectHomeRoutes } from '../api/routes/project-home.ts'
 import { registerSetupGapsRoutes } from '../api/routes/setup-gaps.ts'
@@ -126,6 +127,7 @@ registerSdkHealthRoutes(app)
 registerPipelineRoutes(app)
 registerReportSentryRoutes(app)
 registerPublishedAppsRoutes(app)
+registerDigestRoutes(app)
 registerTesterMarketplaceRoutes(app)
 registerProjectHomeRoutes(app)
 registerSetupGapsRoutes(app)
