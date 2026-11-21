@@ -45,16 +45,20 @@ import {
 import { LlmBudgetExceededError } from './llm-budget.ts';
 import { sanitizeLlmError } from './llm-error-sanitize.ts';
 import {
+  ANTHROPIC_LOW_CREDIT_BODY,
+  DEFAULT_ROUTES_URL,
+  drillFailure,
   getRouteCandidates,
   noteOutcome,
   orderCandidates,
   reportProviderFailure,
-  type RouteSource,
+  type CandidatesSource as RouteSource,
   type RoutesConfig,
   type Tier,
 } from './kensaurus-ai-routes-client.ts';
 import { platformRouteKey } from './byok.ts';
 import { aiProviderForProject } from './ai-provider.ts';
+import { runWithRouteParams } from './route-request-params.ts';
 
 const log = rootLog.child('llm-failover');
 
@@ -470,15 +474,15 @@ export interface LlmRoute {
 
 /** The wallet ledger's id for this app, which the route rows use too. */
 export const ROUTES_APP = 'mushi-mushi';
-const DEFAULT_ROUTES_URL = 'https://jghcferpoaqntpfqvayf.supabase.co/functions/v1/kensaurus-ai-routes';
 
 /**
- * Where routes are read: KENSAURUS_ROUTES_TOKEN, else the wallet's internal
- * token (CONTRACT §1). Without either (a self-host) the URL is empty, so
- * nothing calls kenji and the baked OpenAI-first list runs.
+ * Where routes are read: KENSAURUS_ROUTES_TOKEN, a read-only token the client
+ * sends as x-kensaurus-routes-token (CONTRACT §9; never the wallet token).
+ * Without it (a self-host) the URL is empty, so nothing calls kenji and the
+ * baked OpenAI-first list runs.
  */
 export function routesConfig(): RoutesConfig {
-  const token = Deno.env.get('KENSAURUS_ROUTES_TOKEN') || Deno.env.get('KENSAURUS_WALLET_INTERNAL_TOKEN') || '';
+  const token = Deno.env.get('KENSAURUS_ROUTES_TOKEN') ?? '';
   return { url: token ? (Deno.env.get('KENSAURUS_ROUTES_URL') || DEFAULT_ROUTES_URL) : '', token };
 }
 
@@ -495,9 +499,8 @@ function noteRouteSource(cfg: RoutesConfig, source: RouteSource, feature: string
   log.error('KENSAURUS AI routes unreadable; running on the fallback list', { source, feature });
 }
 
-/** Anthropic's answer to a spent account, verbatim (HTTP 400, recorded 2026-11-21). */
-export const ANTHROPIC_LOW_CREDIT_BODY =
-  '{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
+/** Anthropic's answer to a spent account, verbatim (the routes client's copy). */
+export { ANTHROPIC_LOW_CREDIT_BODY };
 
 /**
  * KENSAURUS_LLM_DRILL=<provider>:payment fails that provider's platform call
@@ -505,8 +508,8 @@ export const ANTHROPIC_LOW_CREDIT_BODY =
  * that carries `drill: true` (the smoke script). The real drill is the kill
  * switch on kenji (`kensaurus_provider_accounts.enabled = false`).
  */
-function drillFails(provider: string, route: LlmRoute): boolean {
-  return !!route.drill && (Deno.env.get('KENSAURUS_LLM_DRILL') ?? '').trim().toLowerCase() === `${provider}:payment`;
+function drilled(provider: string, route: LlmRoute): { status: number; body: string } | null {
+  return route.drill ? drillFailure((Deno.env.get('KENSAURUS_LLM_DRILL') ?? '').trim().toLowerCase(), provider) : null;
 }
 
 /** Why the next candidate should take over, or null when the error is rethrown as is. */
@@ -600,9 +603,14 @@ export async function withPlatformRoute<T>(
   for (const { c, key } of runnable) {
     const k = key!;
     const fn = (k.provider === 'anthropic' ? fns.anthropic : fns.openai)!;
-    const call = drillFails(c.provider, route)
-      ? () => Promise.reject(Object.assign(new Error(`400 ${ANTHROPIC_LOW_CREDIT_BODY}`), { status: 400 }))
-      : fn;
+    const drill = drilled(c.provider, route);
+    // The route row's params reach the OpenAI-family request (reasoning_effort,
+    // body); Claude calls set their own effort in claude-messages.ts.
+    const call = drill
+      ? () => Promise.reject(Object.assign(new Error(`${drill.status} ${drill.body}`), { status: drill.status }))
+      : k.provider === 'anthropic'
+        ? fn
+        : (key: ResolvedKey) => runWithRouteParams(c.params, () => fn(key));
     const outcome = await callWithTransientRetry(call, k, k.provider);
     if (outcome.ok) {
       noteOutcome(c.provider, 'ok');

@@ -5,9 +5,9 @@
  *          llm-failover.ts) once on its KENSAURUS AI route and print the
  *          route source, provider, model and ok (CONTRACT 2026-11-21 §4).
  *
- * Run from the repo root with the platform keys and the kenji token in your
+ * Run from the repo root with the platform keys and the routes token in your
  * environment (names only: OPENAI_API_KEY, OPENROUTER_API_KEY,
- * KENSAURUS_WALLET_INTERNAL_TOKEN, optional KENSAURUS_ROUTES_URL):
+ * KENSAURUS_ROUTES_TOKEN, optional KENSAURUS_ROUTES_URL):
  *
  *   DENO_NO_PACKAGE_JSON=1 deno run --no-lock --node-modules-dir=none \
  *     --allow-env --allow-net --env-file=.env \

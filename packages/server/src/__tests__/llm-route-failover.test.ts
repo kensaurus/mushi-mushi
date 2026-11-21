@@ -31,6 +31,7 @@ vi.mock('../../supabase/functions/_shared/hosted-llm-billing.ts', () => ({
 const failover = await import('../../supabase/functions/_shared/llm-failover.ts')
 const routes = await import('../../supabase/functions/_shared/kensaurus-ai-routes-client.ts')
 const provider = await import('../../supabase/functions/_shared/ai-provider.ts')
+const params = await import('../../supabase/functions/_shared/route-request-params.ts')
 
 const P = '542b34e0-019e-41fe-b900-7b637717bb86'
 const ORG = '0f0e0d0c-0b0a-4908-8706-050403020100'
@@ -76,9 +77,9 @@ function fakeDb(opts: { ownClaudeKey?: boolean; aiProvider?: 'anthropic' | 'open
 
 /** kenji's routes endpoint answering with these candidates; every other URL (provider-ingest) answers 200. */
 function stubKenji(candidates: Array<{ priority: number; provider: string; model: string; params?: Record<string, unknown> }>) {
-  const calls: Array<{ url: string; body?: unknown }> = []
+  const calls: Array<{ url: string; body?: unknown; headers?: Record<string, string> }> = []
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined, headers: init?.headers as Record<string, string> })
     if (url.includes('kensaurus-ai-routes')) {
       return new Response(JSON.stringify({ candidates: candidates.map((c) => ({ params: {}, provider_state: 'ok', ...c })) }), { status: 200 })
     }
@@ -87,7 +88,7 @@ function stubKenji(candidates: Array<{ priority: number; provider: string; model
   return calls
 }
 
-const ENV_NAMES = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'KENSAURUS_WALLET_INTERNAL_TOKEN', 'KENSAURUS_ROUTES_URL', 'KENSAURUS_LLM_DRILL']
+const ENV_NAMES = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'KENSAURUS_ROUTES_TOKEN', 'KENSAURUS_WALLET_INTERNAL_TOKEN', 'KENSAURUS_ROUTES_URL', 'KENSAURUS_LLM_DRILL']
 const saved = Object.fromEntries(ENV_NAMES.map((n) => [n, process.env[n]]))
 
 beforeEach(() => {
@@ -96,6 +97,7 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = 'sk-ant-platform'
   process.env.OPENAI_API_KEY = 'sk-openai-platform'
   process.env.OPENROUTER_API_KEY = 'sk-or-platform'
+  delete process.env.KENSAURUS_ROUTES_TOKEN
   delete process.env.KENSAURUS_WALLET_INTERNAL_TOKEN
   delete process.env.KENSAURUS_ROUTES_URL
   delete process.env.KENSAURUS_LLM_DRILL
@@ -132,7 +134,7 @@ describe('platform calls follow the KENSAURUS AI route', () => {
   })
 
   it("takes the route's order and model from kenji, and a Claude low-credit 400 falls over to the next candidate", async () => {
-    process.env.KENSAURUS_WALLET_INTERNAL_TOKEN = 'internal'
+    process.env.KENSAURUS_ROUTES_TOKEN = 'routes-token'
     const calls = stubKenji([
       { priority: 1, provider: 'anthropic', model: 'claude-haiku-5-5' },
       { priority: 2, provider: 'openai', model: 'gpt-6.1-terra' },
@@ -144,9 +146,13 @@ describe('platform calls follow the KENSAURUS AI route', () => {
     expect(out).toMatchObject({ result: 'sk-openai-platform gpt-6.1-terra', model: 'gpt-6.1-terra', vendor: 'openai', fallbackUsed: true, routeSource: 'live' })
     expect(claude.mock.calls[0][0]).toMatchObject({ source: 'env', key: 'sk-ant-platform', model: 'claude-haiku-5-5' })
     expect(calls[0].url).toContain('app=mushi-mushi&feature=ask-mushi')
+    expect(calls[0].headers?.['x-kensaurus-routes-token']).toBe('routes-token')
     // The spent account is reported to kenji's provider ingest (incident → Slack + Mushi ops).
     await new Promise((r) => setTimeout(r, 0))
-    expect(calls.find((c) => c.url.includes('kensaurus-provider-ingest'))?.body).toMatchObject({ provider: 'anthropic', class: 'payment', app: 'mushi-mushi', feature: 'ask-mushi' })
+    expect(calls.find((c) => c.url.includes('kensaurus-provider-ingest'))?.body).toMatchObject({
+      project: 'mushi-mushi',
+      incidents: [{ provider: 'anthropic', class: 'payment', app: 'mushi-mushi', feature: 'ask-mushi' }],
+    })
   })
 
   it('OpenAI out of credit → OpenRouter on the route model; fallback_used only when priority 1 did not answer', async () => {
@@ -174,7 +180,7 @@ describe('platform calls follow the KENSAURUS AI route', () => {
   })
 
   it('an organization that runs AI on OpenAI gets no Claude candidate from the route either', async () => {
-    process.env.KENSAURUS_WALLET_INTERNAL_TOKEN = 'internal'
+    process.env.KENSAURUS_ROUTES_TOKEN = 'routes-token'
     stubKenji([{ priority: 1, provider: 'anthropic', model: 'claude-haiku-5-5' }, { priority: 2, provider: 'openai', model: 'gpt-6-luna' }])
     const claude = vi.fn(async () => 'claude')
     const out = await failover.withAnthropicOrOpenAi(fakeDb({ aiProvider: 'openai' }), P, claude, async () => 'openai', FAST)
@@ -183,7 +189,7 @@ describe('platform calls follow the KENSAURUS AI route', () => {
   })
 
   it('KENSAURUS_LLM_DRILL=anthropic:payment on a drill call: Claude fails without a request, OpenAI answers', async () => {
-    process.env.KENSAURUS_WALLET_INTERNAL_TOKEN = 'internal'
+    process.env.KENSAURUS_ROUTES_TOKEN = 'routes-token'
     stubKenji([{ priority: 1, provider: 'anthropic', model: 'claude-haiku-5-5' }, { priority: 2, provider: 'openai', model: 'gpt-6-luna' }])
     process.env.KENSAURUS_LLM_DRILL = 'anthropic:payment'
     const claude = vi.fn(async () => 'claude')
@@ -196,7 +202,7 @@ describe('platform calls follow the KENSAURUS AI route', () => {
   })
 
   it('a route row can point a provider at another secret (the dummy-key drill), and a missing key just skips it', async () => {
-    process.env.KENSAURUS_WALLET_INTERNAL_TOKEN = 'internal'
+    process.env.KENSAURUS_ROUTES_TOKEN = 'routes-token'
     stubKenji([
       { priority: 1, provider: 'openai', model: 'gpt-6-luna', params: { secret_name: 'DRILL_DUMMY_OPENAI_KEY' } },
       { priority: 2, provider: 'openrouter', model: 'openai/gpt-6-luna' },
@@ -205,6 +211,26 @@ describe('platform calls follow the KENSAURUS AI route', () => {
     const out = await failover.withAnthropicOrOpenAi(fakeDb(), P, null, async (k) => (seen.push(k.key), 'ok'), FAST)
     expect(seen).toEqual(['sk-or-platform'])
     expect(out.vendor).toBe('openrouter')
+  })
+
+  it("applies the route row's params to that candidate's request only (Luna 'none' on OpenAI, reasoning.effort on OpenRouter)", async () => {
+    process.env.KENSAURUS_ROUTES_TOKEN = 'routes-token'
+    stubKenji([
+      { priority: 1, provider: 'openai', model: 'gpt-6-luna', params: { reasoning_effort: 'none', body: { store: false } } },
+      { priority: 2, provider: 'openrouter', model: 'openai/gpt-6-luna', params: { reasoning_effort: 'low' } },
+    ])
+    const seen: Array<Record<string, unknown>> = []
+    await failover.withAnthropicOrOpenAi(fakeDb(), P, null, async (k) => {
+      seen.push(params.applyRouteParams({ model: k.model }, `${k.baseUrl ?? 'https://api.openai.com/v1'}/chat/completions`))
+      if (k.key === 'sk-openai-platform') throw new Error('429 insufficient_quota: You exceeded your current quota')
+      return 'ok'
+    }, FAST)
+    expect(seen).toEqual([
+      { model: 'gpt-6-luna', reasoning_effort: 'none', store: false },
+      { model: 'openai/gpt-6-luna', reasoning: { effort: 'low' } },
+    ])
+    // Outside a route call (an app's own key) nothing is added.
+    expect(params.applyRouteParams({ model: 'gpt-6-luna' }, 'https://api.openai.com/v1/chat/completions')).toEqual({ model: 'gpt-6-luna' })
   })
 
   it('no project (Ask Mushi without an app): only OpenAI-compatible candidates, and no Claude', async () => {
