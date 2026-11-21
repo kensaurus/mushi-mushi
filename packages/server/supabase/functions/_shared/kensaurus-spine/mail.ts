@@ -341,7 +341,7 @@ export const MAIL_BRANDS: Readonly<Record<MailAppId, MailBrand>> = {
   },
   tsumagoi: {
     id: 'tsumagoi',
-    name: 'Tsumagoi Work&Camp 嬬恋牧場',
+    name: 'Tsumagoi Work&Camp',
     accent: '#4D6B52',
     accentInk: '#3D5742',
     logo: 'https://tsumagoi.kensaur.us/apple-touch-icon.png',
