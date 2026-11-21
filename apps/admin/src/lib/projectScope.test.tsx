@@ -87,6 +87,9 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/users')).toBe('account')
     expect(allAppsSupportFor('/docs-bridge')).toBe('account')
     expect(allAppsSupportFor('/feedback')).toBe('account')
+    // Report 5b386672: Ops lists every app's events, never one app's.
+    expect(allAppsSupportFor('/ops')).toBe('account')
+    expect(allAppsSupportFor('/checks')).toBe('single')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
     expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')
