@@ -1,5 +1,15 @@
 # mushi-mushi
 
+## 1.38.0
+
+### Patch Changes
+
+- Updated dependencies [11c99a5]
+- Updated dependencies [e5f813d]
+- Updated dependencies [c98879e]
+  - @mushi-mushi/cli@0.41.0
+  - @mushi-mushi/web@1.38.0
+
 ## 1.37.2
 
 ### Patch Changes
