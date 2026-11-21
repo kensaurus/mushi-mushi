@@ -6,6 +6,8 @@
  * "Copy link" label (an icon alone did not say what it does; Mushi report
  * 3d5c1f99). The tooltip adds the detail ("Copy link to this filtered
  * view") and we flip to a check + "Copied" in green for ~1.5s on success.
+ * `whitespace-nowrap` + `shrink-0` keep the label on one line and the target
+ * at full size in crowded headers (the old wide pill wrapped there).
  */
 
 import { useState } from 'react'
@@ -35,7 +37,7 @@ export function CopyViewLinkButton() {
         type="button"
         onClick={copy}
         aria-label={copied ? 'View link copied' : 'Copy link to this filtered view'}
-        className={`inline-flex h-7 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        className={`inline-flex h-7 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-md px-2 text-xs font-medium border border-edge-subtle bg-surface-raised/60 shadow-card motion-safe:transition-opacity hover:border-brand/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           copied ? 'text-ok hover:text-ok' : 'text-fg-muted hover:text-fg'
         }`}
       >
