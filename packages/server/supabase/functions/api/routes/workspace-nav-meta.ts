@@ -419,6 +419,7 @@ export function registerWorkspaceNavMetaRoutes(
       paths.push(
         countPaths.fixesSummary,
         countPaths.untriagedReports,
+        countPaths.untriagedChecks,
         countPaths.notifications,
         countPaths.queue,
         countPaths.flaggedDevices,
