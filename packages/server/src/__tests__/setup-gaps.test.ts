@@ -168,6 +168,35 @@ describe('autofixKeyGap', () => {
     expect(autofixKeyGap({ projectId: P, dispatcher: { autofixOn: false, server: { agentKeys: 0, offKeys: 0 } } }).status).toBe('ok')
     expect(autofixKeyGap({ projectId: P, dispatcher: null }).status).toBe('unknown')
   })
+
+  it('says fixes are stopped now and names each key with its own problem and repair', () => {
+    const gap = autofixKeyGap({
+      projectId: P,
+      dispatcher: {
+        autofixOn: true,
+        server: {
+          agentKeys: 0,
+          offKeys: 3,
+          offKeyList: [
+            { label: 'main', issue: 'used_up', until: '2026-11-22T06:00:00Z' },
+            { label: 'backup', issue: 'spend_down_off' },
+            { label: null, issue: 'turned_off' },
+          ],
+        },
+      },
+    })
+    expect(gap.title).toBe('Automatic fixes are stopped')
+    expect(gap.summary).toContain('so no fix starts on its own')
+    expect(gap.summary).not.toContain('will')
+    expect(gap.summary).toContain('Key "main" is used up until Nov 22.')
+    expect(gap.summary).toContain('Key "backup" has spend-down off.')
+    expect(gap.summary).toContain('A key without a name is turned off.')
+    expect(gap.steps).toEqual([
+      'Key "main": wait until Nov 22, or add another Cursor key.',
+      'Key "backup": turn on spend-down for it.',
+      'A key without a name: turn it back on, or add a new Cursor key.',
+    ])
+  })
 })
 
 describe('slackGap', () => {
