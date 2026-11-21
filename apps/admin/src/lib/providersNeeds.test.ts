@@ -1,13 +1,13 @@
 /**
  * FILE: apps/admin/src/lib/providersNeeds.test.ts
  * PURPOSE: Providers & AI routes (2026-11-19): an off or unchecked account says what it needs in
- *          one line (with Turn on when the console can do it), "Used by" is one chip per app with
- *          its features, and a missing balance says why.
+ *          one line (with Turn on when the console can do it), the console finds an app's project
+ *          for its chip, and a missing balance says why.
  */
 
 import { describe, expect, it } from 'vitest'
 import type { ProviderAccount } from './kensaurusOpsTypes'
-import { appUses, balanceWhy, makeAppProjectFinder, providerColumns, providerNeeds, providersLead, PROVIDER_STATE_WORD } from './providersView'
+import { balanceWhy, makeAppProjectFinder, providerColumns, providerNeeds, providersLead, PROVIDER_STATE_WORD } from './providersView'
 
 const NOW = Date.parse('2026-11-19T12:00:00Z')
 
@@ -37,14 +37,6 @@ describe('providerNeeds', () => {
 })
 
 describe('Used by', () => {
-  it('is one entry per app with its features, sorted by the console name', () => {
-    const p = account({ depends: [{ app: 'yen-yen', feature: 'tts' }, { app: 'glot-it', feature: 'chat' }, { app: 'yen-yen', feature: 'chat' }, { app: 'yen-yen' }] })
-    expect(appUses(p)).toEqual([
-      { app: 'glot-it', features: ['chat'] },
-      { app: 'yen-yen', features: ['chat', 'tts'] },
-    ])
-  })
-
   it('finds the project for an ops slug, ignoring case and punctuation', () => {
     const find = makeAppProjectFinder([{ project_name: 'lets-talk', project_slug: 'how-to-talk-to-girls' }])
     expect(find('How_To_Talk_To_Girls')?.project_name).toBe('lets-talk')

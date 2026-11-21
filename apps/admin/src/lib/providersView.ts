@@ -2,16 +2,14 @@
  * FILE: apps/admin/src/lib/providersView.ts
  * PURPOSE: Pure helpers for /providers (Providers & AI routes): micro-USD
  *          formatting, worst-first providers, balance gauges, alert cards,
- *          the app × provider spend grid, hourly bars, route chains, the
- *          last-default guard, reorder permutations, priced models, the
- *          params a provider takes, history diffs and error toasts.
+ *          the app × provider spend grid, hourly bars, the params a provider
+ *          takes, history diffs and error toasts. Route chains, the overview
+ *          and the chain save are in routeChains.ts.
  *          No React; every rule here is unit tested (providersView.test.ts).
  */
 
 import type { RunStatus } from '../components/signal/StatusMark'
 import type {
-  AiRoute,
-  ModelPrice,
   OpsMeta,
   OpsSnapshot,
   ProviderAccount,
@@ -166,26 +164,6 @@ export function makeAppProjectFinder<P extends { project_name: string; project_s
     by.set(normName(p.project_name), p)
   }
   return (app: string) => by.get(normName(app)) ?? null
-}
-
-/** One app that uses an account, with the features it calls it for (a chip's hover). */
-export interface AppUse {
-  app: string
-  features: string[]
-}
-
-/** The apps behind an account, one entry each with its features, sorted by the console's name. */
-export function appUses(p: ProviderAccount, appName: (app: string) => string = (a) => a): AppUse[] {
-  const by = new Map<string, Set<string>>()
-  for (const d of p.depends ?? []) {
-    if (!d.app) continue
-    const f = by.get(d.app) ?? new Set<string>()
-    if (d.feature) f.add(d.feature)
-    by.set(d.app, f)
-  }
-  return [...by.entries()]
-    .map(([app, f]) => ({ app, features: [...f].sort() }))
-    .sort((a, b) => appName(a.app).localeCompare(appName(b.app)))
 }
 
 /** A provider state in plain words (the pill beside its glyph). */
@@ -536,102 +514,11 @@ export function hourlyEmptyText(hourlyProviders: number, callsLast24h: number): 
 }
 
 // ── routes ──────────────────────────────────────────────────────────────────
+// Grouping, the overview, the price book and the chain save live in lib/routeChains.ts.
 
-export interface FeatureChain {
-  app: string
-  feature: string
-  /** By priority, best first. */
-  routes: AiRoute[]
-}
+const featureLabel = (feature: string) => (feature === '*' ? 'default' : feature)
 
-/**
- * A chain's shape: provider, model, on/off and params per candidate, in order. Two chains with the
- * same signature try the same things, so the Routes tab folds the later one under the first.
- */
-export function chainSignature(chain: FeatureChain): string {
-  return chain.routes.map((r) => `${r.provider}|${r.model}|${r.enabled ? 1 : 0}|${JSON.stringify(r.params ?? {})}`).join('>')
-}
-
-export interface AppRoutes {
-  app: string
-  features: FeatureChain[]
-}
-
-/** Routes per app → feature, '*' (default) first, then features by name; candidates by priority. */
-export function groupRoutes(routes: readonly AiRoute[]): AppRoutes[] {
-  const apps = new Map<string, Map<string, AiRoute[]>>()
-  for (const r of routes) {
-    const features = apps.get(r.app) ?? new Map<string, AiRoute[]>()
-    const list = features.get(r.feature) ?? []
-    list.push(r)
-    features.set(r.feature, list)
-    apps.set(r.app, features)
-  }
-  return [...apps.keys()].sort().map((app) => ({
-    app,
-    features: [...apps.get(app)!]
-      .sort(([a], [b]) => (a === '*' ? -1 : b === '*' ? 1 : a.localeCompare(b)))
-      .map(([feature, list]) => ({ app, feature, routes: [...list].sort((x, y) => x.priority - y.priority) })),
-  }))
-}
-
-export const featureLabel = (feature: string) => (feature === '*' ? 'default' : feature)
-
-export const routeKey = (r: { app: string; feature: string; priority: number }) => `${r.app}|${r.feature}|${r.priority}`
-
-/**
- * True when turning this route off (disable, delete, or an upsert with
- * enabled:false) would leave its app with no enabled '*' route while it has
- * one now: upstream refuses that with 409 last_default_route.
- */
-export function wouldDropLastDefault(routes: readonly AiRoute[], target: { app: string; feature: string; priority: number }): boolean {
-  if (target.feature !== '*') return false
-  const enabledDefaults = routes.filter((r) => r.app === target.app && r.feature === '*' && r.enabled)
-  if (enabledDefaults.length === 0) return false
-  return enabledDefaults.every((r) => r.priority === target.priority)
-}
-
-export const LAST_DEFAULT_HINT = 'Enable another default first'
-
-/**
- * The `order` for a reorder: the chain's current priorities, best first,
- * with the candidate at `index` moved one step up (-1) or down (+1).
- * Null when the move would leave the chain.
- */
-export function reorderPermutation(chain: readonly AiRoute[], index: number, dir: -1 | 1): number[] | null {
-  const to = index + dir
-  if (index < 0 || index >= chain.length || to < 0 || to >= chain.length) return null
-  const order = chain.map((r) => r.priority)
-  ;[order[index], order[to]] = [order[to]!, order[index]!]
-  return order
-}
-
-/**
- * Apply a reorder to the routes the way upstream does: renumber the feature 1..n in `order`.
- * @internal Exported for tests.
- */
-export function applyReorder(routes: readonly AiRoute[], app: string, feature: string, order: readonly number[]): AiRoute[] {
-  const byPriority = new Map(routes.filter((r) => r.app === app && r.feature === feature).map((r) => [r.priority, r]))
-  const renumbered = order.flatMap((p, i) => {
-    const r = byPriority.get(p)
-    return r ? [{ ...r, priority: i + 1 }] : []
-  })
-  return [...routes.filter((r) => !(r.app === app && r.feature === feature)), ...renumbered]
-}
-
-/** Models with a price in effect for a provider, by name: the only ones a route may use. */
-export function pricedModels(prices: readonly ModelPrice[], provider: string): string[] {
-  return [...new Set(prices.filter((p) => p.provider === provider).map((p) => p.model))].sort()
-}
-
-/** The lowest free priority of a feature within meta's bounds, or null when the chain is full. */
-export function nextFreePriority(chain: readonly AiRoute[], meta: OpsMeta | null): number | null {
-  const min = meta?.priority.min ?? 1
-  const max = meta?.priority.max ?? 9
-  const used = new Set(chain.map((r) => r.priority))
-  for (let p = min; p <= max; p++) if (!used.has(p)) return p
-  return null
-}
+const LAST_DEFAULT_HINT = 'Enable another default first'
 
 /**
  * Params that only one provider reads; upstream refuses them on any other
@@ -845,15 +732,16 @@ export function groupHistory(rows: readonly HistoryRow[], minRun = 3): HistoryIt
 // ── tabs and errors ─────────────────────────────────────────────────────────
 
 export type ProvidersTab = 'providers' | 'spend' | 'routes' | 'history'
+/** Routes first and the default (2026-11-21): the overview and the switches are what the page is for. */
 export const PROVIDERS_TABS: ReadonlyArray<{ id: ProvidersTab; label: string }> = [
+  { id: 'routes', label: 'Routes' },
   { id: 'providers', label: 'Providers' },
   { id: 'spend', label: 'Spend' },
-  { id: 'routes', label: 'Routes' },
   { id: 'history', label: 'History' },
 ]
 
 export function resolveProvidersTab(raw: string | null): ProvidersTab {
-  return PROVIDERS_TABS.some((t) => t.id === raw) ? (raw as ProvidersTab) : 'providers'
+  return PROVIDERS_TABS.some((t) => t.id === raw) ? (raw as ProvidersTab) : 'routes'
 }
 
 /** One line for a refused write. */
@@ -884,31 +772,16 @@ export function writeErrorText(error: { code: string; message: string; issues?: 
 
 // ── optimistic writes ───────────────────────────────────────────────────────
 
-/** What a toggle or reorder changes before the server answers. */
-export type OptimisticPatch =
-  | { kind: 'provider-enabled'; id: string; enabled: boolean }
-  | { kind: 'route-enabled'; app: string; feature: string; priority: number; enabled: boolean }
-  | { kind: 'reorder'; app: string; feature: string; order: number[] }
+/**
+ * What a provider switch changes before the server answers. Route edits are not optimistic: a
+ * chain save sends many writes and the page re-reads once at the end (ProvidersPage onSaveChain).
+ */
+export type OptimisticPatch = { kind: 'provider-enabled'; id: string; enabled: boolean }
 
-/** The snapshot as it will look once the write lands; unchanged when the patch no longer fits. */
+/** The snapshot as it will look once the write lands. */
 export function applyOptimistic(snapshot: OpsSnapshot | null, patch: OptimisticPatch): OpsSnapshot | null {
   if (!snapshot) return snapshot
-  switch (patch.kind) {
-    case 'provider-enabled':
-      return { ...snapshot, providers: snapshot.providers.map((p) => (p.id === patch.id ? { ...p, enabled: patch.enabled } : p)) }
-    case 'route-enabled':
-      return {
-        ...snapshot,
-        routes: snapshot.routes.map((r) =>
-          r.app === patch.app && r.feature === patch.feature && r.priority === patch.priority ? { ...r, enabled: patch.enabled } : r,
-        ),
-      }
-    case 'reorder': {
-      const current = snapshot.routes.filter((r) => r.app === patch.app && r.feature === patch.feature).map((r) => r.priority)
-      const fits = current.length === patch.order.length && patch.order.every((p) => current.includes(p))
-      return fits ? { ...snapshot, routes: applyReorder(snapshot.routes, patch.app, patch.feature, patch.order) } : snapshot
-    }
-  }
+  return { ...snapshot, providers: snapshot.providers.map((p) => (p.id === patch.id ? { ...p, enabled: patch.enabled } : p)) }
 }
 
 /**

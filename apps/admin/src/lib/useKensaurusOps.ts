@@ -21,8 +21,8 @@ export interface KensaurusOpsState {
 export function useKensaurusOps() {
   const [state, setState] = useState<KensaurusOpsState>({ data: null, error: null, loading: true, refreshing: false })
 
-  /** Read the snapshot; `fresh` skips the server's 60 s hold. Resolves to whether it worked. */
-  const load = useCallback(async (fresh: boolean): Promise<boolean> => {
+  /** Read the snapshot; `fresh` skips the server's 60 s hold. Resolves to the read, or null when it failed. */
+  const load = useCallback(async (fresh: boolean): Promise<OpsReadResponse | null> => {
     setState((s) => ({ ...s, refreshing: true }))
     const path = fresh ? '/v1/admin/kensaurus/ops?fresh=1' : '/v1/admin/kensaurus/ops'
     const res = await apiFetch<OpsReadResponse>(path, { scope: 'none', cache: 'no-store' })
@@ -34,7 +34,7 @@ export function useKensaurusOps() {
           : { ...s, error: res.error ?? { code: 'ERROR', message: 'Request failed' }, loading: false, refreshing: false },
       )
     })
-    return res.ok
+    return res.ok && res.data ? res.data : null
   }, [])
 
   const write = useCallback(
