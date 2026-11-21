@@ -3,37 +3,30 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import type { AiRoute, ModelPrice, OpsMeta, OpsSnapshot, ProviderAccount, ProviderState } from './kensaurusOpsTypes'
+import type { AiRoute, OpsMeta, OpsSnapshot, ProviderAccount, ProviderState } from './kensaurusOpsTypes'
 import {
   accountLabel,
   allSharedAccounts,
   actorLabel,
   ageLabel,
   applyOptimistic,
-  applyReorder,
   buildAlerts,
   buildHistory,
   buildHourlyBars,
   buildSpendGrid,
   cellKey,
-  chainSignature,
   diffFields,
   formatMicroUsd,
   groupHistory,
-  groupRoutes,
   hourlyEmptyText,
   marginChange,
   marginOf,
-  nextFreePriority,
   paramChips,
   paramFieldsFor,
-  pricedModels,
   PROVIDER_STATUS,
   providerGauge,
-  reorderPermutation,
   resolveProvidersTab,
   sortProviders,
-  wouldDropLastDefault,
   writeErrorText,
 } from './providersView'
 
@@ -75,17 +68,6 @@ function acct(id: string, state: ProviderState | null, over: Partial<ProviderAcc
 function rt(app: string, feature: string, priority: number, over: Partial<AiRoute> = {}): AiRoute {
   return { app, feature, priority, provider: 'openai', model: 'm', params: {}, enabled: true, note: null, updated_at: AT, updated_by: 'migration', provider_state: 'ok', ...over }
 }
-
-const price = (provider: string, model: string): ModelPrice => ({
-  provider,
-  model,
-  unit_kind: 'tokens',
-  input_per_mtok_micro: 1,
-  output_per_mtok_micro: 1,
-  cached_input_per_mtok_micro: null,
-  per_unit_micro: null,
-  effective_from: AT,
-})
 
 function snap(over: Partial<OpsSnapshot> = {}): OpsSnapshot {
   const empty = { since: AT, rows: [], liability_micro: 0 }
@@ -242,59 +224,10 @@ describe('buildHourlyBars', () => {
 })
 
 describe('routes', () => {
-  it('groups per app, default first, candidates by priority', () => {
-    const groups = groupRoutes(ROUTES)
-    expect(groups.map((g) => g.app)).toEqual(['glot-it', 'yen-yen'])
-    expect(groups[1]!.features.map((f) => f.feature)).toEqual(['*', 'chat'])
-    expect(groups[1]!.features[0]!.routes.map((r) => r.priority)).toEqual([1, 3])
-  })
-
-  it('guards the last enabled default route only', () => {
-    expect(wouldDropLastDefault(ROUTES, { app: 'glot-it', feature: '*', priority: 1 })).toBe(true)
-    expect(wouldDropLastDefault(ROUTES, { app: 'yen-yen', feature: '*', priority: 1 })).toBe(false)
-    expect(wouldDropLastDefault(ROUTES, { app: 'yen-yen', feature: 'chat', priority: 1 })).toBe(false)
-    const oneLeft = ROUTES.map((r) => (r.app === 'yen-yen' && r.priority === 3 ? { ...r, enabled: false } : r))
-    expect(wouldDropLastDefault(oneLeft, { app: 'yen-yen', feature: '*', priority: 1 })).toBe(true)
-    // An app with no enabled default has nothing to lose.
-    const none = ROUTES.map((r) => (r.app === 'glot-it' ? { ...r, enabled: false } : r))
-    expect(wouldDropLastDefault(none, { app: 'glot-it', feature: '*', priority: 1 })).toBe(false)
-  })
-
-  it('sends the full current order, with gaps, for a move', () => {
-    const chain = groupRoutes(ROUTES)[1]!.features[0]!.routes
-    expect(reorderPermutation(chain, 1, -1)).toEqual([3, 1])
-    expect(reorderPermutation(chain, 0, 1)).toEqual([3, 1])
-    expect(reorderPermutation(chain, 0, -1)).toBeNull()
-    expect(reorderPermutation(chain, 1, 1)).toBeNull()
-  })
-
-  it('renumbers a reordered feature 1..n like upstream', () => {
-    const chain = applyReorder(ROUTES, 'yen-yen', '*', [3, 1])
-      .filter((r) => r.app === 'yen-yen' && r.feature === '*')
-      .sort((a, b) => a.priority - b.priority)
-    expect(chain.map((r) => [r.priority, r.model])).toEqual([
-      [1, 'claude-a'],
-      [2, 'm'],
-    ])
-  })
-
-  it('applies optimistic patches, and leaves a reorder that no longer fits alone', () => {
+  it('applies an optimistic provider switch', () => {
     const s = snap({ routes: ROUTES, providers: [acct('k:a', 'ok')] })
     expect(applyOptimistic(s, { kind: 'provider-enabled', id: 'k:a', enabled: false })!.providers[0]!.enabled).toBe(false)
-    expect(applyOptimistic(s, { kind: 'route-enabled', app: 'glot-it', feature: '*', priority: 1, enabled: false })!.routes[3]!.enabled).toBe(false)
-    expect(applyOptimistic(s, { kind: 'reorder', app: 'yen-yen', feature: '*', order: [5, 1] })).toBe(s)
     expect(applyOptimistic(null, { kind: 'provider-enabled', id: 'k:a', enabled: false })).toBeNull()
-  })
-
-  it('offers only priced models of the provider', () => {
-    const prices = [price('anthropic', 'claude-b'), price('anthropic', 'claude-a'), price('openai', 'gpt-x')]
-    expect(pricedModels(prices, 'anthropic')).toEqual(['claude-a', 'claude-b'])
-    expect(pricedModels(prices, 'together')).toEqual([])
-  })
-
-  it('finds the next free priority within meta bounds', () => {
-    expect(nextFreePriority([rt('a', '*', 1), rt('a', '*', 3)], META)).toBe(2)
-    expect(nextFreePriority([1, 2, 3, 4, 5, 6, 7, 8, 9].map((p) => rt('a', '*', p)), META)).toBeNull()
   })
 
   it('without meta.route_param_providers (live upstream today), uses the built-in map', () => {
@@ -355,10 +288,10 @@ describe('history', () => {
 })
 
 describe('tabs and errors', () => {
-  it('defaults to Providers', () => {
-    expect(resolveProvidersTab(null)).toBe('providers')
-    expect(resolveProvidersTab('routes')).toBe('routes')
-    expect(resolveProvidersTab('nope')).toBe('providers')
+  it('defaults to Routes', () => {
+    expect(resolveProvidersTab(null)).toBe('routes')
+    expect(resolveProvidersTab('providers')).toBe('providers')
+    expect(resolveProvidersTab('nope')).toBe('routes')
   })
 
   it('maps refused writes to one line', () => {
@@ -386,16 +319,6 @@ describe('fresh-eyes fixes (2026-11-18)', () => {
     const row = (id: string, op: 'INSERT' | 'UPDATE' | 'DELETE', actor = 'migration') => ({ id, at: AT, actor, op, kind: 'route' as const, subject: id, diff: [] })
     const items = groupHistory([row('u1', 'UPDATE'), row('u2', 'UPDATE'), row('u3', 'UPDATE'), row('a1', 'INSERT'), row('a2', 'INSERT'), row('a3', 'INSERT'), row('b1', 'INSERT', 'console:x'), row('b2', 'INSERT', 'console:x')])
     expect(items.map((i) => (i.type === 'row' ? i.row.id : `${i.id}:${i.rows.length}`))).toEqual(['u1', 'u2', 'u3', 'g-a1:3', 'b1', 'b2'])
-  })
-
-  it('gives identical chains the same signature and different params a different one', () => {
-    const r = (app: string, priority: number, model: string, params: Record<string, unknown> = {}) =>
-      ({ app, feature: '*', priority, provider: 'openai', model, enabled: true, params, provider_state: 'ok' }) as unknown as AiRoute
-    const a = { app: 'a', feature: '*', routes: [r('a', 1, 'm1'), r('a', 2, 'm2')] }
-    const b = { app: 'b', feature: '*', routes: [r('b', 1, 'm1'), r('b', 2, 'm2')] }
-    const c = { app: 'c', feature: '*', routes: [r('c', 1, 'm1', { effort: 'low' }), r('c', 2, 'm2')] }
-    expect(chainSignature(a)).toBe(chainSignature(b))
-    expect(chainSignature(a)).not.toBe(chainSignature(c))
   })
 })
 
