@@ -2,18 +2,18 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-20 · **831** routes.
+> Generated: 2026-11-21 · **835** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 227 |
+| `adminOrApiKey` | 229 |
 | `apiKeyAuth` | 60 |
 | `jwtAuth` | 423 |
 | `jwtOrApiKey` | 1 |
 | `public` | 69 |
-| `unknown` | 51 |
+| `unknown` | 53 |
 
 ## Routes by path
 
@@ -666,6 +666,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | GET | `/v1/admin/two-way-health` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/reports.ts` |
 | GET | `/v1/admin/verifications` | `jwtAuth` | `packages/server/supabase/functions/api/routes/query-fixes-repo.ts` |
 | POST | `/v1/admin/work/claims/:id/stop` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
+| GET | `/v1/admin/work/code-audit/backlog` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work-collapse.ts` |
+| POST | `/v1/admin/work/code-audit/collapse` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/work-collapse.ts` |
 | DELETE | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | PATCH | `/v1/admin/work/hosts/:id` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/admin/work/hosts/:id/cursor-account` | `jwtAuth` | `packages/server/supabase/functions/api/routes/work-status.ts` |
@@ -847,6 +849,8 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/worker/claim` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/done` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/findings` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| GET | `/v1/worker/claims/:id/recheck` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
+| POST | `/v1/worker/claims/:id/recheck` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/claims/:id/renew` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |
 | POST | `/v1/worker/heartbeat` | `unknown` | `packages/server/supabase/functions/api/routes/work-heartbeat.ts` |
 | POST | `/v1/worker/revoke` | `unknown` | `packages/server/supabase/functions/api/routes/work.ts` |

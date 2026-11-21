@@ -813,7 +813,9 @@ ${ontologyContext}${inventoryContext}${mcpContextSection}`;
           status: 'classified',
           processing_attempts: (report.processing_attempts ?? 0) + 1,
         })
-        .eq('id', reportId);
+        .eq('id', reportId)
+        // ADR 0063: never reopen a report grouping closed as a duplicate.
+        .neq('status', 'dismissed');
 
       if (updateError) {
         // Throw loudly: a silent UPDATE here means the customer paid for the

@@ -12,6 +12,7 @@
  * and names apps in lowercase, as the team writes them.
  */
 
+import { AUTOMATED_REPORT_SOURCES } from './report-sources.ts'
 import {
   escapeMrkdwn,
   formatMoney,
@@ -45,6 +46,8 @@ export interface OpsApp {
 
 /** Report statuses still waiting on a decision (mirrors api/shared.ts OPEN_REPORT_STATUSES). */
 const OPEN_REPORT_STATUSES = ['new', 'queued', 'pending', 'submitted', 'classified', 'triaged', 'grouped', 'reopened']
+/** PostgREST `in` list of Mushi's own report sources (ADR 0063: bugs from people are counted apart). */
+const AUTOMATED_IN = `(${AUTOMATED_REPORT_SOURCES.join(',')})`
 const DAY_MS = 86_400_000
 
 export function eph(text: string, blocks?: unknown[]): SlashReply {
@@ -111,7 +114,10 @@ export interface StatusRow {
   lastRelease: { title: string; at: string } | null
   openAlerts: number
   urgentAlerts: number
+  /** Open reports from people and production (ADR 0063). */
   openBugs: number
+  /** Open reports Mushi's own checks filed (code audit, site audit…); optional for older callers. */
+  openAutomated?: number
   ciFailuresToday: number
   mutedUntil: string | null
 }
@@ -127,7 +133,7 @@ export function answerStatus(rows: StatusRow[], now: Date, consoleBase: string |
     const parts = [
       r.lastRelease ? `🚀 ${escapeMrkdwn(r.lastRelease.title.slice(0, 40))} · ${ago(r.lastRelease.at, now)}` : '🚀 no release seen',
       r.openAlerts ? `⚠️ ${r.openAlerts} open alert${r.openAlerts === 1 ? '' : 's'}` : '✓ no open alerts',
-      `🐞 ${r.openBugs} open bug${r.openBugs === 1 ? '' : 's'}`,
+      `🐞 ${r.openBugs} open bug${r.openBugs === 1 ? '' : 's'}${r.openAutomated ? ` (+${r.openAutomated} automated)` : ''}`,
       r.ciFailuresToday ? `✕ ${r.ciFailuresToday} CI failure${r.ciFailuresToday === 1 ? '' : 's'} today` : '✓ CI clean today',
     ]
     if (r.mutedUntil) parts.push(`🔕 muted until ${shortUtc(r.mutedUntil)}`)
@@ -368,13 +374,17 @@ async function loadCiToday(db: Db, projectIds: string[], now: Date): Promise<CiD
   return (data as CiDayRow[] | null) ?? []
 }
 
-async function loadOpenBugCounts(db: Db, projectIds: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>()
+async function loadOpenBugCounts(db: Db, projectIds: string[]): Promise<Map<string, { people: number; automated: number }>> {
+  const out = new Map<string, { people: number; automated: number }>()
   await Promise.all(
     projectIds.map(async (pid) => {
-      const { count, error } = await db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid).in('status', OPEN_REPORT_STATUSES)
-      throwIf(error, 'reports')
-      out.set(pid, count ?? 0)
+      const [people, automated] = await Promise.all([
+        db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid).in('status', OPEN_REPORT_STATUSES).not('source', 'in', AUTOMATED_IN),
+        db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid).in('status', OPEN_REPORT_STATUSES).in('source', [...AUTOMATED_REPORT_SOURCES]),
+      ])
+      throwIf(people.error, 'reports')
+      throwIf(automated.error, 'reports')
+      out.set(pid, { people: people.count ?? 0, automated: automated.count ?? 0 })
     }),
   )
   return out
@@ -417,7 +427,8 @@ export async function runOpsCommand(db: Db, cmd: OpsCommand, ctx: CommandContext
           lastRelease: last ? { title: last.title, at: last.occurred_at } : null,
           openAlerts: mine.length,
           urgentAlerts: mine.filter((a) => a.severity === 'urgent').length,
-          openBugs: bugs.get(app.id) ?? 0,
+          openBugs: bugs.get(app.id)?.people ?? 0,
+          openAutomated: bugs.get(app.id)?.automated ?? 0,
           ciFailuresToday: ci.filter((j) => j.project_id === app.id && j.ci_kind === 'code_failure').length,
           mutedUntil: mute?.until ?? null,
         }

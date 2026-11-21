@@ -2,7 +2,7 @@ import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { checkSummary, evidenceLine, listScreens, nextScreen, parseProposals, patternReproduces, readWorktreeFile, safePath, safeRegex, scriptReproduces, vetoed } from './audit.js'
+import { checkSummary, evidenceLine, listScreens, nextScreen, parseProposals, patternReproduces, proposePrompt, readWorktreeFile, recheckSweep, safePath, safeRegex, scriptReproduces, vetoed } from './audit.js'
 
 describe('which screens an audit reads', () => {
   it('page files first, never tests, stories or layouts', () => {
@@ -14,7 +14,7 @@ describe('which screens an audit reads', () => {
     expect(listScreens(['src/Button.tsx', 'src/Card.vue', 'src/util.ts'])).toEqual(['src/Button.tsx', 'src/Card.vue'])
   })
 
-  it('goes on where it stopped, and starts a polish pass when every screen is done', () => {
+  it('goes on where it stopped, and starts a new pass when every screen is done', () => {
     const screens = ['a.tsx', 'b.tsx']
     expect(nextScreen({ pass: 1, done: ['a.tsx'], pending: [] }, screens)).toMatchObject({ screen: 'b.tsx', state: { pass: 1 } })
     expect(nextScreen({ pass: 1, done: ['a.tsx', 'b.tsx'], pending: [] }, screens)).toMatchObject({ screen: 'a.tsx', state: { pass: 2, done: [] } })
@@ -25,6 +25,7 @@ describe('which screens an audit reads', () => {
 const proposal = (over: Record<string, unknown> = {}) => ({
   title: 'Save button has no accessible name',
   severity: 'medium',
+  confidence: 0.8,
   file: 'src/app/settings/page.tsx',
   line: 3,
   rule: 'Missing Label',
@@ -54,6 +55,28 @@ describe('what a model may propose', () => {
   it('keeps at most three, and returns nothing for prose', () => {
     expect(parseProposals(text([proposal(), proposal(), proposal(), proposal()]))).toHaveLength(3)
     expect(parseProposals('I found nothing concrete.')).toEqual([])
+    expect(parseProposals(text([]))).toEqual([])
+  })
+
+  // ADR 0063: 550 open findings from one sweep; a guess is not a finding.
+  it('drops a finding under the confidence floor, with no confidence, no user impact, or a severity the rubric does not name', () => {
+    expect(parseProposals(text([proposal({ confidence: 0.59 })]))).toEqual([])
+    expect(parseProposals(text([proposal({ confidence: undefined })]))).toEqual([])
+    expect(parseProposals(text([proposal({ confidence: '0.9' })]))).toEqual([])
+    expect(parseProposals(text([proposal({ user_impact: '' })]))).toEqual([])
+    expect(parseProposals(text([proposal({ severity: 'critical' })]))).toEqual([])
+    expect(parseProposals(text([proposal({ confidence: 0.6 })]))[0]).toMatchObject({ confidence: 0.6, severity: 'medium' })
+    expect(parseProposals(text([proposal({ confidence: 7 })]))[0]?.confidence).toBe(1)
+  })
+
+  it('asks for 0 to 3 findings, none when nothing matters, with a severity rubric and a confidence, and never a polish pass', () => {
+    const p = proposePrompt('app/pricing/page.tsx')
+    expect(p).toContain('Return 0 to 3 findings')
+    expect(p).toContain('Return none when nothing on this screen would matter to a real user')
+    expect(p).toMatch(/Severity: high = .*medium = .*low = /)
+    expect(p).toContain('"confidence":0.8')
+    expect(p).toContain('one fix there covers every screen')
+    expect(p).not.toMatch(/polish pass|rough edges/)
   })
 
   it('a repo path and a regex the worker will run are both bounded', () => {
@@ -126,5 +149,35 @@ describe('a model-named file is read once, inside the clone', () => {
     writeFileSync(join(outside, 'secret.json'), '{"key":"x"}')
     symlinkSync(join(outside, 'secret.json'), join(dir, 'link.ts'))
     expect(readWorktreeFile(join(dir, 'link.ts'))).toBeNull()
+  })
+})
+
+describe('the daily recheck (ADR 0063)', () => {
+  const summary = (s: string) => `What the user sees: x.\n\nReproduced by the worker with no model: pattern check, ${s}\nFound by the code-read audit of a on the local worker lane l.`
+  const files: Record<string, string> = { 'src/a.tsx': 'one\n<Button aria-label="Save" />\nthree' }
+  const read = (p: string) => files[p.replace(/\\/g, '/').replace(/^\/wt\//, '')] ?? null
+
+  it('reports each open finding as gone or still there, and sends back only deferred findings that still reproduce', () => {
+    const out = recheckSweep(
+      {
+        reports: [
+          { id: 'r1', status: 'classified', description: summary('/aria-label/ is absent in src/a.tsx near line 2') },
+          { id: 'r2', status: 'classified', description: summary('/aria-label/ is present in src/a.tsx near line 2') },
+        ],
+        deferred: [
+          { id: 'd1', finding: { check: { kind: 'pattern', summary: '/aria-label/ is present in src/a.tsx near line 2' } } as never },
+          { id: 'd2', finding: { check: { kind: 'pattern', summary: '/onClick/ is present in src/a.tsx near line 2' } } as never },
+          { id: 'd3', finding: { check: { kind: 'script', summary: '`lint` fails' } } as never },
+        ],
+      },
+      '/wt',
+      read,
+    )
+    expect(out.results).toEqual([
+      { reportId: 'r1', gone: true, reason: expect.stringContaining('no longer reproduces') },
+      { reportId: 'r2', gone: false, reason: '' },
+    ])
+    expect(out.refile.map((f) => f.check.summary)).toEqual(['/aria-label/ is present in src/a.tsx near line 2'])
+    expect(out.deferredGone).toEqual(['d2', 'd3'])
   })
 })

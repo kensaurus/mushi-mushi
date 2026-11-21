@@ -404,6 +404,8 @@ export function registerWorkspaceNavMetaRoutes(
     const countPaths = {
       fixesSummary: '/v1/admin/fixes/summary',
       untriagedReports: '/v1/admin/reports?status=new&limit=1',
+      // ADR 0063: Mushi's own checks counted apart, so the badge is what people reported.
+      untriagedChecks: '/v1/admin/reports?status=new&source=check&limit=1',
       notifications: '/v1/admin/notifications?unread=1&count_only=1',
       queue: '/v1/admin/queue/summary',
       flaggedDevices: '/v1/admin/anti-gaming/devices?flagged=true&count_only=1',
@@ -417,6 +419,7 @@ export function registerWorkspaceNavMetaRoutes(
       paths.push(
         countPaths.fixesSummary,
         countPaths.untriagedReports,
+        countPaths.untriagedChecks,
         countPaths.notifications,
         countPaths.queue,
         countPaths.flaggedDevices,
@@ -709,6 +712,9 @@ export function registerWorkspaceNavMetaRoutes(
       const at = (path: string | null) => (path ? byPath[path] ?? null : null)
       const fixes = at(countPaths.fixesSummary)
       const reports = at(countPaths.untriagedReports)
+      const checks = at(countPaths.untriagedChecks)
+      const untriagedAll = reports ? num(reports.total) ?? 0 : null
+      const untriagedChecks = checks ? num(checks.total) ?? 0 : null
       const notifications = at(countPaths.notifications)
       const queueByStatus = (at(countPaths.queue)?.byStatus ?? null) as JsonRecord | null
       const flagged = at(countPaths.flaggedDevices)
@@ -725,7 +731,9 @@ export function registerWorkspaceNavMetaRoutes(
         // T1 fix truth (_shared/fix-report-truth.ts via fixes/summary).
         fixesRetryable: fixes ? num(fixes.retryable) ?? 0 : null,
         prsOpen: fixes ? num(fixes.prsOpen) ?? 0 : null,
-        untriagedBacklog: reports ? num(reports.total) ?? 0 : null,
+        // From people and production only; the checks' share is its own number (null when unread).
+        untriagedBacklog: untriagedAll === null ? null : Math.max(0, untriagedAll - (untriagedChecks ?? 0)),
+        untriagedAutomated: untriagedChecks,
         notificationsUnread: notifications ? num(notifications.unread_count) ?? 0 : null,
         queueFailed: queueByStatus
           ? (num(queueByStatus.dead_letter) ?? 0) + (num(queueByStatus.failed) ?? 0)
