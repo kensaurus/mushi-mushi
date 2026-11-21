@@ -88,10 +88,15 @@ Two references show the intended shape:
      does not count toward the hourly cap (`code_audit_keys.merged`).
    - The old file + rule + evidence-hash key stays, so an exact replay is still a
      duplicate.
-3. **An `absent` check follows the wrappers.** The worker resolves the imported
-   components whose element encloses the cited line. If one of their files has the
-   missing pattern, the finding is not filed. A recheck closes it for the same
-   reason (`absentHeldByWrapper`).
+3. **An `absent` check follows the wrappers, and a wrapper never closes a
+   finding.** The worker resolves the imported components whose element encloses
+   the cited line (`absentHeldByWrapper`). When one of their files has the missing
+   pattern, the finding is still filed, rooted at that wrapper. A recheck keeps it
+   open and re-roots it there the same way. Having the attribute is not doing the
+   job: glot's `RouteLoadingShell` has `aria-live`, but its region stays empty
+   until a 10 s timeout, so a screen reader hears nothing while the page loads.
+   Every such screen collapses into one report on the shell. (Decided by
+   team-lead on 2026-11-21, after a first version closed them as fixed.)
 4. **Grouping that merges.**
    - An automated report that matches an open report of the same app becomes its
      duplicate child: `dismissed`, `closed_reason = 'duplicate'`,
@@ -119,11 +124,9 @@ Two references show the intended shape:
      (`GET /v1/worker/claims/:id/recheck`), then runs each one's own check on the
      default branch, wrappers included. It posts the verdicts with the commit sha
      (`POST …/recheck`).
-     - A finding that no longer reproduces is closed as `fixed`, with
-       `custom_metadata.resolution {kind, sha, base}` and a team note (Sentry's
-       Resolved). The kind is `recheck_not_reproduced`, or
-       `recheck_wrapper_has_pattern` when only a wrapper has what the check
-       wanted.
+     - A finding whose own check no longer reproduces is closed as `fixed`, with
+       `custom_metadata.resolution {kind: 'recheck_not_reproduced', sha, base}`
+       and a team note (Sentry's Resolved).
      - The recheck is recorded as done when the claim is handed out, so a worker
        that never posts one cannot get a pass on every claim.
      - A rejected fix that still reproduces goes back to `classified` once. After
@@ -161,19 +164,42 @@ Two references show the intended shape:
 functions ran read-only over the 550 open reports, on each repository's
 `origin/main`:
 
-- 46 would close as fixed. 29 of those close only because a wrapper around the
-  line has the attribute (27 glot loading screens). See Consequences: that live
-  region is empty while loading.
+- 17 would close as fixed, because their own check no longer reproduces.
 - 118 are `present` checks whose code moved away from the cited line but is still
   in the file. 3 more point at files no longer on main. The agent decides on all
   of these.
-- The rest collapse into 420 pattern parents. 44 patterns hold more than one
-  report, and 84 reports would join a parent.
+- The rest collapse into 424 pattern parents. 45 patterns hold more than one
+  report, and 109 reports would join a parent.
+- glot's 26 loading screens inside `RouteLoadingShell` become one parent rooted
+  at the shell, with the 26 screens in `affected_screens`.
+- `mushi work --collapse-backlog` would close 90 reports as duplicates into 43
+  parents (glot 76, Solo Boss 12, tsumagoi 2). 21 glot reports in those patterns
+  are in `fixing`, with a live PR, so they stay open; 2 patterns hold nothing
+  but such reports and are left alone. Open code-audit reports would go from
+  550 to 533 after the recheck, and to 443 after the collapse.
 
 The full numbers and ids are in the PR, not in this ADR. The collapse is modest:
 most of the 312 "repeated" findings sit in per-page files that share no
 component. They are the same kind of problem, but not one fix. With a cap of 25
-per app, 75 would stay open and 345 would wait as deferred findings.
+per app, 75 would stay open and the rest would wait as deferred findings.
+
+## Collapsing the reports filed before this ADR
+
+`mushi work --collapse-backlog [--apply] [--collapse-tag collapse_YYYY_MM_DD]` is
+a one-shot. It groups an app's open code-audit reports on a worktree at the
+default branch (`planBacklog`, `collapseGroups`), then posts the groups to
+`POST /v1/admin/work/code-audit/collapse`. That is a dry run unless `--apply` is
+given.
+
+- Each group's children become `dismissed` / `duplicate` with
+  `parent_report_id`.
+- The parent gets the pattern key, the screens, and a title naming the shared
+  root.
+- A report in `fixing` is never closed; when a pattern has one, it is the parent.
+- Every changed row records what it was in `custom_metadata.collapse {tag, role,
+  from_status | prev_*}`. One UPDATE on the tag (`collapseRevertSql`, printed on
+  every run) reverts it.
+- A second run changes nothing already collapsed.
 
 ## Consequences
 
@@ -186,17 +212,10 @@ per app, 75 would stay open and 345 would wait as deferred findings.
 - The taxonomy is a regex table. A category it misreads only changes which parent
   a finding joins, never whether it is filed. The table and its tests are the
   place to correct it.
-- **The wrapper rule is only as good as the check's regex, and this is an open owner decision.**
-  - A wrapper that has the attribute counts as having the behaviour. glot's
-    `RouteLoadingShell` has `aria-live`, but its live region stays empty until a
-    10 s timeout. A screen reader still hears nothing while the page loads.
-  - The worker drops a new finding like that before filing it, so the problem
-    cannot come back as a regression either.
-  - Closes made this way carry their own resolution kind,
-    `recheck_wrapper_has_pattern`. One query finds them, and reopening them
-    reverses the rule.
-  - The fix for the shell itself (announce while loading, not only on timeout)
-    is a code change in the app, not in the audit.
+- A wrapper-rooted parent says where the fix goes, not what is wrong with the
+  wrapper: the check only proves the per-screen markup is missing. Its title
+  comes from the category ("Screen readers hear nothing while it loads in
+  components/route-loading-shell.tsx (26 screens)"); a person can sharpen it.
 - **An older worker against this server.**
   - It never posts the recheck, so the claim records the recheck as handed out.
     An app at its cap then gets at most one pass per 20 h, not one per claim.
@@ -214,6 +233,6 @@ per app, 75 would stay open and 345 would wait as deferred findings.
   lists. The existing statuses plus metadata say the same thing.
 - **Auto-closing a person's report as a duplicate.** At a 0.82 match, a widget
   report would close under a bot's finding, and its reporter would be told so.
-- **One parent per category per app.** That would give 120 parents instead of 420,
+- **One parent per category per app.** That would give 120 parents instead of 424,
   but it would merge unrelated bugs that need different fixes. A category is not a
   root cause.

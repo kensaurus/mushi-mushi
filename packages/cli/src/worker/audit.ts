@@ -14,9 +14,10 @@
  *               scripts (lint, typecheck, test, check). Never a command the
  *               model writes. Below AUDIT_MIN_CONFIDENCE it is dropped.
  *            2. The worker runs the check itself, with no model: the quote
- *               must be on that line (±2), and the check must reproduce. An
- *               `absent` check also fails when a shared wrapper around the
- *               line already has what is missing (audit-patterns.ts).
+ *               must be on that line (±2), and the check must reproduce. When
+ *               an `absent` pattern is found in a shared wrapper around the
+ *               line, the finding still files, rooted at that wrapper: having
+ *               the attribute is not doing the job (ADR 0065).
  *            3. A second model (the lane's review model, when set) may only
  *               veto a reproduced finding. No answer counts as a veto.
  *            4. A reproduced, unvetoed finding goes to the server with its
@@ -167,7 +168,7 @@ export function nextScreen(state: AuditState, screens: readonly string[]): { scr
 export function proposePrompt(screen: string): string {
   return `You are auditing one screen of this app as its most careful user. Screen file: ${screen}. Read it and only the files it imports directly (at most 8 files); do not explore the rest of the repo and do not run commands. Answer within a few minutes.
 Return 0 to ${MAX_FINDINGS_PER_SCREEN} findings. Return none when nothing on this screen would matter to a real user: an empty list is the usual, correct answer, and there is no quota. A finding must be a CONCRETE bug a real user of this screen hits: wrong or missing data, text in the wrong language, numbers that contradict each other, a broken empty, loading or error state, a control that does nothing, text that overflows, missing feedback after an action, an accessibility gap (unlabelled control, tiny target, contrast).
-Before you report a missing attribute or state, check the components this screen renders around that line: a shared wrapper that already provides it means there is no bug.
+When the problem lives in a shared component this screen renders (a wrapper, a layout, a primitive), say so in user_impact: one fix there covers every screen.
 Severity: high = a user loses data, money or access, or cannot finish the screen's main task; medium = a user sees wrong information or is blocked from a secondary task; low = a user is confused or slowed, with a way around it.
 Confidence: how sure you are, from 0 to 1, that a real user hits this as you describe it. Below 0.6, leave it out.
 A program checks every finding before anyone sees it, with no model, and drops what it cannot reproduce:
@@ -366,13 +367,13 @@ interface RecheckList {
  * the free slots are checked the same way and come back to be filed.
  */
 export function recheckSweep(list: RecheckList, wt: string, readFile: (path: string) => string | null = readWorktreeFile): {
-  results: Array<{ reportId: string; gone: boolean; reason: string; via?: 'wrapper' }>
+  results: Array<{ reportId: string; gone: boolean; reason: string }>
   refile: FindingBody[]
   deferredGone: string[]
 } {
   const results = list.reports.map((r) => {
     const res = recheckReport({ source: 'code_audit', description: r.description }, wt, readFile)
-    return { reportId: r.id, gone: res.gone, reason: res.reason ?? '', ...(res.gone && res.via ? { via: res.via } : {}) }
+    return { reportId: r.id, gone: res.gone, reason: res.reason ?? '' }
   })
   const refile: FindingBody[] = []
   const deferredGone: string[] = []
@@ -444,6 +445,8 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
     await clearWorktree(o.repoDir, wt)
     await git(o.repoDir, ['worktree', 'add', '--detach', wt, `refs/remotes/origin/${base}`])
     let swept = ''
+    /** Findings whose missing pattern is in a shared wrapper around the line: rooted there (ADR 0065). */
+    const wrapperRoot = new Map<Proposal, string>()
     if (o.recheck) {
       const list = await api<RecheckList>(`/v1/worker/claims/${claimId}/recheck`)
       const sweep = recheckSweep(list, wt)
@@ -487,14 +490,14 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
       if (p.check.kind === 'pattern') {
         const checked = readWorktreeFile(join(wt, p.check.file))
         ok = checked !== null && patternReproduces(checked, p.check)
-        // An `absent` problem a shared wrapper around the line already solves is no problem (ADR 0063).
+        // The pattern sits in a shared wrapper around the line: the wrapper is where the fix goes (ADR 0065).
         if (ok && checked !== null && p.check.expect === 'absent') {
           const re = safeRegex(p.check.regex, p.check.ignoreCase)
           const readRel = (f: string) => readWorktreeFile(join(wt, f))
           const held = re ? absentHeldByWrapper(p.check.file, checked, p.check.line, re, readRel, (f) => readRel(f) !== null) : null
           if (held) {
-            o.log(`  audit: dropped ${p.file}:${evidence.line}: ${held} around it already has /${p.check.regex}/`)
-            ok = false
+            o.log(`  audit: ${p.file}:${evidence.line} is rooted at ${held}, which wraps it and has /${p.check.regex}/ without doing the job`)
+            wrapperRoot.set(p, held)
           }
         }
       } else if (scriptRuns < 1) {
@@ -528,7 +531,7 @@ export async function auditPass(api: Api, claimId: string, o: AuditRunOptions): 
         proposedBy: o.model ?? null,
         vetoBy: o.reviewModel,
         confidence: p.confidence,
-        rootFile: patternRoot(p.file, evidence.text, source, (f) => readWorktreeFile(join(wt, f)), (f) => readWorktreeFile(join(wt, f)) !== null),
+        rootFile: wrapperRoot.get(p) ?? patternRoot(p.file, evidence.text, source, (f) => readWorktreeFile(join(wt, f)), (f) => readWorktreeFile(join(wt, f)) !== null),
       }
       if (o.reviewModel) {
         const v = await ask(o.reviewModel, vetoPrompt(body))

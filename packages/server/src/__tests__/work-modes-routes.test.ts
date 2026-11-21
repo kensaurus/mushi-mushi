@@ -556,7 +556,7 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
         sha: 'abc1234def',
         base: 'main',
         results: [
-          { reportId: R(1), gone: true, via: 'wrapper', reason: 'the shared component components/route-loading-shell.tsx already has /aria-live/' },
+          { reportId: R(1), gone: true, reason: 'its own check no longer reproduces: /aria-live/ is not absent in app/a/loading.tsx near line 7' },
           { reportId: R(2), gone: false, reason: '' },
           { reportId: R(3), gone: true, reason: 'not mine to close' },
           { reportId: R(4), gone: true, reason: 'a person reported it' },
@@ -566,8 +566,7 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
     })
     expect(write.body.data).toEqual({ closed: 1, requeued: 1, deferredDropped: 1 })
     const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
-    // A wrapper close is its own kind, so it can be found and reversed in one query.
-    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_wrapper_has_pattern', sha: 'abc1234def', base: 'main' } } })
+    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_not_reproduced', sha: 'abc1234def', base: 'main' } } })
     expect(byId(R(2))).toMatchObject({ status: 'classified', custom_metadata: { fix_rejected: { count: 1, rechecked: { sha: 'abc1234def' } } } })
     expect([byId(R(3)).status, byId(R(4)).status]).toEqual(['fixing', 'classified'])
     expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
@@ -584,5 +583,62 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
     expect((await bad({ sha: 'not a sha', base: 'main', results: [] })).status).toBe(400)
     expect((await bad({ sha: 'abc1234', base: 'main; rm -rf', results: [] })).status).toBe(400)
     expect((await bad({ sha: 'abc1234', base: 'main', results: [{ reportId: R(1), gone: true, reason: '' }] })).status).toBe(400)
+  })
+})
+
+describe('mushi work --collapse-backlog routes (ADR 0065)', () => {
+  const base = { project_id: P1, source: 'code_audit', parent_report_id: null, severity: 'medium', description: 'd', created_at: '2026-10-29T00:00:00Z', closed_reason: null }
+  const seed = () => ({
+    reports: [
+      { ...base, id: R(1), status: 'classified', title: 'Pricing loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(2), status: 'triaged', title: 'Learn loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(3), status: 'fixing', title: 'Chat loading is silent', custom_metadata: { rule: 'r' } },
+      { ...base, id: R(4), status: 'classified', title: 'A person wrote this', source: 'widget' },
+      { ...base, id: R(5), status: 'classified', title: 'Another app', project_id: '1000000b-0000-4000-8000-000000000000' },
+    ],
+  })
+  const group = { parentId: R(1), patternKey: 'a11y-loading-silent:components/route-loading-shell.tsx', title: 'Screen readers hear nothing while it loads in components/route-loading-shell.tsx (5 screens)', screens: [{ screen: 'app/learn/loading.tsx', file: 'app/learn/loading.tsx', line: 5, title: 't', at: '2026-10-29T00:00:00Z' }], childIds: [R(2), R(3), R(4), R(5)] }
+  const post = (s: ReturnType<typeof setup>, body: Record<string, unknown>) => s.app.call('POST', '/v1/admin/work/code-audit/collapse', { body: { projectId: P1, tag: 'collapse_2026_11_21', groups: [group], ...body } })
+
+  it('lists the open code-audit reports of the app with their metadata', async () => {
+    const s = setup(seed())
+    const res = await s.app.call('GET', '/v1/admin/work/code-audit/backlog', { query: { projectId: P1 } })
+    expect(res.body.data.reports.map((r: { id: string }) => r.id)).toEqual([R(1), R(2), R(3)])
+    expect(res.body.data.reports[0]).toHaveProperty('custom_metadata')
+  })
+
+  it('without apply only counts; nothing changes', async () => {
+    const s = setup(seed())
+    const res = await post(s, {})
+    // R(3) has a live PR, R(4) is a person's report, R(5) is another app's: none of them is closed.
+    expect(res.body.data).toMatchObject({ applied: false, before: 3, after: 2, groups: 1, children: 1, skipped: 3 })
+    expect(s.db.table('reports').filter((r) => r.status === 'dismissed')).toHaveLength(0)
+  })
+
+  it('with apply closes the children as duplicates, tags every row with what it was, and running it again changes nothing', async () => {
+    const s = setup(seed())
+    const res = await post(s, { apply: true })
+    expect(res.body.data).toMatchObject({ applied: true, before: 3, after: 2, groups: 1, children: 1 })
+    const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
+    expect(byId(R(2))).toMatchObject({ status: 'dismissed', closed_reason: 'duplicate', parent_report_id: R(1), custom_metadata: { rule: 'r', collapse: { tag: 'collapse_2026_11_21', role: 'child', from_status: 'triaged', from_closed_reason: null, parent: R(1) } } })
+    expect(byId(R(1))).toMatchObject({
+      status: 'classified',
+      pattern_key: group.patternKey,
+      title: group.title,
+      affected_screens: [expect.objectContaining({ file: 'app/learn/loading.tsx' })],
+      custom_metadata: { collapse: { tag: 'collapse_2026_11_21', role: 'parent', children: 1, prev_title: 'Pricing loading is silent', prev_pattern_key: null, prev_affected_screens: null } },
+    })
+    expect([byId(R(3)).status, byId(R(4)).status, byId(R(5)).status]).toEqual(['fixing', 'classified', 'classified'])
+    const again = await post(s, { apply: true })
+    expect(again.body.data).toMatchObject({ before: 2, after: 2, children: 0 })
+    // The parent keeps what it was before the first run.
+    expect(byId(R(1)).custom_metadata).toMatchObject({ collapse: { prev_title: 'Pricing loading is silent', children: 1 } })
+  })
+
+  it('refuses a bad tag, a bad parent id and a group with no children', async () => {
+    const s = setup(seed())
+    expect((await post(s, { tag: 'collapse; drop' })).status).toBe(400)
+    expect((await post(s, { groups: [{ ...group, parentId: 'x' }] })).status).toBe(400)
+    expect((await post(s, { groups: [{ ...group, childIds: [] }] })).status).toBe(400)
   })
 })

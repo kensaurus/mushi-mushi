@@ -62,15 +62,19 @@ export function parseAuditCheck(description: string | null | undefined): ParsedA
   return { kind: 'pattern', regex: m[1]!, ignoreCase, expect: m[3] as 'present' | 'absent', file, line: m[5] ? Number(m[5]) : null }
 }
 
-/** `via: 'wrapper'` when only a shared wrapper around the line has what the check wanted (ADR 0063): kept apart so it can be reversed. */
-type Recheck = { gone: true; reason: string; via?: 'wrapper' } | { gone: false; reason: string | null }
+/**
+ * `root`: the problem is still there, and a shared wrapper around the cited line
+ * has what the check wanted, so the one fix belongs in that wrapper (ADR 0065).
+ */
+type Recheck = { gone: true; reason: string } | { gone: false; reason: string | null; root?: string }
 
 /**
  * Does the report's own check still reproduce in `worktree`? `gone: true`
  * only when it is a code-audit report with a readable check, the file is
- * there, and the check no longer holds. An `absent` problem is also gone when
- * a shared wrapper around the cited line already has what was missing
- * (ADR 0063: glot's loading screens inside RouteLoadingShell).
+ * there, and the check no longer holds. A wrapper around the cited line that
+ * has the missing pattern never makes it gone (ADR 0065: glot's
+ * RouteLoadingShell has aria-live, and its region stays empty until a 10 s
+ * timeout): the problem is re-rooted at that wrapper instead.
  */
 export function recheckReport(detail: { source?: string | null; description?: string | null }, worktree: string, readFile: (path: string) => string | null = readWorktreeFile): Recheck {
   if (detail.source !== 'code_audit') return { gone: false, reason: null }
@@ -84,9 +88,7 @@ export function recheckReport(detail: { source?: string | null; description?: st
     if (check.expect === 'absent') {
       const re = safeRegex(check.regex, check.ignoreCase)
       const wrapper = re ? absentHeldByWrapper(check.file, text, check.line, re, readRel, (p) => readRel(p) !== null) : null
-      if (wrapper) {
-        return { gone: true, via: 'wrapper', reason: `the shared component ${wrapper} that wraps line ${check.line} of ${check.file} already has /${check.regex}/${check.ignoreCase ? 'i' : ''}` }
-      }
+      if (wrapper) return { gone: false, reason: null, root: wrapper }
     }
     return { gone: false, reason: null }
   }
@@ -135,7 +137,7 @@ export interface BacklogPattern {
 
 export interface BacklogPlan {
   checked: number
-  gone: Array<{ reportId: string; severity: string | null; reason: string; via?: 'wrapper' }>
+  gone: Array<{ reportId: string; severity: string | null; reason: string }>
   stillThere: number
   unclear: number
   /** Every pattern the reports still there fall into, biggest first. */
@@ -162,7 +164,7 @@ export function planBacklog(rows: readonly BacklogRow[], worktree: string, readF
     plan.checked++
     const res = recheckReport(r, worktree, readFile)
     if (res.gone) {
-      plan.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason, ...(res.via ? { via: res.via } : {}) })
+      plan.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason })
       continue
     }
     if (res.reason) plan.unclear++
@@ -172,7 +174,7 @@ export function planBacklog(rows: readonly BacklogRow[], worktree: string, readF
     const rule = r.custom_metadata?.rule ?? ''
     const evidence = descField(r.description, 'The code there')
     const category = auditCategory({ rule, title: r.title ?? r.summary ?? '', userImpact: descField(r.description, 'What the user sees') })
-    const root = file ? patternRoot(file, evidence, readRel(file), readRel, (p) => readRel(p) !== null) : `report:${r.id}`
+    const root = res.root ?? (file ? patternRoot(file, evidence, readRel(file), readRel, (p) => readRel(p) !== null) : `report:${r.id}`)
     const key = r.custom_metadata?.pattern_key ?? auditPatternKey(category, root, rule || r.id)
     const g = byKey.get(`${r.project_id ?? ''}|${key}`) ?? { category, root, rows: [], screens: new Set<string>() }
     g.rows.push(r)
@@ -200,4 +202,84 @@ export function verdictCommits(reason: string): string[] {
 /** The team note left on a report closed by a recheck. */
 export function goneNote(reason: string, baseRef: string, sha: string | null): string {
   return `Closed by mushi work without an agent run: ${reason} (checked on ${baseRef}${sha ? ` at ${sha.slice(0, 9)}` : ''}). Reopen it if the problem is still there.`.slice(0, 4000)
+}
+
+// ── The one-shot collapse of the backlog filed before ADR 0065 ─────────────
+
+/** What a pattern parent is called once its screens are folded into it. */
+const CATEGORY_TITLES: Record<string, string> = {
+  'a11y-loading-silent': 'Screen readers hear nothing while it loads',
+  'offline-state': 'Offline state is wrong',
+  'error-state': 'A failed load is hidden or shown as something else',
+  'loading-state': 'Loading shows a blank or wrong screen',
+  untranslated: 'Text is not translated',
+  contrast: 'Text or icons are too faint to read',
+  overflow: 'Text is cut off or overflows',
+  'control-hard-to-use': 'A control is too small or hard to reach',
+  'control-does-nothing': 'A control does nothing',
+  'a11y-name': 'Screen readers get no name or the wrong one',
+  'hydration-shift': 'Content pops in and shifts after load',
+  'reduced-motion': 'Motion ignores reduced motion',
+  'wrong-number': 'A number or count is wrong',
+  'date-time': 'A date or time is wrong',
+  'stale-state': 'The screen keeps stale data',
+}
+
+export interface CollapseGroupPlan {
+  parentId: string
+  patternKey: string
+  /** A title naming the shared root, when the parent stands for more than its own file. */
+  title: string | null
+  screens: Array<{ screen: string; file: string; line: number; title: string; at: string }>
+  childIds: string[]
+}
+
+/**
+ * The groups `mushi work --collapse-backlog` sends: every pattern with two or more open reports. A report in `fixing`
+ * (a live PR) is never a child; when a pattern has one, it is the parent, so
+ * its PR stands for the pattern. Otherwise the plan's parent (most severe, then
+ * oldest) stays.
+ */
+export function collapseGroups(plan: BacklogPlan, rows: readonly BacklogRow[]): CollapseGroupPlan[] {
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  const out: CollapseGroupPlan[] = []
+  for (const p of plan.patterns) {
+    if (p.reportIds.length < 2) continue
+    const members = p.reportIds.map((id) => byId.get(id)).filter((r): r is BacklogRow => !!r)
+    const parent = members.find((r) => r.status === 'fixing') ?? byId.get(p.parentId)
+    if (!parent) continue
+    const childIds = members.filter((r) => r.id !== parent.id && r.status !== 'fixing').map((r) => r.id)
+    if (childIds.length === 0) continue
+    const screens = members.flatMap((r) => {
+      const where = /^(.+):(\d+)$/.exec(descField(r.description, 'Where'))
+      const file = r.custom_metadata?.file ?? where?.[1]
+      const line = r.custom_metadata?.line ?? (where ? Number(where[2]) : null)
+      const screen = /code-read audit of (\S+?) on the local/.exec(r.description ?? '')?.[1] ?? file
+      return file && screen && line ? [{ screen, file, line, title: (r.title ?? '').slice(0, 200), at: r.created_at ?? '' }] : []
+    })
+    const parentFile = parent.custom_metadata?.file ?? null
+    const label = CATEGORY_TITLES[p.category]
+    const title = label && p.root !== parentFile && !p.root.startsWith('report:') ? `${label} in ${p.root} (${members.length} screens)`.slice(0, 200) : null
+    out.push({ parentId: parent.id, patternKey: p.key, title, screens, childIds })
+  }
+  return out
+}
+
+/**
+ * The one UPDATE that undoes a collapse run: every row it changed carries
+ * custom_metadata.collapse with what it was before. Run it in the SQL editor.
+ */
+export function collapseRevertSql(tag: string): string {
+  const c = "custom_metadata->'collapse'"
+  return [
+    'update public.reports set',
+    `  status = coalesce(${c}->>'from_status', status),`,
+    `  closed_reason = case when ${c}->>'role' = 'child' then ${c}->>'from_closed_reason' else closed_reason end,`,
+    `  parent_report_id = case when ${c}->>'role' = 'child' then null else parent_report_id end,`,
+    `  title = case when ${c}->>'role' = 'parent' then coalesce(${c}->>'prev_title', title) else title end,`,
+    `  pattern_key = case when ${c}->>'role' = 'parent' then ${c}->>'prev_pattern_key' else pattern_key end,`,
+    `  affected_screens = case when ${c}->>'role' = 'parent' then nullif(${c}->'prev_affected_screens', 'null'::jsonb) else affected_screens end,`,
+    "  custom_metadata = custom_metadata - 'collapse'",
+    `where source = 'code_audit' and ${c}->>'tag' = '${tag.replace(/[^a-z0-9_]/g, '')}';`,
+  ].join('\n')
 }

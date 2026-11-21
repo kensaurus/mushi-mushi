@@ -75,7 +75,7 @@ describe('what a model may propose', () => {
     expect(p).toContain('Return none when nothing on this screen would matter to a real user')
     expect(p).toMatch(/Severity: high = .*medium = .*low = /)
     expect(p).toContain('"confidence":0.8')
-    expect(p).toContain('shared wrapper')
+    expect(p).toContain('one fix there covers every screen')
     expect(p).not.toMatch(/polish pass|rough edges/)
   })
 

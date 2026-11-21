@@ -309,8 +309,7 @@ export async function recheckList(db: Db, projectId: string): Promise<{ reports:
 export interface RecheckBody {
   sha: string
   base: string
-  /** `via: 'wrapper'`: only a shared wrapper around the line has what the check wanted; closed as its own kind so it can be reversed. */
-  results: Array<{ reportId: string; gone: boolean; reason: string; via: 'own_check' | 'wrapper' }>
+  results: Array<{ reportId: string; gone: boolean; reason: string }>
   /** Deferred findings whose check no longer reproduces on the default branch. */
   deferredGone: string[]
 }
@@ -331,7 +330,7 @@ export function parseRecheckBody(raw: unknown): { ok: true; value: RecheckBody }
     if (!r || typeof r.reportId !== 'string' || !UUID.test(r.reportId) || typeof r.gone !== 'boolean') return { ok: false, message: 'Each result needs reportId and gone.' }
     const reason = typeof r.reason === 'string' ? r.reason.replace(CONTROL, ' ').trim().slice(0, 600) : ''
     if (r.gone && reason.length < 3) return { ok: false, message: 'A gone result needs its reason.' }
-    results.push({ reportId: r.reportId, gone: r.gone, reason, via: r.via === 'wrapper' ? 'wrapper' : 'own_check' })
+    results.push({ reportId: r.reportId, gone: r.gone, reason })
   }
   const deferredGone = Array.isArray(b.deferredGone) ? (b.deferredGone as unknown[]).filter((x): x is string => typeof x === 'string' && UUID.test(x)).slice(0, 500) : []
   return { ok: true, value: { sha: b.sha, base: b.base, results, deferredGone } }
@@ -367,7 +366,7 @@ export async function applyRecheck(
     if (res.gone) {
       const { data: moved } = await db
         .from('reports')
-        .update({ status: 'fixed', fixed_at: nowIso, updated_at: nowIso, custom_metadata: { ...meta, resolution: { kind: res.via === 'wrapper' ? 'recheck_wrapper_has_pattern' : 'recheck_not_reproduced', reason: res.reason, ...rechecked } } })
+        .update({ status: 'fixed', fixed_at: nowIso, updated_at: nowIso, custom_metadata: { ...meta, resolution: { kind: 'recheck_not_reproduced', reason: res.reason, ...rechecked } } })
         .eq('id', r.id)
         .eq('status', r.status)
         .select('id')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { goneNote, parseAuditCheck, planBacklog, recheckReport, verdictCommits } from './work-recheck.js'
+import { collapseGroups, collapseRevertSql, goneNote, parseAuditCheck, planBacklog, recheckReport, verdictCommits } from './work-recheck.js'
 
 /** The description shape the server writes for a code-audit finding (_shared/work-modes.ts). */
 const desc = (summary: string) =>
@@ -104,10 +104,25 @@ describe('a shared wrapper holds what an absent check missed (ADR 0063)', () => 
   }
   const at = (file: string, line: number) => ({ source: 'code_audit', description: desc(`/aria-busy|aria-live|role="status"/ is absent in ${file} near line ${line}`) })
 
-  it('pricing is gone: the shell around line 5 has the live region', () => {
-    const r = recheckReport(at('app/pricing/loading.tsx', 5), '/wt', tree(files))
-    expect(r).toMatchObject({ gone: true, via: 'wrapper' })
-    expect(r.reason).toContain('components/route-loading-shell.tsx')
+  // ADR 0065: the shell has aria-live, and its region stays empty until a 10 s timeout. Having the attribute is not the fix.
+  it('pricing is never closed by the shell having the pattern: it is re-rooted at the shell', () => {
+    expect(recheckReport(at('app/pricing/loading.tsx', 5), '/wt', tree(files))).toEqual({ gone: false, reason: null, root: 'components/route-loading-shell.tsx' })
+  })
+
+  it('every screen inside the shell collapses into one parent rooted at the shell', () => {
+    const shellFiles = { ...files, 'app/learn/loading.tsx': files['app/pricing/loading.tsx']!.replace('Pricing', 'Learn') }
+    const row = (id: string, file: string) => ({
+      id,
+      source: 'code_audit',
+      status: 'classified',
+      severity: 'medium',
+      title: 'Screen reader hears nothing while it loads',
+      custom_metadata: { rule: 'loading-status-missing', file, line: 5 },
+      description: `Where: ${file}:5\nThe code there: <h1 className="sr-only">x</h1>\nWhat the user sees: A screen reader hears nothing while it loads.\n\nReproduced by the worker with no model: pattern check, /aria-busy|aria-live|role="status"/ is absent in ${file} near line 5\nFound by the code-read audit of ${file} on the local worker lane glot-audit.`,
+    })
+    const plan = planBacklog([row('p', 'app/pricing/loading.tsx'), row('l', 'app/learn/loading.tsx')], '/wt', tree(shellFiles))
+    expect(plan.gone).toEqual([])
+    expect(plan.patterns).toEqual([expect.objectContaining({ key: 'a11y-loading-silent:components/route-loading-shell.tsx', reportIds: ['p', 'l'], screens: ['app/learn/loading.tsx', 'app/pricing/loading.tsx'] })])
   })
 
   it('chat is still there: nothing wraps it', () => {
@@ -167,5 +182,67 @@ describe('planBacklog: what a recheck would close and how the rest collapse', ()
     // The most severe is the parent.
     expect(loading).toMatchObject({ parentId: 'r2', reportIds: ['r2', 'r1'], screens: ['app/a/loading.tsx', 'app/b/loading.tsx'] })
     expect([plan.remaining, plan.collapsed]).toEqual([2, 1])
+  })
+})
+
+describe('collapseGroups and its revert (mushi work --collapse-backlog)', () => {
+  const shell = ['export function RouteLoadingShell({ children }) {', '  return <>{children}<div role="alert" aria-live="assertive" /></>', '}'].join('\n')
+  const page = (name: string) =>
+    [
+      'import { RouteLoadingShell } from "@/components/route-loading-shell"',
+      'export default function L() {',
+      '  return (',
+      '    <RouteLoadingShell>',
+      `      <h1 className="sr-only">${name}</h1>`,
+      '    </RouteLoadingShell>',
+      '  )',
+      '}',
+    ].join('\n')
+  const files = { 'components/route-loading-shell.tsx': shell, 'app/a/loading.tsx': page('A'), 'app/b/loading.tsx': page('B'), 'app/c/loading.tsx': page('C') }
+  const row = (id: string, file: string, status: string, severity = 'medium') => ({
+    id,
+    source: 'code_audit',
+    status,
+    severity,
+    title: `Screen reader hears nothing while ${id} loads`,
+    created_at: '2026-10-29T06:00:00Z',
+    custom_metadata: { rule: 'loading-status-missing', file, line: 5 },
+    description: [
+      `Where: ${file}:5`,
+      'The code there: <h1 className="sr-only">x</h1>',
+      'What the user sees: A screen reader hears nothing while it loads.',
+      '',
+      `Reproduced by the worker with no model: pattern check, /aria-busy|aria-live|role="status"/ is absent in ${file} near line 5`,
+      `Found by the code-read audit of ${file} on the local worker lane glot-audit.`,
+    ].join('\n'),
+  })
+
+  it('one group per pattern; a report with a live PR is the parent and never a child; the title names the shared root', () => {
+    const rows = [row('a', 'app/a/loading.tsx', 'classified', 'high'), row('b', 'app/b/loading.tsx', 'fixing'), row('c', 'app/c/loading.tsx', 'triaged')]
+    const groups = collapseGroups(planBacklog(rows, '/wt', tree(files)), rows)
+    expect(groups).toEqual([
+      {
+        parentId: 'b',
+        patternKey: 'a11y-loading-silent:components/route-loading-shell.tsx',
+        title: 'Screen readers hear nothing while it loads in components/route-loading-shell.tsx (3 screens)',
+        screens: expect.arrayContaining([expect.objectContaining({ screen: 'app/a/loading.tsx', file: 'app/a/loading.tsx', line: 5 })]),
+        childIds: ['a', 'c'],
+      },
+    ])
+    expect(groups[0]!.screens).toHaveLength(3)
+  })
+
+  it('a pattern of one report leaves nothing to close', () => {
+    const one = [row('a', 'app/a/loading.tsx', 'classified')]
+    expect(collapseGroups(planBacklog(one, '/wt', tree(files)), one)).toEqual([])
+  })
+
+  it('the revert is one UPDATE on the tag that restores every field the collapse wrote', () => {
+    const sql = collapseRevertSql('collapse_2026_11_21')
+    expect(sql.match(/^update public\.reports set/gm)).toHaveLength(1)
+    for (const col of ['status', 'closed_reason', 'parent_report_id', 'title', 'pattern_key', 'affected_screens', 'custom_metadata']) expect(sql).toMatch(new RegExp(`^  ${col} = `, 'm'))
+    expect(sql).toContain("where source = 'code_audit' and custom_metadata->'collapse'->>'tag' = 'collapse_2026_11_21';")
+    // A tag can never break out of its quotes.
+    expect(collapseRevertSql("collapse_x'; drop table reports; --")).toContain("= 'collapse_xdroptablereports';")
   })
 })

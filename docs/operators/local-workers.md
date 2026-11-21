@@ -129,8 +129,9 @@ folders) of the default branch, in a worktree under `~/.cache/mushi/audit/`:
    it, what the user sees, a severity, a confidence (under 0.6 is dropped) and
    a check: a pattern near that line, or one of the repo's own `lint`,
    `typecheck`, `test` or `check` scripts that must fail and name the file.
-2. The machine runs each check itself, with no model. A "missing" check also
-   fails when a shared component around the line already has what is missing.
+2. The machine runs each check itself, with no model. When what a "missing"
+   check looks for is in a shared component around the line, the finding is
+   still filed, rooted at that component: one report for every screen it wraps.
 3. **Second model (may only veto)**, when set, can drop a reproduced
    finding. It cannot add one. A missing answer counts as a veto.
 4. What is left is filed as a report (`source = code_audit`), at most 12 an
@@ -148,6 +149,12 @@ folders) of the default branch, in a worktree under `~/.cache/mushi/audit/`:
    as fixed with the commit it checked; the best waiting findings are filed as
    slots free up. `mushi work --recheck --dry-run --json` shows what that would
    do, and how the open reports collapse, without changing anything.
+6. Reports filed before ADR 0065 have no pattern key. Collapse them once with
+   `mushi work --collapse-backlog --project <id> --repo-dir <clone>` (a dry run),
+   then the same with `--apply`. Each group's other reports become duplicates
+   of one; a report with a live PR stays open. Every row it changes is tagged
+   (`--collapse-tag`, default `collapse_<today>`), and the command prints the one
+   SQL UPDATE that reverts it.
 
 A fix PR closed without a merge sends a code-audit report to `triaged`, out of
 the fix lane's queue, until the daily check runs: still there, it is queued

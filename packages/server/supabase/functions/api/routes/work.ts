@@ -34,6 +34,8 @@
  *     PATCH  /v1/admin/work/hosts/:id      host guards (console session, the host's owner)
  *     DELETE /v1/admin/work/hosts/:id      revoke a host and its key (console session, the owner)
  *     POST   /v1/admin/work/key            { projectIds, label? } mint a worker:run key (mcp:write)
+ *     GET    /v1/admin/work/code-audit/backlog, POST …/code-audit/collapse: work-collapse.ts
+ *            (`mushi work --collapse-backlog`, ADR 0065)
  *     GET    /v1/admin/work/stats, POST …/claims/:id/stop, POST …/hosts/:id/recheck: work-status.ts
  *            (worker flags, ADR 0048 amendment 2026-10-28; the lanes answer carries `flags` too)
  *
@@ -54,6 +56,7 @@ import { claimTenantRateLimit } from '../../_shared/tenant-observability.ts'
 import { composeFixPacket, fixPacketContextFromReport } from '../../_shared/fix-packet.ts'
 import { activeWorkClaims, enqueueReports, queuedForLocalLanes, QUEUE_MODES, WORK_LEASE_MS, type QueueLane } from '../../_shared/work-claims.ts'
 import { AUDIT_FINDINGS_PER_HOUR, auditRecheckDue, outcomeKindRefusal, parseAuditFinding } from '../../_shared/work-modes.ts'
+import { registerCodeAuditCollapseRoutes } from './work-collapse.ts'
 import { applyRecheck, auditFiledLastHour, codeAuditBacklog, fileAuditFinding, parseRecheckBody, recheckList } from './work-audit.ts'
 import { claimFreshEyes, endFreshEyesRun, type FreshEyesClaimDeps } from './work-fresh-eyes.ts'
 import { mintSyntheticAccount } from '../../_shared/synthetic-accounts.ts'
@@ -1301,5 +1304,7 @@ export function registerWorkRoutes(app: Hono<{ Variables: Variables }>, deps: Wo
   app.patch('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => patchHost(c as Ctx, deps))
   app.delete('/v1/admin/work/hosts/:id', deps.jwtAuth, (c) => deleteHost(c as Ctx, deps))
   app.post('/v1/admin/work/key', deps.adminOrApiKeyWrite, (c) => mintWorkerKey(c as Ctx, deps))
+  // ADR 0065: `mushi work --collapse-backlog` (one-shot, reversible by its tag).
+  registerCodeAuditCollapseRoutes(app as never, deps)
   registerWorkStatusRoutes(app, deps)
 }

@@ -31,7 +31,7 @@ import type { WhoamiData } from '../cli-types.js'
 import { interruptedBy, onInterrupt } from '../signals.js'
 import { agentRun, agentSpec, agentUnavailable, cursorSignInState, parseLocalAgent, type AgentSignIn, type LocalAgent } from './work-agents.js'
 import { wrongRepoMessage } from './work-repo.js'
-import { goneNote, planBacklog, recheckReport, verdictCommits, type BacklogPlan } from './work-recheck.js'
+import { collapseGroups, collapseRevertSql, goneNote, planBacklog, recheckReport, verdictCommits, type BacklogPlan, type BacklogRow } from './work-recheck.js'
 
 export { cursorSignInState }
 
@@ -838,6 +838,49 @@ async function recheckBacklog(api: Api, repoDir: string, o: { dryRun: boolean; l
   return out
 }
 
+interface CollapseOutcome {
+  tag: string
+  applied: boolean
+  before: number
+  after: number
+  groups: number
+  children: number
+  skipped: number
+  keyTaken: number
+}
+
+/**
+ * `mushi work --collapse-backlog` (ADR 0065): the open code-audit reports filed
+ * before pattern keys, grouped by root cause on one worktree at the base
+ * branch, each group's children closed as duplicates of its parent. Without
+ * --apply the server only counts. Every change carries `tag`, and the revert
+ * is one UPDATE (collapseRevertSql), printed every time.
+ */
+async function collapseBacklog(api: Api, repoDir: string, o: { projectId: string; apply: boolean; tag: string; log: (line: string) => void }): Promise<CollapseOutcome & { plan: ReturnType<typeof collapseGroups>; revertSql: string }> {
+  const base = await defaultBranch(repoDir)
+  await git(repoDir, ['fetch', '--quiet', 'origin', base])
+  const root = join(homedir(), '.cache', 'mushi', 'work', basename(repoDir))
+  mkdirSync(root, { recursive: true })
+  const wt = join(root, 'collapse')
+  await clearWorktree(repoDir, wt)
+  await git(repoDir, ['worktree', 'add', '--detach', wt, `origin/${base}`])
+  try {
+    const { reports } = await api<{ reports: BacklogRow[] }>(`/v1/admin/work/code-audit/backlog?projectId=${encodeURIComponent(o.projectId)}`)
+    const groups = collapseGroups(planBacklog(reports, wt), reports)
+    const res = await api<CollapseOutcome>('/v1/admin/work/code-audit/collapse', {
+      method: 'POST',
+      body: JSON.stringify({ projectId: o.projectId, tag: o.tag, apply: o.apply, groups }),
+    })
+    const revertSql = collapseRevertSql(o.tag)
+    o.log(`${o.apply ? 'Collapsed' : 'Would collapse (dry run, nothing changed)'}: open code-audit reports ${res.before} → ${res.after}; ${res.children} closed as duplicates into ${res.groups} pattern report(s); ${res.skipped} left open (a live PR, or changed meanwhile)${res.keyTaken ? `; ${res.keyTaken} group(s) skipped, their pattern is already open` : ''}.`)
+    for (const g of groups.slice(0, 10)) o.log(`  ${g.patternKey}: ${g.childIds.length + 1} reports → ${g.parentId}${g.title ? ` "${g.title}"` : ''}`)
+    o.log(`Tag ${o.tag}. To undo it, run this once in the SQL editor:\n${revertSql}`)
+    return { ...res, plan: groups, revertSql }
+  } finally {
+    await clearWorktree(repoDir, wt)
+  }
+}
+
 /** One report, start to end: the run `mushi work` and the local worker (worker/daemon.ts) both make. */
 export async function workOne(api: Api, detail: ReportDetail, o: WorkOptions): Promise<WorkOutcome> {
   const base = await defaultBranch(o.repoDir)
@@ -1384,16 +1427,19 @@ export function registerWorkCommands(program: Command): void {
     .option('--report <id>', 'Work on this report only')
     .option('--followups', 'Instead of new reports: fix the Opus "fix first" findings on PRs mushi work opened, and push to them')
     .option('--recheck', 'Instead of fixing: run the check each open code-audit report was filed with again on the base branch (no agent, no tokens; shared wrappers followed) and close those that no longer reproduce; with --dry-run, only count them and show how the rest collapse into one report per pattern')
+    .option('--collapse-backlog', 'Instead of fixing: group the open code-audit reports filed before pattern keys by root cause, on the base branch, and close each group\'s children as duplicates of its parent (ADR 0065); a dry run unless --apply')
+    .option('--apply', 'With --collapse-backlog: make the change (every row is tagged, and the revert SQL is printed)')
+    .option('--collapse-tag <tag>', 'With --collapse-backlog: the tag on every changed row (default collapse_<today, UTC>)')
     .option('--keep', 'Keep the worktree after the run')
     .option('--dry-run', 'Show what would run; change nothing')
     .option('--any-repo', 'Skip the check that the clone is a repo the key\'s project is linked to (a monorepo or a fork)')
     .option('--json', 'Machine-readable JSON output')
     .option('--daemon', 'Run as a local worker: register this machine, send a heartbeat every 60 s, take the console\'s lane settings and claim reports (set up with `mushi worker install`)')
     .option('--worker-config <path>', 'With --daemon: the lanes file (default ~/.config/mushi/worker.json)')
-    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; recheck?: boolean; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
+    .action(async (opts: { repoDir?: string; project?: string; agent?: string; model?: string; max: string; report?: string; followups?: boolean; recheck?: boolean; collapseBacklog?: boolean; apply?: boolean; collapseTag?: string; keep?: boolean; dryRun?: boolean; anyRepo?: boolean; json?: boolean; daemon?: boolean; workerConfig?: string }) => {
       const agent = parseLocalAgent(opts.agent)
       if (opts.daemon) {
-        if (opts.repoDir || opts.report || opts.followups || opts.recheck) {
+        if (opts.repoDir || opts.report || opts.followups || opts.recheck || opts.collapseBacklog) {
           throw new MushiCliError('E_INVALID_INPUT', '--daemon takes its lanes and clones from the worker config, not from --repo-dir, --report or --followups.', 'mushi worker install')
         }
         const { runDaemon } = await import('../worker/daemon.js')
@@ -1414,6 +1460,15 @@ export function registerWorkCommands(program: Command): void {
       // Before any listing, plan or claim (the dry run too): the key decides whose reports come back.
       const whoami = await readWhoami(cfg)
       if (!opts.anyRepo) await requireRightRepo(whoami, repoDir)
+      if (opts.collapseBacklog) {
+        if (opts.apply) requireWriteScope(cfg, whoami)
+        const tag = opts.collapseTag ?? `collapse_${new Date().toISOString().slice(0, 10).replace(/-/g, '_')}`
+        if (!/^collapse_\d{4}_\d{2}_\d{2}$/.test(tag)) throw new MushiCliError('E_INVALID_INPUT', '--collapse-tag must look like collapse_2026_11_21.', 'mushi work --collapse-backlog --collapse-tag collapse_2026_11_21')
+        if (!cfg.projectId) throw new MushiCliError('E_INVALID_INPUT', 'mushi work --collapse-backlog needs a project.', 'mushi work --collapse-backlog --project <id> --repo-dir <clone>')
+        const out = await collapseBacklog(api, repoDir, { projectId: cfg.projectId, apply: !!opts.apply && !opts.dryRun, tag, log })
+        if (opts.json) process.stdout.write(`${JSON.stringify(out, null, 2)}\n`)
+        return
+      }
       if (opts.recheck) {
         if (!opts.dryRun) requireWriteScope(cfg, whoami)
         const sweep = await recheckBacklog(api, repoDir, { dryRun: !!opts.dryRun, log })
