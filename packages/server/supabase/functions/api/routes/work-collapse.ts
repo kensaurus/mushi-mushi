@@ -7,8 +7,14 @@
  *            GET  /v1/admin/work/code-audit/backlog?projectId=  the open
  *                 code_audit reports the CLI groups on its clone (mcp:read)
  *            POST /v1/admin/work/code-audit/collapse  { projectId, tag, apply,
- *                 groups } closes each group's children as duplicates of its
- *                 parent (mcp:write, a non-viewer); without `apply` it only counts
+ *                 groups, cap? } closes each group's children as duplicates of
+ *                 its parent (mcp:write, a non-viewer); without `apply` it only
+ *                 counts. With `cap` (`--apply-cap`), an app still over
+ *                 project_settings.code_audit_open_cap keeps its best parents by
+ *                 severity × confidence; the rest wait in code_audit_deferred,
+ *                 dismissed as `deferred_over_cap`, and the audit lane's recheck
+ *                 restores them as slots free. A report with a live PR is never
+ *                 set aside.
  *
  *          The CLI computes the groups (it has the clone that roots each
  *          finding); the server checks every id and writes only what it can
@@ -21,7 +27,19 @@
 
 import type { Context, Hono, MiddlewareHandler } from 'npm:hono@4'
 import type { getServiceClient } from '../../_shared/db.ts'
-import { appendAffectedScreen, CODE_AUDIT_OPEN_STATUSES, safeRepoPath, type AffectedScreen } from '../../_shared/work-modes.ts'
+import { auditCategory, auditPatternKey } from '../../_shared/audit-taxonomy.ts'
+import {
+  appendAffectedScreen,
+  auditFindingScore,
+  auditKey,
+  CODE_AUDIT_OPEN_STATUSES,
+  codeAuditOpenCap,
+  DEFERRED_OVER_CAP,
+  parseAuditFinding,
+  safeRepoPath,
+  type AffectedScreen,
+  type AuditFinding,
+} from '../../_shared/work-modes.ts'
 
 type Db = ReturnType<typeof getServiceClient>
 // deno-lint-ignore no-explicit-any
@@ -53,6 +71,8 @@ export interface CollapseBody {
   tag: string
   apply: boolean
   groups: CollapseGroup[]
+  /** `--apply-cap`: every parent the CLI saw, with the finding it would wait as. */
+  cap: { candidates: Array<{ reportId: string; finding: unknown }> } | null
 }
 
 // deno-lint-ignore no-control-regex
@@ -84,7 +104,18 @@ export function parseCollapseBody(raw: unknown): { ok: true; value: CollapseBody
     const title = clean(g.title, 200)
     groups.push({ parentId: g.parentId, patternKey, title: title.length >= 3 ? title : null, screens, childIds: [...new Set(g.childIds as string[])].filter((id) => id !== g.parentId) })
   }
-  return { ok: true, value: { projectId: b.projectId, tag: b.tag, apply: b.apply === true, groups } }
+  let cap: CollapseBody['cap'] = null
+  if (b.cap !== undefined && b.cap !== null) {
+    const c = b.cap as Record<string, unknown>
+    if (!Array.isArray(c.candidates) || c.candidates.length > MAX_ROWS) return { ok: false, message: `cap.candidates must be a list of at most ${MAX_ROWS}.` }
+    const candidates: Array<{ reportId: string; finding: unknown }> = []
+    for (const x of c.candidates as Array<Record<string, unknown>>) {
+      if (!x || typeof x.reportId !== 'string' || !UUID_RE.test(x.reportId)) return { ok: false, message: 'Each cap candidate needs a reportId.' }
+      candidates.push({ reportId: x.reportId, finding: x.finding })
+    }
+    cap = { candidates }
+  }
+  return { ok: true, value: { projectId: b.projectId, tag: b.tag, apply: b.apply === true, groups, cap } }
 }
 
 interface Row {
@@ -121,6 +152,120 @@ export interface CollapseResult {
   skipped: number
   /** Groups whose pattern key another open report holds now (filed after the deploy). */
   keyTaken: number
+  /** `--apply-cap`: what the open cap does after the collapse. */
+  cap?: CapResult
+  /** The cap step could not read what it needs; the collapse above stands, nothing was set aside. */
+  capFailed?: boolean
+}
+
+export interface CapResult {
+  cap: number
+  /** Open code_audit reports after the collapse, before the cap. */
+  openBefore: number
+  /** After the cap: the parents kept, plus every one that cannot be set aside. */
+  openAfter: number
+  deferred: number
+  /** Kept open whatever the cap: a live PR (fixing, or an attempt with an open PR). */
+  keptLivePr: number
+  /** Kept open: no finding the server could re-file later (no candidate, or one it refused). */
+  keptNoFinding: number
+}
+
+/** Reports with a fix in flight: an attempt queued or running, or an open (or unread) PR. */
+async function livePrReports(db: Db, ids: readonly string[]): Promise<Set<string> | null> {
+  const out = new Set<string>()
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db
+      .from('fix_attempts')
+      .select('report_id')
+      .in('report_id', ids.slice(i, i + 200))
+      .is('merged_at', null)
+      .or('status.in.(queued,running),pr_state.in.(open,draft),and(pr_url.not.is.null,pr_state.is.null)')
+    if (error) return null
+    for (const r of (data ?? []) as Array<{ report_id: string }>) out.add(r.report_id)
+  }
+  return out
+}
+
+/**
+ * The open cap over what is open after the collapse (`closing` = children it
+ * closes, for a dry run). Ranked by severity × confidence, then oldest first;
+ * the best keep their slots, the rest wait in code_audit_deferred with their
+ * report dismissed as `deferred_over_cap` and its old status in
+ * custom_metadata.cap. Never a report with a live PR.
+ */
+async function applyCap(db: Db, body: CollapseBody, closing: ReadonlySet<string>, now: Date): Promise<CapResult | null> {
+  const nowIso = now.toISOString()
+  const { data: settings } = await db.from('project_settings').select('code_audit_open_cap').eq('project_id', body.projectId).maybeSingle()
+  const cap = codeAuditOpenCap((settings as { code_audit_open_cap?: unknown } | null)?.code_audit_open_cap)
+  const { data: openData, error } = await db
+    .from('reports')
+    .select('id, status, created_at, closed_reason, pattern_key, custom_metadata')
+    .eq('project_id', body.projectId)
+    .eq('source', 'code_audit')
+    .is('parent_report_id', null)
+    .in('status', [...CODE_AUDIT_OPEN_STATUSES])
+    .order('created_at', { ascending: true })
+    .limit(MAX_ROWS)
+  if (error) return null
+  type OpenRow = { id: string; status: string; created_at: string; closed_reason: string | null; pattern_key: string | null; custom_metadata: Record<string, unknown> | null }
+  const open = ((openData ?? []) as OpenRow[]).filter((r) => !closing.has(r.id))
+  const live = await livePrReports(db, open.map((r) => r.id))
+  if (!live) return null
+  const findings = new Map<string, AuditFinding>()
+  for (const c of body.cap?.candidates ?? []) {
+    const parsed = parseAuditFinding(c.finding)
+    if (parsed.ok) findings.set(c.reportId, parsed.value)
+  }
+  const out: CapResult = { cap, openBefore: open.length, openAfter: open.length, deferred: 0, keptLivePr: 0, keptNoFinding: 0 }
+  const movable: Array<{ row: OpenRow; f: AuditFinding; score: number }> = []
+  for (const r of open) {
+    if (r.status === 'fixing' || live.has(r.id)) out.keptLivePr++
+    else if (!findings.has(r.id)) out.keptNoFinding++
+    else movable.push({ row: r, f: findings.get(r.id)!, score: auditFindingScore(findings.get(r.id)!) })
+  }
+  const slots = Math.max(0, cap - out.keptLivePr - out.keptNoFinding)
+  movable.sort((a, b) => b.score - a.score || a.row.created_at.localeCompare(b.row.created_at))
+  const wait = movable.slice(slots)
+  if (!body.apply) {
+    out.deferred = wait.length
+    out.openAfter = open.length - wait.length
+    return out
+  }
+  for (const { row, f, score } of wait) {
+    const key = await auditKey(f)
+    const patternKey = row.pattern_key ?? auditPatternKey(auditCategory({ rule: f.rule, title: f.title, userImpact: f.userImpact }), f.rootFile, f.rule)
+    const finding = { ...(f as unknown as Record<string, unknown>), collapse_report_id: row.id, collapse_tag: body.tag }
+    const { data: existing } = await db.from('code_audit_deferred').select('id').eq('project_id', body.projectId).eq('pattern_key', patternKey).maybeSingle()
+    const prior = existing as { id: string } | null
+    const { data: ins, error: dErr } = prior
+      ? await db.from('code_audit_deferred').update({ finding, audit_key: key, score, updated_at: nowIso }).eq('id', prior.id).select('id')
+      : await db.from('code_audit_deferred').insert({ project_id: body.projectId, pattern_key: patternKey, audit_key: key, finding, score, deferred_at: nowIso, updated_at: nowIso }).select('id')
+    if (dErr || !ins || (ins as unknown[]).length === 0) continue
+    const meta = row.custom_metadata ?? {}
+    const { data: moved } = await db
+      .from('reports')
+      .update({
+        status: 'dismissed',
+        closed_reason: DEFERRED_OVER_CAP,
+        ...(row.pattern_key ? {} : { pattern_key: patternKey }),
+        updated_at: nowIso,
+        custom_metadata: { ...meta, cap: { tag: body.tag, from_status: row.status, from_closed_reason: row.closed_reason ?? null, prev_pattern_key: row.pattern_key ?? null, score, cap } },
+      })
+      .eq('id', row.id)
+      .eq('status', row.status)
+      .is('parent_report_id', null)
+      .select('id')
+    if (moved && (moved as unknown[]).length > 0) {
+      out.deferred++
+      continue
+    }
+    // The report changed meanwhile: it stays open, and its waiting row goes.
+    if (!prior) await db.from('code_audit_deferred').delete().eq('id', ((ins as Array<{ id: string }>)[0]).id)
+  }
+  const after = await openParents(db, body.projectId)
+  out.openAfter = after ?? open.length - out.deferred
+  return out
 }
 
 /**
@@ -147,6 +292,8 @@ export async function applyCollapse(db: Db, body: CollapseBody, now: Date): Prom
   const nowIso = now.toISOString()
   const out: CollapseResult = { tag: body.tag, applied: body.apply, before, after: before, groups: 0, children: 0, skipped: 0, keyTaken: 0 }
   const used = new Set<string>()
+  /** Children this run closes (apply) or would close (dry run): out of the cap's count. */
+  const closing = new Set<string>()
   for (const g of body.groups) {
     const parent = rows.get(g.parentId)
     if (!open(parent) || used.has(parent.id)) {
@@ -161,6 +308,7 @@ export async function applyCollapse(db: Db, body: CollapseBody, now: Date): Prom
     if (!body.apply) {
       out.groups++
       out.children += kids.length
+      for (const k of kids) closing.add(k.id)
       continue
     }
     const meta = parent.custom_metadata ?? {}
@@ -213,8 +361,10 @@ export async function applyCollapse(db: Db, body: CollapseBody, now: Date): Prom
         .eq('status', k.status)
         .is('parent_report_id', null)
         .select('id')
-      if (moved && (moved as unknown[]).length > 0) out.children++
-      else out.skipped++
+      if (moved && (moved as unknown[]).length > 0) {
+        out.children++
+        closing.add(k.id)
+      } else out.skipped++
     }
   }
   if (body.apply) {
@@ -222,6 +372,11 @@ export async function applyCollapse(db: Db, body: CollapseBody, now: Date): Prom
     out.after = after ?? before - out.children
   } else {
     out.after = before - out.children
+  }
+  if (body.cap) {
+    const capped = await applyCap(db, body, body.apply ? new Set() : closing, now)
+    if (capped) out.cap = capped
+    else out.capFailed = true
   }
   return out
 }

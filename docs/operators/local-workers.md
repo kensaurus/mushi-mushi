@@ -153,8 +153,11 @@ folders) of the default branch, in a worktree under `~/.cache/mushi/audit/`:
    `mushi work --collapse-backlog --project <id> --repo-dir <clone>` (a dry run),
    then the same with `--apply`. Each group's other reports become duplicates
    of one; a report with a live PR stays open. Every row it changes is tagged
-   (`--collapse-tag`, default `collapse_<today>`), and the command prints the one
-   SQL UPDATE that reverts it.
+   (`--collapse-tag`, default `collapse_<today>`), and the command prints the
+   SQL that reverts it. Add `--apply-cap` to bring the app down to its open cap:
+   the best reports by severity × confidence stay, the rest wait (closed as
+   `deferred_over_cap`) and come back one by one as reports are fixed. A report
+   with a live PR always stays.
 
 A fix PR closed without a merge sends a code-audit report to `triaged`, out of
 the fix lane's queue, until the daily check runs: still there, it is queued

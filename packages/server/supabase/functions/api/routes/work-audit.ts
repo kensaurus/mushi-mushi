@@ -32,6 +32,7 @@ import {
   auditReportText,
   CODE_AUDIT_OPEN_STATUSES,
   codeAuditOpenCap,
+  DEFERRED_OVER_CAP,
   type AuditFinding,
 } from '../../_shared/work-modes.ts'
 
@@ -70,8 +71,28 @@ export async function codeAuditBacklog(db: Db, projectId: string): Promise<{ ope
   return { open: open.count ?? 0, cap: codeAuditOpenCap((settings.data as { code_audit_open_cap?: unknown } | null)?.code_audit_open_cap) }
 }
 
+/**
+ * Keep a finding in code_audit_deferred (one row per app and pattern; a second
+ * sighting counts). The finding a `--apply-cap` row holds keeps its report id,
+ * so a recheck that finds it gone can close that report too.
+ */
+async function deferFinding(
+  db: Db,
+  a: { projectId: string; patternKey: string; key: string; f: AuditFinding; laneId: string | null; nowIso: string },
+): Promise<FileFindingResult> {
+  const { data: waiting } = await db.from('code_audit_deferred').select('id, seen_count, finding').eq('project_id', a.projectId).eq('pattern_key', a.patternKey).maybeSingle()
+  const w = waiting as { id: string; seen_count: number; finding?: Record<string, unknown> | null } | null
+  const keep = w?.finding?.collapse_report_id ? { collapse_report_id: w.finding.collapse_report_id, collapse_tag: w.finding.collapse_tag } : {}
+  const row = { finding: { ...(a.f as unknown as Record<string, unknown>), ...keep }, audit_key: a.key, score: auditFindingScore(a.f), lane_id: a.laneId, updated_at: a.nowIso }
+  const { error: defErr } = w
+    ? await db.from('code_audit_deferred').update({ ...row, seen_count: (w.seen_count || 1) + 1 }).eq('id', w.id)
+    : await db.from('code_audit_deferred').insert({ project_id: a.projectId, pattern_key: a.patternKey, ...row })
+  if (defErr && defErr.code !== '23505') return { ok: false, code: 'DB_ERROR', message: 'The finding could not be set aside.', status: 500 }
+  return { ok: true, outcome: 'deferred', reportId: null, queuedLaneId: null }
+}
+
 /** What filing a finding did: a new report, a screen added to an open one, a fixed one reopened, or a wait for an open slot. */
-export type FileFindingOutcome = 'filed' | 'merged' | 'regressed' | 'deferred'
+export type FileFindingOutcome = 'filed' | 'merged' | 'regressed' | 'restored' | 'deferred'
 
 export type FileFindingResult =
   | { ok: true; outcome: Exclude<FileFindingOutcome, 'deferred'>; reportId: string; queuedLaneId: string | null }
@@ -107,16 +128,16 @@ export async function fileAuditFinding(
   if (exErr) return { ok: false, code: 'DB_ERROR', message: 'Could not read earlier findings. Try again in a minute.', status: 503 }
   const prior = existing as { id: string; report_id: string | null } | null
   if (prior?.report_id) {
-    const { data: rep, error: repErr } = await db.from('reports').select('status').eq('id', prior.report_id).maybeSingle()
+    const { data: rep, error: repErr } = await db.from('reports').select('status, closed_reason').eq('id', prior.report_id).maybeSingle()
     if (repErr) return { ok: false, code: 'DB_ERROR', message: 'Could not read the earlier report. Try again in a minute.', status: 503 }
     const status = (rep as { status?: string } | null)?.status ?? null
-    if (auditKeyBlocks(status)) return { ok: false, code: 'DUPLICATE', message: `Already filed as report ${prior.report_id} (${status}).`, status: 409, reportId: prior.report_id }
+    if (auditKeyBlocks(status, (rep as { closed_reason?: string | null } | null)?.closed_reason ?? null)) return { ok: false, code: 'DUPLICATE', message: `Already filed as report ${prior.report_id} (${status}).`, status: 409, reportId: prior.report_id }
   }
 
   // The newest report with this pattern: open → one more screen; fixed → a regression (Sentry's model).
   const { data: patRows, error: patErr } = await db
     .from('reports')
-    .select('id, status, affected_screens, custom_metadata')
+    .select('id, status, closed_reason, affected_screens, custom_metadata')
     .eq('project_id', projectId)
     .eq('source', 'code_audit')
     .eq('pattern_key', patternKey)
@@ -124,7 +145,33 @@ export async function fileAuditFinding(
     .order('created_at', { ascending: false })
     .limit(1)
   if (patErr) return { ok: false, code: 'DB_ERROR', message: 'Could not read open findings. Try again in a minute.', status: 503 }
-  const parent = ((patRows ?? []) as Array<{ id: string; status: string; affected_screens: unknown; custom_metadata: Record<string, unknown> | null }>)[0]
+  const parent = ((patRows ?? []) as Array<{ id: string; status: string; closed_reason?: string | null; affected_screens: unknown; custom_metadata: Record<string, unknown> | null }>)[0]
+  // Set aside over the open cap (`--apply-cap`): restored when a slot is free, otherwise it keeps waiting.
+  if (parent?.status === 'dismissed' && parent.closed_reason === DEFERRED_OVER_CAP) {
+    const backlog = await codeAuditBacklog(db, projectId)
+    if (!backlog) return { ok: false, code: 'DB_ERROR', message: 'Could not read the open code-audit count. Try again in a minute.', status: 503 }
+    if (backlog.open >= backlog.cap) return await deferFinding(db, { projectId, patternKey, key, f, laneId: ctx.lane.id, nowIso })
+    const meta = parent.custom_metadata ?? {}
+    const cap = (meta.cap ?? {}) as { from_status?: string; tag?: string }
+    const back = cap.from_status && (CODE_AUDIT_OPEN_STATUSES as readonly string[]).includes(cap.from_status) && cap.from_status !== 'fixing' ? cap.from_status : 'classified'
+    const rest: Record<string, unknown> = { ...meta }
+    delete rest.cap
+    const { data: moved } = await db
+      .from('reports')
+      .update({
+        status: back,
+        closed_reason: null,
+        affected_screens: appendAffectedScreen(parent.affected_screens, screen),
+        custom_metadata: { ...rest, occurrences: (Number(meta.occurrences) || 1) + 1, cap_restored: { at: nowIso, tag: cap.tag ?? null, lane: ctx.lane.name } },
+        updated_at: nowIso,
+      })
+      .eq('id', parent.id)
+      .eq('status', 'dismissed')
+      .select('id')
+    if (!moved || (moved as unknown[]).length === 0) return { ok: false, code: 'DUPLICATE', message: 'That report changed a moment ago; the next pass files this again.', status: 409 }
+    await db.from('code_audit_deferred').delete().eq('project_id', projectId).eq('pattern_key', patternKey)
+    return { ok: true, outcome: 'restored', reportId: parent.id, queuedLaneId: null }
+  }
   const parentOpen = !!parent && (CODE_AUDIT_OPEN_STATUSES as readonly string[]).includes(parent.status)
   const parentFixed = !!parent && ['fixed', 'verified', 'resolved'].includes(parent.status)
   // A person dismissed this pattern (false alarm, won't fix…): it stays dismissed, like an ignored Sentry issue.
@@ -156,16 +203,7 @@ export async function fileAuditFinding(
   // At the open cap the finding waits outside every count; the best of them is filed when a slot frees.
   const backlog = await codeAuditBacklog(db, projectId)
   if (!backlog) return { ok: false, code: 'DB_ERROR', message: 'Could not read the open code-audit count. Try again in a minute.', status: 503 }
-  if (backlog.open >= backlog.cap) {
-    const { data: waiting } = await db.from('code_audit_deferred').select('id, seen_count').eq('project_id', projectId).eq('pattern_key', patternKey).maybeSingle()
-    const w = waiting as { id: string; seen_count: number } | null
-    const row = { finding: f as unknown as Record<string, unknown>, audit_key: key, score: auditFindingScore(f), lane_id: ctx.lane.id, updated_at: nowIso }
-    const { error: defErr } = w
-      ? await db.from('code_audit_deferred').update({ ...row, seen_count: (w.seen_count || 1) + 1 }).eq('id', w.id)
-      : await db.from('code_audit_deferred').insert({ project_id: projectId, pattern_key: patternKey, ...row })
-    if (defErr && defErr.code !== '23505') return { ok: false, code: 'DB_ERROR', message: 'The finding could not be set aside.', status: 500 }
-    return { ok: true, outcome: 'deferred', reportId: null, queuedLaneId: null }
-  }
+  if (backlog.open >= backlog.cap) return await deferFinding(db, { projectId, patternKey, key, f, laneId: ctx.lane.id, nowIso })
 
   const filed = await auditFiledLastHour(db, projectId, ctx.now)
   if (filed === null) return { ok: false, code: 'DB_ERROR', message: 'Could not read the audit\'s hourly count. Try again in a minute.', status: 503 }
@@ -394,8 +432,23 @@ export async function applyRecheck(
   }
   let deferredDropped = 0
   if (body.deferredGone.length) {
-    const { data } = await db.from('code_audit_deferred').delete().eq('project_id', ctx.projectId).in('id', body.deferredGone).select('id')
-    deferredDropped = ((data ?? []) as unknown[]).length
+    const { data } = await db.from('code_audit_deferred').delete().eq('project_id', ctx.projectId).in('id', body.deferredGone).select('id, finding')
+    const dropped = (data ?? []) as Array<{ id: string; finding?: Record<string, unknown> | null }>
+    deferredDropped = dropped.length
+    // A report the cap set aside (`--apply-cap`) whose check is gone is fixed, not left dismissed.
+    const setAside = dropped.map((d) => d.finding?.collapse_report_id).filter((x): x is string => typeof x === 'string' && UUID.test(x))
+    for (const id of setAside) {
+      const { data: rep } = await db.from('reports').select('id, custom_metadata').eq('id', id).eq('project_id', ctx.projectId).eq('status', 'dismissed').eq('closed_reason', DEFERRED_OVER_CAP).maybeSingle()
+      if (!rep) continue
+      const meta = ((rep as { custom_metadata?: Record<string, unknown> | null }).custom_metadata ?? {})
+      const { data: moved } = await db
+        .from('reports')
+        .update({ status: 'fixed', closed_reason: null, fixed_at: nowIso, updated_at: nowIso, custom_metadata: { ...meta, resolution: { kind: 'recheck_not_reproduced', reason: 'its check no longer reproduces while it waited over the open cap', sha: body.sha, base: body.base, at: nowIso, lane: ctx.laneName } } })
+        .eq('id', id)
+        .eq('status', 'dismissed')
+        .select('id')
+      if (moved && (moved as unknown[]).length > 0) closed++
+    }
   }
   await db.from('work_lanes').update({ audit_rechecked_at: nowIso }).eq('id', ctx.laneId)
   return { closed, requeued, deferredDropped }

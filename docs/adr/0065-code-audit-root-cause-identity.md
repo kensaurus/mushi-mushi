@@ -201,6 +201,29 @@ given.
   every run) reverts it.
 - A second run changes nothing already collapsed.
 
+`--apply-cap` then brings each app to its open cap. The CLI sends every report
+the collapse leaves open, with the finding rebuilt from the report text; the
+server ranks them, since it alone sees the cap, the scores and the live PRs:
+
+- A report with a live PR (`fixing`, or a fix attempt queued, running or with an
+  open PR) and any report the server cannot rebuild a finding for keep their
+  place.
+- The best of the rest by severity × confidence fill the slots left.
+- The others wait in `code_audit_deferred`. Their report is `dismissed` with
+  `closed_reason = 'deferred_over_cap'` (added to `reports_closed_reason_check`
+  by this ADR's migration; silent, code_audit only), its pattern key set, and
+  what it was in `custom_metadata.cap`.
+- When a slot frees, the recheck re-files the best waiting finding. Filing a
+  finding whose report waits like this restores that report instead of filing
+  a new one; a finding that no longer reproduces closes its report as fixed.
+- The revert covers it: the same UPDATE restores `cap` rows, and one DELETE
+  drops the deferred rows the tag created.
+
+Dry run with the cap of 25: Solo Boss 141 → 25 open (116 deferred), glot 270 →
+120, tsumagoi 49 → 39. glot and tsumagoi stop there because every report left
+is in `fixing` with an open or draft PR (120 and 39): closing those PRs is a
+person's call.
+
 ## Consequences
 
 - An app's open code-audit count is bounded (25 by default) and means distinct

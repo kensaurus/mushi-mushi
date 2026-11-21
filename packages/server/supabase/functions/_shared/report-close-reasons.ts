@@ -11,7 +11,7 @@
  * close sends no notification (`silentClosedReason`).
  */
 
-/** `reports_closed_reason_check` (20261002120000, plus false_alarm). */
+/** `reports_closed_reason_check` (20261002120000, plus false_alarm and deferred_over_cap). */
 export const CLOSED_REASONS: ReadonlySet<string> = new Set([
   'duplicate',
   'not_reproducible',
@@ -19,6 +19,7 @@ export const CLOSED_REASONS: ReadonlySet<string> = new Set([
   'working_as_intended',
   'spam',
   'false_alarm',
+  'deferred_over_cap',
 ])
 
 /**
@@ -34,8 +35,11 @@ const MUSHI_CHECK_SOURCES: ReadonlySet<string> = new Set([
   'code_audit',
 ])
 
-/** Closes that tell no reporter: spam, and a check of ours that was wrong. */
-const SILENT_CLOSED_REASONS: ReadonlySet<string> = new Set(['spam', 'false_alarm'])
+/**
+ * Closes that tell no reporter: spam, a check of ours that was wrong, and a
+ * code-audit finding set aside over the app's open cap (ADR 0065).
+ */
+const SILENT_CLOSED_REASONS: ReadonlySet<string> = new Set(['spam', 'false_alarm', 'deferred_over_cap'])
 
 export function silentClosedReason(reason: string | null | undefined): boolean {
   return typeof reason === 'string' && SILENT_CLOSED_REASONS.has(reason)
@@ -47,6 +51,8 @@ export function silentClosedReason(reason: string | null | undefined): boolean {
  */
 export function closedReasonAllowed(reason: string, source: string | null | undefined): boolean {
   if (!CLOSED_REASONS.has(reason)) return false
+  // Only the backlog cap sets it, and only on a code-audit report (ADR 0065).
+  if (reason === 'deferred_over_cap') return source === 'code_audit'
   if (reason !== 'false_alarm') return true
   return typeof source === 'string' && MUSHI_CHECK_SOURCES.has(source)
 }

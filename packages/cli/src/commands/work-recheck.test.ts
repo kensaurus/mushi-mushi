@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { collapseGroups, collapseRevertSql, goneNote, parseAuditCheck, planBacklog, recheckReport, verdictCommits } from './work-recheck.js'
+import { capCandidates, collapseGroups, collapseRevertSql, goneNote, parseAuditCheck, planBacklog, recheckReport, verdictCommits } from './work-recheck.js'
 
 /** The description shape the server writes for a code-audit finding (_shared/work-modes.ts). */
 const desc = (summary: string) =>
@@ -237,12 +237,41 @@ describe('collapseGroups and its revert (mushi work --collapse-backlog)', () => 
     expect(collapseGroups(planBacklog(one, '/wt', tree(files)), one)).toEqual([])
   })
 
-  it('the revert is one UPDATE on the tag that restores every field the collapse wrote', () => {
+  it('the revert is one UPDATE on the tag (collapse and cap) and one DELETE of what it set aside, in a transaction', () => {
     const sql = collapseRevertSql('collapse_2026_11_21')
     expect(sql.match(/^update public\.reports set/gm)).toHaveLength(1)
     for (const col of ['status', 'closed_reason', 'parent_report_id', 'title', 'pattern_key', 'affected_screens', 'custom_metadata']) expect(sql).toMatch(new RegExp(`^  ${col} = `, 'm'))
-    expect(sql).toContain("where source = 'code_audit' and custom_metadata->'collapse'->>'tag' = 'collapse_2026_11_21';")
+    expect(sql).toContain("where source = 'code_audit' and (custom_metadata->'collapse'->>'tag' = 'collapse_2026_11_21' or custom_metadata->'cap'->>'tag' = 'collapse_2026_11_21');")
+    expect(sql).toContain("delete from public.code_audit_deferred where finding->>'collapse_tag' = 'collapse_2026_11_21';")
+    expect(sql.startsWith('begin;') && sql.endsWith('commit;')).toBe(true)
     // A tag can never break out of its quotes.
-    expect(collapseRevertSql("collapse_x'; drop table reports; --")).toContain("= 'collapse_xdroptablereports';")
+    expect(collapseRevertSql("collapse_x'; drop table reports; --")).toContain("= 'collapse_xdroptablereports'")
+  })
+
+  it('--apply-cap sends every report the collapse leaves open, with the finding it would wait as', () => {
+    const rows = [row('a', 'app/a/loading.tsx', 'classified', 'high'), row('b', 'app/b/loading.tsx', 'fixing'), row('c', 'app/c/loading.tsx', 'triaged')]
+    const plan = planBacklog(rows, '/wt', tree(files))
+    const groups = collapseGroups(plan, rows)
+    const out = capCandidates(plan, rows, groups, '/wt', tree(files))
+    // a and c close as duplicates of b; b is the one left open.
+    expect(out.map((c) => c.reportId)).toEqual(['b'])
+    expect(out[0]!.finding).toMatchObject({
+      title: 'Screen reader hears nothing while b loads',
+      severity: 'medium',
+      file: 'app/b/loading.tsx',
+      line: 5,
+      rule: 'loading-status-missing',
+      evidenceLine: '<h1 className="sr-only">x</h1>',
+      check: { kind: 'pattern', summary: '/aria-busy|aria-live|role="status"/ is absent in app/b/loading.tsx near line 5' },
+      screen: 'app/b/loading.tsx',
+      rootFile: 'components/route-loading-shell.tsx',
+      confidence: null,
+    })
+  })
+
+  it('--apply-cap leaves out a report it cannot rebuild a finding for (the server keeps it open)', () => {
+    const broken = { ...row('x', 'app/a/loading.tsx', 'classified'), description: 'no structure here' }
+    const plan = planBacklog([broken], '/wt', tree(files))
+    expect(capCandidates(plan, [broken], [], '/wt', tree(files))).toEqual([])
   })
 })

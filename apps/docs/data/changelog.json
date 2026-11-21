@@ -23,7 +23,7 @@
       },
       {
         "title": "`mushi work --collapse-backlog [--apply]` collapses the findings filed before",
-        "description": "a dry run unless `--apply`; each group's other reports become duplicates of one, a report with a live PR stays open, and every changed row is tagged so the one SQL UPDATE it prints reverts it."
+        "description": "a dry run unless `--apply`; each group's other reports become duplicates of one, a report with a live PR stays open, and every changed row is tagged so the SQL it prints reverts it. With `--apply-cap` it then keeps only the best reports up to the app's open cap; the rest wait and come back as slots free."
       },
       {
         "title": "`search_mushi_docs` finds the new \"What leaves the browser\" page",

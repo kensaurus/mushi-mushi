@@ -327,11 +327,19 @@ export async function auditKey(f: Pick<AuditFinding, 'file' | 'rule' | 'evidence
   return `${f.file}:${f.rule}:${hex.slice(0, 16)}`
 }
 
-/** An existing key blocks a new report while its report is open or was dismissed; a fixed one may be filed again (the evidence is still there). */
-export function auditKeyBlocks(existingReportStatus: string | null): boolean {
+/**
+ * An existing key blocks a new report while its report is open or was
+ * dismissed; a fixed one may be filed again (the evidence is still there),
+ * and so may one set aside over the open cap (ADR 0065: filing it restores it).
+ */
+export function auditKeyBlocks(existingReportStatus: string | null, closedReason: string | null = null): boolean {
   if (existingReportStatus == null) return false
+  if (existingReportStatus === 'dismissed' && closedReason === DEFERRED_OVER_CAP) return false
   return !['fixed', 'verified'].includes(existingReportStatus)
 }
+
+/** The closed_reason of a code-audit report moved out of the open count by the backlog cap (ADR 0065). */
+export const DEFERRED_OVER_CAP = 'deferred_over_cap'
 
 /** The report a reproduced finding becomes. */
 export function auditReportText(f: AuditFinding, ctx: { laneName: string }): { title: string; description: string; component: string } {

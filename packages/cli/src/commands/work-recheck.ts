@@ -266,20 +266,93 @@ export function collapseGroups(plan: BacklogPlan, rows: readonly BacklogRow[]): 
 }
 
 /**
- * The one UPDATE that undoes a collapse run: every row it changed carries
- * custom_metadata.collapse with what it was before. Run it in the SQL editor.
+ * The SQL that undoes a collapse run, in one transaction: every report it
+ * changed carries custom_metadata.collapse (a duplicate child or its parent)
+ * and/or custom_metadata.cap (set aside over the open cap) with what it was
+ * before, and every row it put in code_audit_deferred carries the tag. Run it
+ * in the SQL editor.
  */
 export function collapseRevertSql(tag: string): string {
+  const t = tag.replace(/[^a-z0-9_]/g, '')
   const c = "custom_metadata->'collapse'"
+  const k = "custom_metadata->'cap'"
+  const parent = `${c}->>'role' = 'parent'`
+  const child = `${c}->>'role' = 'child'`
   return [
+    'begin;',
     'update public.reports set',
-    `  status = coalesce(${c}->>'from_status', status),`,
-    `  closed_reason = case when ${c}->>'role' = 'child' then ${c}->>'from_closed_reason' else closed_reason end,`,
-    `  parent_report_id = case when ${c}->>'role' = 'child' then null else parent_report_id end,`,
-    `  title = case when ${c}->>'role' = 'parent' then coalesce(${c}->>'prev_title', title) else title end,`,
-    `  pattern_key = case when ${c}->>'role' = 'parent' then ${c}->>'prev_pattern_key' else pattern_key end,`,
-    `  affected_screens = case when ${c}->>'role' = 'parent' then nullif(${c}->'prev_affected_screens', 'null'::jsonb) else affected_screens end,`,
-    "  custom_metadata = custom_metadata - 'collapse'",
-    `where source = 'code_audit' and ${c}->>'tag' = '${tag.replace(/[^a-z0-9_]/g, '')}';`,
+    `  status = coalesce(${k}->>'from_status', ${c}->>'from_status', status),`,
+    `  closed_reason = case when ${k} is not null then ${k}->>'from_closed_reason' when ${child} then ${c}->>'from_closed_reason' else closed_reason end,`,
+    `  parent_report_id = case when ${child} then null else parent_report_id end,`,
+    `  title = case when ${parent} then coalesce(${c}->>'prev_title', title) else title end,`,
+    `  pattern_key = case when ${parent} then ${c}->>'prev_pattern_key' when ${k} is not null then ${k}->>'prev_pattern_key' else pattern_key end,`,
+    `  affected_screens = case when ${parent} then nullif(${c}->'prev_affected_screens', 'null'::jsonb) else affected_screens end,`,
+    "  custom_metadata = custom_metadata - 'collapse' - 'cap'",
+    `where source = 'code_audit' and (${c}->>'tag' = '${t}' or ${k}->>'tag' = '${t}');`,
+    `delete from public.code_audit_deferred where finding->>'collapse_tag' = '${t}';`,
+    'commit;',
   ].join('\n')
+}
+
+/** A severity the audit files: the legacy rows only ever used these. */
+const FINDING_SEVERITIES = new Set(['high', 'medium', 'low'])
+
+/**
+ * The finding a filed report would wait as in code_audit_deferred (the body
+ * POST /v1/worker/claims/:id/findings takes), rebuilt from the report text the
+ * server wrote (auditReportText). Null when a part is missing; the server
+ * refuses anything it cannot parse, and such a report stays open.
+ */
+function findingFromRow(r: BacklogRow, root: string): Record<string, unknown> | null {
+  const where = /^(.+):(\d+)$/.exec(descField(r.description, 'Where'))
+  const file = r.custom_metadata?.file ?? where?.[1]
+  const line = r.custom_metadata?.line ?? (where ? Number(where[2]) : null)
+  const check = /^Reproduced by the worker with no model: (pattern|script) check, (.+)$/m.exec(r.description ?? '')
+  const evidence = descField(r.description, 'The code there')
+  const screen = /code-read audit of (\S+?) on the local/.exec(r.description ?? '')?.[1] ?? file
+  const severity = r.severity === 'critical' ? 'high' : r.severity
+  if (!file || !line || !check || !evidence || !screen || !severity || !FINDING_SEVERITIES.has(severity) || root.startsWith('report:')) return null
+  const title = (r.title ?? r.summary ?? '').trim()
+  return {
+    title,
+    severity,
+    file,
+    line,
+    rule: r.custom_metadata?.rule || 'other',
+    evidenceLine: evidence,
+    userImpact: descField(r.description, 'What the user sees') || title,
+    fix: descField(r.description, 'Fix') || 'See the report.',
+    doneWhen: descField(r.description, 'Done when') || 'The check above no longer reproduces.',
+    check: { kind: check[1], summary: check[2]!.trim() },
+    screen,
+    proposedBy: null,
+    vetoBy: null,
+    confidence: typeof r.custom_metadata?.confidence === 'number' ? r.custom_metadata.confidence : null,
+    rootFile: root,
+  }
+}
+
+/**
+ * The parents `--apply-cap` sends: every open report the collapse leaves open,
+ * with the finding it would wait as. The server picks which wait: it alone
+ * knows the cap, the live PRs and every score.
+ */
+export function capCandidates(plan: BacklogPlan, rows: readonly BacklogRow[], groups: readonly CollapseGroupPlan[], worktree: string, readFile: (path: string) => string | null = readWorktreeFile): Array<{ reportId: string; finding: Record<string, unknown> }> {
+  const children = new Set(groups.flatMap((g) => g.childIds))
+  const rootOf = new Map<string, string>()
+  for (const p of plan.patterns) for (const id of p.reportIds) rootOf.set(id, p.root)
+  const readRel = (p: string) => readFile(join(worktree, p))
+  const out: Array<{ reportId: string; finding: Record<string, unknown> }> = []
+  for (const r of rows) {
+    if (r.source !== 'code_audit' || children.has(r.id)) continue
+    let root = rootOf.get(r.id)
+    if (!root) {
+      // Gone on the base branch: not in a pattern, but it can still wait (the recheck then closes it).
+      const file = r.custom_metadata?.file ?? /^(.+):(\d+)$/.exec(descField(r.description, 'Where'))?.[1]
+      root = file ? patternRoot(file, descField(r.description, 'The code there'), readRel(file), readRel, (p) => readRel(p) !== null) : `report:${r.id}`
+    }
+    const finding = findingFromRow(r, root)
+    if (finding) out.push({ reportId: r.id, finding })
+  }
+  return out
 }

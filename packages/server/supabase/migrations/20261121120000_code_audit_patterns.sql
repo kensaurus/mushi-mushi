@@ -17,6 +17,10 @@
 --                              outside every open count, until a slot frees
 --   project_settings.code_audit_open_cap   default 25
 --   work_lanes.audit_rechecked_at   the audit lane's last recheck sweep
+--   reports.closed_reason 'deferred_over_cap'   a code-audit report moved out of
+--                              the open count by `mushi work --collapse-backlog
+--                              --apply-cap`; it waits in code_audit_deferred and
+--                              is restored when a slot frees
 --
 -- No status is added: a duplicate child is dismissed/duplicate with
 -- parent_report_id, a regression reopens the old parent ('reopened'), a
@@ -96,3 +100,36 @@ ALTER TABLE public.work_lanes
 
 COMMENT ON COLUMN public.work_lanes.audit_rechecked_at IS
   'ADR 0063: when this audit lane last rechecked every open code-audit report of its app on the default branch. The claim asks for a recheck when it is NULL or older than 20 hours.';
+
+-- ── reports.closed_reason: append 'deferred_over_cap' to the live list ──────
+-- Same append-only pattern as 20261024010500 (false_alarm): a reason an earlier
+-- migration added is kept.
+DO $$
+DECLARE
+  v_def  text;
+  v_vals text[];
+  v_add  text[] := ARRAY['deferred_over_cap'];
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO v_def
+    FROM pg_constraint
+   WHERE conrelid = 'public.reports'::regclass
+     AND conname = 'reports_closed_reason_check';
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'reports_closed_reason_check not found; refusing to guess the allowed reasons';
+  END IF;
+
+  SELECT array_agg(DISTINCT m[1] ORDER BY m[1]) INTO v_vals
+    FROM regexp_matches(v_def, '''([^'']+)''', 'g') AS m;
+  IF v_vals IS NULL OR array_length(v_vals, 1) = 0 THEN
+    RAISE EXCEPTION 'could not read the values of reports_closed_reason_check: %', v_def;
+  END IF;
+  IF v_add <@ v_vals THEN
+    RETURN;
+  END IF;
+
+  EXECUTE 'ALTER TABLE public.reports DROP CONSTRAINT reports_closed_reason_check';
+  EXECUTE format(
+    'ALTER TABLE public.reports ADD CONSTRAINT reports_closed_reason_check CHECK (closed_reason IS NULL OR closed_reason IN (%s))',
+    (SELECT string_agg(quote_literal(x), ', ' ORDER BY x) FROM (SELECT DISTINCT unnest(v_vals || v_add) AS x) u)
+  );
+END $$;
