@@ -152,6 +152,24 @@ const NOT_CHECKED: CheckCardView = {
   tone: 'neutral',
 }
 
+/** Health: a platform job (judge batch, weekly summary, retention) errored. Not this app's failed run. */
+const PLATFORM_JOB_ERROR: CheckCardView = {
+  state: 'unavailable',
+  chip: "Couldn't run: platform job error",
+  detail: null,
+  setupTo: null,
+  tone: 'dangerSubtle',
+}
+
+/** Health: a platform job is late. Not this app's failed run. */
+const PLATFORM_JOB_LATE: CheckCardView = {
+  state: 'unavailable',
+  chip: 'Platform job is late',
+  detail: null,
+  setupTo: null,
+  tone: 'warnSubtle',
+}
+
 /** The check's data could not be read. This is not a failed run. */
 const UNAVAILABLE: CheckCardView = {
   state: 'unavailable',
@@ -238,7 +256,10 @@ function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardVi
   const at = health.lastLlmCallAt ?? null
   const priority = health.topPriority
   if (priority === 'no_project' || priority === 'idle') return NOT_CHECKED
-  if (priority === 'cron_error' || priority === 'cron_stale' || priority === 'cron_warn') return NOT_CHECKED
+  // A platform job that errored or is late is not this app's failed run (never Failed, never
+  // Pass), but "Not run yet" claimed nothing had run (console audit 2026-11-21). Say what happened.
+  if (priority === 'cron_error') return PLATFORM_JOB_ERROR
+  if (priority === 'cron_stale' || priority === 'cron_warn') return PLATFORM_JOB_LATE
   if (priority === 'llm_errors' || priority === 'llm_fallbacks') return findings(1, at, now)
   if (priority === 'healthy' && at) return pass(at, now)
   return NOT_CHECKED

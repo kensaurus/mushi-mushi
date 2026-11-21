@@ -91,7 +91,9 @@ describe('buildCheckCardViews', () => {
     const cron = buildCheckCardViews(input({
       health: { topPriority: 'cron_error', cronErrorCount: 3, redCount: 3, lastLlmCallAt: RECENT },
     }), NOW)['/health']
-    expect(cron).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    // Audit 2026-11-21: it said "Not run yet", which claimed nothing had run. It says what happened,
+    // in the error tone, and is still neither Failed nor Pass.
+    expect(cron).toMatchObject({ state: 'unavailable', chip: "Couldn't run: platform job error", tone: 'dangerSubtle', detail: null })
     expect(cron?.chip).not.toBe('Failed')
     expect(cron?.chip).not.toBe('Pass')
   })
@@ -265,11 +267,11 @@ describe('buildCheckCardViews', () => {
     expect(failed).toMatchObject({ state: 'failed', chip: 'Failed' })
   })
 
-  it('a platform cron problem is Not run yet, and this app passes only from its own AI calls', () => {
+  it('a late platform job says so instead of "Not run yet" (nothing claims nothing ran), and this app passes only from its own AI calls', () => {
     const stale = buildCheckCardViews(input({
       health: { topPriority: 'cron_stale', amberCount: 2, lastLlmCallAt: STALE },
     }), NOW)['/health']
-    expect(stale).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(stale).toMatchObject({ state: 'unavailable', chip: 'Platform job is late', tone: 'warnSubtle', detail: null })
     expect(stale?.chip).not.toMatch(/finding/)
     expect(stale?.chip).not.toBe('Failed')
 

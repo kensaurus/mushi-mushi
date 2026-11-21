@@ -1,14 +1,16 @@
 /**
  * FILE: apps/admin/src/components/PageHubView.tsx
  * PURPOSE: The view switcher for a page hub (lib/pageHubs.ts): one row of
- *          views above the page, `?view=` in the URL, gated views hidden
- *          unless a link asks for one: then it says which plan has it.
+ *          views under the page title (ADR 0066; it sat above the title
+ *          under Plan 021), `?view=` in the URL, gated views hidden unless a
+ *          link asks for one: then it says which plan has it.
  */
 
 import { Suspense, type ReactNode } from 'react'
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Loading, SegmentedControl } from './ui'
 import { LockedHubView } from './LockedHubView'
+import { PageHeaderTabsProvider } from './PageHeaderTabs'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useEdgeFade } from '../lib/useEdgeFade'
 import { useMediaQuery } from '../lib/useMediaQuery'
@@ -37,37 +39,42 @@ export function PageHubView({ hub, render }: { hub: PageHub; render: Record<stri
     setSearchParams(next, { replace: true })
   }
 
-  return (
-    <div className="flex w-full min-w-0 flex-col gap-3">
-      {options.length > 1 && !wide && (
+  const tabs =
+    options.length < 2 ? null : wide ? (
+      <div ref={fade.ref} className={`max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`}>
         <SegmentedControl<string>
           value={view}
           options={options.map((v) => ({ id: v.id, label: v.label }))}
           onChange={select}
           ariaLabel={hub.title}
           size="sm"
-          wrap
+          scrollable
         />
-      )}
-      {options.length > 1 && wide && (
-        <div ref={fade.ref} className={`max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fade.className}`}>
-          <SegmentedControl<string>
-            value={view}
-            options={options.map((v) => ({ id: v.id, label: v.label }))}
-            onChange={select}
-            ariaLabel={hub.title}
-            size="sm"
-            scrollable
-          />
-        </div>
-      )}
-      {entitlements.loading && requested && hub.views.some((v) => v.id === requested && v.requiresFeature) ? (
-        <Loading text="Loading…" />
-      ) : locked ? (
-        <LockedHubView view={locked} currentPlan={entitlements.planName} />
-      ) : (
-        <Suspense fallback={<Loading text="Loading…" />}>{render[view]?.()}</Suspense>
-      )}
+      </div>
+    ) : (
+      <SegmentedControl<string>
+        value={view}
+        options={options.map((v) => ({ id: v.id, label: v.label }))}
+        onChange={select}
+        ariaLabel={hub.title}
+        size="sm"
+        wrap
+      />
+    )
+
+  // The tabs go to the view's PageHeaderBar, under its title (ADR 0066): the
+  // title is the first thing on screen and the tabs read as parts of it.
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-3">
+      <PageHeaderTabsProvider tabs={tabs}>
+        {entitlements.loading && requested && hub.views.some((v) => v.id === requested && v.requiresFeature) ? (
+          <Loading text="Loading…" />
+        ) : locked ? (
+          <LockedHubView view={locked} currentPlan={entitlements.planName} />
+        ) : (
+          <Suspense fallback={<Loading text="Loading…" />}>{render[view]?.()}</Suspense>
+        )}
+      </PageHeaderTabsProvider>
     </div>
   )
 }

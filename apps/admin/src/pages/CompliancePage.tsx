@@ -8,6 +8,7 @@ import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { PageHeaderBar } from '../components/PageHeaderBar'
+import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
   Card,
   Btn,
@@ -657,6 +658,26 @@ export function CompliancePage() {
   }
   if (statsError) {
     return <PageLoadError error={statsError} code={statsErrorCode} onRetry={reloadAll} />
+  }
+
+  // A plan without SOC 2: the upgrade panel is the page, as on Single sign-on. A "needs
+  // Enterprise" banner sat over the full evidence table, two upgrade buttons and Refresh
+  // evidence, which the plan cannot use (console audit 2026-11-21).
+  if (statsData && !stats.soc2Entitlement) {
+    return (
+      <div className="space-y-4" data-testid="compliance-locked">
+      <PageHeaderBar
+        title={copy?.title ?? 'Compliance'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        helpTitle={copy?.help?.title ?? 'About Compliance'}
+        helpWhatIsIt={
+          copy?.help?.whatIsIt ??
+          'SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail.'
+        }
+      />
+        <UpgradePrompt flag="soc2" currentPlan={stats.planDisplayName} />
+      </div>
+    )
   }
 
   return (

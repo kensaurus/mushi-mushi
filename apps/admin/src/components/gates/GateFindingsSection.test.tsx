@@ -454,3 +454,43 @@ describe('Dismiss a finding', () => {
     expect(container.textContent).toContain('Hex colour off the palette')
   })
 })
+
+// Console audit 2026-11-21: "Open schema changes →" led to Health → Schema changes, a
+// different scan that said "No baseline scan yet". A link to the check now lands on its
+// card, opens its findings, and the card does not link to itself.
+describe('GateFindingsSection schema_drift', () => {
+  const schemaPayload = {
+    runs: [{ id: 'sd-1', gate: 'schema_drift', status: 'fail', started_at: '2026-11-21T03:05:00Z' }],
+    findings: Array.from({ length: 5 }, (_, i) => ({
+      id: `sd-${i}`, gate_run_id: 'sd-1', severity: 'warn', rule_id: 'schema_drift_table_added', message: `Table t${i} added`, file_path: null, line: null, allowlisted: false,
+    })),
+  }
+
+  it('on Full-stack audit, opens the linked check and drops its link to itself', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: schemaPayload })
+    act(() =>
+      root.render(
+        createElement(MemoryRouter, { initialEntries: ['/fullstack-audit#check-schema_drift'] }, createElement(GateFindingsSection, { projectId: 'p1', neverRunText: 'Never ran.' })),
+      ),
+    )
+    await flush()
+    const card = container.querySelector('#check-schema_drift')!
+    expect(card).not.toBeNull()
+    expect(card.querySelector('details')!.open).toBe(true)
+    expect(card.textContent).not.toContain('Open schema changes')
+    expect(card.textContent).not.toContain('Open the schema findings')
+  })
+
+  it('elsewhere, links to the check on Full-stack audit, never to Health → Schema changes', async () => {
+    apiFetch.mockResolvedValue({ ok: true, data: schemaPayload })
+    act(() =>
+      root.render(
+        createElement(MemoryRouter, { initialEntries: ['/checks'] }, createElement(GateFindingsSection, { projectId: 'p1', neverRunText: 'Never ran.' })),
+      ),
+    )
+    await flush()
+    const link = [...container.querySelectorAll('a')].find((a) => a.textContent?.includes('Open the schema findings'))
+    expect(link?.getAttribute('href')).toBe('/fullstack-audit#check-schema_drift')
+    expect(container.querySelector('a[href="/health?view=schema"]')).toBeNull()
+  })
+})

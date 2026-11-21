@@ -230,12 +230,14 @@ export function FullStackAuditPage() {
   const unfinished = unfinishedChecks(findingsData)
   const status = auditStatsData ? auditStatus(auditStats, unfinished) : null
   const unknownCounts = auditStats.topPriority === 'unknown'
-  // Code size links to #dependency-holes; React Router does not scroll to hashes.
+  // Code size links to #dependency-holes and other pages to #check-<gate>; React Router does
+  // not scroll to hashes. The check cards exist only once the findings have loaded.
   const location = useLocation()
   useEffect(() => {
-    if (location.hash !== '#dependency-holes' || !projectId) return
-    document.getElementById('dependency-holes')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [location.hash, location.key, projectId])
+    const target = location.hash.slice(1)
+    if (!projectId || (target !== 'dependency-holes' && !target.startsWith('check-'))) return
+    document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [location.hash, location.key, projectId, findingsData])
 
   const runAudit = useCallback(async () => {
     if (!projectId) return

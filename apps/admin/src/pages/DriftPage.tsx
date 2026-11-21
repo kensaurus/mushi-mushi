@@ -42,6 +42,7 @@ import { DriftStatusBanner, isDriftStatusBannerCritical } from '../components/dr
 import { DriftReadout } from '../components/drift/DriftReadout'
 import { SchemaChangesTimeline } from '../components/drift/SchemaChangesTimeline'
 import { DriftSnapshotStrip } from '../components/drift/DriftSnapshotStrip'
+import { checkGroupFor, type GateFindingsPayload } from '../lib/gateFindings'
 import { DriftSchemaGuide } from '../components/drift/DriftSchemaGuide'
 import {
   EMPTY_DRIFT_STATS,
@@ -172,6 +173,15 @@ export function DriftPage() {
     projectId && activeTab === 'snapshots' ? `/v1/admin/drift/snapshots?project_id=${projectId}` : null,
     { deps: [projectId, activeTab] },
   )
+
+  // Before this page's own first scan, Full-stack audit's daily schema read (schema_drift) is the
+  // schema result this app has: show it, named, instead of "No baseline scan yet" (audit 2026-11-21).
+  const { data: gateFindings } = usePageData<GateFindingsPayload>(
+    projectId && statsData && stats.snapshotCount === 0 ? `/v1/admin/inventory/${encodeURIComponent(projectId)}/findings` : null,
+    { deps: [projectId, stats.snapshotCount] },
+  )
+  const schemaRead = checkGroupFor(gateFindings, 'schema_drift')
+  const dailyRead = schemaRead ? { ranAt: schemaRead.ranAt, open: schemaRead.open } : null
 
   const findings = listRows(findingsData)
   const snapshots = listRows(snapshotsData)
@@ -466,6 +476,7 @@ export function DriftPage() {
                 statLabels={copy?.statLabels}
                 onFirstScan={() => setActiveTab('scanner')}
                 onReview={() => setActiveTab('findings')}
+                dailyRead={dailyRead}
               />
             ),
           },

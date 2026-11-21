@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSpendCaps, findingsReadTruncated, groupFindingsByCheck, latestOpenFindings, planSpendCaps, spendCapSuggestion } from './gateFindings'
+import { checkGroupFor, describeSpendCaps, findingsReadTruncated, groupFindingsByCheck, latestOpenFindings, planSpendCaps, spendCapSuggestion } from './gateFindings'
 import { gateInfo, gateLabel } from './gateLabels'
 
 describe('latestOpenFindings', () => {
@@ -125,5 +125,24 @@ describe('groupFindingsByCheck', () => {
     expect(gateInfo('design_drift')?.page?.to).toBe('/design')
     expect(gateInfo('schema_drift')?.checks).toMatch(/Supabase schema/)
     expect(gateInfo('not_a_gate')).toBeNull()
+  })
+})
+
+describe('checkGroupFor', () => {
+  it('returns one check from the newest run, or null when it never ran', () => {
+    const payload = {
+      runs: [
+        { id: 'sd-2', gate: 'schema_drift', status: 'fail', started_at: '2026-11-21T03:05:00Z', completed_at: '2026-11-21T03:06:00Z' },
+        { id: 'sd-1', gate: 'schema_drift', status: 'fail', started_at: '2026-11-20T03:05:00Z' },
+      ],
+      findings: [
+        { id: 'a', gate_run_id: 'sd-2', severity: 'warn', rule_id: 'schema_drift_table_added', message: 'x', allowlisted: false },
+        { id: 'b', gate_run_id: 'sd-1', severity: 'warn', rule_id: 'schema_drift_table_added', message: 'old', allowlisted: false },
+      ],
+    } as unknown as Parameters<typeof checkGroupFor>[0]
+    const group = checkGroupFor(payload, 'schema_drift', Date.parse('2026-11-21T12:00:00Z'))
+    expect(group).toMatchObject({ gate: 'schema_drift', open: 1, ranAt: '2026-11-21T03:06:00Z' })
+    expect(checkGroupFor(payload, 'design_drift')).toBeNull()
+    expect(checkGroupFor(null, 'schema_drift')).toBeNull()
   })
 })
