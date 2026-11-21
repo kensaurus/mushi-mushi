@@ -187,7 +187,7 @@ export async function capturePage(page: Page, input: { baseUrl: string; path: st
 
 /** Pure: a folder name for a page key. */
 export function captureFolder(key: string): string {
-  return key.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 110) || 'root'
+  return key.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join('-').slice(0, 110) || 'root'
 }
 
 function writeCapture(dir: string, c: PageCapture): string {

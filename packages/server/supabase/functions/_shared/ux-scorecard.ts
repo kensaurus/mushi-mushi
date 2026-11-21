@@ -161,7 +161,9 @@ export function scorecardPageKey(path: string): string {
   const hashAt = path.indexOf('#')
   const noHash = hashAt < 0 ? path : path.slice(0, hashAt)
   const q = noHash.indexOf('?')
-  const pathname = (q < 0 ? noHash : noHash.slice(0, q)).replace(/\/+$/, '') || '/'
+  let pathname = q < 0 ? noHash : noHash.slice(0, q)
+  while (pathname.endsWith('/')) pathname = pathname.slice(0, -1)
+  pathname ||= '/'
   if (q < 0) return pathname
   const kept: string[] = []
   for (const part of noHash.slice(q + 1).split('&')) {
@@ -301,7 +303,7 @@ export function normText(s: string): string {
 export function evidenceSeenIn(evidence: string, f: Pick<UxPageFacts, 'text' | 'title' | 'controls' | 'headings' | 'earlyText' | 'breadcrumb'>): boolean {
   const hay = loose([f.title, f.breadcrumb ?? '', f.headings.join('\n'), f.controls.join('\n'), f.text, f.earlyText ?? ''].join('\n'))
   const quoted = [...evidence.matchAll(/["“'‘`]([^"”'’`]{6,})["”'’`]/g)].map((m) => m[1])
-  const parts = (quoted.length ? quoted : evidence.split(/\s*(?:\.\.\.|…|;|\|)\s*/)).map(loose).filter((p) => p.length >= 6)
+  const parts = (quoted.length ? quoted : evidence.split(/\.\.\.|…|;|\|/)).map(loose).filter((p) => p.length >= 6)
   return parts.some((p) => hay.includes(p))
 }
 
@@ -785,5 +787,5 @@ export function scorecardMarkdown(input: { app: string; url: string; at: string;
 }
 
 function esc(s: string): string {
-  return s.replace(/\|/g, '\\|').replace(/\n+/g, ' ')
+  return s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ')
 }

@@ -34,7 +34,7 @@ export function parseViewport(v: unknown): { width: number; height: number } | n
 
 /** Pure: a ux_surfaces.surface_key for a page key: lower-case slug, at most 120 characters, unique enough per run. */
 export function scorecardSurfaceKey(pageKey: string): string {
-  const slug = pageKey.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'root'
+  const slug = pageKey.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).join('-') || 'root'
   if (slug.length <= 110) return slug
   let h = 0
   for (const ch of pageKey) h = (h * 31 + ch.charCodeAt(0)) >>> 0
