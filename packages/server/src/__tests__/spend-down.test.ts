@@ -381,7 +381,9 @@ describe('runSpendDownForKey', () => {
       const off = await run()
       const enforce = await run(await gate('enforce', [noAgent]))
       expect(enforce.calls).toEqual([])
-      expect(enforce.summary.projects.find((p) => p.projectId === P1)).toMatchObject({ dispatched: 0, healthPaused: true, stopped: expect.stringContaining('Paused until this is fixed: Auto-fix agent key') })
+      expect(enforce.summary.projects.find((p) => p.projectId === P1)).toMatchObject({ dispatched: 0, healthPaused: true, stopped: expect.stringContaining('Paused until this is fixed: No Cursor key can start fixes. Auto-fix is on, but no Cursor key can start an agent, so automatic fixes are stopped.') })
+      // The reason names what to fix once; it never says the pause twice ("Paused … Automatic fixes are stopped").
+      expect(enforce.summary.projects.find((p) => p.projectId === P1)?.stopped).not.toMatch(/Paused until this is fixed: Automatic fixes are stopped/)
       const other = await run(await gate('enforce', [followupsOnly, unknown]))
       expect(JSON.stringify(other.calls)).toBe(JSON.stringify(off.calls))
     })

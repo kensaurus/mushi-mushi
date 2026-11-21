@@ -318,18 +318,21 @@ export function autofixKeyGap(input: DispatchInput): SetupGap {
   if (d.server.agentKeys === 0) {
     // Present tense: automatic fixes are stopped now, not at risk later. Each
     // key gets its own problem and its own repair (report e32cd161).
+    // The title names the problem to fix: the health gate prints it as
+    // "Paused until this is fixed: <title>. <summary>", where "Automatic fixes
+    // are stopped" read as the pause repeated, not what to fix.
     const list = d.server.offKeyList ?? []
     const off = d.server.offKeys
     const keysPart = list.length
       ? ` ${list.map(offKeyProblem).join(' ')}`
       : off
-        ? ` (${off} key${off === 1 ? ' is' : 's are'} off, used up, or have spend-down off)`
+        ? ` ${off} key${off === 1 ? ' is' : 's are'} off, used up, or have spend-down off.`
         : ' You have no Cursor key for this app.'
     return {
       ...base,
       status: 'gap',
-      title: 'Automatic fixes are stopped',
-      summary: `Auto-fix is on, but no Cursor key can start an agent, so no fix starts on its own.${keysPart}`,
+      title: 'No Cursor key can start fixes',
+      summary: `Auto-fix is on, but no Cursor key can start an agent, so automatic fixes are stopped.${keysPart}`,
       ...(list.length ? { steps: list.map(offKeyRepair) } : {}),
     }
   }

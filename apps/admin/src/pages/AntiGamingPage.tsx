@@ -921,7 +921,7 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
               size="sm"
               onClick={onToggleExpand}
               aria-expanded={isExpanded}
-              aria-label={isExpanded ? 'Collapse device details' : 'Show device details'}
+              aria-label={isExpanded ? 'Hide device details' : 'Show device details'}
               leadingIcon={isExpanded ? <IconChevronUp size={14} /> : <IconEye size={14} />}
             >
               {isExpanded ? 'Hide' : 'Details'}

@@ -185,8 +185,8 @@ describe('autofixKeyGap', () => {
         },
       },
     })
-    expect(gap.title).toBe('Automatic fixes are stopped')
-    expect(gap.summary).toContain('so no fix starts on its own')
+    expect(gap.title).toBe('No Cursor key can start fixes')
+    expect(gap.summary).toContain('so automatic fixes are stopped.')
     expect(gap.summary).not.toContain('will')
     expect(gap.summary).toContain('Key "main" is used up until Nov 22.')
     expect(gap.summary).toContain('Key "backup" has spend-down off.')
