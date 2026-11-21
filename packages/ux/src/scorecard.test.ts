@@ -103,3 +103,53 @@ describe('the UX scorecard run', () => {
     expect(() => new Function(`return ${FACTS_SCRIPT.replace(/\(\)\s*$/, '')}`)).not.toThrow()
   })
 })
+
+describe('a server-scored run keeps its screenshots', () => {
+  it('the server scorer remembers what it uploaded, and the final sync sends those names, not []', async () => {
+    const { serverScorer, syncScorecard } = await import('./scorecard.js')
+    const { topCauses } = await import('./scorecard-rubric.js')
+    const dir = capturesDir([facts('/queue', 'Processing jobs', 'Oldest pending job is 2400m old')])
+    writeFileSync(join(dir, 'pages', 'queue', 'early.png'), Buffer.from([1]))
+    const calls: Array<{ url: string; method: string; body: string }> = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      calls.push({ url, method, body: typeof init?.body === 'string' ? init.body : '' })
+      const json = (data: unknown) => new Response(JSON.stringify({ ok: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.endsWith('/uploads')) {
+        const names = (JSON.parse(String(init?.body)) as { names: string[] }).names
+        return json({ uploads: names.map((name) => ({ name, signedUrl: `https://storage.test/${name}` })) })
+      }
+      if (url.startsWith('https://storage.test/')) return new Response('', { status: 200 })
+      if (url.endsWith('/score')) {
+        const scores = Object.fromEntries(UX_DIMENSIONS.map((d) => [d, 5])) as UxPageScore['scores']
+        return json({ score: { key: '/queue', page: 'x', scores, why: {}, capped: {}, overall: 5, issues: [], claims: [], promptVersion: 'test' } })
+      }
+      return json({ id: 'run' })
+    }) as typeof fetch
+    try {
+      const cfg = { apiKey: 'k', projectId: 'p', endpoint: 'https://api.test', mode: 'local' as const }
+      const scorer = serverScorer(cfg, '20261121-130357-tfwt')
+      const f = readCaptures(dir)[0]
+      const s = await scorer.score(f.facts, f.folder, { app: 'Mushi', otherPages: [] })
+      expect(s.score?.overall).toBe(5)
+      expect(scorer.uploaded?.get('/queue')).toEqual(['queue/early.png', 'queue/settled.png'])
+      await syncScorecard(cfg, {
+        runId: '20261121-130357-tfwt',
+        url: 'https://kensaur.us/mushi-mushi/admin/',
+        viewport: { width: 1440, height: 900 },
+        scoredBy: 'server',
+        startedAt: '2026-11-21T13:03:57Z',
+        finished: true,
+        pages: [{ facts: f.facts, folder: f.folder, score: s.score }],
+        causes: topCauses([]),
+        uploaded: scorer.uploaded,
+      })
+      const put = calls.find((c) => c.method === 'PUT' && c.url.startsWith('https://api.test'))!
+      expect((JSON.parse(put.body) as { pages: Array<{ shots: string[] }> }).pages[0].shots).toEqual(['queue/early.png', 'queue/settled.png'])
+    } finally {
+      globalThis.fetch = realFetch
+    }
+  })
+})

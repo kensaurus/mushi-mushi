@@ -16,6 +16,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   accessibilityCap,
+  causeRank,
   causeReportBody,
   evidenceSeenIn,
   groupCauses,
@@ -32,6 +33,7 @@ import {
   scorecardMarkdown,
   scorecardPageKey,
   scorecardRows,
+  topCauses,
   UX_DIMENSIONS,
   UX_RUBRIC,
   UX_SCORE_ANCHORS,
@@ -412,7 +414,7 @@ describe('rows and wire shapes', () => {
     const row = io.scorecardReportRow(c, { reportId: 'r', projectId: 'p', actorId: 'u', localRunId: '20261121-100000-abcd', baseUrl: 'https://x/admin/', pageScores: { '/help': 5 }, now: new Date('2026-11-21T10:30:00Z') })
     expect(row).toMatchObject({ source: 'ux_scorecard', status: 'new', pattern_key: c.patternKey, category: 'visual', reporter_token_hash: 'ux-scorecard' })
     expect((row.affected_screens as Array<{ file: string }>).map((s) => s.file).sort()).toEqual(['/help', '/plugins', '/team?view=billing'])
-    expect(io.UxScorecardCauses.safeParse([c]).success).toBe(true)
+    expect(io.parseCauses([c])).toHaveLength(1)
   })
 })
 
@@ -423,5 +425,77 @@ describe('the versioned rubric file', () => {
     for (const d of UX_DIMENSIONS) expect(doc).toContain(`- **${d}** (${UX_RUBRIC[d].label}): ${UX_RUBRIC[d].asks}`)
     for (const a of UX_SCORE_ANCHORS) expect(doc).toContain(`- ${a}`)
     expect(doc).toContain(pageSystemPrompt())
+  })
+})
+
+// ── The first real run (2026-11-21): 235 causes, and thumbs wiped ─────────
+
+describe('a run keeps its top causes and its screenshots', () => {
+  const many = (n: number): UxCause[] =>
+    Array.from({ length: n }, (_, i) => ({
+      patternKey: `ux:copy:cause-${String(i).padStart(3, '0')}`,
+      dimension: 'copy' as const,
+      severity: (['high', 'medium', 'low'] as const)[i % 3],
+      kind: i % 10 === 0 ? ('shared' as const) : i % 25 === 0 ? ('contradiction' as const) : ('page' as const),
+      title: `Cause ${i}`,
+      problem: 'A real problem',
+      fix: 'A real fix',
+      pages: Array.from({ length: i % 10 === 0 ? 4 : 1 }, (_, j) => ({ key: `/p${i}-${j}`, label: `P${i}`, issueTitle: 't', evidence: 'e' })),
+      confidence: 0.6 + (i % 4) / 10,
+      evidenceSeen: true,
+    }))
+
+  it('235 causes keep the top 60: every cross-page cause first, then one-page causes by rank', () => {
+    const all = many(235)
+    const top = topCauses(all)
+    expect(top).toHaveLength(UX_SCORECARD_LIMITS.causes)
+    const cross = all.filter((c) => c.kind !== 'page').length
+    expect(top.slice(0, cross).every((c) => c.kind !== 'page')).toBe(true)
+    expect(top.slice(cross).every((c) => c.kind === 'page')).toBe(true)
+    const ranks = top.slice(cross).map(causeRank)
+    expect(ranks).toEqual([...ranks].sort((a, b) => b - a))
+  })
+
+  it('a stored blob over the limit reads as its top 60, a bad entry is skipped, not-a-list is none', async () => {
+    const io = await import('../../supabase/functions/_shared/ux-scorecard-io.ts')
+    const blob = [...many(235), { patternKey: 'not a key' }]
+    expect(io.parseCauses(blob)).toHaveLength(60)
+    expect(io.parseCauses(blob)[0].kind).not.toBe('page')
+    expect(io.parseCauses(null)).toEqual([])
+    expect(io.parseCauses({ causes: [] })).toEqual([])
+  })
+
+  it('a snapshot with 235 causes parses (no 400) and the run row stores 60', async () => {
+    const io = await import('../../supabase/functions/_shared/ux-scorecard-io.ts')
+    const snap = io.UxScorecardSnapshot.safeParse({
+      status: 'done',
+      start_url: 'https://kensaur.us/mushi-mushi/admin/',
+      viewport: '1440x900',
+      scored_by: 'server',
+      started_at: '2026-11-21T13:03:57Z',
+      pages: [],
+      causes: many(235),
+    })
+    expect(snap.success).toBe(true)
+    if (!snap.success) return
+    const row = io.scorecardRunRow(snap.data, { projectId: 'p', localRunId: '20261121-130357-tfwt', userId: 'u', now: new Date() })
+    expect((row.findings as unknown[]).length).toBe(60)
+    expect((row.counts as { causes: number }).causes).toBe(60)
+  })
+
+  it('a page synced with no screenshot names keeps the ones it was scored with', async () => {
+    const io = await import('../../supabase/functions/_shared/ux-scorecard-io.ts')
+    const rows = [
+      { surface_key: 'queue', thumbs: null },
+      { surface_key: 'checks', thumbs: { scorecard: ['checks/settled.png'] } },
+      { surface_key: 'new', thumbs: null },
+    ]
+    const kept = io.keepThumbs(rows, [
+      { surface_key: 'queue', thumbs: { scorecard: ['queue/early.png', 'queue/settled.png'] } },
+      { surface_key: 'checks', thumbs: { scorecard: ['old.png'] } },
+    ])
+    expect(kept[0].thumbs).toEqual({ scorecard: ['queue/early.png', 'queue/settled.png'] })
+    expect(kept[1].thumbs).toEqual({ scorecard: ['checks/settled.png'] })
+    expect(kept[2].thumbs).toBeNull()
   })
 })
