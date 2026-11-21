@@ -640,6 +640,10 @@ async function claimAuditMode(c: Ctx, db: Db, lane: LaneRow, host: HostRow, now:
     .select('id')
     .single()
   if (error || !data) return err(c, 'DB_ERROR', 'The claim could not be stored. Try again in a minute.', 500)
+  // The recheck is handed out once per 20 h, done or not: a worker older than
+  // ADR 0063 never posts it, and would otherwise get a model pass on every claim
+  // while the backlog is full (its findings only land in code_audit_deferred).
+  if (recheck) await db.from('work_lanes').update({ audit_rechecked_at: now.toISOString() }).eq('id', lane.id)
   return c.json({
     ok: true,
     data: {

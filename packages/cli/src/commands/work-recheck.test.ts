@@ -106,7 +106,7 @@ describe('a shared wrapper holds what an absent check missed (ADR 0063)', () => 
 
   it('pricing is gone: the shell around line 5 has the live region', () => {
     const r = recheckReport(at('app/pricing/loading.tsx', 5), '/wt', tree(files))
-    expect(r.gone).toBe(true)
+    expect(r).toMatchObject({ gone: true, via: 'wrapper' })
     expect(r.reason).toContain('components/route-loading-shell.tsx')
   })
 

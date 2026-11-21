@@ -62,7 +62,8 @@ export function parseAuditCheck(description: string | null | undefined): ParsedA
   return { kind: 'pattern', regex: m[1]!, ignoreCase, expect: m[3] as 'present' | 'absent', file, line: m[5] ? Number(m[5]) : null }
 }
 
-type Recheck = { gone: true; reason: string } | { gone: false; reason: string | null }
+/** `via: 'wrapper'` when only a shared wrapper around the line has what the check wanted (ADR 0063): kept apart so it can be reversed. */
+type Recheck = { gone: true; reason: string; via?: 'wrapper' } | { gone: false; reason: string | null }
 
 /**
  * Does the report's own check still reproduce in `worktree`? `gone: true`
@@ -84,7 +85,7 @@ export function recheckReport(detail: { source?: string | null; description?: st
       const re = safeRegex(check.regex, check.ignoreCase)
       const wrapper = re ? absentHeldByWrapper(check.file, text, check.line, re, readRel, (p) => readRel(p) !== null) : null
       if (wrapper) {
-        return { gone: true, reason: `the shared component ${wrapper} that wraps line ${check.line} of ${check.file} already has /${check.regex}/${check.ignoreCase ? 'i' : ''}` }
+        return { gone: true, via: 'wrapper', reason: `the shared component ${wrapper} that wraps line ${check.line} of ${check.file} already has /${check.regex}/${check.ignoreCase ? 'i' : ''}` }
       }
     }
     return { gone: false, reason: null }
@@ -134,7 +135,7 @@ export interface BacklogPattern {
 
 export interface BacklogPlan {
   checked: number
-  gone: Array<{ reportId: string; severity: string | null; reason: string }>
+  gone: Array<{ reportId: string; severity: string | null; reason: string; via?: 'wrapper' }>
   stillThere: number
   unclear: number
   /** Every pattern the reports still there fall into, biggest first. */
@@ -161,7 +162,7 @@ export function planBacklog(rows: readonly BacklogRow[], worktree: string, readF
     plan.checked++
     const res = recheckReport(r, worktree, readFile)
     if (res.gone) {
-      plan.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason })
+      plan.gone.push({ reportId: r.id, severity: r.severity ?? null, reason: res.reason, ...(res.via ? { via: res.via } : {}) })
       continue
     }
     if (res.reason) plan.unclear++

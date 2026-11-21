@@ -366,13 +366,13 @@ interface RecheckList {
  * the free slots are checked the same way and come back to be filed.
  */
 export function recheckSweep(list: RecheckList, wt: string, readFile: (path: string) => string | null = readWorktreeFile): {
-  results: Array<{ reportId: string; gone: boolean; reason: string }>
+  results: Array<{ reportId: string; gone: boolean; reason: string; via?: 'wrapper' }>
   refile: FindingBody[]
   deferredGone: string[]
 } {
   const results = list.reports.map((r) => {
     const res = recheckReport({ source: 'code_audit', description: r.description }, wt, readFile)
-    return { reportId: r.id, gone: res.gone, reason: res.reason ?? '' }
+    return { reportId: r.id, gone: res.gone, reason: res.reason ?? '', ...(res.gone && res.via ? { via: res.via } : {}) }
   })
   const refile: FindingBody[] = []
   const deferredGone: string[] = []

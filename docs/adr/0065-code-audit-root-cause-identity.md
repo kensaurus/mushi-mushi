@@ -116,8 +116,12 @@ Two references show the intended shape:
      default branch, wrappers included. It posts the verdicts with the commit sha
      (`POST …/recheck`).
      - A finding that no longer reproduces is closed as `fixed`, with
-       `custom_metadata.resolution {kind: 'recheck_not_reproduced', sha, base}`
-       and a team note (Sentry's Resolved).
+       `custom_metadata.resolution {kind, sha, base}` and a team note (Sentry's
+       Resolved). The kind is `recheck_not_reproduced`, or
+       `recheck_wrapper_has_pattern` when only a wrapper has what the check
+       wanted.
+     - The recheck is recorded as done when the claim is handed out, so a worker
+       that never posts one cannot get a pass on every claim.
      - A rejected fix that still reproduces goes back to `classified` once. After
        `FIX_REJECTED_REQUEUE_LIMIT` (2) rejections it stays with a person.
    - **A regression.** When a pattern comes back after its parent was fixed, the
@@ -153,8 +157,9 @@ Two references show the intended shape:
 functions ran read-only over the 550 open reports, on each repository's
 `origin/main`:
 
-- 46 would close as fixed. 27 of those are glot loading screens whose wrapper
-  already has the live region.
+- 46 would close as fixed. 29 of those close only because a wrapper around the
+  line has the attribute (27 glot loading screens). See Consequences: that live
+  region is empty while loading.
 - 118 are `present` checks whose code moved away from the cited line but is still
   in the file. 3 more point at files no longer on main. The agent decides on all
   of these.
@@ -177,9 +182,22 @@ per app, 75 would stay open and 345 would wait as deferred findings.
 - The taxonomy is a regex table. A category it misreads only changes which parent
   a finding joins, never whether it is filed. The table and its tests are the
   place to correct it.
-- The recheck trusts each report's own check, as ADR 0050's recheck did. A check
-  that "passes" because a wrapper has an empty live region closes the report. The
-  regression path reopens it if the audit finds the problem again.
+- **The wrapper rule is only as good as the check's regex, and this is an open owner decision.**
+  - A wrapper that has the attribute counts as having the behaviour. glot's
+    `RouteLoadingShell` has `aria-live`, but its live region stays empty until a
+    10 s timeout. A screen reader still hears nothing while the page loads.
+  - The worker drops a new finding like that before filing it, so the problem
+    cannot come back as a regression either.
+  - Closes made this way carry their own resolution kind,
+    `recheck_wrapper_has_pattern`. One query finds them, and reopening them
+    reverses the rule.
+  - The fix for the shell itself (announce while loading, not only on timeout)
+    is a code change in the app, not in the audit.
+- **An older worker against this server.**
+  - It never posts the recheck, so the claim records the recheck as handed out.
+    An app at its cap then gets at most one pass per 20 h, not one per claim.
+  - Its findings land in `code_audit_deferred`.
+  - Upgrade the daemon soon after the deploy.
 
 ## Rejected
 

@@ -526,7 +526,8 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
     await post(s, loading('pricing', { severity: 'high' }))
     expect(s.db.table('code_audit_deferred')[0]).toMatchObject({ seen_count: 2 })
     await s.app.call('POST', '/v1/worker/claims/:id/done', { params: { id: s.claim.id }, body: { outcome: 'no_change' } })
-    s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at = NOW.toISOString()
+    // A worker that never posts the recheck (older than ADR 0063) still gets one pass per 20 h, not one per claim.
+    expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
     const none = await s.app.call('POST', '/v1/worker/claim', { body: { laneId: s.ids['glot-audit'] } })
     expect(none.body.data).toEqual({ claim: null, reason: expect.stringMatching(/1 open code-audit reports \(its cap is 1\)/) })
   })
@@ -555,7 +556,7 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
         sha: 'abc1234def',
         base: 'main',
         results: [
-          { reportId: R(1), gone: true, reason: 'the shared component components/route-loading-shell.tsx already has /aria-live/' },
+          { reportId: R(1), gone: true, via: 'wrapper', reason: 'the shared component components/route-loading-shell.tsx already has /aria-live/' },
           { reportId: R(2), gone: false, reason: '' },
           { reportId: R(3), gone: true, reason: 'not mine to close' },
           { reportId: R(4), gone: true, reason: 'a person reported it' },
@@ -565,7 +566,8 @@ describe('audit patterns, the open cap and the recheck (ADR 0063)', () => {
     })
     expect(write.body.data).toEqual({ closed: 1, requeued: 1, deferredDropped: 1 })
     const byId = (id: string) => s.db.table('reports').find((r) => r.id === id)!
-    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_not_reproduced', sha: 'abc1234def', base: 'main' } } })
+    // A wrapper close is its own kind, so it can be found and reversed in one query.
+    expect(byId(R(1))).toMatchObject({ status: 'fixed', custom_metadata: { resolution: { kind: 'recheck_wrapper_has_pattern', sha: 'abc1234def', base: 'main' } } })
     expect(byId(R(2))).toMatchObject({ status: 'classified', custom_metadata: { fix_rejected: { count: 1, rechecked: { sha: 'abc1234def' } } } })
     expect([byId(R(3)).status, byId(R(4)).status]).toEqual(['fixing', 'classified'])
     expect(s.db.table('work_lanes').find((l) => l.name === 'glot-audit')!.audit_rechecked_at).toBe(NOW.toISOString())
