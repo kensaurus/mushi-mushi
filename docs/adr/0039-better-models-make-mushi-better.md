@@ -108,10 +108,12 @@ credit and switch over" (Claude credit at $1.30, OpenAI at $221).
 - The platform Claude key is handed out up front only when Anthropic heads
   the order. Otherwise it is `withAnthropicOrOpenAi`'s last resort, after the
   OpenAI pool (`OPENAI_API_KEY`, then `OPENROUTER_API_KEY`). Callers that
-  take one key and call Claude themselves take their OpenAI branch; callers
-  with no OpenAI branch (story-mapper, sentinel-audit, prompt-auto-tune, the
-  nl-query planner, screenshot vision) skip on the platform key, as they
-  already do for an organization on OpenAI.
+  take one key and call Claude themselves (classify-report, judge-batch,
+  mistake-*, release-builder, the Ask Mushi stream) take their OpenAI branch
+  on one platform key, without walking the rest of the order. inventory-propose,
+  story-mapper and nl-query gained an OpenAI leg. sentinel-audit,
+  prompt-auto-tune and screenshot vision have none and skip on the platform
+  key, as they already do for an organization on OpenAI.
 - An app's own keys (BYOK) are untouched: an app with its own Claude key
   still runs Claude first. Rejected: flipping `ai_provider`'s default to
   `openai`, which would also take away customers' own Claude keys.
