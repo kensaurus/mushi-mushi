@@ -32,7 +32,6 @@ import {
   formatRelative,
   Input,
   SegmentedControl,
-  Tooltip,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile } from '../components/charts'
@@ -917,46 +916,42 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
             </InlineProof>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Tooltip content={isExpanded ? 'Collapse' : 'Details'}>
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={onToggleExpand}
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? 'Collapse device details' : 'Show device details'}
+              leadingIcon={isExpanded ? <IconChevronUp size={14} /> : <IconEye size={14} />}
+            >
+              {isExpanded ? 'Hide' : 'Details'}
+            </Btn>
+            {d.flagged_as_suspicious ? (
               <Btn
                 variant="ghost"
                 size="sm"
-                onClick={onToggleExpand}
-                aria-expanded={isExpanded}
-                aria-label={isExpanded ? 'Collapse device details' : 'Show device details'}
-                className="px-2"
+                onClick={onUnflag}
+                disabled={isBusy}
+                loading={isBusy}
+                aria-label="Unflag device"
+                leadingIcon={<IconFlagOff size={14} />}
+                className="text-fg-muted hover:text-ok"
               >
-                {isExpanded ? <IconChevronUp size={14} /> : <IconEye size={14} />}
+                Unflag
               </Btn>
-            </Tooltip>
-            {d.flagged_as_suspicious ? (
-              <Tooltip content="Unflag device">
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={onUnflag}
-                  disabled={isBusy}
-                  loading={isBusy}
-                  aria-label="Unflag device"
-                  className="px-2 text-fg-muted hover:text-ok"
-                >
-                  <IconFlagOff size={14} />
-                </Btn>
-              </Tooltip>
             ) : (
-              <Tooltip content="Flag as suspicious">
-                <Btn
-                  variant="ghost"
-                  size="sm"
-                  onClick={onFlag}
-                  disabled={isBusy}
-                  loading={isBusy}
-                  aria-label="Flag as suspicious"
-                  className="px-2 text-fg-muted hover:text-danger"
-                >
-                  <IconFlag size={14} />
-                </Btn>
-              </Tooltip>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={onFlag}
+                disabled={isBusy}
+                loading={isBusy}
+                aria-label="Flag as suspicious"
+                leadingIcon={<IconFlag size={14} />}
+                className="text-fg-muted hover:text-danger"
+              >
+                Flag
+              </Btn>
             )}
           </div>
         </div>

@@ -13,7 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockState = vi.hoisted(() => ({ tracked: 0, events: [] as unknown[] }))
+const mockState = vi.hoisted(() => ({ tracked: 0, events: [] as unknown[], devices: [] as unknown[] }))
 
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useEntitlements', () => ({ useEntitlements: () => ({ has: () => false, isSuperAdmin: false, canEditProject: true }) }))
@@ -29,7 +29,7 @@ vi.mock('../lib/usePageData', () => ({
         data: { hasAnyProject: true, projectId: 'p1', projectName: 'kensaur.us', trackedDevices: mockState.tracked, flaggedDevices: 0, crossAccountDevices: 0, totalReports: 4, topPriority: 'waiting', topPriorityLabel: null, topPriorityTo: null },
       }
     }
-    if (path.startsWith('/v1/admin/anti-gaming/devices')) return { ...base, data: { devices: [] } }
+    if (path.startsWith('/v1/admin/anti-gaming/devices')) return { ...base, data: { devices: mockState.devices } }
     if (path.startsWith('/v1/admin/anti-gaming/events')) return { ...base, data: { events: mockState.events } }
     return { ...base, data: null }
   },
@@ -111,5 +111,21 @@ describe('AntiGamingPage with no tracked device', () => {
     const typeFilter = [...host.querySelectorAll('select')].find((s) => s.getAttribute('aria-label') === 'Type') as HTMLSelectElement
     expect([...typeFilter.options].map((o) => o.textContent)).toContain('Multi-account')
     mockState.events = []
+  })
+  // Report 35d0d73d (2026-11-21): the device row's eye and flag controls were icon-only.
+  it('labels the device row actions in words, not icons alone', async () => {
+    mockState.tracked = 1
+    const now = new Date().toISOString()
+    mockState.devices = [
+      { id: 'd1', project_id: 'p1', device_fingerprint: 'fp-1', fingerprint_hash: null, reporter_tokens: ['t1'], ip_addresses: ['10.0.0.1'], report_count: 2, distinct_user_count: 1, flagged_as_suspicious: false, cross_account_flagged: false, flag_reason: null, updated_at: now, created_at: now },
+    ]
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(AntiGamingPage))))
+    })
+    const details = host.querySelector('button[aria-label="Show device details"]')
+    const flag = host.querySelector('button[aria-label="Flag as suspicious"]')
+    expect(details?.textContent).toContain('Details')
+    expect(flag?.textContent).toContain('Flag')
+    mockState.devices = []
   })
 })
