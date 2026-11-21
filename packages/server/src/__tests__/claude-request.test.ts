@@ -271,7 +271,8 @@ describe('refusal handling', () => {
 
   it('a spent Anthropic key (a 400 "usage limits", not a 429) is quota, so failover tries the next key', () => {
     expect(classifyLlmError(new Error('You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.'))).toBe('quota')
-    expect(classifyLlmError(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('quota')
+    // A spent balance is its own class since 2026-11-21 ('payment'); it fails over the same way.
+    expect(classifyLlmError(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('payment')
   })
 
   it('withAnthropicOrOpenAi hands a Claude refusal to OpenAI', async () => {

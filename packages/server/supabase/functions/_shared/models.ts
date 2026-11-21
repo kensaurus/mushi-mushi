@@ -143,9 +143,14 @@ export const RELEASE_NOTES_FALLBACK = OPENAI_MINI
 
 /** story-mapper: crawled pages → a draft inventory.yaml. */
 export const STORY_MAP_MODEL = ANTHROPIC_SONNET_LATEST
+/** story-mapper on the OpenAI pool (Sonnet tier → Terra). */
+export const STORY_MAP_FALLBACK = OPENAI_TERRA
 
 /** inventory-propose: SDK observations → a draft inventory.yaml. */
 export const INVENTORY_PROPOSE_MODEL = ANTHROPIC_SONNET_LATEST
+/** inventory-propose on the OpenAI pool: Terra is the Sonnet-tier model
+ *  (hosted calls run here first since 2026-11-21, hosted-llm-order.ts). */
+export const INVENTORY_PROPOSE_FALLBACK = OPENAI_TERRA
 
 /** mistake-clusterer coherence check and mistake-summarizer lessons. */
 export const MISTAKE_MODEL = ANTHROPIC_HAIKU_LATEST
@@ -306,5 +311,6 @@ export const ALL_ACTIVE_CHAT_MODELS: readonly string[] = [
   ANTHROPIC_OPUS,
   ANTHROPIC_OPUS_LATEST,
   OPENAI_PRIMARY,
+  OPENAI_TERRA,
   OPENAI_MINI,
 ] as const

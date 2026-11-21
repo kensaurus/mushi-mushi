@@ -31,8 +31,9 @@
 //
 // BYOK
 // ────
-// Honours `project_settings.byok_anthropic_key_ref` via the existing
-// `resolveLlmKey` helper. Falls back to the host's `ANTHROPIC_API_KEY`.
+// Runs through `withAnthropicOrOpenAi`: the app's own Claude key first,
+// else its OpenAI pool, else the platform keys in MUSHI_HOSTED_LLM_ORDER
+// (OpenAI first since 2026-11-21; GPT-6.1 Terra is the Sonnet-tier model).
 //
 // Run budget
 // ──────────
@@ -58,8 +59,13 @@ import { withSentry } from '../_shared/sentry.ts'
 import { safeErrorResponse } from '../_shared/safe-error.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { parseBody, InventoryProposeBodySchema } from '../_shared/validate.ts'
-import { withLlmFailover, WalletDeniedError } from '../_shared/llm-failover.ts'
-import { INVENTORY_PROPOSE_EFFORT, INVENTORY_PROPOSE_MODEL, THINKING_HEADROOM_TOKENS } from '../_shared/models.ts'
+import { withAnthropicOrOpenAi, WalletDeniedError } from '../_shared/llm-failover.ts'
+import {
+  INVENTORY_PROPOSE_EFFORT,
+  INVENTORY_PROPOSE_FALLBACK,
+  INVENTORY_PROPOSE_MODEL,
+  THINKING_HEADROOM_TOKENS,
+} from '../_shared/models.ts'
 import { claudeGenerateText } from '../_shared/claude-messages.ts'
 import { withLlmUsage, type LlmUsageContext } from '../_shared/llm-usage.ts'
 import { resolveClaudeModel } from '../_shared/claude-request.ts'
@@ -260,6 +266,10 @@ Produce a complete inventory.yaml object as JSON. Wrap the inventory under \`inv
  */
 async function runProposer(args: {
   apiKey: string
+  /** Which family the key belongs to; 'openai' covers the OpenAI pool (OpenAI or OpenRouter). */
+  provider: 'anthropic' | 'openai'
+  /** The key's OpenAI-compatible base URL (an OpenRouter key must not go to api.openai.com). */
+  baseUrl?: string
   /** Writes the llm_invocations row for the provider call (and so its hosted-key debit). */
   db: SupabaseClient
   usage: LlmUsageContext
@@ -284,17 +294,32 @@ async function runProposer(args: {
   // `extractFencedJson` for why this is not a structured-output call.
   // Recorded at the provider call, so a reply that later fails JSON parsing
   // or validation still counts: its tokens were spent.
-  const result = await withLlmUsage(args.db, args.usage, () => claudeGenerateText({
-    apiKey: args.apiKey,
-    model: args.modelId,
-    effort: INVENTORY_PROPOSE_EFFORT,
-    messages,
-    // 8k of inventory JSON plus room for adaptive thinking.
-    maxTokens: 8192 + THINKING_HEADROOM_TOKENS,
-    // Without this the call can outlive the edge runtime itself.
-    abortSignal: AbortSignal.timeout(args.timeoutMs),
-    timeoutMs: args.timeoutMs,
-  }))
+  const result = await withLlmUsage(args.db, args.usage, async () => {
+    if (args.provider === 'openai') {
+      const [{ openAiProvider }, { generateText }] = await Promise.all([
+        import('../_shared/openai-compat.ts'),
+        import('../_shared/ai-sdk.ts'),
+      ])
+      const openai = openAiProvider({ apiKey: args.apiKey, ...(args.baseUrl ? { baseURL: args.baseUrl } : {}) })
+      return generateText({
+        model: openai(args.modelId),
+        messages,
+        maxTokens: 8192 + THINKING_HEADROOM_TOKENS,
+        abortSignal: AbortSignal.timeout(args.timeoutMs),
+      })
+    }
+    return claudeGenerateText({
+      apiKey: args.apiKey,
+      model: args.modelId,
+      effort: INVENTORY_PROPOSE_EFFORT,
+      messages,
+      // 8k of inventory JSON plus room for adaptive thinking.
+      maxTokens: 8192 + THINKING_HEADROOM_TOKENS,
+      // Without this the call can outlive the edge runtime itself.
+      abortSignal: AbortSignal.timeout(args.timeoutMs),
+      timeoutMs: args.timeoutMs,
+    })
+  })
 
   let out: ModelOutput
   try {
@@ -386,34 +411,37 @@ async function proposeAndPersist(
       break
     }
     try {
-      last = await withLlmFailover(
-        db,
-        projectId,
-        'anthropic',
-        async (resolved) => {
-          return runProposer({
+      // No `meter`: runProposer writes an llm_invocations row, and
+      // logLlmInvocation takes the hosted-key debit. Passing both would
+      // charge the call twice.
+      const propose = (provider: 'anthropic' | 'openai', model: string) =>
+        async (resolved: { key: string; source: 'byok' | 'env'; baseUrl?: string }) =>
+          runProposer({
             apiKey: resolved.key,
+            provider,
+            baseUrl: resolved.baseUrl,
             db,
             usage: {
               functionName: 'inventory-propose',
               stage: 'propose',
               projectId,
-              model: modelId,
+              model,
               keySource: resolved.source,
               // Billed before (withLlmFailover meter); keeps that debit.
               billHosted: true,
             },
-            modelId,
+            modelId: model,
             prompt,
             previousIssues,
             systemPrompt: managedSystemPrompt ?? undefined,
             timeoutMs,
           })
-        },
-        // No `meter`: runProposer writes an llm_invocations row, and
-        // logLlmInvocation takes the hosted-key debit. Passing both would
-        // charge the call twice.
-      )
+      last = (await withAnthropicOrOpenAi(
+        db,
+        projectId,
+        propose('anthropic', modelId),
+        propose('openai', INVENTORY_PROPOSE_FALLBACK),
+      )).result
       break
     } catch (err) {
       // A wallet refusal is not a retryable model failure — retrying only hits

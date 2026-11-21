@@ -23,6 +23,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
+import { anthropicNoCreditDrill, hostedClaudeFirst } from './hosted-llm-order.ts'
 
 const log = rootLog.child('ai-provider')
 
@@ -68,9 +69,13 @@ export function clearAiProviderCache(): void {
 
 /**
  * The platform's ANTHROPIC_API_KEY for this app, or undefined when its
- * organization runs AI on OpenAI. Use it instead of reading the env var.
+ * organization runs AI on OpenAI, or when MUSHI_HOSTED_LLM_ORDER does not put
+ * Anthropic first (hosted-llm-order.ts; the default since 2026-11-21 is
+ * OpenAI first). Use it instead of reading the env var: a caller that gets
+ * undefined takes its OpenAI branch.
  */
 export async function platformAnthropicKey(db: SupabaseClient, projectId: string): Promise<string | undefined> {
+  if (!hostedClaudeFirst() || anthropicNoCreditDrill()) return undefined
   if ((await aiProviderForProject(db, projectId)) === 'openai') return undefined
   return typeof Deno !== 'undefined' ? Deno.env.get('ANTHROPIC_API_KEY') || undefined : undefined
 }

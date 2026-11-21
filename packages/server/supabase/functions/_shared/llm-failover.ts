@@ -5,6 +5,8 @@
  * `withLlmFailover(db, projectId, provider, fn)` iterates the ordered list
  * of active keys, calls `fn(resolvedKey)`, and on error:
  *   - 429 → marks key as `quota_exhausted` (1-hour cooldown), advances.
+ *   - Spent credit ('payment': Anthropic's 400 "credit balance is too low",
+ *     402, OpenAI insufficient_quota) → same cooldown, advances.
  *   - 401/403 → marks key as `auth_failed`, advances.
  *   - Transient (5xx, timeout, ECONNRESET/ETIMEDOUT, "overloaded") → bounded
  *     exponential-backoff+jitter retry on the SAME key first (the key isn't
@@ -42,6 +44,12 @@ import {
 } from './hosted-llm-billing.ts';
 import { LlmBudgetExceededError } from './llm-budget.ts';
 import { sanitizeLlmError } from './llm-error-sanitize.ts';
+import {
+  AnthropicLowCreditDrillError,
+  anthropicNoCreditDrill,
+  hostedClaudeAllowed,
+  hostedClaudeFirst,
+} from './hosted-llm-order.ts';
 
 const log = rootLog.child('llm-failover');
 
@@ -96,8 +104,16 @@ export function isStage1LlmUnavailable(err: unknown): boolean {
  * this module depends on Supabase + BYOK key resolution, but classification
  * and the transient-retry decision are pure and worth testing in isolation.
  */
-export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' | 'other' {
+export function classifyLlmError(err: unknown): 'payment' | 'quota' | 'auth' | 'transient' | 'other' {
   const msg = String(err).toLowerCase();
+
+  // A spent account, not a busy one: Anthropic's 400 "Your credit balance is
+  // too low", OpenRouter's 402 "Insufficient credits", OpenAI's
+  // insufficient_quota / billing_hard_limit. No retry on this key helps; the
+  // next candidate (another vendor) does.
+  if (isPaymentMessage(msg)) return 'payment';
+  const errStatus = err as { status?: number; statusCode?: number } | null;
+  if ((errStatus?.status ?? errStatus?.statusCode) === 402) return 'payment';
 
   // HTTP status codes in the error message (Vercel AI SDK wraps them)
   // 429s, rate limits, and a spent Anthropic key (a 400 "usage limits", not a
@@ -168,6 +184,19 @@ export function classifyLlmError(err: unknown): 'quota' | 'auth' | 'transient' |
   return 'other';
 }
 
+/** Spent-credit wording from Anthropic, OpenAI and OpenRouter (lower-cased input). */
+function isPaymentMessage(msg: string): boolean {
+  return (
+    msg.includes('credit balance is too low') ||
+    msg.includes('insufficient_quota') ||
+    msg.includes('exceeded your current quota') ||
+    msg.includes('billing_hard_limit') ||
+    msg.includes('insufficient credits') ||
+    msg.includes('payment required') ||
+    /\b402\b/.test(msg)
+  );
+}
+
 function readEnvNumber(name: string, fallback: number): number {
   const raw = Deno.env.get(name);
   if (!raw) return fallback;
@@ -203,7 +232,7 @@ type CandidateOutcome<T> =
   // callers like `withAnthropicOrOpenAi` can still `instanceof`-check it
   // (e.g. `NoObjectGeneratedError.isInstance`) after it round-trips through
   // this helper.
-  | { ok: false; kind: 'quota' | 'auth' | 'transient_exhausted'; lastError: string }
+  | { ok: false; kind: 'payment' | 'quota' | 'auth' | 'transient_exhausted'; lastError: string }
   | { ok: false; kind: 'fatal'; lastError: string; error: unknown };
 
 /**
@@ -248,7 +277,7 @@ export async function callWithTransientRetry<T>(
         };
       }
 
-      if (kind === 'quota' || kind === 'auth') {
+      if (kind === 'payment' || kind === 'quota' || kind === 'auth') {
         return { ok: false, kind, lastError };
       }
 
@@ -291,11 +320,18 @@ export async function withLlmFailover<T>(
   provider: LlmProvider,
   fn: (key: ResolvedKey) => Promise<T>,
   meter?: LlmFailoverMeterOptions<T>,
-  /** `openAiOnly`: leave OpenRouter keys out (speech-to-text, fine-tuning). */
-  opts: { openAiOnly?: boolean } = {},
+  /**
+   * `openAiOnly`: leave OpenRouter keys out (speech-to-text, fine-tuning).
+   * `hostedClaude`: include the platform Claude key even when
+   * MUSHI_HOSTED_LLM_ORDER puts it after OpenAI (withAnthropicOrOpenAi's last leg).
+   */
+  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
 ): Promise<T> {
   await enforceLlmBudget(db, projectId, provider);
-  const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
+  const candidates = await resolveLlmKeys(db, projectId, provider, {
+    openAiOnly: opts.openAiOnly,
+    hostedClaude: opts.hostedClaude,
+  });
 
   if (candidates.length === 0) {
     throw new LlmFailoverError({
@@ -306,8 +342,9 @@ export async function withLlmFailover<T>(
     });
   }
 
-  // The env fallback in byok.ts always returns exactly one candidate, so a
-  // hosted call is never mixed with pooled BYOK keys in the same list.
+  // The env fallback in byok.ts returns only platform keys (OpenAI then
+  // OpenRouter for 'openai'), so a hosted call is never mixed with pooled
+  // BYOK keys in the same list.
   if (candidates.some((c) => c.source === 'env')) {
     const preflight = await hostedLlmPreflight({ db, projectId });
     if (!preflight.allowed) {
@@ -320,7 +357,7 @@ export async function withLlmFailover<T>(
 
   for (const candidate of candidates) {
     attempts++;
-    const outcome = await callWithTransientRetry(fn, candidate, provider);
+    const outcome = await callWithTransientRetry(drillWrap(fn, candidate, provider), candidate, provider);
 
     if (outcome.ok) {
       if (candidate.source === 'byok') {
@@ -350,6 +387,18 @@ export async function withLlmFailover<T>(
     lastError = outcome.lastError;
 
     switch (outcome.kind) {
+      case 'payment':
+        log.warn('LLM key out of credit; trying next', {
+          provider,
+          hint: candidate.hint,
+          keyId: candidate.keyId,
+          source: candidate.source,
+        });
+        if (candidate.keyId) {
+          await markKeyStatus(db, candidate.keyId, 'quota_exhausted', lastError);
+        }
+        continue;
+
       case 'quota':
         log.warn('LLM key quota exhausted; trying next', {
           provider,
@@ -401,8 +450,55 @@ export async function withLlmFailover<T>(
 }
 
 /**
- * Convenience wrapper that tries Anthropic first, then OpenAI.
- * Returns the result plus which provider was used.
+ * MUSHI_LLM_DRILL=anthropic_no_credit: a platform-key Claude call fails with
+ * Anthropic's recorded low-credit 400 before any request is sent, so the
+ * fallover can be proven live without touching a key (hosted-llm-order.ts).
+ * App-owned keys are never drilled.
+ */
+function drillWrap<T>(
+  fn: (key: ResolvedKey) => Promise<T>,
+  candidate: ResolvedKey,
+  provider: LlmProvider,
+): (key: ResolvedKey) => Promise<T> {
+  if (provider !== 'anthropic' || candidate.source !== 'env' || !anthropicNoCreditDrill()) return fn;
+  return () => Promise.reject(new AnthropicLowCreditDrillError());
+}
+
+/** Why OpenAI should take over from Claude, or null when it should not (the error is rethrown). */
+async function openAiCanCover(err: unknown): Promise<string | null> {
+  if (
+    err instanceof LlmFailoverError &&
+    (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
+  ) {
+    return err.code;
+  }
+  // (ai@4 loads here, after a model call, never at boot: ai-sdk.ts.)
+  // Anthropic responded but its output didn't match the required schema.
+  // OpenAI often handles complex structured-output schemas more reliably.
+  if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) return 'no_object';
+  // Claude (and its server-side fallback chain, which only covers the cyber /
+  // frontier_llm categories) declined. Not the key's fault and not transient:
+  // `withLlmFailover` re-threw it as fatal without marking the key. OpenAI
+  // runs different safety policies, so hand it over.
+  if (isClaudeRefusal(err)) return 'refusal';
+  return null;
+}
+
+/**
+ * Claude or OpenAI, in this order:
+ *   1. the app's own Claude keys (BYOK: own, legacy, shared, universal). The
+ *      platform Claude key joins this leg only when MUSHI_HOSTED_LLM_ORDER
+ *      puts Anthropic first;
+ *   2. the OpenAI pool: the app's OpenAI/OpenRouter keys, else the platform's
+ *      OPENAI_API_KEY and OPENROUTER_API_KEY in the configured order;
+ *   3. the platform Claude key as the last resort, when the order lists it
+ *      after OpenAI and the app has no Claude key of its own.
+ * With the default order (2026-11-21: openai,openrouter,anthropic) a hosted
+ * call runs on OpenAI, and an app with its own Claude key keeps it first. An
+ * organization that runs AI on OpenAI (ai-provider.ts) gets no Claude key in
+ * any leg.
+ *
+ * Returns the result plus which provider family answered.
  */
 export async function withAnthropicOrOpenAi<T>(
   db: SupabaseClient,
@@ -410,7 +506,7 @@ export async function withAnthropicOrOpenAi<T>(
   anthropicFn: (key: ResolvedKey) => Promise<T>,
   openAiFn: (key: ResolvedKey) => Promise<T>,
 ): Promise<{ result: T; usedProvider: 'anthropic' | 'openai' }> {
-  // Try Anthropic pool first
+  let appHasNoClaudeKey = false;
   try {
     const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
     return { result, usedProvider: 'anthropic' };
@@ -418,30 +514,28 @@ export async function withAnthropicOrOpenAi<T>(
     // Over budget is a project state, not an Anthropic problem: OpenAI is
     // under the same budget, so never fall through to it.
     if (err instanceof LlmBudgetExceededError) throw err;
-    if (
-      err instanceof LlmFailoverError &&
-      (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
-    ) {
-      // No Anthropic keys available — fall through to OpenAI.
-      log.warn('Anthropic exhausted, trying OpenAI', { projectId, reason: err.code });
-    } else if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) {
-      // (ai@4 loads here, after a model call, never at boot: ai-sdk.ts.)
-      // Anthropic responded but its output didn't match the required schema.
-      // OpenAI often handles complex structured-output schemas more reliably —
-      // try it as a fallback before giving up.
-      log.warn('Anthropic NoObjectGeneratedError; falling back to OpenAI', { projectId });
-    } else if (isClaudeRefusal(err)) {
-      // Claude (and its server-side fallback chain, which only covers the
-      // cyber / frontier_llm categories) declined. Not the key's fault and not
-      // transient — `withLlmFailover` re-threw it as fatal without marking the
-      // key. OpenAI runs different safety policies, so hand it over.
-      log.warn('Claude refusal; falling back to OpenAI', { projectId, category: err.category });
-    } else {
-      throw err;
-    }
+    const reason = await openAiCanCover(err);
+    if (!reason) throw err;
+    appHasNoClaudeKey = reason === 'NO_KEYS_CONFIGURED';
+    if (!appHasNoClaudeKey) log.warn('Anthropic could not answer; falling back to OpenAI', { projectId, reason });
   }
 
-  // Try OpenAI pool
-  const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
-  return { result, usedProvider: 'openai' };
+  try {
+    const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
+    return { result, usedProvider: 'openai' };
+  } catch (err) {
+    const lastResort = appHasNoClaudeKey && !hostedClaudeFirst() && hostedClaudeAllowed() &&
+      err instanceof LlmFailoverError &&
+      (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED');
+    if (!lastResort) throw err;
+    log.warn('OpenAI pool exhausted; trying the platform Claude key last', { projectId, reason: err.code });
+    try {
+      const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn, undefined, { hostedClaude: true });
+      return { result, usedProvider: 'anthropic' };
+    } catch (claudeErr) {
+      // No platform Claude key either: the OpenAI failure is the useful one.
+      if (claudeErr instanceof LlmFailoverError && claudeErr.code === 'NO_KEYS_CONFIGURED') throw err;
+      throw claudeErr;
+    }
+  }
 }

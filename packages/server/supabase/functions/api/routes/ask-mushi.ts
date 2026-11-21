@@ -989,8 +989,10 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
 
       try {
         // An organization that runs AI on OpenAI never gets the platform Claude key
-        // (ADR 0039 amendment); with no active project there is no organization
-        // to check, so no Claude key either.
+        // (ADR 0039 amendment), and neither does any app while
+        // MUSHI_HOSTED_LLM_ORDER puts OpenAI first (the default since
+        // 2026-11-21): this stream then runs on OPENAI_API_KEY. With no active
+        // project there is no organization to check, so no Claude key either.
         const anthropicKey = activeProject?.id ? await platformAnthropicKey(db, activeProject.id) : undefined;
         let primaryFailed = false;
         if (anthropicKey) {
@@ -1030,7 +1032,9 @@ export function registerAskMushiRoutes(app: Hono<{ Variables: Variables }>): voi
         } else {
           primaryFailed = true;
           fallbackUsed = true;
-          fallbackReason = activeProject?.id ? 'ANTHROPIC_API_KEY not set' : 'no active project to check the AI provider for';
+          fallbackReason = activeProject?.id
+            ? 'no platform Claude key (hosted order puts OpenAI first, the organization runs on OpenAI, or ANTHROPIC_API_KEY is unset)'
+            : 'no active project to check the AI provider for';
         }
 
         if (primaryFailed) {

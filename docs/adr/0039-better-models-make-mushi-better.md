@@ -92,3 +92,35 @@ settings. use latest model with similar model and pricing like opus 5.5."
   are OpenAI models. This is accepted for the duration; switching back to
   Claude restores the two families.
 - Screenshot vision runs on Claude only, and is skipped while on OpenAI.
+
+## Amendment 2026-11-21: hosted AI runs on OpenAI first, by config
+
+The owner, 2026-11-21: "move all services using CLAUDE API to openAI API
+(cheaper and latest model) … simulate that claude api is running out of
+credit and switch over" (Claude credit at $1.30, OpenAI at $221).
+
+- The platform keys (Mushi-hosted AI, billed to the KENSAURUS wallet) follow
+  `MUSHI_HOSTED_LLM_ORDER`, an edge secret: default
+  `openai,openrouter,anthropic`. The next contingency is a secret flip, not a
+  deploy. `_shared/hosted-llm-order.ts` owns it; `byok.ts` (the platform
+  step of the resolver), `platformAnthropicKey` and `withAnthropicOrOpenAi`
+  apply it.
+- The platform Claude key is handed out up front only when Anthropic heads
+  the order. Otherwise it is `withAnthropicOrOpenAi`'s last resort, after the
+  OpenAI pool (`OPENAI_API_KEY`, then `OPENROUTER_API_KEY`). Callers that
+  take one key and call Claude themselves take their OpenAI branch; callers
+  with no OpenAI branch (story-mapper, sentinel-audit, prompt-auto-tune, the
+  nl-query planner, screenshot vision) skip on the platform key, as they
+  already do for an organization on OpenAI.
+- An app's own keys (BYOK) are untouched: an app with its own Claude key
+  still runs Claude first. Rejected: flipping `ai_provider`'s default to
+  `openai`, which would also take away customers' own Claude keys.
+- A spent account is its own failure class, `payment` (Anthropic's 400 "Your
+  credit balance is too low", 402, OpenAI `insufficient_quota`); it cools the
+  key down and falls over like a quota error. `MUSHI_LLM_DRILL=anthropic_no_credit`
+  makes platform-key Claude calls fail that way without sending them, to
+  prove the fallover in production.
+- Models are matched by tier: Haiku → `gpt-6-luna`, Sonnet → `gpt-6.1-terra`,
+  and the code stages keep `OPENAI_PRIMARY` (`gpt-6.1-sol`). The calls stay on
+  the AI SDK's chat-completions path, which has run every OpenAI-organization
+  call since 2026-10-31.

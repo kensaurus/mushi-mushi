@@ -92,7 +92,7 @@ export function llmKeyCheck(input: { envAnthropic: boolean; envOpenai: boolean; 
       input.appKeys === null
         ? 'No AI key on the server, and your apps’ keys could not be read. Triage is rule-based until a key is set.'
         : 'No AI key yet: reports get a rule-based category, no plain-English diagnosis or fix draft.',
-    hint: 'Add an Anthropic or OpenAI key in Settings → AI keys, or set ANTHROPIC_API_KEY / OPENAI_API_KEY as a function secret.',
+    hint: 'Add an OpenAI or Anthropic key in Settings → AI keys, or set OPENAI_API_KEY (and OPENROUTER_API_KEY as its fallback) as a function secret. Hosted calls try them in MUSHI_HOSTED_LLM_ORDER.',
     fixHref: '/settings?tab=byok',
   }
 }

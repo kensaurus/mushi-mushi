@@ -191,6 +191,13 @@ A Supabase function secret: `supabase secrets set NAME=value` (or Project Settin
 | `KENSAURUS_WALLET_INTERNAL_TOKEN` | Optional | — | — |
 | `MUSHI_HOSTED_LLM_PREFLIGHT_TIMEOUT_MS` | Optional | — | — |
 
+### Hosted LLM provider order (optional)
+
+| Variable | Required | Default | What it does |
+| --- | --- | --- | --- |
+| `MUSHI_HOSTED_LLM_ORDER` | Optional | `openai` | Which vendor the platform keys try first, comma-separated from openai, openrouter, anthropic. A vendor left out is never used on the platform key. An app's own keys (BYOK) are not affected. Flip it for a contingency. Default: openai,openrouter,anthropic |
+| `MUSHI_LLM_DRILL` | Optional | — | Drill: anthropic_no_credit makes every platform-key Claude call fail with Anthropic's low-credit error, without sending it. Leave unset. |
+
 ### OpenAI-compatible endpoint (optional)
 
 | Variable | Required | Default | What it does |

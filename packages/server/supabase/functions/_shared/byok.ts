@@ -38,6 +38,13 @@ import {
 } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 import { aiProviderForProject } from './ai-provider.ts';
+import {
+  anthropicNoCreditDrill,
+  hostedClaudeAllowed,
+  hostedClaudeFirst,
+  hostedLlmOrder,
+  hostedOpenAiVendors,
+} from './hosted-llm-order.ts';
 
 const log = rootLog.child('byok');
 
@@ -168,6 +175,10 @@ export async function resolveLlmKey(
     await enforceLlmBudget(db, projectId, provider);
   }
   const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
+  // MUSHI_LLM_DRILL=anthropic_no_credit: callers that take one key and call
+  // Claude themselves see no platform Claude key, as if it were spent, and
+  // take their OpenAI branch. withLlmFailover callers get the recorded 400.
+  if (provider === 'anthropic' && candidates[0]?.source === 'env' && anthropicNoCreditDrill()) return null;
   return candidates[0] ?? null;
 }
 
@@ -209,7 +220,12 @@ export async function resolveLlmKeys(
   db: SupabaseClient,
   projectId: string,
   provider: LlmProvider,
-  opts: { openAiOnly?: boolean } = {},
+  /**
+   * `hostedClaude`: also hand out the platform Claude key when
+   * MUSHI_HOSTED_LLM_ORDER does not put Anthropic first (the last-resort leg
+   * of withAnthropicOrOpenAi). An app's own Claude keys are unaffected.
+   */
+  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
 ): Promise<ResolvedKey[]> {
   // An organization that runs AI on OpenAI (ADR 0039 amendment, 2026-10-31)
   // gets no Claude key at all: not its pool, legacy field or the platform's.
@@ -234,7 +250,7 @@ export async function resolveLlmKeys(
     legacy: own.length > 0 ? [] : await legacyCandidates(db, projectId, provider),
     shared,
     universal,
-    env: () => envCandidates(projectId, provider),
+    env: () => envCandidates(projectId, provider, opts),
   });
 }
 
@@ -324,7 +340,14 @@ export async function resolveLlmKeySources(
     if (legacy.get(provider)) return 'project';
     if (sourceFlags.organization) return 'organization';
     if (sourceFlags.universal) return 'owner_universal';
-    if (Deno.env.get(ENV_VAR[provider])) return 'env';
+    // Same answer as resolveLlmKeys: the platform Claude key only when
+    // MUSHI_HOSTED_LLM_ORDER puts Anthropic first (otherwise it is only
+    // withAnthropicOrOpenAi's last resort), and no vendor the order leaves out.
+    if (provider === 'anthropic' && !hostedClaudeFirst()) return null;
+    if (provider === 'openrouter' && !hostedOpenAiVendors().includes('openrouter')) return null;
+    const inOrder = provider !== 'openai' || hostedOpenAiVendors().includes('openai');
+    if (inOrder && Deno.env.get(ENV_VAR[provider])) return 'env';
+    if (provider === 'openai' && !opts.openAiOnly && hostedOpenAiVendors().includes('openrouter') && Deno.env.get(ENV_VAR.openrouter)) return 'env';
     return null;
   });
 }
@@ -631,22 +654,55 @@ async function legacySourcesAvailable(
   return out;
 }
 
-/** Step 3: the platform env-var key, when the project has no key of its own or shared. */
-function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] {
-  const env = Deno.env.get(ENV_VAR[provider]);
-  if (env) {
-    log.warn('BYOK call using platform env key — BYOK not configured for this project', {
-      projectId,
-      provider,
-      hint: hint(env),
-    });
-    const baseUrl = provider === 'openai'
-      ? validatedPlatformOpenAiBaseUrl(projectId)
-      : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
-    return [{ key: env, source: 'env', hint: hint(env), baseUrl }];
+/**
+ * Step 5: the platform keys, when the app has no key of its own, shared or
+ * universal. They follow MUSHI_HOSTED_LLM_ORDER (hosted-llm-order.ts):
+ *   - 'anthropic': the platform Claude key only when Anthropic heads the
+ *     order, or when the caller asks for it as the last resort
+ *     (`hostedClaude`, withAnthropicOrOpenAi's final leg). Otherwise none, so
+ *     every caller that has an OpenAI branch takes it.
+ *   - 'openai': OPENAI_API_KEY and OPENROUTER_API_KEY in the configured order
+ *     (OpenRouter left out for `openAiOnly` calls, which only OpenAI serves).
+ */
+function envCandidates(
+  projectId: string,
+  provider: LlmProvider,
+  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
+): ResolvedKey[] {
+  const order = hostedLlmOrder();
+  if (provider === 'anthropic' && !hostedClaudeFirst(order) && !(opts.hostedClaude && hostedClaudeAllowed(order))) {
+    return [];
   }
+  if (provider === 'openai') {
+    const out: ResolvedKey[] = [];
+    for (const vendor of hostedOpenAiVendors(order)) {
+      if (vendor === 'openrouter' && opts.openAiOnly) continue;
+      out.push(...platformKey(projectId, vendor));
+    }
+    return out;
+  }
+  return platformKey(projectId, provider);
+}
 
-  return [];
+/** One platform env-var key as a candidate, or none when the secret is unset. */
+function platformKey(projectId: string, provider: LlmProvider): ResolvedKey[] {
+  const env = Deno.env.get(ENV_VAR[provider]);
+  if (!env) return [];
+  log.warn('BYOK call using platform env key — BYOK not configured for this project', {
+    projectId,
+    provider,
+    hint: hint(env),
+  });
+  const baseUrl = provider === 'openai'
+    ? validatedPlatformOpenAiBaseUrl(projectId)
+    : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
+  return [{
+    key: env,
+    source: 'env',
+    hint: hint(env),
+    baseUrl,
+    ...(provider === 'openrouter' ? { provider: 'openrouter' as const } : {}),
+  }];
 }
 
 /**
