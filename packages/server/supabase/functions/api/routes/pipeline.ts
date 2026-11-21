@@ -466,7 +466,7 @@ export async function readDispatchers(db: Db, projectIds: string[], projects: Di
   try {
     const [settingsRes, keysRes, ownersRes, jobsRes, attemptsRes] = await Promise.all([
       db.from('project_settings').select('project_id, autofix_enabled').in('project_id', projectIds),
-      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until').eq('provider_slug', 'cursor').limit(500),
+      db.from('byok_keys').select('project_id, organization_id, owner_user_id, status, spend_down_enabled, exhausted_until, label').eq('provider_slug', 'cursor').limit(500),
       orgIds.length
         ? db.from('organization_members').select('organization_id, user_id').in('organization_id', orgIds).eq('role', 'owner')
         : Promise.resolve({ data: [], error: null }),

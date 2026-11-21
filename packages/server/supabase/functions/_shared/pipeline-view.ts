@@ -920,6 +920,28 @@ export interface AgentKeyRow {
   status: string | null
   spend_down_enabled: boolean | null
   exhausted_until: string | null
+  /** The name the owner gave the key (never key material). */
+  label?: string | null
+}
+
+/** Why a Cursor key that serves the app cannot start fixes, and its repair. */
+export interface OffKey {
+  label: string | null
+  issue: 'turned_off' | 'used_up' | 'spend_down_off'
+  /** For used_up: when Cursor lets it start agents again. */
+  until?: string
+}
+
+/** Each serving key that cannot start fixes, with its own reason (first that applies). */
+export function offKeyReasons(keys: AgentKeyRow[], now: number): OffKey[] {
+  const out: OffKey[] = []
+  for (const k of keys) {
+    const label = typeof k.label === 'string' && k.label.trim() ? k.label.trim() : null
+    if (k.status !== 'active') out.push({ label, issue: 'turned_off' })
+    else if (k.exhausted_until && Date.parse(k.exhausted_until) > now) out.push({ label, issue: 'used_up', until: k.exhausted_until })
+    else if (!k.spend_down_enabled) out.push({ label, issue: 'spend_down_off' })
+  }
+  return out
 }
 
 export interface DispatcherInput {
@@ -943,7 +965,7 @@ export interface DispatcherStatus {
   autofixOn: boolean
   /** Who opened fixes in the last 7 days. */
   opener: 'server' | 'local' | 'both' | 'nobody'
-  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null }
+  server: { agentKeys: number; offKeys: number; dispatches24h: number; dispatches48h: number; lastAt: string | null; offKeyList?: OffKey[] }
   local: {
     runs24h: number
     running: number
@@ -981,7 +1003,7 @@ export function buildDispatchers(input: DispatcherInput): DispatcherStatus[] {
     const serverTimes = [...jobs.map((j) => j.created_at), ...serverAttempts.map((a) => a.created_at)].sort()
     const dispatches24h = jobs.filter((j) => within(j.created_at, 24 * HOUR)).length
     const dispatches48h = jobs.filter((j) => within(j.created_at, 48 * HOUR)).length
-    const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null }
+    const server = { agentKeys, offKeys: keys.length - agentKeys, dispatches24h, dispatches48h, lastAt: serverTimes[serverTimes.length - 1] ?? null, offKeyList: offKeyReasons(keys, now) }
     const localTimes = localAttempts.map((a) => a.created_at).sort()
     // Registered lanes, not inferred from runs (ADR 0048): one that is online,
     // not paused or draining, before its stop date and fixing new reports.
