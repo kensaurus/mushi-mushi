@@ -33,6 +33,7 @@ const MUSHI_CHECK_SOURCES: ReadonlySet<string> = new Set([
   'security_advisory',
   'fresh_eyes',
   'code_audit',
+  'ux_scorecard',
 ])
 
 /**

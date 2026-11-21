@@ -840,6 +840,15 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
+// The UX scorecard (ux-scorecard.ts, ADR 0066).
+forwardToApiExt([
+  '/v1/admin/projects/:pid/ux-scorecard',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/uploads',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/score',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/group',
+  '/v1/admin/projects/:pid/ux-scorecard/:runId/file',
+]);
 registerPullRequestRoutes(app);
 registerProjectGroupRoutes(app);
 registerBootstrapRoutes(app);

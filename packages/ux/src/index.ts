@@ -2,7 +2,8 @@
 /**
  * @mushi-mushi/ux — library entry. The `mushi-ux` bin (cli.ts) is the main
  * way in; these exports let other tools drive the same steps: map an app,
- * run the loop, judge a run, serve its dashboard, try a goal as a first-time visitor.
+ * run the loop, judge a run, serve its dashboard, try a goal as a first-time visitor,
+ * score every page on the UX rubric (ADR 0066).
  */
 
 export { AGENTS, getAgent, quoteArg, type AgentAdapter, type AgentName, type AgentRunOptions } from './agents.js'
@@ -45,6 +46,30 @@ export { startLoop, type LoopEvent, type LoopHandle, type LoopOptions } from './
 export { buildPacket, findDesignFiles, POINTER_PROMPT, type PacketInput } from './packet.js'
 export { runProbes, probePenalty } from './probes.js'
 export { routesFromSource, sitemapPaths, reactRouterPaths, nextRoutePath } from './routes.js'
+export {
+  capturePage,
+  captureFolder,
+  fileScorecard,
+  localScorer,
+  readCaptures,
+  runScorecard,
+  scorecardContext,
+  scorecardRunId,
+  serverScorer,
+  syncScorecard,
+  uploadAllShots,
+  DEFAULT_SCORECARD_MODEL,
+  DEFAULT_SCORECARD_VIEWPORT,
+  FACTS_SCRIPT,
+  type PageCapture,
+  type ScoreVia,
+  type Scorer,
+  type ScorecardFileOutcome,
+  type ScorecardOptions,
+  type ScorecardPageResult,
+  type ScorecardResult,
+} from './scorecard.js'
+export * from './scorecard-rubric.js'
 export {
   loadState,
   saveState,
