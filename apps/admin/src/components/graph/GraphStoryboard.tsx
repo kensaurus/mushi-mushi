@@ -211,10 +211,14 @@ export function GraphStoryboard({
                       ${dimmed ? 'opacity-40' : 'opacity-100'}
                     `}
                   >
-                    <div
-                      className="text-2xs text-fg-secondary font-semibold"
-                      style={{ color: NODE_COLORS[col.type] }}
-                    >
+                    {/* The type colour is a swatch, not the text colour: red and green
+                        2xs text on the card failed WCAG contrast (axe, audit 2026-11-21). */}
+                    <div className="flex items-center gap-1.5 text-2xs text-fg-secondary font-semibold">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: NODE_COLORS[col.type] }}
+                      />
                       {col.label}
                     </div>
                     <div className="text-xs text-fg-secondary leading-snug wrap-break-word mt-0.5" title={node.label || undefined}>

@@ -271,7 +271,7 @@ function NoEventsYet() {
       <CodeValue value={TRACK_SNIPPET} copyable />
       <p className="text-2xs text-fg-faint">
         Do Not Track and Global Privacy Control browsers send nothing.{' '}
-        <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-link hover:underline">
+        <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-link underline underline-offset-2">
           Analytics SDK docs →
         </a>
       </p>
