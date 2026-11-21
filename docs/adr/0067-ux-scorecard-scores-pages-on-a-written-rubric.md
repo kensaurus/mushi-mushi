@@ -1,8 +1,8 @@
 # 0067. The UX scorecard: every page scored on a written rubric, problems filed by root cause
 
-Status: Proposed 2026-11-21. Built on the owner's request of the same day; it
-moves the line ADRs 0020, 0021, 0045 and 0040 draw on model judgement, so it
-waits for the lead's acceptance. Date: 2026-11-21
+Status: Accepted 2026-11-21, accepted by the owner 2026-11-21. Built on the
+owner's request of the same day; it moves the line ADRs 0020, 0021, 0045 and
+0040 draw on model judgement. Date: 2026-11-21
 
 Related: ADR [0045](0045-ux-audit-finds-bugs-on-signed-in-screens.md) (UX
 audit), ADR [0020](0020-local-ux-loop-runs-agents-in-the-cli-process.md) and
