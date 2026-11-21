@@ -220,6 +220,8 @@ export interface Scorer {
   readonly name: string
   score(facts: UxPageFacts, folder: string, ctx: { app: string; otherPages: string[]; about?: string }): Promise<{ score?: UxPageScore; error?: string }>
   group(pages: readonly ScoredPage[], base: readonly UxCause[], priorKeys: readonly string[]): Promise<{ causes: UxCause[]; error?: string }>
+  /** Screenshot names this scorer already uploaded, per page key (the server scorer uploads as it scores). */
+  readonly uploaded?: ReadonlyMap<string, string[]>
 }
 
 /** Score on this machine through one of the checker's transports. */
@@ -284,10 +286,13 @@ async function uploadShots(cfg: SyncConfig, runId: string, folder: string, key: 
 
 /** Score on the server through the `ux-scorecard` platform route (the app's own key first). */
 export function serverScorer(cfg: SyncConfig, runId: string): Scorer {
+  const uploaded = new Map<string, string[]>()
   return {
     name: 'server',
+    uploaded,
     async score(facts, folder, ctx) {
       const shots = await uploadShots(cfg, runId, folder, facts.key)
+      uploaded.set(facts.key, shots)
       const r = await api(cfg, `/v1/admin/projects/${cfg.projectId}/ux-scorecard/${runId}/score`, {
         method: 'POST',
         body: JSON.stringify({ facts, shots, app: ctx.app, about: ctx.about, other_pages: ctx.otherPages }),

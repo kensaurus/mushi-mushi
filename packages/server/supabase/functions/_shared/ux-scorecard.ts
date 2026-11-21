@@ -83,6 +83,8 @@ export const UX_SCORECARD_LIMITS = {
   fileConfidence: 0.6,
   /** Reports one run may file (one per root cause). */
   filePerRun: 5,
+  /** Causes a run keeps (stored, synced, shown, filed from): cross-page first, then by rank (topCauses). */
+  causes: 60,
 } as const
 
 export interface UxPageFacts {
@@ -551,6 +553,18 @@ export function causeRank(c: Pick<UxCause, 'severity' | 'pages' | 'confidence' |
 
 function byRank(a: UxCause, b: UxCause): number {
   return causeRank(b) - causeRank(a) || a.patternKey.localeCompare(b.patternKey)
+}
+
+/**
+ * Pure: the causes a run keeps, at most `max`: causes that span pages or
+ * contradict come first, then one-page causes, each by rank. The first real
+ * run (Mushi console, 74 pages, 2026-11-21) grouped 299 issues into 235
+ * causes, past what the routes stored, so every route and the CLI keep these.
+ */
+export function topCauses<T extends Pick<UxCause, 'kind' | 'severity' | 'pages' | 'confidence' | 'patternKey'>>(causes: readonly T[], max: number = UX_SCORECARD_LIMITS.causes): T[] {
+  return [...causes]
+    .sort((a, b) => Number(b.kind !== 'page') - Number(a.kind !== 'page') || causeRank(b) - causeRank(a) || a.patternKey.localeCompare(b.patternKey))
+    .slice(0, Math.max(0, max))
 }
 
 /** Pure: the system and user text of the cross-page pass (text only, one call per run). */
