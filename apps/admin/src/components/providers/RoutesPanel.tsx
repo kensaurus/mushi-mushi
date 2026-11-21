@@ -96,7 +96,7 @@ function CheaperModels({ apps, found, failed, appName, onOpen }: { apps: readonl
             {failed && !found
               ? "Couldn't read the model check's suggestions from the Ops hub. Refresh to try again."
               : found
-              ? 'The weekly model check found nothing cheaper for the models in use.'
+              ? `The weekly model check found no cheaper model of the same size for the models in use (checked ${found.at.slice(0, 10)}).`
               : 'No suggestions yet. The weekly model check (kensaurus-model-scout on kenji) posts them to the Ops hub, and they show here.'}
           </p>
         ) : (
@@ -118,9 +118,25 @@ function CheaperModels({ apps, found, failed, appName, onOpen }: { apps: readonl
               </li>
             ))}
             <li className="text-3xs text-fg-muted">
-              Suggestions only: compare the two side by side before switching. The new model needs a price on kenji first. Checked {found.at.slice(0, 10)}.
+              Suggestions only: a model of the same size or larger, for less. Compare the two side by side before switching. The new model needs a price on kenji first. Checked {found.at.slice(0, 10)}.
             </li>
           </ul>
+        )}
+        {found && found.smaller.length > 0 && (
+          // Never offered as a swap: cheaper because it does less (2026-11-21).
+          <details className="mt-1.5 text-2xs text-fg-secondary" data-testid="routes-smaller">
+            <summary className="cursor-pointer select-none">
+              Smaller, cheaper models ({found.smaller.length}): not like-for-like
+            </summary>
+            <ul className="mt-1 flex list-none flex-col gap-0.5 p-0">
+              {found.smaller.map((s) => (
+                <li key={`${s.provider}|${s.model}|${s.candidate}`} data-testid="routes-smaller-item">
+                  {providerName(s.provider)} <span className="font-mono">{modelShort(s.model)}</span> ({s.currentPerM}/M) could drop to the smaller{' '}
+                  <span className="font-mono">{s.candidate}</span> ({s.candidatePerM}/M, {s.savingPct}% less). It does less; try it on one feature first.
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </div>
     </Callout>

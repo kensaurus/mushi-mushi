@@ -32,7 +32,8 @@ const ROLE_CLASS: Record<ProviderRole, string> = {
   primary: 'font-bold text-fg',
   backup: 'font-semibold text-fg-secondary',
   last: 'text-fg-secondary',
-  off: 'text-fg-muted line-through',
+  // Muted beside the ⊘ mark, never struck: struck, "Off" read as "not off" (2026-11-21).
+  off: 'text-fg-muted',
   none: 'text-fg-faint',
 }
 
@@ -104,7 +105,7 @@ export function RoutesOverview({ routes, providers, health, rows, status, busy, 
             <li key={p} className="flex flex-col gap-1 rounded-md border border-edge bg-surface px-2.5 py-2" data-testid={`provider-card-${p}`} data-health={h.kind}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-bold text-fg">{providerName(p)}</span>
-                <StatusPill status={healthStatus(h)} label={h.word} />
+                <StatusPill status={healthStatus(h)} label={h.word} strike={false} />
               </div>
               <span className="text-2xs text-fg-secondary tabular-nums">
                 {appsOn === 1 ? '1 app tries it' : `${appsOn} apps try it`} · 24 h: {calls(t.calls)} · {formatMicroUsd(t.cost)}

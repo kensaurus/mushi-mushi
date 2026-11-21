@@ -163,6 +163,8 @@ export interface OpsMeta {
   route_param_providers?: Record<string, string[]>
   threshold_keys: string[]
   actions: string[]
+  /** Present once upstream takes `batch` (yen-yen kensaurus-ops, 2026-11-21). */
+  batch?: { max_ops: number; max_body_bytes: number }
 }
 
 /** GET /v1/admin/kensaurus/ops → data. */
@@ -175,7 +177,8 @@ export interface OpsReadResponse {
 
 type RouteKey = { app: string; feature: string; priority: number }
 
-export type OpsAction =
+/** One route change: alone, or one op of a `batch`. */
+type RouteWrite =
   | ({ action: 'upsert_route' } & RouteKey & {
       provider: string
       model: string
@@ -185,6 +188,20 @@ export type OpsAction =
     })
   | ({ action: 'enable_route' | 'disable_route' | 'delete_route' } & RouteKey)
   | { action: 'reorder'; app: string; feature: string; order: number[] }
+
+export type OpsAction =
+  | RouteWrite
+  /**
+   * One chain save: every op for one app, in order, in one transaction upstream; refused whole
+   * (409 stale) when a feature's rows no longer match `expect`. One hub notice for all of it.
+   */
+  | {
+      action: 'batch'
+      app: string
+      ops: RouteWrite[]
+      expect?: Array<{ feature: string; count: number; updated_at: string | null }>
+      note?: string
+    }
   | { action: 'set_provider_enabled'; account_id: string; enabled: boolean }
   | { action: 'set_provider_thresholds'; account_id: string; thresholds: Record<string, unknown> }
 

@@ -2,7 +2,9 @@
  * FILE: apps/admin/src/components/providers/ChainDrawer.tsx
  * PURPOSE: Edit one fallback order (a chain) in a side drawer, for every feature that shares it.
  *          Reorder steps (↑/↓), switch a step's model (priced models of its provider, with input
- *          and output price per 1M and the size class), turn a step on or off, remove one, add one.
+ *          and output price per 1M and the size class), set its effort (reasoning effort on OpenAI and
+ *          OpenRouter, effort on Anthropic; picking Sol moves none to low, which Sol needs), turn a
+ *          step on or off, remove one, add one.
  *          "Review" shows the order before and after and the change in plain words; "Save" is a
  *          second, explicit press. The page sends the writes (ProvidersPage onSaveChain).
  */
@@ -12,6 +14,8 @@ import type { ModelPrice, OpsMeta, RouteParams } from '../../lib/kensaurusOpsTyp
 import { paramChips, paramChoices, paramFieldsFor } from '../../lib/providersView'
 import {
   chainTitle,
+  paramsForModel,
+  paramsProblem,
   draftChanges,
   draftFrom,
   draftProblem,
@@ -155,6 +159,46 @@ function stepPrice(prices: readonly ModelPrice[], s: { provider: string; model: 
   return p ? priceLabel(p) : null
 }
 
+/** The effort key a provider reads, from meta: reasoning_effort (OpenAI, OpenRouter) or effort (Anthropic). */
+function effortKey(meta: OpsMeta | null, provider: string): 'reasoning_effort' | 'effort' | null {
+  const fields = paramFieldsFor(meta, provider)
+  if (fields.includes('reasoning_effort')) return 'reasoning_effort'
+  if (fields.includes('effort')) return 'effort'
+  return null
+}
+
+/** The step's effort, beside its model: the setting a model switch most often needs. */
+function EffortSelect({ meta, provider, value, label, onChange }: { meta: OpsMeta | null; provider: string; value: RouteParams; label: string; onChange: (p: RouteParams) => void }) {
+  const key = effortKey(meta, provider)
+  const choices = key ? paramChoices(meta, key) : null
+  if (!key || !choices) return null
+  const current = typeof value[key] === 'string' ? (value[key] as string) : ''
+  return (
+    <label className="flex items-center gap-1.5 text-2xs text-fg-secondary">
+      <span>{key === 'reasoning_effort' ? 'Reasoning effort' : 'Effort'}</span>
+      <select
+        aria-label={label}
+        className={SELECT}
+        value={current}
+        data-testid="step-effort"
+        onChange={(e) => {
+          const next = { ...value }
+          if (e.target.value) next[key] = e.target.value
+          else delete next[key]
+          onChange(next)
+        }}
+      >
+        <option value="">not set</option>
+        {choices.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 /** One step in read-only form, for the before/after lists. */
 function StepLine({ s, n, changed }: { s: ChainStep; n: number; changed?: boolean }) {
   return (
@@ -212,6 +256,18 @@ function ChainEditor({ chain, meta, prices, health, now, saving, onClose, onSave
   const writes = changes.length === 0 ? 0 : chain.members.length
 
   const update = (uid: string, patch: Partial<DraftStep>) => setDraft((d) => d.map((s) => (s.uid === uid ? { ...s, ...patch } : s)))
+  // Why a step's effort moved by itself ("gpt-6.2-sol needs … so it is now low"), per step.
+  const [effortNotes, setEffortNotes] = useState<Record<string, string>>({})
+  const switchModel = (s: DraftStep & { uid: string }, model: string) => {
+    const next = paramsForModel(s.provider, model, s.params)
+    update(s.uid, { model, params: next.params })
+    setEffortNotes((n) => {
+      const rest = { ...n }
+      if (next.note) rest[s.uid] = next.note
+      else delete rest[s.uid]
+      return rest
+    })
+  }
   const newBook = priceBook(prices, newProvider, now)
   const chosenNew = newBook.some((p) => p.model === newModel) ? newModel : (newBook[0]?.model ?? '')
 
@@ -289,7 +345,10 @@ function ChainEditor({ chain, meta, prices, health, now, saving, onClose, onSave
         {draft.map((s, i) => {
           const h = health.get(s.provider)
           const label = `step ${i + 1}, ${providerName(s.provider)} ${modelShort(s.model)}`
-          const chips = paramChips(s.params)
+          const ek = effortKey(meta, s.provider)
+          // The effort has its own picker; the other settings stay as chips.
+          const chips = paramChips((ek ? Object.fromEntries(Object.entries(s.params).filter(([k]) => k !== ek)) : s.params) as RouteParams)
+          const problem = paramsProblem(s.provider, s.model, s.params)
           return (
             <li
               key={s.uid}
@@ -329,7 +388,31 @@ function ChainEditor({ chain, meta, prices, health, now, saving, onClose, onSave
                   </button>
                 </span>
               </div>
-              <ModelSelect provider={s.provider} value={s.model} prices={prices} now={now} label={`Model for ${label}`} onChange={(model) => update(s.uid, { model })} />
+              <ModelSelect provider={s.provider} value={s.model} prices={prices} now={now} label={`Model for ${label}`} onChange={(model) => switchModel(s, model)} />
+              <EffortSelect
+                meta={meta}
+                provider={s.provider}
+                value={s.params}
+                label={`Effort for ${label}`}
+                onChange={(params) => {
+                  update(s.uid, { params })
+                  setEffortNotes((n) => {
+                    const rest = { ...n }
+                    delete rest[s.uid]
+                    return rest
+                  })
+                }}
+              />
+              {effortNotes[s.uid] && !problem && (
+                <p className="text-2xs text-fg-secondary" role="status" data-testid="step-effort-note">
+                  {effortNotes[s.uid]}
+                </p>
+              )}
+              {problem && (
+                <p className="text-2xs font-semibold text-st-failed-ink" role="alert" data-testid="step-problem">
+                  {problem}.
+                </p>
+              )}
               {chips.length > 0 && (
                 <span className="flex flex-wrap gap-1" aria-label="Settings">
                   {chips.map((c) => (
@@ -373,7 +456,8 @@ function ChainEditor({ chain, meta, prices, health, now, saving, onClose, onSave
               variant="primary"
               disabled={!chosenNew}
               onClick={() => {
-                setDraft((d) => [...d, { provider: newProvider, model: chosenNew, params: newParams, enabled: true, origin: null, uid: `n${++uidSeq}` }])
+                const fitted = paramsForModel(newProvider, chosenNew, newParams)
+                setDraft((d) => [...d, { provider: newProvider, model: chosenNew, params: fitted.params, enabled: true, origin: null, uid: `n${++uidSeq}` }])
                 setAdding(false)
                 setNewParams({})
                 setNewModel('')

@@ -11,9 +11,11 @@
  *
  * Writes: a provider toggle moves at once (useOptimistic inside a transition)
  * and falls back when the server refuses; thresholds wait for the answer. A
- * chain edit (ChainDrawer) re-reads ?fresh=1, refuses when the chain changed
- * meanwhile, then sends one audited write at a time for every feature in the
- * chain (kensaurus-ops has no batch action) and stops at the first refusal,
+ * chain edit (ChainDrawer) re-reads ?fresh=1 and refuses when the chain changed
+ * meanwhile. Then, when upstream lists `batch`, it sends ONE call: every feature
+ * in one transaction, refused whole (409 stale) if the rows moved since the
+ * read, one hub notice. Otherwise (an older upstream, or a batch over its
+ * limits) it sends one audited write at a time and stops at the first refusal,
  * saying which features changed. Every write is audited upstream (History).
  *
  * Data: GET /v1/admin/kensaurus/ops[?fresh=1] → OpsReadResponse
@@ -49,7 +51,10 @@ import { useReadTimedOut } from '../lib/ciReadTimeout'
 import { CiNotChecked } from '../components/ci/CiNotChecked'
 import type { OpsAction, ProviderAccount } from '../lib/kensaurusOpsTypes'
 import {
+  batchFits,
   buildOverview,
+  chainBatch,
+  draftChanges,
   driftedFeatures,
   findChain,
   groupChains,
@@ -213,6 +218,29 @@ export function ProvidersPage() {
     const latest = findChain(groupChains(fresh.snapshot.routes), chain.id)!
     const target = { ...latest, members: latest.members.filter((m) => chain.members.some((o) => o.feature === m.feature)) }
     const plans = planChainSave(target, draft, fresh.meta)
+    // One call when upstream takes a batch: one transaction, one hub notice (2026-11-21).
+    const batch = chainBatch(target, plans, draftChanges(chain, draft).join('; '))
+    if (batchFits(fresh.meta, batch)) {
+      const res = await ops.write(batch)
+      // An older proxy that does not know `batch` yet refuses it before upstream; fall through.
+      const unknown = !res.ok && res.error?.code === 'validation_failed' && /unknown action/i.test(res.error.message ?? '')
+      if (!unknown) {
+        await ops.load(true)
+        setSaving(null)
+        setOpenChainId(null)
+        if (res.ok) {
+          toast.success(saveReportText(appName(chain.app), { saved: plans.map((x) => x.feature), failed: null, untouched: [], writes: batch.ops.length }, plans.length, writeErrorText), undefined, {
+            label: 'History',
+            onClick: () => openTab('history'),
+          })
+        } else if (res.error?.code === 'stale') {
+          toast.error('This order changed since you opened it. Nothing was saved; open it again to see the latest.')
+        } else {
+          toast.error(`Nothing was saved: ${writeErrorText(res.error)}`)
+        }
+        return
+      }
+    }
     const result = await runChainSave(plans, ops.write, (done, total) => setSaving({ done, total }))
     await ops.load(true)
     const text = saveReportText(appName(chain.app), result, plans.length, (e) => writeErrorText(e))

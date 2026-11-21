@@ -28,7 +28,7 @@ Every scored page stores this version (`ux_surfaces.scorecard.promptVersion`, `u
 - Overall: 0.5 × the mean of the eight + 0.5 × the lowest, rounded (`overallScore`).
 - Performance is capped by the measured settle time: ≤1.5 s 10, ≤3 s 8, ≤5 s 6, ≤8 s 4, slower or never settled 3–4 (`performanceCap`).
 - Accessibility is capped by axe: 1+ serious 8, 3+ serious 6, any critical 5, sideways scroll 6 (`accessibilityCap`).
-- Issues: at most 5 a page, confidence ≥ 0.5, quoted evidence and a fix, no taste wording. A cause is filed at confidence ≥ 0.6, at most 5 a run.
+- Issues: at most 5 a page, confidence ≥ 0.5, quoted evidence and a fix, no taste wording. A cause is filed at confidence ≥ 0.6, at most 5 a run. A run keeps its top 60 causes: those that span pages or contradict first, then by rank (`topCauses`).
 
 ## The system prompt
 

@@ -120,6 +120,7 @@ export function ProvidersTable({ providers, routes, incidents, now, pending, onT
               <StatusPill
                 status={p.enabled ? PROVIDER_STATUS[state] : 'cancelled'}
                 label={p.enabled ? PROVIDER_STATE_WORD[state] : 'Off'}
+                strike={false}
                 title={age ? `In this state for ${age}` : undefined}
               />
               {age ? (
