@@ -111,29 +111,103 @@ async function langfuseApi(path: string, body: Record<string, unknown>): Promise
   }
 }
 
+type OtlpValue =
+  | { stringValue: string }
+  | { intValue: string }
+  | { doubleValue: number }
+  | { boolValue: boolean }
+
+interface OtlpSpan {
+  traceId: string
+  spanId: string
+  parentSpanId?: string
+  name: string
+  kind: number
+  startTimeUnixNano: string
+  endTimeUnixNano: string
+  attributes: { key: string; value: OtlpValue }[]
+  status?: { code: number; message?: string }
+}
+
+function hexId(bytes: number): string {
+  const buf = new Uint8Array(bytes)
+  crypto.getRandomValues(buf)
+  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function otlpValue(value: unknown): OtlpValue {
+  if (typeof value === 'string') return { stringValue: value }
+  if (typeof value === 'boolean') return { boolValue: value }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value }
+  }
+  return { stringValue: JSON.stringify(value) ?? '' }
+}
+
+function otlpAttributes(
+  attrs: Record<string, unknown>,
+  metadataPrefix?: string,
+  metadata?: Record<string, unknown>,
+): { key: string; value: OtlpValue }[] {
+  const out: { key: string; value: OtlpValue }[] = []
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value !== undefined && value !== null) out.push({ key, value: otlpValue(value) })
+  }
+  if (metadataPrefix && metadata) {
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value !== undefined && value !== null) out.push({ key: `${metadataPrefix}.${key}`, value: otlpValue(value) })
+    }
+  }
+  return out
+}
+
+const nanos = (ms: number) => `${BigInt(Math.round(ms)) * 1_000_000n}`
+
+/**
+ * Langfuse removed the legacy `/api/public/ingestion` endpoint for traces and
+ * observations on 2026-11-16 (HTTP 410; only score events are still taken).
+ * Traces and spans now go to its OpenTelemetry endpoint as OTLP/HTTP JSON.
+ */
+function exportSpans(spans: OtlpSpan[]): Promise<void> {
+  return langfuseApi('/otel/v1/traces', {
+    resourceSpans: [{
+      resource: { attributes: otlpAttributes({ 'service.name': 'mushi-mushi' }) },
+      scopeSpans: [{ scope: { name: 'mushi-mushi' }, spans }],
+    }],
+  })
+}
+
 export function createTrace(name: string, metadata?: TraceMetadata): Trace {
-  const traceId = crypto.randomUUID()
-  const startTime = new Date().toISOString()
+  // OTel trace id: 32 lowercase hex chars. Langfuse uses it verbatim as the
+  // trace id, so scores and stored `langfuse_trace_id` values still link.
+  const traceId = hexId(16)
+  const rootSpanId = hexId(8)
+  const traceStart = Date.now()
   const safeMetadata = sanitizeTraceMetadata(metadata)
 
+  function rootSpan(endMs: number, extra?: Record<string, unknown>): OtlpSpan {
+    return {
+      traceId,
+      spanId: rootSpanId,
+      name,
+      kind: 1,
+      startTimeUnixNano: nanos(traceStart),
+      endTimeUnixNano: nanos(endMs),
+      attributes: otlpAttributes(
+        { 'langfuse.trace.name': name },
+        'langfuse.trace.metadata',
+        { ...safeMetadata, ...extra },
+      ),
+    }
+  }
+
   if (isConfigured()) {
-    langfuseApi('/ingestion', {
-      batch: [{
-        id: crypto.randomUUID(),
-        type: 'trace-create',
-        timestamp: startTime,
-        body: {
-          id: traceId,
-          name,
-          metadata: safeMetadata,
-          timestamp: startTime,
-        },
-      }],
-    }).catch((err) => onLangfuseIngestFailure('trace-create', err))
+    exportSpans([rootSpan(traceStart)])
+      .catch((err) => onLangfuseIngestFailure('trace-create', err))
   }
 
   function span(spanName: string): Span {
-    const spanId = crypto.randomUUID()
+    const spanId = hexId(8)
     const spanStart = Date.now()
 
     return {
@@ -142,49 +216,53 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
         const duration = spanEnd - spanStart
 
         if (isConfigured()) {
-          const events: Record<string, unknown>[] = [{
-            id: crypto.randomUUID(),
-            type: 'span-create',
-            timestamp: new Date().toISOString(),
-            body: {
-              id: spanId,
-              traceId,
-              name: spanName,
-              startTime: new Date(spanStart).toISOString(),
-              endTime: new Date(spanEnd).toISOString(),
-              metadata: {
-                ...data,
-                durationMs: duration,
+          const level = data?.error ? 'ERROR' : 'DEFAULT'
+          const status = data?.error ? { code: 2, message: data.error } : undefined
+          const spans: OtlpSpan[] = [{
+            traceId,
+            spanId,
+            parentSpanId: rootSpanId,
+            name: spanName,
+            kind: 1,
+            startTimeUnixNano: nanos(spanStart),
+            endTimeUnixNano: nanos(spanEnd),
+            attributes: otlpAttributes(
+              {
+                'langfuse.observation.type': 'span',
+                'langfuse.observation.level': level,
+                'langfuse.observation.status_message': data?.error,
               },
-              level: data?.error ? 'ERROR' : 'DEFAULT',
-              statusMessage: data?.error,
-            },
+              'langfuse.observation.metadata',
+              { ...data, durationMs: duration },
+            ),
+            ...(status ? { status } : {}),
           }]
 
           if (data?.model) {
-            events.push({
-              id: crypto.randomUUID(),
-              type: 'generation-create',
-              timestamp: new Date().toISOString(),
-              body: {
-                id: crypto.randomUUID(),
-                traceId,
-                parentObservationId: spanId,
-                name: spanName,
-                model: data.model,
-                startTime: new Date(spanStart).toISOString(),
-                endTime: new Date(spanEnd).toISOString(),
-                usage: {
-                  input: data.inputTokens,
-                  output: data.outputTokens,
+            spans.push({
+              traceId,
+              spanId: hexId(8),
+              parentSpanId: spanId,
+              name: spanName,
+              kind: 1,
+              startTimeUnixNano: nanos(spanStart),
+              endTimeUnixNano: nanos(spanEnd),
+              attributes: otlpAttributes(
+                {
+                  'langfuse.observation.type': 'generation',
+                  'langfuse.observation.level': level,
+                  'gen_ai.request.model': data.model,
+                  'gen_ai.usage.input_tokens': data.inputTokens,
+                  'gen_ai.usage.output_tokens': data.outputTokens,
                 },
-                metadata: { latencyMs: data.latencyMs ?? duration },
-                level: data.error ? 'ERROR' : 'DEFAULT',
-              },
+                'langfuse.observation.metadata',
+                { latencyMs: data.latencyMs ?? duration },
+              ),
+              ...(status ? { status } : {}),
             })
           }
 
-          langfuseApi('/ingestion', { batch: events }).catch((err) =>
+          exportSpans(spans).catch((err) =>
             onLangfuseIngestFailure(`span:${spanName}`, err),
           )
         }
@@ -220,17 +298,9 @@ export function createTrace(name: string, metadata?: TraceMetadata): Trace {
 
   async function end(): Promise<void> {
     if (isConfigured()) {
-      await langfuseApi('/ingestion', {
-        batch: [{
-          id: crypto.randomUUID(),
-          type: 'trace-create',
-          timestamp: new Date().toISOString(),
-          body: {
-            id: traceId,
-            metadata: { ...safeMetadata, completedAt: new Date().toISOString() },
-          },
-        }],
-      }).catch((err) => onLangfuseIngestFailure('trace-end', err))
+      const now = Date.now()
+      await exportSpans([rootSpan(now, { completedAt: new Date(now).toISOString() })])
+        .catch((err) => onLangfuseIngestFailure('trace-end', err))
     }
   }
 
