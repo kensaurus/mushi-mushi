@@ -13,9 +13,12 @@
  *     --allow-env --allow-net --env-file=.env \
  *     packages/server/supabase/scripts/hosted-llm-smoke.ts [--features a,b]
  *
- * The drill: flip a kill switch on kenji (`update kensaurus_provider_accounts
- * set enabled = false where provider = '<p>'`), wait 60 s, run this again, and
- * every line must still end `ok` on another provider. Set it back after.
+ * The drill: turn the priority-1 provider off on kenji (Providers & AI routes →
+ * the provider's switch, i.e. `kensaurus_provider_accounts.enabled = false`;
+ * today that is openai), wait 60 s, run this again: every line must say
+ * `source=live provider=openrouter fallback=true`. Turn it back on after.
+ * (An anthropic switch proves nothing here: with no app, Claude rows are
+ * skipped anyway.)
  *
  * No app, so the route's OpenAI-compatible candidates answer, as for Ask Mushi
  * without an active app; a Claude row is skipped. At most 50 output tokens per

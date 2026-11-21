@@ -482,6 +482,19 @@ export function routesConfig(): RoutesConfig {
   return { url: token ? (Deno.env.get('KENSAURUS_ROUTES_URL') || DEFAULT_ROUTES_URL) : '', token };
 }
 
+/**
+ * A configured routes read that did not come back live (bad token, kenji
+ * down, endpoint missing) would leave mushi on cached or baked routes with
+ * console edits and kill switches not reaching it. Said once per isolate
+ * (Sentry), so the fallback is never silent.
+ */
+let warnedRouteSource = false;
+function noteRouteSource(cfg: RoutesConfig, source: RouteSource, feature: string): void {
+  if (!cfg.url || source === 'live' || source === 'cache' || warnedRouteSource) return;
+  warnedRouteSource = true;
+  log.error('KENSAURUS AI routes unreadable; running on the fallback list', { source, feature });
+}
+
 /** Anthropic's answer to a spent account, verbatim (HTTP 400, recorded 2026-11-21). */
 export const ANTHROPIC_LOW_CREDIT_BODY =
   '{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
@@ -555,12 +568,19 @@ export async function withPlatformRoute<T>(
   if (projectId) await enforceLlmBudget(db, projectId, 'openai');
   const cfg = routesConfig();
   const { candidates, source } = await getRouteCandidates(cfg, ROUTES_APP, route.feature, route.tier);
+  noteRouteSource(cfg, source, route.feature);
   const ordered = orderCandidates(candidates);
   // An organization that runs AI on OpenAI gets no Claude key, route or not.
   const claudeOff = !projectId || (await aiProviderForProject(db, projectId)) === 'openai';
-  const runnable = ordered
-    .map((c) => ({ c, key: claudeOff && c.provider === 'anthropic' ? null : platformRouteKey(projectId ?? '', c) }))
-    .filter((x) => x.key && (x.key.provider === 'anthropic' ? fns.anthropic : fns.openai));
+  const mapped = ordered.map((c) => ({ c, key: claudeOff && c.provider === 'anthropic' ? null : platformRouteKey(projectId ?? '', c) }));
+  // A route candidate this project holds no key for is a config problem a
+  // person must fix (a missing secret), not a silent skip.
+  for (const { c, key } of mapped) {
+    if (key || (claudeOff && c.provider === 'anthropic')) continue;
+    noteOutcome(c.provider, 'config');
+    void reportProviderFailure(cfg, { project: ROUTES_APP, app: ROUTES_APP, feature: route.feature, provider: c.provider, model: c.model, class: 'config' });
+  }
+  const runnable = mapped.filter((x) => x.key && (x.key.provider === 'anthropic' ? fns.anthropic : fns.openai));
   if (runnable.length === 0) {
     throw new LlmFailoverError({
       code: 'NO_KEYS_CONFIGURED',
