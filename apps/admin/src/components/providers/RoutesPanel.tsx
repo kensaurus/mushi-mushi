@@ -86,14 +86,16 @@ function ChainRow({ chain, health, cheaper, onOpen }: { chain: RouteChain; healt
 }
 
 /** The weekly model scout's last "cheaper" lines, each linked to the orders it would touch. */
-function CheaperModels({ apps, found, appName, onOpen }: { apps: readonly AppChains[]; found: Scout; appName: (a: string) => string; onOpen: (id: string) => void }) {
+function CheaperModels({ apps, found, failed, appName, onOpen }: { apps: readonly AppChains[]; found: Scout; failed: boolean; appName: (a: string) => string; onOpen: (id: string) => void }) {
   const byId = useMemo(() => new Map(apps.flatMap((a) => a.chains.map((c) => [c.id, c] as const))), [apps])
   return (
     <Callout tone="neutral" label="Cheaper model available">
       <div data-testid="routes-cheaper">
         {!found || found.items.length === 0 ? (
           <p className="text-2xs text-fg-secondary" data-testid="routes-cheaper-empty">
-            {found
+            {failed && !found
+              ? "Couldn't read the model check's suggestions from the Ops hub. Refresh to try again."
+              : found
               ? 'The weekly model check found nothing cheaper for the models in use.'
               : 'No suggestions yet. The weekly model check (kensaurus-model-scout on kenji) posts them to the Ops hub, and they show here.'}
           </p>
@@ -164,7 +166,7 @@ export function RoutesPanel({ apps, health, appName, overview, report, onDismiss
         </Callout>
       )}
       {overview}
-      {orgId && !(feed.loading && !feed.data) ? <CheaperModels apps={apps} found={found} appName={appName} onOpen={onOpen} /> : null}
+      {orgId && !(feed.loading && !feed.data) ? <CheaperModels apps={apps} found={found} failed={!!feed.error} appName={appName} onOpen={onOpen} /> : null}
       {apps.length === 0 ? (
         <p className="text-xs text-fg-muted">No routes yet.</p>
       ) : (
