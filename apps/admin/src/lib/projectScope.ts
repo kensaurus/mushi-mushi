@@ -72,9 +72,10 @@ const ALL_APPS_EXACT: readonly string[] = ['/reports']
  * Providers & AI routes (the platform's provider accounts, never one app's;
  * it said "This page shows one app at a time", 2026-11-18). Help & support
  * lists your tickets to the Mushi team across every app, each with its app
- * name (console audit 2026-11-21).
+ * name (console audit 2026-11-21). Ops is every app's events for the team,
+ * filtered by app in its own URL (report 5b386672: it said "one app at a time").
  */
-const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers', '/users', '/docs-bridge', '/feedback']
+const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers', '/users', '/docs-bridge', '/feedback', '/ops']
 
 type AllAppsSupport = 'combined' | 'account' | 'single'
 
