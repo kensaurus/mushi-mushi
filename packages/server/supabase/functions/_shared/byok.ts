@@ -38,13 +38,6 @@ import {
 } from './byok-scope.ts';
 import { assertLlmBudget, isBudgetedProvider, LlmBudgetUnavailableError } from './llm-budget.ts';
 import { aiProviderForProject } from './ai-provider.ts';
-import {
-  anthropicNoCreditDrill,
-  hostedClaudeAllowed,
-  hostedClaudeFirst,
-  hostedLlmOrder,
-  hostedOpenAiVendors,
-} from './hosted-llm-order.ts';
 
 const log = rootLog.child('byok');
 
@@ -94,6 +87,15 @@ export interface ResolvedKey {
   shared?: boolean;
   /** Which pool the key came from; absent for the legacy and platform keys. */
   scope?: KeyScope;
+  /**
+   * Platform keys from a KENSAURUS AI route (llm-failover.ts `withAnthropicOrOpenAi`):
+   * the model the route row names, its priority and its params. Callers send
+   * `key.model ?? <their default>`, so an app's own key (BYOK) keeps the
+   * caller's model and a platform call runs the route's.
+   */
+  model?: string;
+  routePriority?: number;
+  routeParams?: Record<string, unknown>;
 }
 
 /**
@@ -175,10 +177,6 @@ export async function resolveLlmKey(
     await enforceLlmBudget(db, projectId, provider);
   }
   const candidates = await resolveLlmKeys(db, projectId, provider, { openAiOnly: opts.openAiOnly });
-  // MUSHI_LLM_DRILL=anthropic_no_credit: callers that take one key and call
-  // Claude themselves see no platform Claude key, as if it were spent, and
-  // take their OpenAI branch. withLlmFailover callers get the recorded 400.
-  if (provider === 'anthropic' && candidates[0]?.source === 'env' && anthropicNoCreditDrill()) return null;
   return candidates[0] ?? null;
 }
 
@@ -221,11 +219,11 @@ export async function resolveLlmKeys(
   projectId: string,
   provider: LlmProvider,
   /**
-   * `hostedClaude`: also hand out the platform Claude key when
-   * MUSHI_HOSTED_LLM_ORDER does not put Anthropic first (the last-resort leg
-   * of withAnthropicOrOpenAi). An app's own Claude keys are unaffected.
+   * `ownOnly`: the app's keys only (own, legacy, shared, universal), never
+   * the platform key. withAnthropicOrOpenAi runs platform calls through the
+   * KENSAURUS AI routes instead.
    */
-  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
+  opts: { openAiOnly?: boolean; ownOnly?: boolean } = {},
 ): Promise<ResolvedKey[]> {
   // An organization that runs AI on OpenAI (ADR 0039 amendment, 2026-10-31)
   // gets no Claude key at all: not its pool, legacy field or the platform's.
@@ -250,7 +248,7 @@ export async function resolveLlmKeys(
     legacy: own.length > 0 ? [] : await legacyCandidates(db, projectId, provider),
     shared,
     universal,
-    env: () => envCandidates(projectId, provider, opts),
+    env: () => (opts.ownOnly ? [] : envCandidates(projectId, provider)),
   });
 }
 
@@ -340,14 +338,8 @@ export async function resolveLlmKeySources(
     if (legacy.get(provider)) return 'project';
     if (sourceFlags.organization) return 'organization';
     if (sourceFlags.universal) return 'owner_universal';
-    // Same answer as resolveLlmKeys: the platform Claude key only when
-    // MUSHI_HOSTED_LLM_ORDER puts Anthropic first (otherwise it is only
-    // withAnthropicOrOpenAi's last resort), and no vendor the order leaves out.
-    if (provider === 'anthropic' && !hostedClaudeFirst()) return null;
-    if (provider === 'openrouter' && !hostedOpenAiVendors().includes('openrouter')) return null;
-    const inOrder = provider !== 'openai' || hostedOpenAiVendors().includes('openai');
-    if (inOrder && Deno.env.get(ENV_VAR[provider])) return 'env';
-    if (provider === 'openai' && !opts.openAiOnly && hostedOpenAiVendors().includes('openrouter') && Deno.env.get(ENV_VAR.openrouter)) return 'env';
+    // Same answer as resolveLlmKeys: no platform Claude key outside a route.
+    if (provider !== 'anthropic' && Deno.env.get(ENV_VAR[provider])) return 'env';
     return null;
   });
 }
@@ -654,55 +646,75 @@ async function legacySourcesAvailable(
   return out;
 }
 
-/**
- * Step 5: the platform keys, when the app has no key of its own, shared or
- * universal. They follow MUSHI_HOSTED_LLM_ORDER (hosted-llm-order.ts):
- *   - 'anthropic': the platform Claude key only when Anthropic heads the
- *     order, or when the caller asks for it as the last resort
- *     (`hostedClaude`, withAnthropicOrOpenAi's final leg). Otherwise none, so
- *     every caller that has an OpenAI branch takes it.
- *   - 'openai': OPENAI_API_KEY and OPENROUTER_API_KEY in the configured order
- *     (OpenRouter left out for `openAiOnly` calls, which only OpenAI serves).
- */
-function envCandidates(
-  projectId: string,
-  provider: LlmProvider,
-  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
-): ResolvedKey[] {
-  const order = hostedLlmOrder();
-  if (provider === 'anthropic' && !hostedClaudeFirst(order) && !(opts.hostedClaude && hostedClaudeAllowed(order))) {
-    return [];
+/** Step 3: the platform env-var key, when the project has no key of its own or shared. */
+function envCandidates(projectId: string, provider: LlmProvider): ResolvedKey[] {
+  // The platform Claude key is handed out only through a KENSAURUS AI route
+  // (platformRouteKey), so which vendor and model a platform call uses is the
+  // route row's choice, never a caller's (CONTRACT, 2026-11-21).
+  if (provider === 'anthropic') return [];
+  const env = Deno.env.get(ENV_VAR[provider]);
+  if (env) {
+    log.warn('BYOK call using platform env key — BYOK not configured for this project', {
+      projectId,
+      provider,
+      hint: hint(env),
+    });
+    const baseUrl = provider === 'openai'
+      ? validatedPlatformOpenAiBaseUrl(projectId)
+      : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
+    return [{ key: env, source: 'env', hint: hint(env), baseUrl }];
   }
-  if (provider === 'openai') {
-    const out: ResolvedKey[] = [];
-    for (const vendor of hostedOpenAiVendors(order)) {
-      if (vendor === 'openrouter' && opts.openAiOnly) continue;
-      out.push(...platformKey(projectId, vendor));
-    }
-    return out;
-  }
-  return platformKey(projectId, provider);
+
+  return [];
 }
 
-/** One platform env-var key as a candidate, or none when the secret is unset. */
-function platformKey(projectId: string, provider: LlmProvider): ResolvedKey[] {
-  const env = Deno.env.get(ENV_VAR[provider]);
-  if (!env) return [];
-  log.warn('BYOK call using platform env key — BYOK not configured for this project', {
-    projectId,
-    provider,
-    hint: hint(env),
-  });
-  const baseUrl = provider === 'openai'
+/** Together's OpenAI-compatible API root, for a route row that names provider 'together'. */
+const TOGETHER_BASE_URL = 'https://api.together.xyz/v1';
+
+/** Route providers mushi can run on the platform key, and their secrets. */
+const ROUTE_PROVIDER_SECRET: Record<string, string> = {
+  openai: 'OPENAI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  together: 'TOGETHER_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
+};
+
+/**
+ * The platform key for one KENSAURUS AI route candidate, carrying the route's
+ * model, priority and params; null when this project holds no key for that
+ * provider (or the provider is one mushi cannot call). A route row may name a
+ * different secret in `params.secret_name` (how a drill points a provider at a
+ * dummy key). `provider` is the family the caller's function speaks:
+ * 'anthropic', or 'openai' for every OpenAI-compatible host.
+ */
+export function platformRouteKey(
+  projectId: string,
+  candidate: { provider: string; model: string; priority: number; params?: Record<string, unknown> },
+): (ResolvedKey & { provider: LlmProvider }) | null {
+  const secretOverride = candidate.params?.secret_name;
+  const secret = typeof secretOverride === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(secretOverride)
+    ? secretOverride
+    : ROUTE_PROVIDER_SECRET[candidate.provider];
+  if (!secret) return null;
+  const key = Deno.env.get(secret);
+  if (!key) return null;
+  const baseUrl = candidate.provider === 'openai'
     ? validatedPlatformOpenAiBaseUrl(projectId)
-    : provider === 'openrouter' ? OPENROUTER_BASE_URL : undefined;
-  return [{
-    key: env,
+    : candidate.provider === 'openrouter'
+      ? OPENROUTER_BASE_URL
+      : candidate.provider === 'together'
+        ? TOGETHER_BASE_URL
+        : undefined;
+  return {
+    key,
     source: 'env',
-    hint: hint(env),
+    hint: hint(key),
     baseUrl,
-    ...(provider === 'openrouter' ? { provider: 'openrouter' as const } : {}),
-  }];
+    provider: candidate.provider === 'anthropic' ? 'anthropic' : candidate.provider === 'openrouter' ? 'openrouter' : 'openai',
+    model: candidate.model,
+    routePriority: candidate.priority,
+    routeParams: candidate.params ?? {},
+  };
 }
 
 /**

@@ -1,8 +1,7 @@
 import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
-import { resolveLlmKey } from './byok.ts'
-import { LlmBudgetExceededError } from './llm-budget.ts'
+import type { ResolvedKey } from './byok.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 import {
   NL_QUERY_PLANNER_EFFORT,
@@ -10,11 +9,11 @@ import {
   NL_QUERY_PLANNER_MODEL,
   NL_QUERY_SUMMARY_FALLBACK,
   NL_QUERY_SUMMARY_MODEL,
+  THINKING_HEADROOM_TOKENS,
 } from './models.ts'
-import { claudeGenerateObject } from './claude-messages.ts'
+import { claudeGenerateObject, claudeGenerateText } from './claude-messages.ts'
 import { withLlmUsage } from './llm-usage.ts'
 import { getPromptForStage } from './prompt-ab.ts'
-import { platformAnthropicKey } from './ai-provider.ts'
 
 // These text checks are defence in depth, not the tenant boundary. The boundary
 // is in the database (migration 20260923000003_nl_query_role_containment):
@@ -255,103 +254,72 @@ export async function executeNaturalLanguageQuery(
     }
   }
 
-  // §3a: BYOK-resolve Anthropic against the first project the user
-  // owns. Falls back to the platform Claude key, which follows that project's
-  // organization's AI provider (ADR 0039 amendment) and MUSHI_HOSTED_LLM_ORDER
-  // (OpenAI first since 2026-11-21). With no Claude key the app's OpenAI pool
-  // answers (its own key, else the platform's), on the tier-matched models.
-  // Resolution failures are non-fatal: `resolved` is null and the next key is
-  // tried. With no project there is no organization to check, so it refuses.
-  const overBudgetRethrow = (err: unknown) => {
-    // Over budget rethrows: the env-key fallback below would bypass it.
-    if (err instanceof LlmBudgetExceededError) throw err
-    return null
-  }
-  const resolved = projectIds.length > 0
-    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch(overBudgetRethrow)
-    : null
-  const claudeKey = resolved?.key ?? (projectIds.length > 0 ? await platformAnthropicKey(db, projectIds[0]) : undefined)
-  const openaiResolved = !claudeKey && projectIds.length > 0
-    ? await resolveLlmKey(db, projectIds[0], 'openai').catch(overBudgetRethrow)
-    : null
-  const apiKey = claudeKey ?? openaiResolved?.key
-  if (!apiKey) {
-    throw new Error(projectIds.length > 0 ? 'No AI key available (BYOK or platform)' : 'No app to query, so no AI provider to check')
-  }
-  const onOpenAi = !claudeKey
-  const keySource: 'byok' | 'env' = onOpenAi ? (openaiResolved?.source ?? 'env') : resolved?.key ? resolved.source : 'env'
-  const plannerModel = onOpenAi ? NL_QUERY_PLANNER_FALLBACK : NL_QUERY_PLANNER_MODEL
-  const summaryModel = onOpenAi ? NL_QUERY_SUMMARY_FALLBACK : NL_QUERY_SUMMARY_MODEL
-  // On the platform key the query is billed, so check the wallet first, as
-  // withLlmFailover does for every other billed path.
-  const onPlatformKey = keySource === 'env'
-  if (onPlatformKey && projectIds.length > 0) {
-    // Imported lazily: the billing module reads Deno env at load, which the
-    // permission-less Deno unit tests that import this file cannot do.
-    const { hostedLlmPreflight, WalletDeniedError } = await import('./hosted-llm-billing.ts')
-    const preflight = await hostedLlmPreflight({ db, projectId: projectIds[0] })
-    if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro)
-  }
+  // §3a: the first project the user owns picks the keys: its own Claude key,
+  // then its own OpenAI key, then the platform keys through the nl-query-plan
+  // and nl-query-summary routes (provider and model from kenji; wallet and
+  // budget checked in withAnthropicOrOpenAi). With no project there is no
+  // organization to check, so it refuses.
+  if (projectIds.length === 0) throw new Error('No app to query, so no AI provider to check')
+  const projectId0 = projectIds[0]
   // The Sonnet planner goes through claude-messages.ts (Sonnet 5.5 rejects the
-  // AI SDK v4 call shape); the Haiku summariser and the OpenAI pool stay on
-  // the AI SDK, which loads here rather than at boot (ai-sdk.ts).
+  // AI SDK v4 call shape); the Haiku summariser on the app's own key and the
+  // OpenAI pool stay on the AI SDK, which loads here rather than at boot.
   const { createAnthropic, generateObject, generateText } = await import('./ai-sdk.ts')
-  const openai = onOpenAi
-    ? (await import('./openai-compat.ts')).openAiProvider({
-        apiKey,
-        ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
-      })
-    : null
-  // Only called when a Claude key resolved (the OpenAI branch is checked first).
-  const anthropic = (onOpenAi ? null : createAnthropic({ apiKey })) as ReturnType<typeof createAnthropic>
+  const { openAiProvider } = await import('./openai-compat.ts')
+  const { withAnthropicOrOpenAi } = await import('./llm-failover.ts')
   const trace = createTrace('nl-query', {
     question: question.slice(0, 100),
-    keySource,
     mode: 'llm-sql',
   })
-
-  const planSpan = trace.span('generate-sql')
-  const nlPlanSelection = projectIds.length > 0
-    ? await getPromptForStage(db, projectIds[0], 'nl_plan')
-    : { promptTemplate: null, promptVersion: null, isCandidate: false }
-  const nlPlanBasePrompt = nlPlanSelection.promptTemplate
-    ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
-  // claudeGenerateObject validates the reply against sqlSchema before returning.
-  // One key for both calls: the project's BYOK key, else the platform key.
   const usageCtx = {
     functionName: 'nl-query',
-    projectId: projectIds[0] ?? null,
-    keySource,
+    projectId: projectId0,
     langfuseTraceId: trace.id,
     // A question the user asked in the console: billed on the platform key.
     billHosted: true,
   } as const
-  // Both answers carry the plan and the AI SDK v4 usage shape that
-  // recordLlmUsage reads; the Claude one also carries cache metadata.
+
+  const planSpan = trace.span('generate-sql')
+  const nlPlanSelection = await getPromptForStage(db, projectId0, 'nl_plan')
+  const nlPlanBasePrompt = nlPlanSelection.promptTemplate
+    ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
+  const planSystem = `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`
   type PlanResult = {
     object: z.infer<typeof sqlSchema>
     usage: { promptTokens: number; completionTokens: number }
   }
-  const { object: queryPlan, usage: planUsage } = await withLlmUsage(
+  /** One recorded plan call, on either family (one wrapper per call). */
+  const plan = (key: ResolvedKey, family: 'anthropic' | 'openai') => {
+    const model = key.model ?? (family === 'anthropic' ? NL_QUERY_PLANNER_MODEL : NL_QUERY_PLANNER_FALLBACK)
+    return withLlmUsage(
+      db,
+      { ...usageCtx, keySource: key.source, stage: 'plan', model, promptVersion: nlPlanSelection.promptVersion ?? null },
+      (): Promise<PlanResult> => family === 'openai'
+        ? generateObject({
+            model: openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })(model),
+            schema: sqlSchema,
+            system: planSystem,
+            prompt: question,
+          })
+        : claudeGenerateObject({
+            apiKey: key.key,
+            model,
+            effort: NL_QUERY_PLANNER_EFFORT,
+            schema: sqlSchema,
+            system: planSystem,
+            prompt: question,
+          }),
+    ).then((r) => ({ ...r, model }))
+  }
+  const planned = await withAnthropicOrOpenAi(
     db,
-    { ...usageCtx, stage: 'plan', model: plannerModel, promptVersion: nlPlanSelection.promptVersion ?? null },
-    (): Promise<PlanResult> => openai
-      ? generateObject({
-          model: openai(NL_QUERY_PLANNER_FALLBACK),
-          schema: sqlSchema,
-          system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
-          prompt: question,
-        })
-      : claudeGenerateObject({
-          apiKey,
-          model: NL_QUERY_PLANNER_MODEL,
-          effort: NL_QUERY_PLANNER_EFFORT,
-          schema: sqlSchema,
-          system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
-          prompt: question,
-        }),
+    projectId0,
+    (key) => plan(key, 'anthropic'),
+    (key) => plan(key, 'openai'),
+    { feature: 'nl-query-plan', tier: 'standard' },
   )
-  planSpan.end({ model: plannerModel, inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
+  const queryPlan = planned.result.object
+  planSpan.end({ model: planned.result.model, inputTokens: planned.result.usage?.promptTokens, outputTokens: planned.result.usage?.completionTokens })
 
   const cleanedSql = sanitizeSql(queryPlan.sql, { requireProjectIdParam: true })
 
@@ -371,27 +339,42 @@ export async function executeNaturalLanguageQuery(
   }
 
   const summarySpan = trace.span('summarize')
-  const nlSummarySelection = projectIds.length > 0
-    ? await getPromptForStage(db, projectIds[0], 'nl_summary')
-    : { promptTemplate: null, promptVersion: null, isCandidate: false }
+  const nlSummarySelection = await getPromptForStage(db, projectId0, 'nl_summary')
   const summarySystem = nlSummarySelection.promptTemplate
     ?? 'Summarize these query results in 2-3 sentences for a developer. Never invent numbers not in the input.'
-  const { text: summary, usage: summaryUsage } = await withLlmUsage(
+  const summaryPrompt = `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`
+  /** One recorded summary call. A route's Claude model is 5.x, which only the Messages path takes. */
+  const summarize = (key: ResolvedKey, family: 'anthropic' | 'openai') => {
+    const model = key.model ?? (family === 'anthropic' ? NL_QUERY_SUMMARY_MODEL : NL_QUERY_SUMMARY_FALLBACK)
+    const anthropic = createAnthropic({ apiKey: key.key })
+    return withLlmUsage(
+      db,
+      { ...usageCtx, keySource: key.source, stage: 'summary', model, promptVersion: nlSummarySelection.promptVersion ?? null },
+      (): Promise<{ text: string; usage: { promptTokens: number; completionTokens: number } }> => family === 'anthropic' && key.model
+        ? claudeGenerateText({ apiKey: key.key, model, effort: 'low', system: summarySystem, prompt: summaryPrompt, maxTokens: 400 + THINKING_HEADROOM_TOKENS })
+        : generateText({
+            model: family === 'openai'
+              ? openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })(model)
+              : anthropic(NL_QUERY_SUMMARY_MODEL),
+            system: summarySystem,
+            prompt: summaryPrompt,
+          }),
+    ).then((r) => ({ text: r.text, usage: r.usage, model }))
+  }
+  const summarized = await withAnthropicOrOpenAi(
     db,
-    { ...usageCtx, stage: 'summary', model: summaryModel, promptVersion: nlSummarySelection.promptVersion ?? null },
-    () => generateText({
-      model: openai ? openai(NL_QUERY_SUMMARY_FALLBACK) : anthropic(NL_QUERY_SUMMARY_MODEL),
-      system: summarySystem,
-      prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
-    }),
+    projectId0,
+    (key) => summarize(key, 'anthropic'),
+    (key) => summarize(key, 'openai'),
+    { feature: 'nl-query-summary', tier: 'fast' },
   )
-  summarySpan.end({ model: summaryModel, inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
+  summarySpan.end({ model: summarized.result.model, inputTokens: summarized.result.usage?.promptTokens, outputTokens: summarized.result.usage?.completionTokens })
   await trace.end()
 
   return {
     sql: cleanedSql,
     explanation: queryPlan.explanation,
     results: results.slice(0, 100),
-    summary,
+    summary: summarized.result.text,
   }
 }

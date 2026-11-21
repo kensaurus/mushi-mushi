@@ -237,8 +237,9 @@ Deno.serve(
           : prompt
 
         try {
-          // The app's own Claude key first, else the OpenAI pool (the platform
-          // keys follow MUSHI_HOSTED_LLM_ORDER, OpenAI first since 2026-11-21).
+          // The app's own Claude key first, else its OpenAI pool, else the
+          // platform keys through the story-mapper route (provider and model
+          // from kenji, 2026-11-21).
           // No `meter`: withLlmUsage writes an llm_invocations row, and
           // logLlmInvocation takes the hosted-key debit. Passing both would
           // charge the call twice.
@@ -252,16 +253,16 @@ Deno.serve(
             // Billed before (withLlmFailover meter); keeps that debit.
             billHosted: true,
           })
-          const { result: completion, usedProvider } = await withAnthropicOrOpenAi(
+          const { result: completion, usedProvider, model: routeModel } = await withAnthropicOrOpenAi(
             db,
             project_id,
             async (k) => {
               const { text, usage } = await withLlmUsage(
                 db,
-                usageFor(STORY_MAP_MODEL, k.source),
+                usageFor(k.model ?? STORY_MAP_MODEL, k.source),
                 () => claudeGenerateText({
                   apiKey: k.key,
-                  model: STORY_MAP_MODEL,
+                  model: k.model ?? STORY_MAP_MODEL,
                   effort: STORY_MAP_EFFORT,
                   system: STORY_MAPPER_SYSTEM,
                   prompt: promptWithRetry,
@@ -279,9 +280,9 @@ Deno.serve(
               const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
               const { text, usage } = await withLlmUsage(
                 db,
-                usageFor(STORY_MAP_FALLBACK, k.source),
+                usageFor(k.model ?? STORY_MAP_FALLBACK, k.source),
                 () => generateText({
-                  model: openai(STORY_MAP_FALLBACK),
+                  model: openai(k.model ?? STORY_MAP_FALLBACK),
                   system: STORY_MAPPER_SYSTEM,
                   prompt: promptWithRetry,
                   maxTokens: 8000 + THINKING_HEADROOM_TOKENS,
@@ -289,8 +290,9 @@ Deno.serve(
               )
               return { text, usage }
             },
+            { feature: 'story-mapper', tier: 'standard' },
           )
-          usedModel = usedProvider === 'openai' ? STORY_MAP_FALLBACK : STORY_MAP_MODEL
+          usedModel = routeModel ?? (usedProvider === 'openai' ? STORY_MAP_FALLBACK : STORY_MAP_MODEL)
 
           const parsed = extractFencedJson(completion.text) as ProposerOutput
           const inventoryCandidate = parsed?.inventory ?? parsed

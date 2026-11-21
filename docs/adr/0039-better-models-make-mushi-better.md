@@ -93,36 +93,41 @@ settings. use latest model with similar model and pricing like opus 5.5."
   Claude restores the two families.
 - Screenshot vision runs on Claude only, and is skipped while on OpenAI.
 
-## Amendment 2026-11-21: hosted AI runs on OpenAI first, by config
+## Amendment 2026-11-21: platform AI follows the KENSAURUS AI routes
 
 The owner, 2026-11-21: "move all services using CLAUDE API to openAI API
-(cheaper and latest model) … simulate that claude api is running out of
-credit and switch over" (Claude credit at $1.30, OpenAI at $221).
+(cheaper and latest model) … easy to switch, monitor, auto-switch and notify …
+not hard coding" (Claude credit at $1.30, OpenAI at $221).
 
-- The platform keys (Mushi-hosted AI, billed to the KENSAURUS wallet) follow
-  `MUSHI_HOSTED_LLM_ORDER`, an edge secret: default
-  `openai,openrouter,anthropic`. The next contingency is a secret flip, not a
-  deploy. `_shared/hosted-llm-order.ts` owns it; `byok.ts` (the platform
-  step of the resolver), `platformAnthropicKey` and `withAnthropicOrOpenAi`
-  apply it.
-- The platform Claude key is handed out up front only when Anthropic heads
-  the order. Otherwise it is `withAnthropicOrOpenAi`'s last resort, after the
-  OpenAI pool (`OPENAI_API_KEY`, then `OPENROUTER_API_KEY`). Callers that
-  take one key and call Claude themselves (classify-report, judge-batch,
-  mistake-*, release-builder, the Ask Mushi stream) take their OpenAI branch
-  on one platform key, without walking the rest of the order. inventory-propose,
-  story-mapper and nl-query gained an OpenAI leg. sentinel-audit,
-  prompt-auto-tune and screenshot vision have none and skip on the platform
-  key, as they already do for an organization on OpenAI.
-- An app's own keys (BYOK) are untouched: an app with its own Claude key
-  still runs Claude first. Rejected: flipping `ai_provider`'s default to
-  `openai`, which would also take away customers' own Claude keys.
+- Which provider and model a platform-key call uses (Mushi-hosted AI, billed
+  to the KENSAURUS wallet) comes from kenji `kensaurus_ai_routes`, per
+  (app `mushi-mushi`, feature), through the vendored
+  `_shared/kensaurus-ai-routes-client.ts` (CONTRACT 2026-11-21). mushi keeps no
+  provider order of its own. A switch, a new model or a kill switch is one row
+  on kenji, edited on the console's Providers & AI routes page.
+- `withAnthropicOrOpenAi(db, project, claudeFn, openAiFn, { feature, tier })`
+  is the one choke point. It runs the app's own Claude keys, then its own
+  OpenAI keys (BYOK unchanged, with the caller's model), then the platform
+  keys through `withPlatformRoute`. That walks the route's candidates in
+  order, with down and recently failing providers last, and puts the route's
+  model in `key.model`. Every chat feature calls it, the former self-resolving
+  jobs included.
+- The resolver no longer hands out the platform Claude key. `platformAnthropicKey`
+  and `_shared/project-llm-key.ts` are gone. Embeddings and speech-to-text
+  stay outside the routes.
+- Without a kenji token (a self-host) nothing calls kenji. The built-in
+  OpenAI-first list runs (OpenAI, OpenRouter, then Claude), and so does a cold
+  instance when kenji is slow (800 ms).
 - A spent account is its own failure class, `payment` (Anthropic's 400 "Your
-  credit balance is too low", 402, OpenAI `insufficient_quota`); it cools the
-  key down and falls over like a quota error. `MUSHI_LLM_DRILL=anthropic_no_credit`
-  makes platform-key Claude calls fail that way without sending them, to
-  prove the fallover in production.
-- Models are matched by tier: Haiku → `gpt-6-luna`, Sonnet → `gpt-6.1-terra`,
-  and the code stages keep `OPENAI_PRIMARY` (`gpt-6.1-sol`). The calls stay on
-  the AI SDK's chat-completions path, which has run every OpenAI-organization
-  call since 2026-10-31.
+  credit balance is too low", 402, OpenAI `insufficient_quota`). It is reported
+  to kenji's provider ingest, which opens an incident, posts to Slack and adds
+  an ops event, and the next candidate runs. `fallback_used` means only that
+  the route's priority 1 did not answer.
+- The drill is the kill switch on kenji. `KENSAURUS_LLM_DRILL=<provider>:payment`
+  works only on calls marked `drill: true` (tests).
+- The code tier moves to `gpt-6.2-sol` (`OPENAI_PRIMARY`; same $2 / $10 as
+  6.1 Sol). Calls stay on the AI SDK's chat-completions path, which has run
+  every OpenAI-organization call since 2026-10-31.
+- Rejected: a mushi-local `MUSHI_HOSTED_LLM_ORDER` (the owner wants one control
+  plane), and flipping `ai_provider`'s default, which would also take away
+  customers' own Claude keys.

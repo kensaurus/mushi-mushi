@@ -149,20 +149,9 @@ describe('aiProviderForProject', () => {
   })
 })
 
-describe('platformAnthropicKey', () => {
-  afterEach(() => {
-    delete process.env.MUSHI_HOSTED_LLM_ORDER
-  })
-
-  it('hands out the platform Claude key only while the organization runs on Claude', async () => {
-    process.env.MUSHI_HOSTED_LLM_ORDER = 'anthropic,openai'
-    expect(await provider.platformAnthropicKey(fakeDb('anthropic').db, P)).toBe('sk-ant-platform')
-    provider.clearAiProviderCache()
-    expect(await provider.platformAnthropicKey(fakeDb('openai').db, P)).toBeUndefined()
-  })
-
-  it('hands out none under the default hosted order (OpenAI first, 2026-11-21)', async () => {
-    expect(await provider.platformAnthropicKey(fakeDb('anthropic').db, P)).toBeUndefined()
+describe('the platform Claude key', () => {
+  it('is never handed out by the resolver: platform calls take it only through a KENSAURUS AI route', async () => {
+    expect(await byok.resolveLlmKeys(fakeDb('anthropic', null).db, P, 'anthropic')).toEqual([])
   })
 })
 

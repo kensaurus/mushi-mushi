@@ -32,8 +32,8 @@
 // BYOK
 // ────
 // Runs through `withAnthropicOrOpenAi`: the app's own Claude key first,
-// else its OpenAI pool, else the platform keys in MUSHI_HOSTED_LLM_ORDER
-// (OpenAI first since 2026-11-21; GPT-6.1 Terra is the Sonnet-tier model).
+// else its OpenAI pool, else the platform keys through the inventory-propose
+// KENSAURUS AI route (provider and model from kenji, 2026-11-21).
 //
 // Run budget
 // ──────────
@@ -414,9 +414,11 @@ async function proposeAndPersist(
       // No `meter`: runProposer writes an llm_invocations row, and
       // logLlmInvocation takes the hosted-key debit. Passing both would
       // charge the call twice.
-      const propose = (provider: 'anthropic' | 'openai', model: string) =>
-        async (resolved: { key: string; source: 'byok' | 'env'; baseUrl?: string }) =>
-          runProposer({
+      // A platform call runs the inventory-propose route's model (resolved.model).
+      const propose = (provider: 'anthropic' | 'openai', defaultModel: string) =>
+        async (resolved: { key: string; source: 'byok' | 'env'; baseUrl?: string; model?: string }) => {
+          const model = resolved.model ?? defaultModel
+          return runProposer({
             apiKey: resolved.key,
             provider,
             baseUrl: resolved.baseUrl,
@@ -436,11 +438,13 @@ async function proposeAndPersist(
             systemPrompt: managedSystemPrompt ?? undefined,
             timeoutMs,
           })
+        }
       last = (await withAnthropicOrOpenAi(
         db,
         projectId,
         propose('anthropic', modelId),
         propose('openai', INVENTORY_PROPOSE_FALLBACK),
+        { feature: 'inventory-propose', tier: 'standard' },
       )).result
       break
     } catch (err) {

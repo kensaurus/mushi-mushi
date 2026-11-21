@@ -37,12 +37,11 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
+import { LlmFailoverError, withAnthropicOrOpenAi } from '../_shared/llm-failover.ts'
 import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { createTrace } from '../_shared/observability.ts'
-import { ANTHROPIC_HAIKU } from '../_shared/models.ts'
+import { ANTHROPIC_HAIKU, OPENAI_MINI } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { platformAnthropicKey } from '../_shared/ai-provider.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -132,21 +131,11 @@ test asserts nothing observable, return verdict=rejected with concrete
 suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
 
   const start = Date.now()
-  const resolved = await resolveLlmKey(db, projectId, 'anthropic')
-  const apiKey = resolved?.key ?? (await platformAnthropicKey(db, projectId))
-  if (!apiKey) {
-    rlog.warn('no anthropic key — degrading to unknown', { project: projectId })
-    await db.from('sentinel_verdicts').insert({
-      project_id: projectId,
-      test_file: test.file,
-      test_name: test.name,
-      commit_sha: commitSha ?? '',
-      verdict: 'unknown',
-      reasoning: 'no LLM key configured',
-    })
-    return { verdict: 'rejected', reasoning: 'no LLM key configured', cached: false }
-  }
-  const anthropic = createAnthropic({ apiKey })
+  // The app's own keys first, then the platform keys through the
+  // sentinel-audit route (provider and model from kenji).
+  let usedModel: string = SENTINEL_MODEL
+  let keySource: 'byok' | 'env' = 'env'
+  let fallbackUsed = false
 
   // Resolve the managed system prompt from prompt_versions (stage 'sentinel').
   // Falls back to the hardcoded SENTINEL_SYSTEM_PROMPT constant when no row exists.
@@ -154,24 +143,44 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
   const trace = createTrace('sentinel-audit', { projectId, testFile: test.file, testName: test.name })
 
   try {
-    const { object: result, usage } = await generateObject({
-      model: anthropic(SENTINEL_MODEL),
-      schema: verdictSchema,
-      system: managedSystemPrompt ?? SENTINEL_SYSTEM_PROMPT,
-      prompt,
-    })
+    const system = managedSystemPrompt ?? SENTINEL_SYSTEM_PROMPT
+    const routed = await withAnthropicOrOpenAi(
+      db,
+      projectId,
+      async (key) => {
+        keySource = key.source
+        if (key.model) {
+          // A route's Claude model is 5.x, which only the Messages path takes.
+          const { claudeGenerateObject } = await import('../_shared/claude-messages.ts')
+          return claudeGenerateObject({ apiKey: key.key, model: key.model, effort: 'low', schema: verdictSchema, system, prompt })
+        }
+        const anthropic = createAnthropic({ apiKey: key.key })
+        return generateObject({ model: anthropic(SENTINEL_MODEL), schema: verdictSchema, system, prompt })
+      },
+      async (key) => {
+        keySource = key.source
+        const { openAiProvider } = await import('../_shared/openai-compat.ts')
+        const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
+        return generateObject({ model: openai(key.model ?? OPENAI_MINI, { structuredOutputs: false }), schema: verdictSchema, system, prompt })
+      },
+      { feature: 'sentinel-audit', tier: 'fast' },
+    )
+    const result = routed.result.object as z.infer<typeof verdictSchema>
+    const usage = routed.result.usage
+    usedModel = routed.model ?? (routed.usedProvider === 'openai' ? OPENAI_MINI : SENTINEL_MODEL)
+    fallbackUsed = routed.fallbackUsed
     await logLlmInvocation(db, {
       projectId,
       functionName: 'sentinel-audit',
       stage: 'sentinel',
       primaryModel: SENTINEL_MODEL,
-      usedModel: SENTINEL_MODEL,
-      fallbackUsed: false,
+      usedModel,
+      fallbackUsed,
       status: 'success',
       latencyMs: Date.now() - start,
       inputTokens: usage?.promptTokens,
       outputTokens: usage?.completionTokens,
-      keySource: resolved?.source ?? 'env',
+      keySource,
       langfuseTraceId: trace.id,
     })
 
@@ -192,17 +201,30 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
       suggested: result.suggested_assertions,
     }
   } catch (err) {
+    // No key anywhere: the verdict stays unknown, as before the route.
+    if (err instanceof LlmFailoverError && err.code === 'NO_KEYS_CONFIGURED') {
+      rlog.warn('no AI key — degrading to unknown', { project: projectId })
+      await db.from('sentinel_verdicts').insert({
+        project_id: projectId,
+        test_file: test.file,
+        test_name: test.name,
+        commit_sha: commitSha ?? '',
+        verdict: 'unknown',
+        reasoning: 'no LLM key configured',
+      })
+      return { verdict: 'rejected', reasoning: 'no LLM key configured', cached: false }
+    }
     await logLlmInvocation(db, {
       projectId,
       functionName: 'sentinel-audit',
       stage: 'sentinel',
       primaryModel: SENTINEL_MODEL,
-      usedModel: SENTINEL_MODEL,
-      fallbackUsed: false,
+      usedModel,
+      fallbackUsed,
       status: 'error',
       errorMessage: String(err),
       latencyMs: Date.now() - start,
-      keySource: resolved?.source ?? 'env',
+      keySource,
       langfuseTraceId: trace.id,
     })
     rlog.error('sentinel LLM failed', { test: `${test.file}::${test.name}`, err: String(err) })

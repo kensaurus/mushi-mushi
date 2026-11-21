@@ -162,7 +162,10 @@ async function assertLlmAvailable(c: Context, projectId: string) {
   const db = getServiceClient()
   const anthropic = await resolveLlmKey(db, projectId, 'anthropic')
   const openai = await resolveLlmKey(db, projectId, 'openai')
-  if (!anthropic && !openai) {
+  // The platform Claude and OpenRouter keys only serve through a route, so
+  // resolveLlmKey does not hand them out; they still make Q&A available.
+  const platformRoute = !!(Deno.env.get('ANTHROPIC_API_KEY') || Deno.env.get('OPENROUTER_API_KEY'))
+  if (!anthropic && !openai && !platformRoute) {
     return c.json(
       {
         ok: false,
@@ -293,7 +296,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     let outputTokens: number | undefined
 
     try {
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const { result, usedProvider, model: routeModel, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
         db,
         projectId,
         async (key) => {
@@ -301,7 +304,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           return assistText(
             await claudeGenerateText({
               apiKey: key.key,
-              model: CODEBASE_ASSIST_MODEL,
+              model: key.model ?? CODEBASE_ASSIST_MODEL,
               effort: CODEBASE_ASSIST_EFFORT,
               messages: [
                 {
@@ -324,18 +327,18 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             apiKey: key.key,
             ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
           })
-          usedModel = ASSIST_FALLBACK
           return assistText(
             await generateText({
-              model: openai(ASSIST_FALLBACK),
+              model: openai(key.model ?? ASSIST_FALLBACK),
               system: systemPrompt,
               messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               maxTokens: 900,
             }),
           )
         },
+        { feature: 'codebase-understand', tier: 'fast' },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
+      usedModel = routeModel ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL)
       inputTokens = result.usage?.promptTokens
       outputTokens = result.usage?.completionTokens
       const cache = extractAnthropicCacheUsage(result.experimental_providerMetadata)
@@ -386,7 +389,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         stage: 'codebase-chat',
         primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
-        fallbackUsed: usedProvider === 'openai',
+        fallbackUsed: routeFallback,
         status: 'success',
         latencyMs,
         inputTokens,
@@ -481,14 +484,14 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       await stream.write(toSseEvent({ threadId, citations }, { event: 'start' }))
 
       try {
-        const { result, usedProvider } = await withAnthropicOrOpenAi(
+        const { result, usedProvider, model: routeModel, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
           db,
           projectId,
           async (key): Promise<AssistStream> => {
             keySource = key.source
             const streamed = claudeStreamText({
               apiKey: key.key,
-              model: CODEBASE_ASSIST_MODEL,
+              model: key.model ?? CODEBASE_ASSIST_MODEL,
               effort: CODEBASE_ASSIST_EFFORT,
               messages: [
                 {
@@ -506,22 +509,22 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           },
           async (key): Promise<AssistStream> => {
             keySource = key.source
-            usedModel = ASSIST_FALLBACK
             const [{ openAiProvider }, { streamText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
             const openai = openAiProvider({
               apiKey: key.key,
               ...(key.baseUrl ? { baseURL: key.baseUrl } : {}),
             })
             const streamed = streamText({
-              model: openai(ASSIST_FALLBACK),
+              model: openai(key.model ?? ASSIST_FALLBACK),
               system: systemPrompt,
               messages: body.messages!.slice(-10).map((m) => ({ role: m.role, content: m.content })),
               maxTokens: 900,
             })
             return { textStream: streamed.textStream, usage: streamed.usage }
           },
+          { feature: 'codebase-understand-stream', tier: 'fast' },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
+        usedModel = routeModel ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL)
         for await (const delta of result.textStream) {
           acc += delta
           await stream.write(toSseEvent({ delta }, { event: 'delta' }))
@@ -563,7 +566,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           stage: 'codebase-chat-stream',
           primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
-          fallbackUsed: usedProvider === 'openai',
+          fallbackUsed: routeFallback,
           status: 'success',
           latencyMs,
           inputTokens,
@@ -671,7 +674,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
     let keySource: 'byok' | 'env' = 'env'
 
     try {
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const { result, usedProvider, model: routeModel, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
         db,
         projectId,
         async (key) => {
@@ -679,7 +682,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           return assistText(
             await claudeGenerateText({
               apiKey: key.key,
-              model: CODEBASE_ASSIST_MODEL,
+              model: key.model ?? CODEBASE_ASSIST_MODEL,
               effort: CODEBASE_ASSIST_EFFORT,
               prompt,
               maxTokens: 400 + THINKING_HEADROOM_TOKENS,
@@ -688,7 +691,6 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         },
         async (key) => {
           keySource = key.source
-          usedModel = ASSIST_FALLBACK
           const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({
             apiKey: key.key,
@@ -696,14 +698,15 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           })
           return assistText(
             await generateText({
-              model: openai(ASSIST_FALLBACK),
+              model: openai(key.model ?? ASSIST_FALLBACK),
               prompt,
               maxTokens: 400,
             }),
           )
         },
+        { feature: 'codebase-understand', tier: 'fast' },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
+      usedModel = routeModel ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL)
       const summary = result.text.trim()
       const latencyMs = Date.now() - started
 
@@ -726,7 +729,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         stage: 'summary',
         primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
-        fallbackUsed: usedProvider === 'openai',
+        fallbackUsed: routeFallback,
         status: 'success',
         latencyMs,
         inputTokens: result.usage?.promptTokens,
@@ -807,7 +810,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         const tourContext = stops
           .map((s) => `${s.order}. ${s.title} (${s.layer}): ${s.file_paths.join(', ')}`)
           .join('\n')
-        const { result, usedProvider } = await withAnthropicOrOpenAi(
+        const { result, usedProvider, model: routeModel, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
           db,
           projectId,
           async (key) => {
@@ -815,7 +818,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
             return assistText(
               await claudeGenerateText({
                 apiKey: key.key,
-                model: CODEBASE_ASSIST_MODEL,
+                model: key.model ?? CODEBASE_ASSIST_MODEL,
                 effort: CODEBASE_ASSIST_EFFORT,
                 prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
                 maxTokens: 800 + THINKING_HEADROOM_TOKENS,
@@ -824,19 +827,19 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           },
           async (key) => {
             keySource = key.source
-            usedModel = ASSIST_FALLBACK
             const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
             const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
             return assistText(
               await generateText({
-                model: openai(ASSIST_FALLBACK),
+                model: openai(key.model ?? ASSIST_FALLBACK),
                 prompt: `Improve these guided-tour stop rationales for onboarding a new developer. Keep the same order. Return JSON array of {order, rationale} only.\n\n${tourContext}`,
                 maxTokens: 800,
               }),
             )
           },
+          { feature: 'codebase-understand', tier: 'fast' },
         )
-        usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
+        usedModel = routeModel ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL)
         const latencyMs = Date.now() - started
         void logLlmInvocation(db, {
           projectId,
@@ -844,7 +847,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           stage: 'tour',
           primaryModel: CODEBASE_ASSIST_MODEL,
           usedModel,
-          fallbackUsed: usedProvider === 'openai',
+          fallbackUsed: routeFallback,
           status: 'success',
           latencyMs,
           inputTokens: result.usage?.promptTokens,
@@ -933,7 +936,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
       const started = Date.now()
       let usedModel = CODEBASE_ASSIST_MODEL
       let keySource: 'byok' | 'env' = 'env'
-      const { result, usedProvider } = await withAnthropicOrOpenAi(
+      const { result, usedProvider, model: routeModel, fallbackUsed: routeFallback } = await withAnthropicOrOpenAi(
         db,
         projectId,
         async (key) => {
@@ -941,7 +944,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
           return assistText(
             await claudeGenerateText({
               apiKey: key.key,
-              model: CODEBASE_ASSIST_MODEL,
+              model: key.model ?? CODEBASE_ASSIST_MODEL,
               effort: CODEBASE_ASSIST_EFFORT,
               prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
               maxTokens: 1200 + THINKING_HEADROOM_TOKENS,
@@ -950,19 +953,19 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         },
         async (key) => {
           keySource = key.source
-          usedModel = ASSIST_FALLBACK
           const [{ openAiProvider }, { generateText }] = await Promise.all([import('../../_shared/openai-compat.ts'), import('../../_shared/ai-sdk.ts')])
           const openai = openAiProvider({ apiKey: key.key, ...(key.baseUrl ? { baseURL: key.baseUrl } : {}) })
           return assistText(
             await generateText({
-              model: openai(ASSIST_FALLBACK),
+              model: openai(key.model ?? ASSIST_FALLBACK),
               prompt: `From this indexed file list, extract business domains, user flows, and steps. Return JSON matching {domains:[{id,name,description,flows:[{id,name,description,steps:[{id,name,description,file_paths[]}]}]}]}.\n\nFiles:\n${fileList}`,
               maxTokens: 1200,
             }),
           )
         },
+        { feature: 'codebase-understand', tier: 'fast' },
       )
-      usedModel = usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL
+      usedModel = routeModel ?? (usedProvider === 'openai' ? ASSIST_FALLBACK : CODEBASE_ASSIST_MODEL)
       const latencyMs = Date.now() - started
       void logLlmInvocation(db, {
         projectId,
@@ -970,7 +973,7 @@ export function registerCodebaseUnderstandRoutes(app: Hono<{ Variables: Variable
         stage: 'domains',
         primaryModel: CODEBASE_ASSIST_MODEL,
         usedModel,
-        fallbackUsed: usedProvider === 'openai',
+        fallbackUsed: routeFallback,
         status: 'success',
         latencyMs,
         inputTokens: result.usage?.promptTokens,

@@ -7,10 +7,10 @@
  *
  *          The owner switched to OpenAI when the Claude credits ran low. Only
  *          pausing the Claude key was not enough: the resolver then reached
- *          the app's legacy Claude field and the platform's ANTHROPIC_API_KEY,
- *          and eight call sites read that env key directly. So the switch is
- *          enforced in `resolveLlmKeys` and in `platformAnthropicKey`, which
- *          those call sites use instead of the env var.
+ *          the app's legacy Claude field and the platform's ANTHROPIC_API_KEY.
+ *          So the switch is enforced in `resolveLlmKeys` (the app's keys) and
+ *          in llm-failover's `withPlatformRoute` (the platform keys, which
+ *          since 2026-11-21 reach a call only through a KENSAURUS AI route).
  *
  * A failed read keeps the default ('anthropic'): one unreadable row must not
  * move an organization's spend to another vendor. It logs a warning and is not
@@ -23,7 +23,6 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
-import { anthropicNoCreditDrill, hostedClaudeFirst } from './hosted-llm-order.ts'
 
 const log = rootLog.child('ai-provider')
 
@@ -65,17 +64,4 @@ async function readAiProvider(db: SupabaseClient, projectId: string): Promise<Ai
 /** Forget cached choices (after the console changes one, and in tests). */
 export function clearAiProviderCache(): void {
   cache.clear()
-}
-
-/**
- * The platform's ANTHROPIC_API_KEY for this app, or undefined when its
- * organization runs AI on OpenAI, or when MUSHI_HOSTED_LLM_ORDER does not put
- * Anthropic first (hosted-llm-order.ts; the default since 2026-11-21 is
- * OpenAI first). Use it instead of reading the env var: a caller that gets
- * undefined takes its OpenAI branch.
- */
-export async function platformAnthropicKey(db: SupabaseClient, projectId: string): Promise<string | undefined> {
-  if (!hostedClaudeFirst() || anthropicNoCreditDrill()) return undefined
-  if ((await aiProviderForProject(db, projectId)) === 'openai') return undefined
-  return typeof Deno !== 'undefined' ? Deno.env.get('ANTHROPIC_API_KEY') || undefined : undefined
 }

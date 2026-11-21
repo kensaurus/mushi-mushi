@@ -280,7 +280,7 @@ describe('refusal handling', () => {
       throw refusal
     })
     const openai = vi.fn(async () => 'openai-answer')
-    const { result, usedProvider } = await withAnthropicOrOpenAi(db, 'project-1', anthropic, openai)
+    const { result, usedProvider } = await withAnthropicOrOpenAi(db, 'project-1', anthropic, openai, { feature: 'test', tier: 'fast' })
     expect(anthropic).toHaveBeenCalledTimes(1)
     expect(usedProvider).toBe('openai')
     expect(result).toBe('openai-answer')
@@ -289,7 +289,7 @@ describe('refusal handling', () => {
   it('still re-throws an unrelated Anthropic error instead of falling back', async () => {
     const err = Object.assign(new Error('invalid_request_error'), { status: 400 })
     await expect(
-      withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x'),
+      withAnthropicOrOpenAi(db, 'project-1', async () => { throw err }, async () => 'x', { feature: 'test', tier: 'fast' }),
     ).rejects.toBe(err)
   })
 })

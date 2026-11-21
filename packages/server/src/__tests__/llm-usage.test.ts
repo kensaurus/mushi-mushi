@@ -363,7 +363,7 @@ describe('background jobs use the project key first', () => {
     for (const f of ['generate-synthetic/index.ts', 'mistake-clusterer/index.ts', 'mistake-summarizer/index.ts', 'release-builder/index.ts']) {
       const src = readFileSync(resolve(FUNCTIONS_ROOT, f), 'utf8')
       expect(src, f).not.toMatch(/Deno\.env\.get\('(ANTHROPIC|OPENAI)_API_KEY'\)/)
-      expect(src, f).toMatch(/projectLlmKey|resolveLlmKey/)
+      expect(src, f).toMatch(/projectLlmKey|resolveLlmKey|withAnthropicOrOpenAi\(/)
       expect(src, f).not.toMatch(/keySource: 'env'/)
     }
   })

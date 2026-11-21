@@ -21,7 +21,6 @@ import { isCodebaseIndexFailing } from './sweep-error-classifier.ts'
 import { dereferenceMaybeVault } from './settings-secrets.ts'
 import { resolveLlmKey } from './byok.ts'
 import { aiProviderForProject } from './ai-provider.ts'
-import { hostedClaudeFirst } from './hosted-llm-order.ts'
 import { isSlackChannelUnusable } from './slack.ts'
 
 // Deno global — declared only where consumed (edge functions).
@@ -252,12 +251,6 @@ export async function probeIntegration(
         if (!res.ok) {
           const body = await res.text().catch(() => '')
           detail = `HTTP ${res.status}${body ? ` — ${body.slice(0, 160)}` : ''}`
-        }
-        // The platform Claude key is the last resort unless MUSHI_HOSTED_LLM_ORDER
-        // puts Anthropic first (hosted-llm-order.ts): say so next to its health.
-        if (!hostedClaudeFirst()) {
-          const note = 'Hosted AI runs on OpenAI first; this key is only the last resort.'
-          detail = detail ? `${detail} ${note}` : note
         }
       }
 

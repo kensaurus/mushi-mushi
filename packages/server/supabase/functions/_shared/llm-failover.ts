@@ -45,11 +45,16 @@ import {
 import { LlmBudgetExceededError } from './llm-budget.ts';
 import { sanitizeLlmError } from './llm-error-sanitize.ts';
 import {
-  AnthropicLowCreditDrillError,
-  anthropicNoCreditDrill,
-  hostedClaudeAllowed,
-  hostedClaudeFirst,
-} from './hosted-llm-order.ts';
+  getRouteCandidates,
+  noteOutcome,
+  orderCandidates,
+  reportProviderFailure,
+  type RouteSource,
+  type RoutesConfig,
+  type Tier,
+} from './kensaurus-ai-routes-client.ts';
+import { platformRouteKey } from './byok.ts';
+import { aiProviderForProject } from './ai-provider.ts';
 
 const log = rootLog.child('llm-failover');
 
@@ -322,15 +327,15 @@ export async function withLlmFailover<T>(
   meter?: LlmFailoverMeterOptions<T>,
   /**
    * `openAiOnly`: leave OpenRouter keys out (speech-to-text, fine-tuning).
-   * `hostedClaude`: include the platform Claude key even when
-   * MUSHI_HOSTED_LLM_ORDER puts it after OpenAI (withAnthropicOrOpenAi's last leg).
+   * `ownOnly`: the app's own keys only, never the platform key
+   * (withAnthropicOrOpenAi runs platform calls through a route instead).
    */
-  opts: { openAiOnly?: boolean; hostedClaude?: boolean } = {},
+  opts: { openAiOnly?: boolean; ownOnly?: boolean } = {},
 ): Promise<T> {
   await enforceLlmBudget(db, projectId, provider);
   const candidates = await resolveLlmKeys(db, projectId, provider, {
     openAiOnly: opts.openAiOnly,
-    hostedClaude: opts.hostedClaude,
+    ownOnly: opts.ownOnly,
   });
 
   if (candidates.length === 0) {
@@ -342,9 +347,8 @@ export async function withLlmFailover<T>(
     });
   }
 
-  // The env fallback in byok.ts returns only platform keys (OpenAI then
-  // OpenRouter for 'openai'), so a hosted call is never mixed with pooled
-  // BYOK keys in the same list.
+  // The env fallback in byok.ts always returns exactly one candidate, so a
+  // hosted call is never mixed with pooled BYOK keys in the same list.
   if (candidates.some((c) => c.source === 'env')) {
     const preflight = await hostedLlmPreflight({ db, projectId });
     if (!preflight.allowed) {
@@ -357,7 +361,7 @@ export async function withLlmFailover<T>(
 
   for (const candidate of candidates) {
     attempts++;
-    const outcome = await callWithTransientRetry(drillWrap(fn, candidate, provider), candidate, provider);
+    const outcome = await callWithTransientRetry(fn, candidate, provider);
 
     if (outcome.ok) {
       if (candidate.source === 'byok') {
@@ -450,22 +454,50 @@ export async function withLlmFailover<T>(
 }
 
 /**
- * MUSHI_LLM_DRILL=anthropic_no_credit: a platform-key Claude call fails with
- * Anthropic's recorded low-credit 400 before any request is sent, so the
- * fallover can be proven live without touching a key (hosted-llm-order.ts).
- * App-owned keys are never drilled.
+ * KENSAURUS AI routes (CONTRACT 2026-11-21): which provider and model a
+ * platform-key call uses comes from kenji `kensaurus_ai_routes`, per
+ * (app 'mushi-mushi', feature). The tier only picks the baked list used when
+ * kenji cannot be read. Nothing in mushi names the order.
  */
-function drillWrap<T>(
-  fn: (key: ResolvedKey) => Promise<T>,
-  candidate: ResolvedKey,
-  provider: LlmProvider,
-): (key: ResolvedKey) => Promise<T> {
-  if (provider !== 'anthropic' || candidate.source !== 'env' || !anthropicNoCreditDrill()) return fn;
-  return () => Promise.reject(new AnthropicLowCreditDrillError());
+export interface LlmRoute {
+  /** The route's feature name, e.g. 'classify-report'. */
+  feature: string;
+  /** fast ≈ Haiku, standard ≈ Sonnet, premium ≈ Opus: only for the baked fallback. */
+  tier: Tier;
+  /** Honour KENSAURUS_LLM_DRILL for this call (the smoke script's drill). */
+  drill?: boolean;
 }
 
-/** Why OpenAI should take over from Claude, or null when it should not (the error is rethrown). */
-async function openAiCanCover(err: unknown): Promise<string | null> {
+/** The wallet ledger's id for this app, which the route rows use too. */
+export const ROUTES_APP = 'mushi-mushi';
+const DEFAULT_ROUTES_URL = 'https://jghcferpoaqntpfqvayf.supabase.co/functions/v1/kensaurus-ai-routes';
+
+/**
+ * Where routes are read: KENSAURUS_ROUTES_TOKEN, else the wallet's internal
+ * token (CONTRACT §1). Without either (a self-host) the URL is empty, so
+ * nothing calls kenji and the baked OpenAI-first list runs.
+ */
+export function routesConfig(): RoutesConfig {
+  const token = Deno.env.get('KENSAURUS_ROUTES_TOKEN') || Deno.env.get('KENSAURUS_WALLET_INTERNAL_TOKEN') || '';
+  return { url: token ? (Deno.env.get('KENSAURUS_ROUTES_URL') || DEFAULT_ROUTES_URL) : '', token };
+}
+
+/** Anthropic's answer to a spent account, verbatim (HTTP 400, recorded 2026-11-21). */
+export const ANTHROPIC_LOW_CREDIT_BODY =
+  '{"type":"error","error":{"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."}}';
+
+/**
+ * KENSAURUS_LLM_DRILL=<provider>:payment fails that provider's platform call
+ * with the recorded low-credit 400 before any request is sent, only on a call
+ * that carries `drill: true` (the smoke script). The real drill is the kill
+ * switch on kenji (`kensaurus_provider_accounts.enabled = false`).
+ */
+function drillFails(provider: string, route: LlmRoute): boolean {
+  return !!route.drill && (Deno.env.get('KENSAURUS_LLM_DRILL') ?? '').trim().toLowerCase() === `${provider}:payment`;
+}
+
+/** Why the next candidate should take over, or null when the error is rethrown as is. */
+async function nextCanCover(err: unknown): Promise<string | null> {
   if (
     err instanceof LlmFailoverError &&
     (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED')
@@ -473,69 +505,166 @@ async function openAiCanCover(err: unknown): Promise<string | null> {
     return err.code;
   }
   // (ai@4 loads here, after a model call, never at boot: ai-sdk.ts.)
-  // Anthropic responded but its output didn't match the required schema.
-  // OpenAI often handles complex structured-output schemas more reliably.
+  // The model answered but its output didn't match the schema; another model
+  // often handles it.
   if ((await import('./ai-sdk.ts')).NoObjectGeneratedError.isInstance(err)) return 'no_object';
-  // Claude (and its server-side fallback chain, which only covers the cyber /
-  // frontier_llm categories) declined. Not the key's fault and not transient:
-  // `withLlmFailover` re-threw it as fatal without marking the key. OpenAI
-  // runs different safety policies, so hand it over.
+  // Claude (and its server-side fallback chain) declined. Not the key's fault
+  // and not transient; another vendor runs different safety policies.
   if (isClaudeRefusal(err)) return 'refusal';
   return null;
 }
 
+export interface RoutedLlmResult<T> {
+  result: T;
+  /** The family that answered: 'openai' covers every OpenAI-compatible host. */
+  usedProvider: 'anthropic' | 'openai';
+  /** The model a route chose (platform key); undefined when the app's own key answered with the caller's model. */
+  model?: string;
+  /** The vendor that answered (openai, openrouter, together, anthropic). */
+  vendor?: string;
+  /** True only when the answer did not come from the first choice: not the route's priority 1, or after the app's own key failed. */
+  fallbackUsed: boolean;
+  keySource: 'byok' | 'env';
+  /** Where the route came from (live, cache, last_known_good, baked); platform calls only. */
+  routeSource?: RouteSource;
+}
+
+/** Map this module's failure kinds onto the routes client's breaker classes. */
+function breakerClass(kind: 'payment' | 'quota' | 'auth' | 'transient_exhausted' | 'config'): 'payment' | 'auth' | 'rate_limit' | 'outage' | 'config' {
+  return kind === 'quota' ? 'rate_limit' : kind === 'transient_exhausted' ? 'outage' : kind;
+}
+
 /**
- * Claude or OpenAI, in this order:
- *   1. the app's own Claude keys (BYOK: own, legacy, shared, universal). The
- *      platform Claude key joins this leg only when MUSHI_HOSTED_LLM_ORDER
- *      puts Anthropic first;
- *   2. the OpenAI pool: the app's OpenAI/OpenRouter keys, else the platform's
- *      OPENAI_API_KEY and OPENROUTER_API_KEY in the configured order;
- *   3. the platform Claude key as the last resort, when the order lists it
- *      after OpenAI and the app has no Claude key of its own.
- * With the default order (2026-11-21: openai,openrouter,anthropic) a hosted
- * call runs on OpenAI, and an app with its own Claude key keeps it first. An
- * organization that runs AI on OpenAI (ai-provider.ts) gets no Claude key in
- * any leg.
+ * Run one platform-key call through the feature's KENSAURUS AI route: each
+ * candidate in order (down and recently failing providers last), on this
+ * project's key for that provider, with the route's model in `key.model`.
+ * A failed candidate is noted for the breaker, reported to kenji when a person
+ * must act (auth, payment, config), and the next one runs. A wallet denial or
+ * an over-budget project never moves to another provider.
  *
- * Returns the result plus which provider family answered.
+ * `projectId: null` (Ask Mushi with no active app): no budget or wallet to
+ * check and no organization to ask about Claude, so only OpenAI-compatible
+ * candidates run.
+ */
+export async function withPlatformRoute<T>(
+  db: SupabaseClient,
+  projectId: string | null,
+  route: LlmRoute,
+  fns: { anthropic?: ((key: ResolvedKey) => Promise<T>) | null; openai?: ((key: ResolvedKey) => Promise<T>) | null },
+): Promise<RoutedLlmResult<T>> {
+  if (projectId) await enforceLlmBudget(db, projectId, 'openai');
+  const cfg = routesConfig();
+  const { candidates, source } = await getRouteCandidates(cfg, ROUTES_APP, route.feature, route.tier);
+  const ordered = orderCandidates(candidates);
+  // An organization that runs AI on OpenAI gets no Claude key, route or not.
+  const claudeOff = !projectId || (await aiProviderForProject(db, projectId)) === 'openai';
+  const runnable = ordered
+    .map((c) => ({ c, key: claudeOff && c.provider === 'anthropic' ? null : platformRouteKey(projectId ?? '', c) }))
+    .filter((x) => x.key && (x.key.provider === 'anthropic' ? fns.anthropic : fns.openai));
+  if (runnable.length === 0) {
+    throw new LlmFailoverError({
+      code: 'NO_KEYS_CONFIGURED',
+      provider: 'openai',
+      attempts: 0,
+      lastError: `No platform key for any route of ${route.feature} (${ordered.map((c) => c.provider).join(', ') || 'no routes'}).`,
+    });
+  }
+  if (projectId) {
+    const preflight = await hostedLlmPreflight({ db, projectId });
+    if (!preflight.allowed) throw new WalletDeniedError(preflight.reason ?? 'insufficient', preflight.balanceMicro);
+  }
+
+  const firstPriority = Math.min(...ordered.map((c) => c.priority));
+  const tried: string[] = [];
+  let lastError = '';
+  for (const { c, key } of runnable) {
+    const k = key!;
+    const fn = (k.provider === 'anthropic' ? fns.anthropic : fns.openai)!;
+    const call = drillFails(c.provider, route)
+      ? () => Promise.reject(Object.assign(new Error(`400 ${ANTHROPIC_LOW_CREDIT_BODY}`), { status: 400 }))
+      : fn;
+    const outcome = await callWithTransientRetry(call, k, k.provider);
+    if (outcome.ok) {
+      noteOutcome(c.provider, 'ok');
+      return {
+        result: outcome.result,
+        usedProvider: k.provider === 'anthropic' ? 'anthropic' : 'openai',
+        model: c.model,
+        vendor: c.provider,
+        fallbackUsed: c.priority !== firstPriority,
+        keySource: 'env',
+        routeSource: source,
+      };
+    }
+    lastError = outcome.lastError;
+    tried.push(`${c.provider}/${c.model}: ${outcome.kind}`);
+    if (outcome.kind === 'fatal') {
+      if (!(await nextCanCover(outcome.error))) throw outcome.error;
+      log.warn('Route candidate could not answer; trying the next', { feature: route.feature, provider: c.provider, model: c.model });
+      continue;
+    }
+    const cls = breakerClass(outcome.kind);
+    noteOutcome(c.provider, cls);
+    void reportProviderFailure(cfg, {
+      project: ROUTES_APP,
+      app: ROUTES_APP,
+      feature: route.feature,
+      provider: c.provider,
+      model: c.model,
+      class: cls,
+    });
+    log.warn('Route candidate failed; trying the next', { feature: route.feature, provider: c.provider, model: c.model, kind: outcome.kind });
+  }
+  throw new LlmFailoverError({
+    code: 'ALL_KEYS_EXHAUSTED',
+    provider: 'openai',
+    attempts: tried.length,
+    lastError: `${tried.join('; ')}. Last error: ${lastError}`,
+  });
+}
+
+/**
+ * Claude or OpenAI for one feature:
+ *   1. the app's own Claude keys (BYOK: own, legacy, shared, universal);
+ *   2. the app's own OpenAI/OpenRouter keys;
+ *   3. the platform keys, through the feature's KENSAURUS AI route
+ *      (`withPlatformRoute`): provider, model and order come from kenji.
+ * An app's own key keeps the caller's model; a platform call gets the route's
+ * model in `key.model`, so callers send `key.model ?? <their default>`.
+ * Pass `anthropicFn: null` for a feature only OpenAI-compatible models serve.
  */
 export async function withAnthropicOrOpenAi<T>(
   db: SupabaseClient,
   projectId: string,
-  anthropicFn: (key: ResolvedKey) => Promise<T>,
+  anthropicFn: ((key: ResolvedKey) => Promise<T>) | null,
   openAiFn: (key: ResolvedKey) => Promise<T>,
-): Promise<{ result: T; usedProvider: 'anthropic' | 'openai' }> {
-  let appHasNoClaudeKey = false;
-  try {
-    const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn);
-    return { result, usedProvider: 'anthropic' };
-  } catch (err) {
-    // Over budget is a project state, not an Anthropic problem: OpenAI is
-    // under the same budget, so never fall through to it.
-    if (err instanceof LlmBudgetExceededError) throw err;
-    const reason = await openAiCanCover(err);
-    if (!reason) throw err;
-    appHasNoClaudeKey = reason === 'NO_KEYS_CONFIGURED';
-    if (!appHasNoClaudeKey) log.warn('Anthropic could not answer; falling back to OpenAI', { projectId, reason });
-  }
-
-  try {
-    const result = await withLlmFailover(db, projectId, 'openai', openAiFn);
-    return { result, usedProvider: 'openai' };
-  } catch (err) {
-    const lastResort = appHasNoClaudeKey && !hostedClaudeFirst() && hostedClaudeAllowed() &&
-      err instanceof LlmFailoverError &&
-      (err.code === 'NO_KEYS_CONFIGURED' || err.code === 'ALL_KEYS_EXHAUSTED');
-    if (!lastResort) throw err;
-    log.warn('OpenAI pool exhausted; trying the platform Claude key last', { projectId, reason: err.code });
+  route: LlmRoute,
+): Promise<RoutedLlmResult<T>> {
+  let ownKeyFailed = false;
+  if (anthropicFn) {
     try {
-      const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn, undefined, { hostedClaude: true });
-      return { result, usedProvider: 'anthropic' };
-    } catch (claudeErr) {
-      // No platform Claude key either: the OpenAI failure is the useful one.
-      if (claudeErr instanceof LlmFailoverError && claudeErr.code === 'NO_KEYS_CONFIGURED') throw err;
-      throw claudeErr;
+      const result = await withLlmFailover(db, projectId, 'anthropic', anthropicFn, undefined, { ownOnly: true });
+      return { result, usedProvider: 'anthropic', fallbackUsed: false, keySource: 'byok' };
+    } catch (err) {
+      // Over budget is a project state, not a vendor problem: never move on.
+      if (err instanceof LlmBudgetExceededError) throw err;
+      const reason = await nextCanCover(err);
+      if (!reason) throw err;
+      if (reason !== 'NO_KEYS_CONFIGURED') {
+        ownKeyFailed = true;
+        log.warn("The app's Claude key could not answer; trying its OpenAI key", { projectId, reason });
+      }
     }
   }
+  try {
+    const result = await withLlmFailover(db, projectId, 'openai', openAiFn, undefined, { ownOnly: true });
+    return { result, usedProvider: 'openai', fallbackUsed: ownKeyFailed, keySource: 'byok' };
+  } catch (err) {
+    if (err instanceof LlmBudgetExceededError) throw err;
+    const reason = await nextCanCover(err);
+    if (!reason) throw err;
+    if (reason !== 'NO_KEYS_CONFIGURED') ownKeyFailed = true;
+  }
+  const routed = await withPlatformRoute(db, projectId, route, { anthropic: anthropicFn, openai: openAiFn });
+  return { ...routed, fallbackUsed: routed.fallbackUsed || ownKeyFailed };
 }

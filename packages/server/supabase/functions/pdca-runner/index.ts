@@ -166,9 +166,9 @@ async function runQaStoryImprover(
           // claude-messages, not AI SDK v4: Sonnet 5.5 rejects the
           // temperature + forced tool_choice that generateObject sends. The
           // default max_tokens leaves room for adaptive thinking.
-          const { object } = await withLlmUsage(db, { ...improveUsage, model: IMPROVE_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
+          const { object } = await withLlmUsage(db, { ...improveUsage, model: anthropicKey.model ?? IMPROVE_MODEL, keySource: anthropicKey.source }, () => claudeGenerateObject({
             apiKey: anthropicKey.key,
-            model: IMPROVE_MODEL,
+            model: anthropicKey.model ?? IMPROVE_MODEL,
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
@@ -176,8 +176,8 @@ async function runQaStoryImprover(
           return object
         },
         async (openaiKey) => {
-          const { object } = await withLlmUsage(db, { ...improveUsage, model: OPENAI_PRIMARY, keySource: openaiKey.source }, () => generateObject({
-            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(OPENAI_PRIMARY, { structuredOutputs: false }),
+          const { object } = await withLlmUsage(db, { ...improveUsage, model: openaiKey.model ?? OPENAI_PRIMARY, keySource: openaiKey.source }, () => generateObject({
+            model: openAiProvider({ apiKey: openaiKey.key, baseURL: openaiKey.baseUrl })(openaiKey.model ?? OPENAI_PRIMARY, { structuredOutputs: false }),
             system: IMPROVE_SYSTEM,
             schema: improveSchema,
             prompt: `ORIGINAL TEST:\n\`\`\`typescript\n${(story.script as string).slice(0, 4000)}\n\`\`\`\n\nRECENT FAILURES:\n${failureSummary}`,
@@ -185,6 +185,7 @@ async function runQaStoryImprover(
           }))
           return object
         },
+        { feature: 'pdca-improve', tier: 'standard' },
       )
 
       if (result.confidence < 0.3) {
@@ -348,22 +349,23 @@ Deno.serve(
           db,
           run.project_id as string,
           async (k) => {
-            const { text } = await withLlmUsage(db, { ...producerUsage, model: primaryModel, keySource: k.source }, () => claudeGenerateText({
+            const { text } = await withLlmUsage(db, { ...producerUsage, model: k.model ?? primaryModel, keySource: k.source }, () => claudeGenerateText({
               apiKey: k.key,
-              model: primaryModel,
+              model: k.model ?? primaryModel,
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
             }))
             return text.trim()
           },
           async (k) => {
             const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
-            const { text } = await withLlmUsage(db, { ...producerUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateText({
-              model: openai(OPENAI_PRIMARY),
+            const { text } = await withLlmUsage(db, { ...producerUsage, model: k.model ?? OPENAI_PRIMARY, keySource: k.source }, () => generateText({
+              model: openai(k.model ?? OPENAI_PRIMARY),
               prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
               maxTokens: 3000,
             }))
             return text.trim()
           },
+          { feature: 'pdca-producer', tier: 'standard' },
         )
         draft = producerResult
 
@@ -374,25 +376,26 @@ Deno.serve(
           db,
           run.project_id as string,
           async (k) => {
-            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: judgeModel, keySource: k.source }, () => claudeGenerateObject({
+            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: k.model ?? judgeModel, keySource: k.source }, () => claudeGenerateObject({
               apiKey: k.key,
-              model: judgeModel,
+              model: k.model ?? judgeModel,
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             }))
-            costUsd = estimateCallCostUsd(judgeModel, usage.promptTokens, usage.completionTokens)
+            costUsd = estimateCallCostUsd(k.model ?? judgeModel, usage.promptTokens, usage.completionTokens)
             return object
           },
           async (k) => {
             const openai = openAiProvider({ apiKey: k.key, ...(k.baseUrl ? { baseURL: k.baseUrl } : {}) })
-            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: OPENAI_PRIMARY, keySource: k.source }, () => generateObject({
-              model: openai(OPENAI_PRIMARY, { structuredOutputs: false }),
+            const { object, usage } = await withLlmUsage(db, { ...criticUsage, model: k.model ?? OPENAI_PRIMARY, keySource: k.source }, () => generateObject({
+              model: openai(k.model ?? OPENAI_PRIMARY, { structuredOutputs: false }),
               schema: rubricSchema,
               prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
             }))
-            costUsd = estimateCallCostUsd(OPENAI_PRIMARY, usage.promptTokens, usage.completionTokens)
+            costUsd = estimateCallCostUsd(k.model ?? OPENAI_PRIMARY, usage.promptTokens, usage.completionTokens)
             return object
           },
+          { feature: 'pdca-critic', tier: 'standard' },
         )
         critiqueResult = criticResult
 

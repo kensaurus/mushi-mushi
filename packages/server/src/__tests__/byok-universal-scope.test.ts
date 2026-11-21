@@ -163,19 +163,18 @@ describe('resolveLlmKeys: the five steps in order', () => {
 
   it('5. the platform key only when the app has no key at all', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
+    process.env.OPENAI_API_KEY = 'sk-platform-openai-0000'
     try {
-      // Since 2026-11-21 hosted AI runs on OpenAI first (hosted-llm-order.ts):
-      // the platform Claude key is handed out up front only when the order
-      // puts Anthropic first.
+      // The platform Claude key reaches a call only through a KENSAURUS AI
+      // route (2026-11-21), so the resolver's platform step is OpenAI's.
       expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'anthropic'))).toEqual([])
-      process.env.MUSHI_HOSTED_LLM_ORDER = 'anthropic,openai'
-      expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'anthropic'))).toEqual(['env'])
+      expect(ids(await byok.resolveLlmKeys(db([]), P_MUSHI, 'openai'))).toEqual(['env'])
       expect(ids(await byok.resolveLlmKeys(db([key('universal', { owner_user_id: OWNER })]), P_MUSHI, 'anthropic'))).toEqual([
         'universal',
       ])
     } finally {
       delete process.env.ANTHROPIC_API_KEY
-      delete process.env.MUSHI_HOSTED_LLM_ORDER
+      delete process.env.OPENAI_API_KEY
     }
   })
 
@@ -244,12 +243,9 @@ describe('resolveLlmKeySource matches the key resolveLlmKeys would use', () => {
     const previous = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = 'sk-ant-platform-0000'
     try {
-      // Default hosted order (OpenAI first): no platform Claude key up front.
+      // No platform Claude key outside a route, so no 'env' source for Claude.
       expect((await agrees(db([]))).source).toBe(null)
-      process.env.MUSHI_HOSTED_LLM_ORDER = 'anthropic,openai'
-      expect((await agrees(db([]))).source).toBe('env')
     } finally {
-      delete process.env.MUSHI_HOSTED_LLM_ORDER
       if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = previous
     }
