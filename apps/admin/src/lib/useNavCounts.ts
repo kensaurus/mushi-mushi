@@ -29,8 +29,10 @@ import { useEntitlements } from './useEntitlements'
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
 export interface NavCounts {
-  /** Reports with status='new' (no age filter). */
+  /** Reports with status='new' (no age filter) from people and production; Mushi's checks are untriagedAutomated. */
   untriagedBacklog: number
+  /** Untriaged reports Mushi's own checks filed (ADR 0063); optional so older fixtures stay valid. */
+  untriagedAutomated?: number
   /** Unfixed reports with a fix queued or running (counted per report). */
   fixesInFlight: number
   /** Unfixed reports whose latest attempt failed, was skipped, or whose PR closed / went red. */
@@ -87,6 +89,7 @@ export interface NavCounts {
 
 const INITIAL: NavCounts = {
   untriagedBacklog: 0,
+  untriagedAutomated: 0,
   fixesInFlight: 0,
   fixesFailed: 0,
   fixesRetryable: 0,
@@ -196,6 +199,7 @@ function navCountsFromNavMeta(data: WorkspaceNavMetaResponse): NavCounts {
   const staleKeyCount = data.projects?.staleKeyCount ?? 0
   return {
     untriagedBacklog: countOrZero(counts?.untriagedBacklog),
+    untriagedAutomated: countOrZero(counts?.untriagedAutomated),
     fixesInFlight: countOrZero(counts?.fixesInFlight),
     fixesFailed: countOrZero(counts?.fixesFailed),
     fixesRetryable: countOrZero(counts?.fixesRetryable),

@@ -1,6 +1,9 @@
 # 0050. Code-read audit: a model proposes, a deterministic check files
 
-Status: Accepted 2026-10-27 by team-lead (Claude) under the owner's explicit delegation. Date: 2026-10-27
+Status: Accepted 2026-10-27 by team-lead (Claude) under the owner's explicit delegation. Date: 2026-10-27.
+Partly superseded 2026-11-21 by ADR [0065](0065-code-audit-root-cause-identity.md): no quota of findings
+per screen and no polish pass, one report per root cause (`pattern_key`), a capped backlog, and a fixed
+finding that comes back reopens as a regression instead of a new report.
 
 Related: ADR [0048](0048-local-workers.md) (local workers), ADR
 [0046](0046-explore-mode-model-drives-code-judges.md) (explore mode: the model

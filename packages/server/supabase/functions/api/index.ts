@@ -56,7 +56,6 @@ import { registerCodeHealthRoutes } from './routes/code-health.ts';
 import { registerRecipeRoutes } from './routes/recipe.ts';
 import { registerPortfolioRoutes } from './routes/portfolio.ts';
 import { registerRadarRoutes } from './routes/radar.ts';
-import { registerDigestRoutes } from './routes/digest.ts';
 import { registerConnectorRoutes } from './routes/connectors.ts';
 import { registerRecipeChangeRoutes } from './routes/recipe-changes.ts';
 import { registerStoreOpsRoutes } from './routes/store-ops.ts';
@@ -782,7 +781,8 @@ registerCodeHealthRoutes(app);
 registerRecipeRoutes(app);
 registerPortfolioRoutes(app);
 registerRadarRoutes(app);
-registerDigestRoutes(app);
+// The operator digest (_shared/operator-digest.ts): served by api-ext (api size budget, 2026-11-21, ADR 0065).
+forwardToApiExt(['/v1/admin/orgs/:orgId/digest', '/v1/admin/orgs/:orgId/digest/settings', '/v1/admin/orgs/:orgId/digest/send']);
 registerConnectorRoutes(app);
 // recipe-ingest.ts (design CI push, portfolio resources, recipe drift): served
 // by api-ext, so `api` has room for the runner and worker heartbeats it now

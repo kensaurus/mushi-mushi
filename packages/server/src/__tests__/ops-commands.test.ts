@@ -44,6 +44,15 @@ describe('answers', () => {
     expect(r.response_type).toBe('ephemeral')
   })
 
+  it("status: bugs from people first, Mushi's own checks counted apart (ADR 0063)", () => {
+    const r = cmds.answerStatus(
+      [{ app: apps[0], lastRelease: null, openAlerts: 0, urgentAlerts: 0, openBugs: 3, openAutomated: 40, ciFailuresToday: 0, mutedUntil: null }],
+      NOW,
+      null,
+    )
+    expect(text(r)).toContain('🐞 3 open bugs (+40 automated)')
+  })
+
   it('sales: by app and currency, refunds taken off, totals per currency', () => {
     const r = cmds.answerSales(
       [

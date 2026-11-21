@@ -205,6 +205,9 @@ describe('audit: the dedupe key', () => {
     expect(auditKeyBlocks('fixed')).toBe(false)
     expect(auditKeyBlocks('verified')).toBe(false)
     expect(auditKeyBlocks(null)).toBe(false)
+    // ADR 0065: a report set aside over the open cap is restored by filing it again.
+    expect(auditKeyBlocks('dismissed', 'deferred_over_cap')).toBe(false)
+    expect(auditKeyBlocks('dismissed', 'false_alarm')).toBe(true)
   })
 
   it('the hourly cap leaves people room under FILED_REPORTS_PER_HOUR', () => {

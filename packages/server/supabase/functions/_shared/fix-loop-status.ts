@@ -11,6 +11,7 @@
  */
 
 import { readFixCiInfra } from './ci-infra.ts'
+import { isAutomatedReportSource } from './report-sources.ts'
 
 /** GitHub PR lifecycle as stored in `fix_attempts.pr_state` (CHECK-constrained). */
 export type PrLifecycle = 'open' | 'closed' | 'merged' | 'draft'
@@ -36,6 +37,36 @@ export function preFixReportStatus(report: {
 }): 'classified' | 'new' {
   if (report.category || report.severity || report.stage1_classification) return 'classified'
   return 'new'
+}
+
+/** What a report records about its rejected fixes (custom_metadata.fix_rejected, ADR 0063). */
+export interface FixRejected {
+  count: number
+  pr_url: string | null
+  at: string
+  /** Set by the audit lane's recheck when the problem still reproduced; cleared by the next rejection. */
+  rechecked?: unknown
+}
+
+/**
+ * Where a report goes when its only fix PR is closed unmerged (ADR 0063).
+ * It never goes back to `new`: that made 120 rejected code-audit fixes look
+ * like fresh reports and sent them straight to a fix agent again.
+ *  - A finding Mushi filed itself goes to `triaged`, out of the fix lane's
+ *    queue (it claims `classified` and `reopened` only), with the rejection
+ *    counted; the audit lane's recheck closes it when the code no longer has
+ *    the problem, or queues it again (at most twice) when it still does.
+ *  - A person's report goes back to `classified`: a closed PR never decides
+ *    that their bug is gone.
+ */
+export function closedUnmergedReportStatus(
+  report: { source?: string | null; custom_metadata?: Record<string, unknown> | null },
+  attempt: { pr_url: string | null },
+  now: string,
+): { status: 'classified' | 'triaged'; fixRejected: FixRejected | null } {
+  if (!isAutomatedReportSource(report.source)) return { status: 'classified', fixRejected: null }
+  const prev = (report.custom_metadata?.fix_rejected ?? null) as Partial<FixRejected> | null
+  return { status: 'triaged', fixRejected: { count: (Number(prev?.count) || 0) + 1, pr_url: attempt.pr_url, at: now } }
 }
 
 /**

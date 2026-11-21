@@ -10,6 +10,7 @@ import { sendDiscordNotification } from '../_shared/discord.ts'
 import { detachTriage, isTriageConfigured, notifyTriageDeduped } from '../_shared/discord-triage.ts'
 import { sendTeamsNotification } from '../_shared/teams.ts'
 import { generateAndStoreEmbedding, suggestGrouping } from '../_shared/embeddings.ts'
+import { mergeDuplicate } from '../_shared/duplicate-merge.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { awardPoints } from '../_shared/reputation.ts'
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts'
@@ -423,6 +424,12 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
       .then(async (group) => {
         if (group.similarCount > 0) {
           log.info('Similar reports found', { similarCount: group.similarCount, groupId: group.groupId })
+          // ADR 0063: an automated report that matches an OPEN report closes as its duplicate child.
+          const parentId = await mergeDuplicate(db, reportId, projectId, group.similar ?? [], group.threshold ?? 1).catch((err) => {
+            log.warn('Duplicate merge skipped', { reportId, err: String(err) })
+            return null
+          })
+          if (parentId) log.info('Duplicate merged into an open report', { reportId, parentId })
         }
         // Stage-1 only knows the category and the page URL. The actual
         // `component` is resolved by Stage 2 (classify-report), so we deliberately
@@ -487,10 +494,11 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}${appDiagnosti
 
     if ((classification.confidence > confidenceThreshold && !forceStage2) || usedHeuristic) {
       const summary = clipAtWord(`${classification.symptom} — ${classification.actual}`, 200)
+      // ADR 0063: grouping (fire-and-forget above) may already have closed it as a duplicate.
       await db.from('reports').update({
         status: 'classified',
         summary,
-      }).eq('id', reportId)
+      }).eq('id', reportId).neq('status', 'dismissed')
 
       const { data: project } = await db.from('projects').select('name').eq('id', projectId).single()
       const projectName = project?.name ?? 'Unknown'

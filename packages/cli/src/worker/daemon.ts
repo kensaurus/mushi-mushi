@@ -629,7 +629,7 @@ export function createDaemon(cfg: WorkerConfig, deps: DaemonDeps) {
         )
       } else if (k.kind === 'audit' && c.mode === 'audit') {
         startJob(lane, k.id, 'audit', `audit pass (${k.audit.findingsLeft} finding(s) left this hour)`, (signal, log) =>
-          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, agent, model: jobModel, reviewModel: model(k.audit.reviewModel) ?? null, log, signal }),
+          (deps.auditPass ?? auditPass)(api, k.id, { repoDir: lane.local.repoDir, laneName: lane.local.name, agent, model: jobModel, reviewModel: model(k.audit.reviewModel) ?? null, recheck: k.audit.recheck, propose: k.audit.propose, log, signal }),
         )
       } else if (k.kind === 'fresh_eyes' && deps.freshEyes) {
         // Any lane of the app runs it: the test needs no clone. Never log the target (it can hold passwords).

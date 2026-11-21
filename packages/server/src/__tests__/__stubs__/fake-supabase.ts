@@ -48,6 +48,23 @@ interface FakeDbOptions {
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete'
 
+/** Split a PostgREST logic list on its top-level commas: `a.in.(x,y),and(b.is.null,c.eq.1)` → two parts. */
+function splitTopLevel(list: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of list) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === ',' && depth === 0) {
+      out.push(cur)
+      cur = ''
+    } else cur += ch
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
 /** SQL LIKE (`%` and `_`) as an anchored RegExp. */
 function likePattern(pattern: string): RegExp {
   const body = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')
@@ -162,8 +179,14 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
    */
   or(filters: string): this {
     // Split on top-level commas only: `col.not.in.(a,b)` keeps its list.
-    const parts = filters.split(/,(?![^(]*\))/)
-    const alternatives = parts.map((part) => {
+    const parts = splitTopLevel(filters)
+    const one = (part: string): ((r: Row) => boolean) => {
+      // `and(a,b)`: every member matches (PostgREST's nested logic tree).
+      const group = /^and\((.*)\)$/.exec(part.trim())
+      if (group) {
+        const members = splitTopLevel(group[1]!).map(one)
+        return (r) => members.every((f) => f(r))
+      }
       const m = /^([\w>-]+)\.(not\.)?(is|eq|neq|in|lt|gt|lte|gte)\.(.*)$/.exec(part.trim())
       if (!m) throw new Error(`fake-supabase: or(${part}) unsupported`)
       const [, key, negated, op, raw] = m
@@ -188,7 +211,8 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
         }
         return negated ? !hit : hit
       }
-    })
+    }
+    const alternatives = parts.map(one)
     this.filters.push((r) => alternatives.some((f) => f(r)))
     return this
   }
