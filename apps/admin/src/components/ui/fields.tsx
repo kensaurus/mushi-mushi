@@ -429,7 +429,13 @@ export function CopyButton(props: CopyButtonProps) {
       props.onCopy()
     }
   }
-  const dims = size === 'md' ? { box: 'h-7 w-7', glyph: 14 } : { box: 'h-5 w-5', glyph: 11 }
+  // Same hit-area floor as Btn / SegmentedControl (WCAG 2.5.8): 24px on
+  // mouse layouts, 32px on coarse pointers. sm was 20px with an 11px glyph,
+  // too small to hit or see (report 44ac4ce2).
+  const dims =
+    size === 'md'
+      ? { box: 'h-7 w-7 pointer-coarse:h-8 pointer-coarse:w-8', glyph: 14 }
+      : { box: 'h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8', glyph: 13 }
   return (
     <Tooltip content={copied ? copiedLabel : label}>
       <button
