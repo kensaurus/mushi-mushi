@@ -438,7 +438,11 @@ export async function runScorecard(opts: ScorecardOptions): Promise<ScorecardRes
     results.filter((r) => !r.error),
     opts.concurrency ?? (opts.scorer.name === 'server' ? 3 : 4),
     async (r) => {
-      const s = await opts.scorer.score(r.facts, r.folder, { app: opts.app, about: opts.about, otherPages: labels.filter((l) => l !== r.facts.label) }).catch((err: Error) => ({ error: err.message, score: undefined }))
+      const ask = () => opts.scorer.score(r.facts, r.folder, { app: opts.app, about: opts.about, otherPages: labels.filter((l) => l !== r.facts.label) }).catch((err: Error) => ({ error: err.message, score: undefined }))
+      // One retry: an answer with no JSON, or a busy model, usually comes right
+      // the second time (1 of 72 console pages on 2026-11-21).
+      let s = await ask()
+      if (!s.score) s = await ask()
       if (s.score) r.score = s.score
       else r.error = `Not scored: ${s.error ?? 'no answer'}`
       progress(r.score ? `scored ${r.facts.key}: ${r.score.overall}/10` : `could not score ${r.facts.key}: ${r.error}`)

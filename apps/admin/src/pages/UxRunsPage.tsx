@@ -79,7 +79,7 @@ function ProjectUxScorecard({ projectId }: { projectId: string }) {
   return (
     <div className={PAGE_CONTENT_STACK}>
       <PageHeaderBar
-        title="UX scorecard"
+        title="UX runs"
         helpTitle="What is the UX scorecard?"
         helpWhatIsIt="Every page of your app, scored 1 to 10 on a written rubric: clarity, hierarchy, consistency, loading/empty/error states, truthfulness, copy, accessibility and speed. A page's score follows its worst problem. Problems that repeat across pages are grouped into one root cause, so one fix lifts many pages."
         helpHowToUse="Run mushi-ux scorecard --url <your app> --profile-dir <your signed-in browser profile> --sync on your computer. Read the root causes first; each says where to fix it. Add --file to file the top ones as bugs (one per cause, at most five a run). Run it again after a fix to see each page's trend."

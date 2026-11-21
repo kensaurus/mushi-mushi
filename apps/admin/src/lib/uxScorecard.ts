@@ -25,7 +25,7 @@ export const UX_DIMENSION_LABEL: Readonly<Record<UxDimension, string>> = {
   performance: 'Speed',
 }
 
-export interface UxScorecardIssue {
+interface UxScorecardIssue {
   dimension: UxDimension
   severity: 'high' | 'medium' | 'low'
   title: string
@@ -60,7 +60,7 @@ export interface UxScorecardCause {
   evidenceSeen: boolean
 }
 
-export interface UxScorecardRun {
+interface UxScorecardRun {
   local_run_id: string
   status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'
   model: string | null
