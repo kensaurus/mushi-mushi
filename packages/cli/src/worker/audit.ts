@@ -129,8 +129,7 @@ interface AuditState {
   pending: FindingBody[]
 }
 
-/** @internal Exported for tests only. */
-export interface AuditOutcome {
+interface AuditOutcome {
   result: 'filed' | 'no_change' | 'timeout' | 'stopped' | 'failed'
   failureKind?: 'infra' | 'code'
   detail: string

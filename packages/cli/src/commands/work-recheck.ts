@@ -47,8 +47,7 @@ interface ParsedAuditCheck {
 const CHECK_RE = /Reproduced by the worker with no model: pattern check, \/(.+)\/(i?) is (present|absent) in (\S+?)(?: near line (\d+))?(?=\s|$|[.,;)](?:\s|$))/m
 
 /**
- * @internal Exported for tests only. The pattern check a code-audit report
- * was filed with, read back from its description; null when there is none,
+ * The pattern check a code-audit report was filed with, read back from its description; null when there is none,
  * or when it may have been cut short or names an unsafe path or pattern.
  */
 export function parseAuditCheck(description: string | null | undefined): ParsedAuditCheck | null {
@@ -122,6 +121,7 @@ export interface BacklogRow {
   custom_metadata?: { rule?: string | null; file?: string | null; line?: number | null; confidence?: number | null; pattern_key?: string | null } | null
 }
 
+/** @internal One pattern of a BacklogPlan; exported for its readers' types. */
 export interface BacklogPattern {
   key: string
   category: string

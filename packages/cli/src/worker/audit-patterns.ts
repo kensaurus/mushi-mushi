@@ -34,6 +34,7 @@ import { posix } from 'node:path'
  * slug, the title and the user impact together: a slug alone ("discover-
  * status-hidden") rarely says what kind of problem it is.
  * Mirrored verbatim in packages/server/supabase/functions/_shared/audit-taxonomy.ts.
+ * @internal Exported for the parity test only.
  */
 export const AUDIT_TAXONOMY: ReadonlyArray<{ category: string; re: RegExp }> = [
   { category: 'a11y-loading-silent', re: /(loading|loads|skeleton|busy|streaming|placeholder|wait)[\s\S]{0,80}(screen reader|silent|announc|unlabel|accessible name|no status|status|no text|hears)|(screen reader|silent|announc|unlabel|no status|hears)[\s\S]{0,80}(loading|loads|skeleton|busy|streaming)/i },
@@ -53,6 +54,7 @@ export const AUDIT_TAXONOMY: ReadonlyArray<{ category: string; re: RegExp }> = [
   { category: 'stale-state', re: /stale|previous|old |keeps the|stays|comes back|left over/i },
 ]
 
+/** @internal Exported for the parity test only. */
 export const AUDIT_CATEGORIES: readonly string[] = [...AUDIT_TAXONOMY.map((t) => t.category), 'other']
 
 /** The fixed category of a finding, from its rule, title and user impact; `other` when nothing matches. */
@@ -73,7 +75,7 @@ export function auditPatternKey(category: string, root: string, rule: string): s
 
 // ── Imports and the root component ─────────────────────────────────────────
 
-/** Local imports of a module: binding name → specifier. Package imports are left out by resolveImport. */
+/** @internal Exported for tests only. Local imports of a module: binding name → specifier. Package imports are left out by resolveImport. */
 export function parseImports(source: string): Map<string, string> {
   const out = new Map<string, string>()
   const re = /import\s+(type\s+)?([\s\S]*?)\s+from\s+["']([^"']+)["']/g
@@ -100,6 +102,7 @@ export function parseImports(source: string): Map<string, string> {
 const EXTS = ['.tsx', '.ts', '.jsx', '.js', '.vue', '.svelte']
 
 /**
+ * @internal Exported for tests only.
  * The repo path an import specifier names, or null for a package import or a
  * file that is not there. `@/` and `~/` are the repo root or `src/` (the two
  * layouts the audited apps use); `exists` says whether a repo path is a file.
@@ -119,6 +122,7 @@ export function resolveImport(fromFile: string, spec: string, exists: (path: str
 }
 
 /**
+ * @internal Exported for tests only.
  * Where `name` is defined, following one barrel file (`export { X } from './x'`
  * or `export * from './x'`), so `@/design-system` resolves to the component.
  */
@@ -140,7 +144,7 @@ export function resolveComponent(fromFile: string, name: string, imports: Map<st
   return target
 }
 
-/** The component an evidence line opens (`<Skeleton …`), when it is an imported binding. */
+/** @internal Exported for tests only. The component an evidence line opens (`<Skeleton …`), when it is an imported binding. */
 export function evidenceTag(evidence: string): string | null {
   const m = /<([A-Z][\w]*)(?:\.[A-Z]\w*)?[\s/>]/.exec(`${evidence} `)
   return m ? m[1]! : null
@@ -168,6 +172,7 @@ export function patternRoot(file: string, evidence: string, source: string | nul
 }
 
 /**
+ * @internal Exported for tests only.
  * Imported components whose element encloses `line` (`<Shell>` above it,
  * `</Shell>` below it). A self-closing element encloses nothing.
  */
