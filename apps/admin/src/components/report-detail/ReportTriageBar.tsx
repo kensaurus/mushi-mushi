@@ -255,7 +255,9 @@ export function ReportTriageBar({
         {!saving && showSaved && <span className="text-ok">✓ Saved</span>}
       </div>
 
-      <div className="ml-auto flex flex-wrap items-end gap-2">
+      {/* min-w-0 / max-w-full: a long repo name ("kensaurus/solo-boss-cloud-documentation
+          (primary)") sized the select past the screen at 390 px (audit 2026-11-21). */}
+      <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-end gap-2">
         {destinations.length === 0 ? (
           // "Sync to 0 destinations" was a button that could do nothing (sweep 2026-11-18).
           <Btn
@@ -280,12 +282,13 @@ export function ReportTriageBar({
           </Btn>
         )}
         {repoChoice && repoChoice.repos.length > 1 && (
+          <div className="min-w-0 max-w-full">
           <SelectField
             label="Repo"
             value={repoChoice.targetRepoId}
             onChange={(e) => repoChoice.setTargetRepoId(e.currentTarget.value)}
             disabled={isDispatchBusy}
-            className="!w-auto"
+            className="!w-auto max-w-full"
             title="The linked repo the fix PR opens against"
           >
             {!repoChoice.repos.some((r) => r.is_primary) && <option value="">Project default</option>}
@@ -296,6 +299,7 @@ export function ReportTriageBar({
               </option>
             ))}
           </SelectField>
+          </div>
         )}
         {/* Closing used to hide in the Status select. Many Sentry imports are
             config, an outage or expected noise, so say it in one click; the

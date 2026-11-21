@@ -5,7 +5,7 @@
  * and look for an update when the tab comes back (throttled).
  */
 import { describe, expect, it, vi } from 'vitest'
-import { createSwUpdater, getSwUpdate, publishSwUpdate, subscribeSwUpdate } from './swUpdate'
+import { createSwUpdater, entryScriptPath, getSwUpdate, pageRunsDeployedBuild, publishSwUpdate, subscribeSwUpdate } from './swUpdate'
 
 type L = () => void
 
@@ -150,5 +150,30 @@ describe('the new-version store', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     expect(getSwUpdate()).toBe(apply)
     off()
+  })
+})
+
+// Console audit 2026-11-21: "New version ready" showed on the newest build, on
+// every first load after a deploy, because navigations are network first.
+describe("pageRunsDeployedBuild", () => {
+  const base = "https://kensaur.us/mushi-mushi/admin/"
+  const shell = (entry: string) =>
+    `<!doctype html><html><head><link rel="modulepreload" href="/mushi-mushi/admin/assets/vendor-1.js"><script type="module" crossorigin src="${entry}"></script></head><body></body></html>`
+
+  it("reads the entry script path from the shell", () => {
+    expect(entryScriptPath(shell("/mushi-mushi/admin/assets/index-NEW.js"), base)).toBe("/mushi-mushi/admin/assets/index-NEW.js")
+    expect(entryScriptPath(shell("./assets/index-REL.js"), base)).toBe("/mushi-mushi/admin/assets/index-REL.js")
+    expect(entryScriptPath("<html></html>", base)).toBeNull()
+  })
+
+  it("is true when the page runs the entry the server serves now", async () => {
+    await expect(pageRunsDeployedBuild({ fetchShell: async () => shell("/mushi-mushi/admin/assets/index-NEW.js"), runningEntry: "/mushi-mushi/admin/assets/index-NEW.js", baseUrl: base })).resolves.toBe(true)
+  })
+
+  it("is false when the page is behind, or anything is unknown", async () => {
+    await expect(pageRunsDeployedBuild({ fetchShell: async () => shell("/mushi-mushi/admin/assets/index-NEW.js"), runningEntry: "/mushi-mushi/admin/assets/index-OLD.js", baseUrl: base })).resolves.toBe(false)
+    await expect(pageRunsDeployedBuild({ fetchShell: async () => { throw new Error("offline") }, runningEntry: "/mushi-mushi/admin/assets/index-NEW.js", baseUrl: base })).resolves.toBe(false)
+    await expect(pageRunsDeployedBuild({ fetchShell: async () => "<html></html>", runningEntry: "/mushi-mushi/admin/assets/index-NEW.js", baseUrl: base })).resolves.toBe(false)
+    await expect(pageRunsDeployedBuild({ fetchShell: async () => shell("/x.js"), runningEntry: null, baseUrl: base })).resolves.toBe(false)
   })
 })

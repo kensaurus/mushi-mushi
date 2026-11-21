@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEALTH_HUB, HOME_HUB, TEAM_HUB, hubRedirectTarget, legacyHubRoutes, lockedHubView, resolveHubView, visibleViews } from './pageHubs'
+import { HEALTH_HUB, HOME_HUB, TEAM_HUB, hubRedirectTarget, hubViewLabel, legacyHubRoutes, lockedHubView, resolveHubView, visibleViews } from './pageHubs'
 
 const viewer = (over: Partial<{ isOperator: boolean; isSuperAdmin: boolean; flags: string[] }> = {}) => ({
   isOperator: over.isOperator ?? false,
@@ -42,5 +42,17 @@ describe('page hubs', () => {
     expect(lockedHubView(TEAM_HUB, 'billing', viewer())).toBeNull()
     expect(lockedHubView(TEAM_HUB, null, viewer())).toBeNull()
     expect(lockedHubView(HOME_HUB, 'growth', viewer())).toBeNull()
+  })
+})
+
+// Console audit 2026-11-21: every Team view titled the browser tab just "Team".
+describe('hubViewLabel', () => {
+  it('names a hub view other than the first, and nothing else', () => {
+    expect(hubViewLabel('/team', '?view=billing')).toBe('Billing')
+    expect(hubViewLabel('/team', '?view=members')).toBeNull()
+    expect(hubViewLabel('/team', '')).toBeNull()
+    expect(hubViewLabel('/team', '?view=nope')).toBeNull()
+    expect(hubViewLabel('/dashboard', '?view=apps&project=p1')).toBe('Overview')
+    expect(hubViewLabel('/reports', '?view=apps')).toBeNull()
   })
 })

@@ -14,8 +14,8 @@ import { apiFetch } from '../lib/supabase'
 import { useSendTestReport } from '../lib/useSendTestReport'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { usePageCopy } from '../lib/copy'
-import { isDevFacingHint } from '../lib/devHintCopy'
 import { useRealtimeReload } from '../lib/realtime'
 import { pluralizeWithCount } from '../lib/format'
 import {
@@ -253,9 +253,7 @@ export function ProjectsPage() {
 
   usePublishPageContext({
     route: '/projects',
-    title: `${activeMeta.label} · Manage apps`,
-    // A tab description is a dev-facing hint (isDevFacingHint); the tab title shows a plain one.
-    summary: isDevFacingHint(activeMeta.description) ? 'Your apps, which ones send reports, and what to do next' : activeMeta.description,
+    title: tabbedPageTitle('Manage apps', activeMeta.label, activeMeta.id === TABS[0].id),
     filters: { tab: activeTab, active_project_id: activeProjectId ?? undefined },
     criticalCount:
       stats.topPriority === 'healthy'

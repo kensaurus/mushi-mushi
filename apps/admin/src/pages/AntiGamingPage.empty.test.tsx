@@ -13,7 +13,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockState = vi.hoisted(() => ({ tracked: 0 }))
+const mockState = vi.hoisted(() => ({ tracked: 0, events: [] as unknown[] }))
 
 vi.mock('../components/ProjectSwitcher', () => ({ useActiveProjectId: () => 'p1' }))
 vi.mock('../lib/useEntitlements', () => ({ useEntitlements: () => ({ has: () => false, isSuperAdmin: false, canEditProject: true }) }))
@@ -30,7 +30,7 @@ vi.mock('../lib/usePageData', () => ({
       }
     }
     if (path.startsWith('/v1/admin/anti-gaming/devices')) return { ...base, data: { devices: [] } }
-    if (path.startsWith('/v1/admin/anti-gaming/events')) return { ...base, data: { events: [] } }
+    if (path.startsWith('/v1/admin/anti-gaming/events')) return { ...base, data: { events: mockState.events } }
     return { ...base, data: null }
   },
 }))
@@ -95,5 +95,21 @@ describe('AntiGamingPage with no tracked device', () => {
     const filter = host.querySelector('select') as HTMLSelectElement
     expect([...filter.options].map((o) => o.textContent)).toContain('Flagged')
     expect(host.querySelector('input[placeholder="Search devices…"]')).not.toBeNull()
+  })
+
+  // Audit 2026-11-21: event rows read `velocity_anomaly` and "10/28/2026, 2:5…".
+  it('names event types in words and dates them as an age', async () => {
+    mockState.tracked = 3
+    mockState.events = [
+      { id: 'e1', reporter_token_hash: 'abcdef0123456789', ip_address: '10.0.0.1', event_type: 'velocity_anomaly', reason: 'Velocity anomaly: 11 reports in 24h', created_at: new Date(Date.now() - 3 * 86_400_000).toISOString() },
+    ]
+    await act(async () => {
+      root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null, createElement(AntiGamingPage))))
+    })
+    expect(host.textContent).toContain('Too many reports')
+    expect(host.textContent).not.toContain('velocity_anomaly')
+    const typeFilter = [...host.querySelectorAll('select')].find((s) => s.getAttribute('aria-label') === 'Type') as HTMLSelectElement
+    expect([...typeFilter.options].map((o) => o.textContent)).toContain('Multi-account')
+    mockState.events = []
   })
 })
