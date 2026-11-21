@@ -7,7 +7,10 @@
  * 3d5c1f99). The tooltip adds the detail ("Copy link to this filtered
  * view") and we flip to a check + "Copied" in green for ~1.5s on success.
  * `whitespace-nowrap` + `shrink-0` keep the label on one line and the target
- * at full size in crowded headers (the old wide pill wrapped there).
+ * at full size in crowded headers (the old wide pill wrapped there); the
+ * header's action row wraps instead, so on a phone help + Copy link move to
+ * their own line. CopyViewLinkButton.browser.test.tsx measures this in
+ * Chromium at 320–1024px.
  */
 
 import { useState } from 'react'

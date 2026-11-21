@@ -3,7 +3,8 @@
  *
  * The copy-link control in every page header showed only a chain icon
  * (Mushi report 3d5c1f99). It must carry a visible action label, copy the
- * filtered URL on click and say "Copied" once the write succeeds.
+ * filtered URL on click and say "Copied" once the write succeeds. Layout in
+ * a narrow header is checked in a real browser: CopyViewLinkButton.browser.test.tsx.
  */
 
 import { act, createElement, type ReactNode } from 'react'
@@ -43,13 +44,9 @@ describe('CopyViewLinkButton', () => {
     expect(button?.textContent?.trim()).toBe('Copy link')
   })
 
-  it('keeps the label on one line and the target unshrunk in a crowded header', () => {
-    act(() => root.render(createElement(CopyViewLinkButton)))
-    const classes = container.querySelector('button')?.className.split(/\s+/) ?? []
-    expect(classes).toContain('whitespace-nowrap')
-    expect(classes).toContain('shrink-0')
-    expect(classes).toContain('h-7')
-  })
+  // Whether the wider labelled button still fits a crowded header is a layout
+  // question jsdom cannot answer: CopyViewLinkButton.browser.test.tsx measures
+  // it in Chromium at 320–1024px.
 
   it('copies the filtered view URL and shows "Copied" after the write succeeds', async () => {
     window.history.replaceState(null, '', '/reports?status=open&severity=high#focus')
