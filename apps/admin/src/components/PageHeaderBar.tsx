@@ -44,6 +44,7 @@ import { Tooltip } from './ui'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath, type PdcaStageId } from '../lib/pdca'
 import { stageChipCopy } from '../lib/navRegistry'
 import { PageHelpPopover } from './ui/help-popover'
+import { useClaimedHeaderTabs } from './PageHeaderTabs'
 
 /* ── Inline PDCA chip ─────────────────────────────────────────────────── */
 
@@ -131,6 +132,8 @@ export function PageHeaderBar({
   const { pathname } = useLocation()
   const registerPageHelp = usePageHelpRegister()
   const locationChrome = useLocationChrome()
+  // A hub's view tabs (Home, Team, Mushi health) sit under the title, not above it (ADR 0066).
+  const hubTabs = useClaimedHeaderTabs()
 
   const chipKey =
     contextChip === undefined && !suppressContextChipProp && !locationChrome.suppressContextChip
@@ -234,6 +237,12 @@ export function PageHeaderBar({
           {description}
         </p>
       )}
+
+      {hubTabs ? (
+        <div className="mt-3 min-w-0" data-testid="page-header-hub-tabs">
+          {hubTabs}
+        </div>
+      ) : null}
     </div>
   )
 }

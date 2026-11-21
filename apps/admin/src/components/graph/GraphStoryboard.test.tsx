@@ -54,6 +54,15 @@ describe('GraphStoryboard', () => {
     expect(region.firstElementChild!.className).toContain('sm:flex-row')
   })
 
+  // axe 2026-11-21: the type label in the node colour failed contrast on the card.
+  it('shows the node type colour as a swatch, never as the text colour', () => {
+    render([])
+    const button = host.querySelector<HTMLElement>('button[aria-pressed]')!
+    const typeLine = button.firstElementChild as HTMLElement
+    expect(typeLine.style.color).toBe('')
+    expect((typeLine.querySelector('[aria-hidden="true"]') as HTMLElement).style.backgroundColor).not.toBe('')
+  })
+
   it('wraps the full label instead of clamping it', () => {
     render([])
     expect(host.textContent).toContain('/cloudwatch/alarms/very-long-route-name')

@@ -152,6 +152,24 @@ const NOT_CHECKED: CheckCardView = {
   tone: 'neutral',
 }
 
+/** Health: a platform job (judge batch, weekly summary, retention) errored. Not this app's failed run. */
+const PLATFORM_JOB_ERROR: CheckCardView = {
+  state: 'unavailable',
+  chip: "Couldn't run: platform job error",
+  detail: null,
+  setupTo: null,
+  tone: 'dangerSubtle',
+}
+
+/** Health: a platform job is late. Not this app's failed run. */
+const PLATFORM_JOB_LATE: CheckCardView = {
+  state: 'unavailable',
+  chip: 'Platform job is late',
+  detail: null,
+  setupTo: null,
+  tone: 'warnSubtle',
+}
+
 /** The check's data could not be read. This is not a failed run. */
 const UNAVAILABLE: CheckCardView = {
   state: 'unavailable',
@@ -222,8 +240,11 @@ function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
   if (qa.topPriority === 'no_stories' || stories === 0) return notSetUp('/qa-coverage')
   if (qa.topPriority === 'disabled_all') return notSetUp('/qa-coverage')
   if (failing > 0) return findings(failing, qa.lastRunAt, now)
-  if (qa.topPriority === 'healthy' && qa.lastRunAt && (qa.pendingRuns ?? 0) === 0) return pass(qa.lastRunAt, now)
-  return withTime(NOT_CHECKED, qa.lastRunAt, now)
+  // A run in progress does not undo the last finished one. The card read "Not run
+  // yet" while /qa-coverage showed 7 of 7 passing 3 h earlier (audit 2026-11-21).
+  if ((qa.topPriority === 'healthy' || qa.topPriority === 'pending') && qa.lastRunAt) return pass(qa.lastRunAt, now)
+  // "Not run yet" with "Last run 3h ago" under it said two things; nothing ran means no time.
+  return NOT_CHECKED
 }
 
 function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardView {
@@ -235,7 +256,10 @@ function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardVi
   const at = health.lastLlmCallAt ?? null
   const priority = health.topPriority
   if (priority === 'no_project' || priority === 'idle') return NOT_CHECKED
-  if (priority === 'cron_error' || priority === 'cron_stale' || priority === 'cron_warn') return NOT_CHECKED
+  // A platform job that errored or is late is not this app's failed run (never Failed, never
+  // Pass), but "Not run yet" claimed nothing had run (console audit 2026-11-21). Say what happened.
+  if (priority === 'cron_error') return PLATFORM_JOB_ERROR
+  if (priority === 'cron_stale' || priority === 'cron_warn') return PLATFORM_JOB_LATE
   if (priority === 'llm_errors' || priority === 'llm_fallbacks') return findings(1, at, now)
   if (priority === 'healthy' && at) return pass(at, now)
   return NOT_CHECKED

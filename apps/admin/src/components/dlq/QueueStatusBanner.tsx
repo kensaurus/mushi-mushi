@@ -7,6 +7,7 @@ import { deadLetterHint, scopedHref } from '../../lib/humanPageHints'
 import { StatusBannerShell } from '../StatusBannerShell'
 import { StatusBannerAction } from '../StatusBannerAction'
 import type { QueueStats, QueueTabId } from './QueueStatsTypes'
+import { waitedLabel } from './types'
 
 interface Props {
   stats: QueueStats
@@ -126,8 +127,12 @@ export function QueueStatusBanner({
         tone="warn"
         title="Pipeline may be stalled"
         subtitle={
-          stats.topPriorityLabel ??
-          'Reports are not moving through triage — recover stranded jobs or refresh to see current state.'
+          // Composed here, not the server's "Oldest pending job is 34865m old"
+          // (console audit 2026-11-21): an age in days reads at a glance.
+          stats.oldestPendingMinutes != null
+            ? `The oldest waiting job has waited ${waitedLabel(stats.oldestPendingMinutes)}. Recover stranded jobs to start it again.`
+            : (stats.topPriorityLabel ??
+              'Reports are not moving through triage — recover stranded jobs or refresh to see current state.')
         }
         action={
           onRecover ? (

@@ -11,6 +11,7 @@ import { usePageData } from '../lib/usePageData'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useActiveOrgSignal } from '../lib/activeOrg'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
@@ -19,7 +20,7 @@ import { RewardsSnapshotStrip } from '../components/rewards/RewardsSnapshotStrip
 import { RewardsTabNav } from '../components/rewards/RewardsTabNav'
 import { ProjectRewardsSwitch, useProjectRewardsToggle } from '../components/rewards/ProjectRewardsSwitch'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
-import { rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
+import { REWARDS_TABS, rewardsTabMeta, resolveRewardsTabParam } from '../components/rewards/rewardsTabs'
 import { useRewardsUx, resolveQuickRewardsTab } from '../lib/rewardsModeUx'
 import { useQuickstartLandingTab } from '../lib/useQuickstartTab'
 import { Badge, Btn, Card } from '../components/ui'
@@ -79,8 +80,7 @@ export function RewardsPage() {
 
   usePublishPageContext({
     route: '/rewards',
-    title: `${activeMeta.label} · Rewards`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Tester rewards', activeMeta.label, activeMeta.id === REWARDS_TABS[0].id),
     filters: { tab: active },
   })
 

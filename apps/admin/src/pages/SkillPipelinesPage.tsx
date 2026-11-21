@@ -27,6 +27,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { IconSkills, IconQueue, IconGithub, IconClose } from '../components/icons'
 import { ReactFlow, Background, Controls, useNodesState, useEdgesState } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -205,13 +206,7 @@ export function SkillPipelinesPage() {
 
   usePublishPageContext({
     route: '/skills',
-    title: TAB_META[tab].label,
-    summary:
-      tab === 'catalog'
-        ? 'Browse agent skills from kenji skills by category'
-        : tab === 'pipelines'
-          ? 'Track handoff and cloud pipeline runs'
-          : 'Sync SKILL.md repos into the catalog',
+    title: tabbedPageTitle('Agent skills', TAB_META[tab].label, tab === 'catalog'),
     questions: [
       'Which skill should I run for a UI audit?',
       'How do I attach a skill to a bug report?',

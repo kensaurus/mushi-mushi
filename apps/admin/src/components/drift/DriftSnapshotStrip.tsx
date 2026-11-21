@@ -5,10 +5,45 @@
  *          the page's one first step (PageFirstStep, P3).
  */
 
-import { Btn, PageStatus } from '../ui'
+import { Btn, formatRelative, PageStatus, type PageFirstStepProps } from '../ui'
 import type { DriftStats } from './DriftStatsTypes'
 import { pluralizeWithCount } from '../../lib/format'
 import { driftLinks } from '../../lib/statCardLinks'
+import { SCHEMA_DRIFT_FINDINGS } from '../../lib/gateLabels'
+
+/** The Full-stack audit's daily schema read (schema_drift), when it has run. */
+interface DailySchemaRead {
+  ranAt: string | null
+  open: number
+}
+
+/**
+ * The first step before this page's own scan. When Full-stack audit's daily
+ * schema read has a result, that result leads, with its source named: the
+ * page said "No baseline scan yet" while the audit listed changed tables
+ * (console audit 2026-11-21).
+ * @internal Exported for tests.
+ */
+export function driftFirstStep(dailyRead: DailySchemaRead | null | undefined, onFirstScan?: () => void): PageFirstStepProps {
+  const firstScan: PageFirstStepProps['action'] = onFirstScan ? { label: 'Run first scan', onClick: onFirstScan } : { label: 'Run first scan', to: '/health?view=schema&tab=scanner' }
+  if (!dailyRead) {
+    return {
+      title: 'No baseline scan yet',
+      sentence: 'Run one scan of your API and database; later scans tell you what changed since.',
+      action: firstScan,
+    }
+  }
+  const when = dailyRead.ranAt ? ` (last read ${formatRelative(dailyRead.ranAt)})` : ''
+  return {
+    title:
+      dailyRead.open > 0
+        ? `${pluralizeWithCount(dailyRead.open, 'schema change')} from the daily schema read`
+        : 'No open schema changes in the daily schema read',
+    sentence: `Full-stack audit reads your Supabase schema every day${when}. This page also scans your API and database contract; that scan has not run yet.`,
+    action: { label: dailyRead.open > 0 ? 'Open the schema findings' : 'Open the daily read', to: SCHEMA_DRIFT_FINDINGS },
+    learnMore: { label: 'Or run this page\'s first scan', to: '/health?view=schema&tab=scanner' },
+  }
+}
 
 interface Props {
   stats: DriftStats
@@ -19,6 +54,8 @@ interface Props {
   onFirstScan?: () => void
   /** Opens the list of changes: the one action while any wait. */
   onReview?: () => void
+  /** Full-stack audit's daily schema read, shown before this page's own first scan. */
+  dailyRead?: DailySchemaRead | null
 }
 
 function driftSentence(stats: DriftStats): string {
@@ -28,7 +65,7 @@ function driftSentence(stats: DriftStats): string {
   return `${pluralizeWithCount(stats.openFindings, 'change')} to your API or database since the baseline${critical}.`
 }
 
-export function DriftSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onFirstScan, onReview }: Props) {
+export function DriftSnapshotStrip({ stats, statsFetchedAt, statsValidating, statLabels, onFirstScan, onReview, dailyRead }: Props) {
   return (
     <PageStatus
       ariaLabel="Schema changes status"
@@ -64,11 +101,7 @@ export function DriftSnapshotStrip({ stats, statsFetchedAt, statsValidating, sta
           to: driftLinks.snapshots,
         },
       ]}
-      empty={{
-        title: 'No baseline scan yet',
-        sentence: 'Run one scan of your API and database; later scans tell you what changed since.',
-        action: onFirstScan ? { label: 'Run first scan', onClick: onFirstScan } : { label: 'Run first scan', to: '/health?view=schema&tab=scanner' },
-      }}
+      empty={driftFirstStep(dailyRead, onFirstScan)}
     />
   )
 }

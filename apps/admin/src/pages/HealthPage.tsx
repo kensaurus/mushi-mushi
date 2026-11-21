@@ -2,7 +2,8 @@
  * FILE: apps/admin/src/pages/HealthPage.tsx
  * PURPOSE: Real-time LLM + cron telemetry. Banner + HEALTH SNAPSHOT + one row of sections
  *          (components/health/HealthSectionsBar): Overview | AI calls | Scheduled jobs |
- *          Recent traces | Code size | Schema changes | Unusual spikes. Two stacked bars
+ *          Recent traces | Code size | Schema changes | Unusual spikes, under the page title
+ *          (ADR 0066). Two stacked bars
  *          (the hub's views, then this view's tabs) were flattened into one (2026-11-18).
  */
 
@@ -59,6 +60,7 @@ import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
 import { shouldHideGuideWhenBannerActive } from '../lib/pagePostureHelpers'
 import { CheckVerificationHub } from '../components/check/CheckVerificationHub'
 import { HealthSectionsBar, resolveHealthView, type HealthSection } from '../components/health/HealthSectionsBar'
+import { PageHeaderTabsProvider } from '../components/PageHeaderTabs'
 import { useReadTimedOut } from '../lib/ciReadTimeout'
 import { CiNotChecked } from '../components/ci/CiNotChecked'
 import { cronJobState } from '../components/health/cronJobState'
@@ -165,10 +167,12 @@ export function HealthPage() {
   if (view === 'integrations') return <HealthPageContent />
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      <HealthSectionsBar tabLabels={HEALTH_TAB_LABELS} />
-      <Suspense fallback={<Loading text="Loading…" />}>
-        {view === 'code' ? <CodeHealthPage /> : view === 'schema' ? <DriftPage /> : <AnomaliesPage />}
-      </Suspense>
+      {/* The one bar sits under the view's page title (ADR 0066). */}
+      <PageHeaderTabsProvider tabs={<HealthSectionsBar tabLabels={HEALTH_TAB_LABELS} />}>
+        <Suspense fallback={<Loading text="Loading…" />}>
+          {view === 'code' ? <CodeHealthPage /> : view === 'schema' ? <DriftPage /> : <AnomaliesPage />}
+        </Suspense>
+      </PageHeaderTabsProvider>
     </div>
   )
 }
@@ -379,11 +383,13 @@ function HealthPageContent() {
     [stats.cronErrorCount, stats.errorRatePct],
   )
   const tabLabels = { ...HEALTH_TAB_LABELS, ...copy?.tabLabels }
-  // The one bar sits above every state of the page, loading and errors too.
+  // The one bar is on every state of the page, loading and errors too: under
+  // the page title once it renders (ADR 0066), above the content until then.
   const withBar = (node: ReactNode) => (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      {!ux.hideTabs && <HealthSectionsBar tabLabels={tabLabels} counts={sectionCounts} />}
-      {node}
+      <PageHeaderTabsProvider tabs={ux.hideTabs ? null : <HealthSectionsBar tabLabels={tabLabels} counts={sectionCounts} />}>
+        {node}
+      </PageHeaderTabsProvider>
     </div>
   )
   const retryAll = () => {

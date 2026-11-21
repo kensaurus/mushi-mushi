@@ -15,7 +15,23 @@
 
 import { registerSW } from 'virtual:pwa-register'
 import { debugLog } from './debug'
-import { createSwUpdater, publishSwUpdate } from './swUpdate'
+import { createSwUpdater, pageRunsDeployedBuild, publishSwUpdate } from './swUpdate'
+
+/** Announce a waiting worker only when this page is not already the deployed build. */
+function announceIfBehind(apply: () => void): void {
+  const base = new URL(import.meta.env.BASE_URL, window.location.origin).href
+  const running = document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.src ?? null
+  void pageRunsDeployedBuild({
+    // The base URL, not index.html: sw.ts serves index.html from its precache
+    // (cache first, matched by path), which would return the old shell.
+    fetchShell: async () => (await fetch(base, { cache: 'no-store', credentials: 'same-origin' })).text(),
+    runningEntry: running ? new URL(running).pathname : null,
+    baseUrl: base,
+  }).then((current) => {
+    if (current) debugLog('pwa', 'new worker waiting; this page already runs the deployed build')
+    else publishSwUpdate(apply)
+  })
+}
 
 let registered = false
 
@@ -37,7 +53,7 @@ export function registerServiceWorker(): void {
         doc: document,
         win: window,
         reload: () => window.location.reload(),
-        onReady: publishSwUpdate,
+        onReady: announceIfBehind,
       })
     },
     onRegisterError(error) {

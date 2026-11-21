@@ -116,6 +116,48 @@ export function createSwUpdater(reg: SwRegistrationLike, deps: Deps): () => void
   }
 }
 
+// ── Is this page already the deployed build? ────────────────────────────────
+
+/**
+ * Path of the first module script in an HTML document, or null.
+ * @internal Exported for tests.
+ */
+export function entryScriptPath(html: string, baseUrl: string): string | null {
+  const tag = /<script\b[^>]*\btype=["']module["'][^>]*>/i.exec(html)?.[0]
+  const src = tag ? /\bsrc=["']([^"']+)["']/i.exec(tag)?.[1] : undefined
+  if (!src) return null
+  try {
+    return new URL(src, baseUrl).pathname
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Navigations are network first (sw.ts), so a page opened after a deploy
+ * already runs the new bundle while the new worker still waits for older
+ * tabs to close. The banner then said "New version ready" on the newest
+ * build, on every first load after a deploy (console audit 2026-11-21).
+ * True only when the entry script this page runs is the one the server
+ * serves now; any doubt (a failed fetch, no entry found) returns false, so
+ * the banner still shows.
+ */
+export async function pageRunsDeployedBuild(deps: {
+  /** The HTML the server serves now for the app's base URL, past the worker's precache. */
+  fetchShell: () => Promise<string>
+  /** The entry script this page runs (its `<script type="module">` src, resolved). */
+  runningEntry: string | null
+  baseUrl: string
+}): Promise<boolean> {
+  if (!deps.runningEntry) return false
+  try {
+    const deployed = entryScriptPath(await deps.fetchShell(), deps.baseUrl)
+    return deployed !== null && deployed === deps.runningEntry
+  } catch {
+    return false
+  }
+}
+
 // ── The page-wide "a new version is waiting" store, read by the banner ─────
 
 let pendingApply: (() => void) | null = null

@@ -289,7 +289,8 @@ export function DLQPage() {
           Flush queued ({stats.reportsQueued})
         </Btn>
         ) : null}
-        {stats.recoverable > 0 && canEditProject ? (
+        {/* A stalled queue puts this button in its banner; two copies of one CTA (audit 2026-11-21). */}
+        {stats.recoverable > 0 && canEditProject && stats.topPriority !== 'stalled' ? (
         <Btn
           size="sm"
           variant="primary"

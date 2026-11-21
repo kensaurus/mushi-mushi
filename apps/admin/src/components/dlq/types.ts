@@ -73,3 +73,35 @@ export function queueStageLabel(value: string): string {
   const words = value.replace(/[_-]+/g, ' ').trim()
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : value
 }
+
+/** "12 min", "5 h", "24 d": how long a job has waited, in the units the Pipeline page uses. */
+export function waitedLabel(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes))
+  if (m < 60) return `${m} min`
+  const h = Math.round(m / 60)
+  if (h < 48) return `${h} h`
+  return `${Math.round(h / 24)} d`
+}
+
+/**
+ * A job's last error in words. Edge functions store
+ * `Stage 1 failed: 500 {"ok":false,"error":"…"}` and every row showed that
+ * JSON verbatim (console audit 2026-11-21). The message is lifted out; the
+ * raw text stays available as `detail` when it differs.
+ */
+export function readableQueueError(raw: string): { text: string; detail: string | null } {
+  const trimmed = raw.trim()
+  const match = /^([\s\S]*?)\b(\d{3})\s*(\{[\s\S]*\})\s*$/.exec(trimmed)
+  if (!match) return { text: trimmed, detail: null }
+  let message: unknown
+  try {
+    const body = JSON.parse(match[3]) as { error?: unknown; message?: unknown }
+    const nested = body.error && typeof body.error === 'object' ? (body.error as { message?: unknown }).message : undefined
+    message = typeof body.error === 'string' ? body.error : (nested ?? body.message)
+  } catch {
+    return { text: trimmed, detail: null }
+  }
+  if (typeof message !== 'string' || !message.trim()) return { text: trimmed, detail: null }
+  const prefix = match[1].trim().replace(/[:\s]+$/, '')
+  return { text: prefix ? `${prefix}: ${message.trim()}` : message.trim(), detail: trimmed }
+}

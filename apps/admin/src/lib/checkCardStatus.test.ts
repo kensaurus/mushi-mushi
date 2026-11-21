@@ -91,7 +91,9 @@ describe('buildCheckCardViews', () => {
     const cron = buildCheckCardViews(input({
       health: { topPriority: 'cron_error', cronErrorCount: 3, redCount: 3, lastLlmCallAt: RECENT },
     }), NOW)['/health']
-    expect(cron).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    // Audit 2026-11-21: it said "Not run yet", which claimed nothing had run. It says what happened,
+    // in the error tone, and is still neither Failed nor Pass.
+    expect(cron).toMatchObject({ state: 'unavailable', chip: "Couldn't run: platform job error", tone: 'dangerSubtle', detail: null })
     expect(cron?.chip).not.toBe('Failed')
     expect(cron?.chip).not.toBe('Pass')
   })
@@ -106,6 +108,22 @@ describe('buildCheckCardViews', () => {
       qa: { totalStories: 4, failingStories: 2, pendingRuns: 0, lastRunAt: RECENT, topPriority: 'failing' },
     }), NOW)['/qa-coverage']
     expect(view).toMatchObject({ state: 'findings', chip: '2 findings', detail: 'Last run 12h ago' })
+  })
+
+  // Audit 2026-11-21: /checks said "Not run yet" while /qa-coverage showed 7 of 7
+  // passing, because two runs were in progress.
+  it('scheduled tests with runs in progress keep the last finished result', () => {
+    const view = buildCheckCardViews(input({
+      qa: { totalStories: 7, failingStories: 0, pendingRuns: 2, lastRunAt: RECENT, topPriority: 'pending' },
+    }), NOW)['/qa-coverage']
+    expect(view).toMatchObject({ state: 'pass', chip: 'Pass', detail: 'Last run 12h ago' })
+  })
+
+  it('scheduled tests that never ran say Not run yet with no run time', () => {
+    const view = buildCheckCardViews(input({
+      qa: { totalStories: 3, failingStories: 0, pendingRuns: 0, lastRunAt: null, topPriority: 'no_runs' },
+    }), NOW)['/qa-coverage']
+    expect(view).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
   })
 
   it('scheduled tests that are turned off are Not set up', () => {
@@ -249,11 +267,11 @@ describe('buildCheckCardViews', () => {
     expect(failed).toMatchObject({ state: 'failed', chip: 'Failed' })
   })
 
-  it('a platform cron problem is Not run yet, and this app passes only from its own AI calls', () => {
+  it('a late platform job says so instead of "Not run yet" (nothing claims nothing ran), and this app passes only from its own AI calls', () => {
     const stale = buildCheckCardViews(input({
       health: { topPriority: 'cron_stale', amberCount: 2, lastLlmCallAt: STALE },
     }), NOW)['/health']
-    expect(stale).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+    expect(stale).toMatchObject({ state: 'unavailable', chip: 'Platform job is late', tone: 'warnSubtle', detail: null })
     expect(stale?.chip).not.toMatch(/finding/)
     expect(stale?.chip).not.toBe('Failed')
 
