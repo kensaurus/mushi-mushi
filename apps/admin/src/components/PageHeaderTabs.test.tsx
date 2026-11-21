@@ -8,7 +8,7 @@
  * itself, so a loading or locked view still has its tabs.
  */
 
-import { act, createElement } from 'react'
+import { act, createElement, Fragment, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PageHeaderTabsProvider, useClaimedHeaderTabs } from './PageHeaderTabs'
@@ -32,13 +32,16 @@ function Header({ title }: { title: string }) {
   return createElement('header', { 'data-title': title }, createElement('h2', null, title), tabs)
 }
 
+/** The provider with children passed as a prop, as its type asks. */
+const provider = (...kids: ReactNode[]) => createElement(PageHeaderTabsProvider, { tabs, children: createElement(Fragment, null, ...kids) })
+
 const tabs = createElement('nav', { 'data-testid': 'tabs' }, 'Members Billing')
 
 describe('PageHeaderTabs', () => {
   it('puts the tabs under the first header title, once', () => {
     act(() =>
       root.render(
-        createElement(PageHeaderTabsProvider, { tabs }, createElement(Header, { title: 'Billing' }), createElement(Header, { title: 'Inner panel' })),
+        provider(createElement(Header, { title: 'Billing' }), createElement(Header, { title: 'Inner panel' })),
       ),
     )
     expect(host.querySelectorAll('[data-testid="tabs"]')).toHaveLength(1)
@@ -49,13 +52,13 @@ describe('PageHeaderTabs', () => {
   })
 
   it('shows the tabs at the top while no header has mounted', () => {
-    act(() => root.render(createElement(PageHeaderTabsProvider, { tabs }, createElement('p', null, 'Loading…'))))
+    act(() => root.render(provider(createElement('p', null, 'Loading…'))))
     expect(host.querySelector('[data-testid="page-header-tabs-fallback"] [data-testid="tabs"]')).not.toBeNull()
   })
 
   it('hands the tabs to the next header when the first one goes', () => {
-    act(() => root.render(createElement(PageHeaderTabsProvider, { tabs }, createElement(Header, { title: 'Members' }))))
-    act(() => root.render(createElement(PageHeaderTabsProvider, { tabs }, createElement(Header, { key: 'b', title: 'Billing' }))))
+    act(() => root.render(provider(createElement(Header, { title: 'Members' }))))
+    act(() => root.render(provider(createElement(Header, { key: 'b', title: 'Billing' }))))
     expect(host.querySelectorAll('[data-testid="tabs"]')).toHaveLength(1)
     expect(host.querySelector('header[data-title="Billing"] [data-testid="tabs"]')).not.toBeNull()
   })
