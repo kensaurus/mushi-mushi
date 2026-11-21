@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 /**
  * FILE: _shared/ux-scorecard.ts (kept byte-identical in packages/ux/src/scorecard-rubric.ts)
- * PURPOSE: The UX scorecard's rules (ADR 0066): the written rubric, the
+ * PURPOSE: The UX scorecard's rules (ADR 0067): the written rubric, the
  *          prompts, how a model's answer is read, how a page's score is
  *          computed, how issues on many pages group into one root cause, and
  *          which causes are filed as reports.

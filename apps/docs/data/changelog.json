@@ -7,7 +7,7 @@
     "highlights": [
       {
         "title": "`mushi-ux scorecard` scores every page of a live app",
-        "description": "each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0066)."
+        "description": "each page gets a 1–10 score on eight written dimensions (clarity, hierarchy, consistency, states, truthfulness, copy, accessibility, speed), its top problems with quoted evidence and a fix, and the overall score follows its worst dimension. It reads the page as a person meets it: the tab title, the text, a screenshot early in the load and one once it settles, the settle time and axe. The settle time and axe cap the speed and accessibility scores (ADR 0067)."
       },
       {
         "title": "Problems that repeat across pages become one root cause",

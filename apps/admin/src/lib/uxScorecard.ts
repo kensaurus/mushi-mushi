@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/lib/uxScorecard.ts
- * PURPOSE: The UX scorecard's console side (ADR 0066): the shapes
+ * PURPOSE: The UX scorecard's console side (ADR 0067): the shapes
  *          GET /v1/admin/projects/:pid/ux-scorecard returns and the small
  *          rules the view shows them with. The rubric itself lives in the
  *          server's _shared/ux-scorecard.ts.

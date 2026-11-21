@@ -12,7 +12,7 @@
  * The first-time user test (fresh-eyes runs) was a tab here; it has its own
  * page now (/first-user-test), and ?tab=fresh-eyes redirects there.
  *
- * ?view=scorecard shows the UX scorecard (ADR 0066): every page scored on a
+ * ?view=scorecard shows the UX scorecard (ADR 0067): every page scored on a
  * written rubric, worst first, and the root causes across pages.
  */
 

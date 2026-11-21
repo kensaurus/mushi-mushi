@@ -111,7 +111,7 @@ mushi-ux audit --url https://example.com/admin \
 
 ## Score every page: the UX scorecard
 
-`mushi-ux scorecard` scores each page of the live app 1–10 against a written rubric, groups what is wrong into root causes, and can file the top causes as Mushi Mushi reports (ADR 0066).
+`mushi-ux scorecard` scores each page of the live app 1–10 against a written rubric, groups what is wrong into root causes, and can file the top causes as Mushi Mushi reports (ADR 0067).
 
 ```bash
 mushi-ux scorecard --url https://example.com/admin/ \

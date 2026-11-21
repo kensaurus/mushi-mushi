@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/src/__tests__/ux-scorecard.test.ts
- * PURPOSE: The UX scorecard's pure rules (ADR 0066):
+ * PURPOSE: The UX scorecard's pure rules (ADR 0067):
  *            - the server module is the CLI's, byte for byte;
  *            - a page's identity keeps its view (`/team?view=sso`), not its records;
  *            - a model answer is read strictly: eight scores, evidence, a fix, no taste;

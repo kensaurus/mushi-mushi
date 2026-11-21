@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/ux-scorecard-io.ts
- * PURPOSE: The UX scorecard's wire shapes and rows (ADR 0066), with no I/O:
+ * PURPOSE: The UX scorecard's wire shapes and rows (ADR 0067), with no I/O:
  *          what the CLI sends (a run and its pages), which rows they become
  *          (ux_runs kind 'scorecard', one ux_surfaces row per page), where a
  *          page's screenshots live, and the `ux_scorecard` report a root cause

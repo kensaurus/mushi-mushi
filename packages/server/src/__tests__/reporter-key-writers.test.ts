@@ -69,7 +69,7 @@ const REVIEWED = new Map<string, 'keyed' | 'stored' | 'sentinel'>([
   ['_shared/cloudwatch-ingest.ts reporter_token_hash', 'sentinel'], // 'cloudwatch-webhook' (ADR 0061): an AWS alarm, no person reported it
   ['_shared/ux-runs.ts reporter_token_hash', 'sentinel'], // 'ux-loop' (UX_LOOP_REPORTER): a screen the mushi-ux loop flagged
   ['_shared/fresh-eyes.ts reporter_token_hash', 'sentinel'], // 'fresh-eyes' (ADR 0053): a first-time-visitor run found it, no person reported it
-  ['_shared/ux-scorecard-io.ts reporter_token_hash', 'sentinel'], // 'ux-scorecard' (ADR 0066): a root cause the UX scorecard found, no person reported it
+  ['_shared/ux-scorecard-io.ts reporter_token_hash', 'sentinel'], // 'ux-scorecard' (ADR 0067): a root cause the UX scorecard found, no person reported it
   ['library-modernizer/index.ts reporter_token_hash', 'sentinel'], // 'cron:library-modernizer'
   ['_shared/vuln-watch-db.ts reporter_token_hash', 'sentinel'], // 'cron:vuln-watch' (ADR 0038)
   ['skill-runs/index.ts reporter_token_hash', 'sentinel'], // 'cron:skill-runs' (ADR 0042: a skill-run round has no reporter)

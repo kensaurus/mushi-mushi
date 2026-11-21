@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 20261121190000_ux_scorecard
 --
--- ADR 0066: the UX scorecard. ADDITIVE and idempotent: apply BEFORE deploying
+-- ADR 0067: the UX scorecard. ADDITIVE and idempotent: apply BEFORE deploying
 -- the api-ext function.
 --
 --   ux_runs.kind 'scorecard'        one scorecard run of an app (mushi-ux scorecard)
@@ -33,11 +33,11 @@ ALTER TABLE public.ux_surfaces
     CHECK (facts IS NULL OR (jsonb_typeof(facts) = 'object' AND pg_column_size(facts) <= 65536));
 
 COMMENT ON COLUMN public.ux_surfaces.score IS
-  'ADR 0066: a scorecard page''s overall score, 1–10, computed from its eight rubric scores (_shared/ux-scorecard.ts overallScore). NULL for UX loop screens and unscored pages.';
+  'ADR 0067: a scorecard page''s overall score, 1–10, computed from its eight rubric scores (_shared/ux-scorecard.ts overallScore). NULL for UX loop screens and unscored pages.';
 COMMENT ON COLUMN public.ux_surfaces.scorecard IS
-  'ADR 0066: the page''s scores, issues (with evidence and a fix) and claims, as parsePageAnswer returns them.';
+  'ADR 0067: the page''s scores, issues (with evidence and a fix) and claims, as parsePageAnswer returns them.';
 COMMENT ON COLUMN public.ux_surfaces.facts IS
-  'ADR 0066: what the page was scored on: tab title, headings, visible text (trimmed), controls, settle time, axe counts, viewport.';
+  'ADR 0067: what the page was scored on: tab title, headings, visible text (trimmed), controls, settle time, axe counts, viewport.';
 
 -- The trend: one page's score across the app's runs.
 CREATE INDEX IF NOT EXISTS ux_surfaces_project_path_scored
@@ -90,4 +90,4 @@ ALTER TABLE public.project_settings
     CHECK (ux_scorecard_viewport ~ '^[0-9]{3,4}x[0-9]{3,4}$');
 
 COMMENT ON COLUMN public.project_settings.ux_scorecard_viewport IS
-  'ADR 0066: WIDTHxHEIGHT the UX scorecard scores this app at. Desktop-first by default (console apps); a phone-first app sets 390x844.';
+  'ADR 0067: WIDTHxHEIGHT the UX scorecard scores this app at. Desktop-first by default (console apps); a phone-first app sets 390x844.';

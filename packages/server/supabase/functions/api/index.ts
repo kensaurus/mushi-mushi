@@ -840,7 +840,7 @@ forwardToApiExt([
   '/v1/admin/projects/:pid/fresh-eyes/:runId/findings',
   '/v1/admin/projects/:pid/fresh-eyes/:runId/cancel',
 ]);
-// The UX scorecard (ux-scorecard.ts, ADR 0066).
+// The UX scorecard (ux-scorecard.ts, ADR 0067).
 forwardToApiExt([
   '/v1/admin/projects/:pid/ux-scorecard',
   '/v1/admin/projects/:pid/ux-scorecard/:runId',

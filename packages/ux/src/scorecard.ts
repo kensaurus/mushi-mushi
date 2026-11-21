@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 /**
  * `mushi-ux scorecard`: score every page of a live app against a written
- * rubric (ADR 0066), group what is wrong into root causes, and file the top
+ * rubric (ADR 0067), group what is wrong into root causes, and file the top
  * ones as Mushi reports.
  *
  * - Pages: `--path` / `--paths-file` (a route list), else the routes in the

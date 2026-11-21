@@ -1,4 +1,4 @@
-# 0066. The UX scorecard: every page scored on a written rubric, problems filed by root cause
+# 0067. The UX scorecard: every page scored on a written rubric, problems filed by root cause
 
 Status: Proposed 2026-11-21. Built on the owner's request of the same day; it
 moves the line ADRs 0020, 0021, 0045 and 0040 draw on model judgement, so it

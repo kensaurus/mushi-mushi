@@ -1,6 +1,6 @@
 # UX scorecard rubric
 
-Version: `ux-scorecard-2026-11-21.2` (ADR 0066).
+Version: `ux-scorecard-2026-11-21.2` (ADR 0067).
 
 Every scored page stores this version (`ux_surfaces.scorecard.promptVersion`, `ux_runs.counts.prompt`), so two runs compare only when their versions match. The text below is the rubric the model gets, word for word; `packages/server/src/__tests__/ux-scorecard.test.ts` fails when it drifts from `_shared/ux-scorecard.ts`. A change to the rubric bumps the version and this file in the same commit.
 

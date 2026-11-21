@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/ux-runs/UxScorecardView.tsx
- * PURPOSE: The UX scorecard on /ux-runs?view=scorecard (ADR 0066): every page
+ * PURPOSE: The UX scorecard on /ux-runs?view=scorecard (ADR 0067): every page
  *          of the app scored 1–10 on a written rubric, worst first, with its
  *          trend across runs; the root causes that span pages; and the
  *          reports they were filed as. `mushi-ux scorecard --sync` fills it.

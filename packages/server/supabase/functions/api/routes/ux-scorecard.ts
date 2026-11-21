@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/api/routes/ux-scorecard.ts
- * PURPOSE: The UX scorecard (ADR 0066), served by `api-ext` (deploy size
+ * PURPOSE: The UX scorecard (ADR 0067), served by `api-ext` (deploy size
  *          limit; `api` forwards these paths).
  *
  *   PUT  /v1/admin/projects/:pid/ux-scorecard/:runId            — CLI: upsert a run and its pages (ux_runs kind scorecard)

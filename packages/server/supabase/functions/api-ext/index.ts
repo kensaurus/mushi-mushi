@@ -21,7 +21,7 @@
  *          roadmap, submission and redemption review, Tremendous webhook),
  *          the per-app Home, setup gaps and the release batch (console ops
  *          plan P1), the Health check registry (plan-simplicity-2026-10 Phase 1), local workers (`mushi work --daemon`, ADR 0048), repo clean-up (ADR 0051)
- *          fresh-eyes runs (ADR 0053), the UX scorecard (ADR 0066), the Journey optimizer (ADR 0058), the public free Production Check and
+ *          fresh-eyes runs (ADR 0053), the UX scorecard (ADR 0067), the Journey optimizer (ADR 0058), the public free Production Check and
  *          scoreboard (docs /check and /proof, GTM plan November 2026), and the
  *          cookieless landing page-view count with the daily GTM scorecard
  *          (landing-visits.ts), the design CI push and recipe drift
