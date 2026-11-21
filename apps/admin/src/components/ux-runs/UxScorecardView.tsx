@@ -103,6 +103,7 @@ export function UxScorecardView({ projectId, runId, onPickRun }: { projectId: st
         <span>{d.run.detail ?? `viewport ${d.viewport}`}</span>
         <ViewportSetting projectId={projectId} value={d.viewport} onSaved={q.reload} />
         {d.run.model && <span>scored by {d.run.model}</span>}
+        {d.rubricVersion && <span title="Trends compare runs of the same rubric version only">rubric {d.rubricVersion}</span>}
         {d.run.status !== 'done' && <Badge tone={d.run.status === 'failed' ? 'dangerSubtle' : 'infoSubtle'}>{d.run.status === 'failed' ? 'Failed' : 'Running'}</Badge>}
       </div>
       {d.run.error && <p className="text-xs text-danger">{d.run.error}</p>}

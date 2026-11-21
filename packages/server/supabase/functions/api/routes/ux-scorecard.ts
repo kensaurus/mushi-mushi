@@ -430,7 +430,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     const older = list.filter((r) => r.started_at < run.started_at).map((r) => r.id)
     const [pagesRes, histRes, reportsRes] = await Promise.all([
       db.from('ux_surfaces').select('path, label, score, scorecard, facts, status, note, thumbs').eq('run_id', run.id).order('path').limit(200),
-      older.length ? db.from('ux_surfaces').select('run_id, path, score, updated_at').in('run_id', older).not('score', 'is', null).limit(2000) : Promise.resolve({ data: [], error: null }),
+      older.length ? db.from('ux_surfaces').select('run_id, path, score, updated_at, version:scorecard->>promptVersion').in('run_id', older).not('score', 'is', null).limit(2000) : Promise.resolve({ data: [], error: null }),
       db.from('reports').select('id, title, status, severity, pattern_key, created_at').eq('project_id', projectId).eq('source', 'ux_scorecard').order('created_at', { ascending: false }).limit(50),
     ])
     if (pagesRes.error) return dbError(c, pagesRes.error)
@@ -439,7 +439,11 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
     const pageRows = (pagesRes.data ?? []) as Array<{ path: string; label: string; scorecard: unknown; facts: unknown; status: string; note: string | null }>
     const scored = pageRows.map(scoredPageFromRow).filter((p): p is ScoredPage => !!p)
     const startedAt = new Map(list.map((r) => [r.id, r.started_at]))
-    const history = ((histRes.data ?? []) as Array<{ run_id: string; path: string; score: number }>).map((h) => ({ key: h.path, overall: h.score, at: startedAt.get(h.run_id) ?? '' }))
+    // A trend compares scores of one rubric version only (docs/ux-scorecard-rubric.md); older versions are left out.
+    const version = scored[0]?.score.promptVersion ?? null
+    const history = ((histRes.data ?? []) as Array<{ run_id: string; path: string; score: number; version: string | null }>)
+      .filter((h) => !version || h.version === version)
+      .map((h) => ({ key: h.path, overall: h.score, at: startedAt.get(h.run_id) ?? '' }))
     const rows = scorecardRows(scored, history)
     const unscored = pageRows.filter((p) => !scored.some((s) => s.key === p.path)).map((p) => ({ key: p.path, label: p.label, status: p.status, note: p.note }))
     const causesParsed = UxScorecardCauses.safeParse(run.findings ?? [])
@@ -453,6 +457,7 @@ export function registerUxScorecardRoutes(app: Hono<{ Variables: Variables }>): 
         causes: causesParsed.success ? causesParsed.data : [],
         reports: reportsRes.data ?? [],
         viewport,
+        rubricVersion: version,
       },
     })
   })

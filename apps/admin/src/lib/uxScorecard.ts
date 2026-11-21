@@ -80,6 +80,8 @@ export interface UxScorecardData {
   causes: UxScorecardCause[]
   reports: Array<{ id: string; title: string; status: string; severity: string | null; pattern_key: string | null; created_at: string }>
   viewport: string
+  /** The rubric version of this run's scores; the trend only compares runs of the same version. */
+  rubricVersion?: string | null
 }
 
 /** A score's tone: red when the page misleads or blocks (1–4), amber for a real problem (5–6), green otherwise. */

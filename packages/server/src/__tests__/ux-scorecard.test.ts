@@ -33,7 +33,10 @@ import {
   scorecardPageKey,
   scorecardRows,
   UX_DIMENSIONS,
+  UX_RUBRIC,
+  UX_SCORE_ANCHORS,
   UX_SCORECARD_LIMITS,
+  UX_SCORECARD_PROMPT_VERSION,
   type ScoredPage,
   type UxCause,
   type UxDimension,
@@ -410,5 +413,15 @@ describe('rows and wire shapes', () => {
     expect(row).toMatchObject({ source: 'ux_scorecard', status: 'new', pattern_key: c.patternKey, category: 'visual', reporter_token_hash: 'ux-scorecard' })
     expect((row.affected_screens as Array<{ file: string }>).map((s) => s.file).sort()).toEqual(['/help', '/plugins', '/team?view=billing'])
     expect(io.UxScorecardCauses.safeParse([c]).success).toBe(true)
+  })
+})
+
+describe('the versioned rubric file', () => {
+  it('docs/ux-scorecard-rubric.md carries the current version, every dimension, every anchor and the system prompt verbatim', () => {
+    const doc = readFileSync(resolve(__dirname, '../../../../docs/ux-scorecard-rubric.md'), 'utf8')
+    expect(doc).toContain(`Version: \`${UX_SCORECARD_PROMPT_VERSION}\``)
+    for (const d of UX_DIMENSIONS) expect(doc).toContain(`- **${d}** (${UX_RUBRIC[d].label}): ${UX_RUBRIC[d].asks}`)
+    for (const a of UX_SCORE_ANCHORS) expect(doc).toContain(`- ${a}`)
+    expect(doc).toContain(pageSystemPrompt())
   })
 })
