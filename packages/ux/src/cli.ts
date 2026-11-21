@@ -7,6 +7,8 @@
  *   mushi-ux discover --url http://localhost:5173        (list screens, no agent)
  *   mushi-ux audit --url https://app.example.com/admin --profile-dir ~/.playwright-cli-profiles/app
  *                                                        (find UX bugs on signed-in screens, file reports)
+ *   mushi-ux scorecard --url https://app.example.com/admin/ --profile-dir ~/.playwright-cli-profiles/app --file
+ *                                                        (score every page 1-10 on a written rubric, file the root causes)
  *   mushi-ux fresh-eyes --url https://example.com --goal "get my first bug explained"
  *                                                        (a first-time visitor: time the path, file what stops them)
  *   mushi-ux run --dev "pnpm dev --port {port}" --agent claude-code
@@ -19,7 +21,7 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
-import { existsSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Command, InvalidArgumentError, Option } from 'commander'
@@ -37,6 +39,19 @@ import { fileFreshEyesFindings, mintTestAccount, syncFreshEyes, writeTimeline } 
 import { literalPattern, parseStdinRequest, readStdin, stepsFor, syncsToConsole } from './fresh-eyes-request.js'
 import { runTerminalSetup } from './fresh-eyes-terminal.js'
 import { DEFAULT_JUDGE_MODEL } from './judge.js'
+import {
+  DEFAULT_SCORECARD_MODEL,
+  DEFAULT_SCORECARD_VIEWPORT,
+  fileScorecard,
+  localScorer,
+  runScorecard,
+  scorecardContext,
+  scorecardRunId,
+  serverScorer,
+  syncScorecard,
+  uploadAllShots,
+  type ScoreVia,
+} from './scorecard.js'
 import { cachedProfile, parseChannel } from './profile.js'
 import { agentAccount, studioOptions } from './launcher.js'
 import { listModels } from './models.js'
@@ -384,6 +399,119 @@ program
       if (pending) {
         console.log(o.dryRun ? `Dry run: ${outcome.pending.length} report(s) would be filed: ${pending}` : `No MUSHI_API_KEY / MUSHI_PROJECT_ID: ${outcome.pending.length} report(s) left to file in ${pending}`)
       }
+    },
+  )
+
+program
+  .command('scorecard')
+  .description('Score every page of a live app against a written UX rubric (1–10 each), group the problems into root causes, and file the top ones as Mushi reports.')
+  .requiredOption('--url <url>', 'The live app where your cached session is signed in, e.g. https://example.com/admin/; only paths under it are scored')
+  .option('--app <name>', 'What to call the app in the prompts and the scorecard', 'this app')
+  .option('--about <text>', 'One line on what the app is and who uses it')
+  .option('--profile-dir <dir>', 'The cached, signed-in browser profile to reuse (e.g. ~/.playwright-cli-profiles/<app>); never a fresh browser')
+  .option('--channel <name>', 'Browser build for --profile-dir: chrome (default) or chromium', parseChannel)
+  .option('--path <path>', 'A page to score, with its view query (repeatable; default: the routes in --routes-from, else a crawl)', collect, [])
+  .option('--paths-file <file>', 'A file with one page path per line')
+  .option('--routes-from <dir>', "Read the page list from the app's source (React Router or Next.js routes)")
+  .option('--max-pages <n>', 'Pages scored in one run', '60')
+  .option('--viewport <WxH>', "Viewport, e.g. 1440x900 (default: the app's setting on the console, else 1440x900)")
+  .option('--from-captures <dir>', 'Score captures another browser driver wrote (<dir>/pages/<page>/facts.json, early.png, settled.png); no browser opens')
+  .addOption(
+    new Option('--score-via <how>', 'Who scores: server (the ux-scorecard route on Mushi; needs MUSHI_API_KEY), claude-code, cursor or anthropic-api on this machine')
+      .choices(['server', 'claude-code', 'cursor', 'anthropic-api'])
+      .default('server'),
+  )
+  .option('--model <id>', `Model for a local transport (default: ${DEFAULT_CURSOR_REVIEW_MODEL} with cursor, else ${DEFAULT_SCORECARD_MODEL})`)
+  .option('--concurrency <n>', 'Pages scored at once')
+  .option('--allow <rule>', 'Allow a non-GET request that only reads, e.g. "POST /rest/v1/rpc/*" (repeatable)', collect, [])
+  .option('--ignore <selector>', 'CSS selector that is not part of the app (repeatable)', collectSelector, [])
+  .option('--sync', 'Show the run on the console (Check → UX runs → Scorecard); MUSHI_API_KEY / MUSHI_PROJECT_ID')
+  .option('--file', 'File the top root causes as reports (one per cause, at most 5 a run); implies --sync')
+  .option('--dry-run', 'With --file: show what would be filed, file nothing')
+  .action(
+    async (o: {
+      url: string
+      app: string
+      about?: string
+      profileDir?: string
+      channel?: string
+      path: string[]
+      pathsFile?: string
+      routesFrom?: string
+      maxPages: string
+      viewport?: string
+      fromCaptures?: string
+      scoreVia: ScoreVia
+      model?: string
+      concurrency?: string
+      allow: string[]
+      ignore: string[]
+      sync?: boolean
+      file?: boolean
+      dryRun?: boolean
+    }) => {
+      const wantSync = o.sync || o.file || o.scoreVia === 'server'
+      const cfg = wantSync ? syncConfigFromEnv() : null
+      for (const k of ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT']) delete process.env[k]
+      if (wantSync && !cfg) {
+        throw new Error(`${o.scoreVia === 'server' ? '--score-via server' : '--sync and --file'} need MUSHI_API_KEY and MUSHI_PROJECT_ID (run mushi login), or score on this machine with --score-via claude-code.`)
+      }
+      const cached = o.fromCaptures ? null : cachedProfile(o)
+      if (!o.fromCaptures && !cached) console.warn('No --profile-dir: the scorecard sees the app signed out. Pass a cached, signed-in profile.')
+      const context = cfg ? await scorecardContext(cfg) : { viewport: null, history: [], priorKeys: [] }
+      const vp = o.viewport ?? context.viewport ?? `${DEFAULT_SCORECARD_VIEWPORT.width}x${DEFAULT_SCORECARD_VIEWPORT.height}`
+      const m = /^([0-9]{3,4})x([0-9]{3,4})$/.exec(vp)
+      if (!m) throw new InvalidArgumentError(`--viewport must look like 1440x900, not ${vp}`)
+      const viewport = { width: Number(m[1]), height: Number(m[2]) }
+      const fromFile = o.pathsFile
+        ? readFileSync(o.pathsFile, 'utf8')
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter((l) => l && !l.startsWith('#'))
+        : []
+      const runId = scorecardRunId(new Date())
+      const startedAt = new Date().toISOString()
+      const scorer = o.scoreVia === 'server' ? serverScorer(cfg!, runId) : localScorer(o.scoreVia, o.model ?? (o.scoreVia === 'cursor' ? DEFAULT_CURSOR_REVIEW_MODEL : DEFAULT_SCORECARD_MODEL))
+      // The server scorer stores each score on the run, so the run row comes first.
+      if (cfg) {
+        const err = await syncScorecard(cfg, { runId, url: o.url, viewport, scoredBy: scorer.name, startedAt, finished: false, pages: [] })
+        if (err) throw new Error(`The scorecard run could not be created on the console: ${err}`)
+      }
+      const result = await runScorecard({
+        url: o.url,
+        app: o.app,
+        about: o.about,
+        paths: [...o.path, ...fromFile],
+        routesFrom: o.routesFrom,
+        maxPages: Number(o.maxPages),
+        viewport,
+        fromCaptures: o.fromCaptures,
+        profileDir: cached?.profileDir,
+        channel: cached?.channel,
+        allow: o.allow,
+        ignore: o.ignore,
+        scorer,
+        concurrency: o.concurrency ? Number(o.concurrency) : undefined,
+        priorKeys: context.priorKeys,
+        history: context.history,
+        runId,
+        onProgress: (msg) => process.stderr.write(`  ${msg}\n`),
+      })
+      const scored = result.pages.filter((p) => p.score)
+      const mean = scored.length ? scored.reduce((n, p) => n + (p.score?.overall ?? 0), 0) / scored.length : 0
+      const cross = result.causes.filter((c) => c.kind !== 'page').length
+      console.log(`\n${scored.length} of ${result.pages.length} page(s) scored, average ${mean.toFixed(1)}/10; ${cross} cross-page cause(s). Scorecard: ${join(result.dir, 'scorecard.md')}`)
+      if (result.groupError) console.warn(`Cross-page pass: ${result.groupError} (the code's grouping stands).`)
+      if (!cfg) return
+      const uploaded = o.scoreVia === 'server' ? undefined : await uploadAllShots(cfg, runId, result.pages)
+      const err = await syncScorecard(cfg, { runId, url: o.url, viewport, scoredBy: scorer.name, startedAt, finished: true, pages: result.pages, causes: result.causes, uploaded })
+      console.log(err ? `Console sync did not finish: ${err}` : `On the console: ${consoleBaseUrl()}/ux-runs?view=scorecard&run=${runId}`)
+      if (!o.file) return
+      const outcome = await fileScorecard(cfg, runId, { causes: result.causes, dryRun: o.dryRun })
+      for (const f of outcome.filed) console.log(`Filed ${f.reportId}: ${f.title}`)
+      for (const u of outcome.updated) console.log(`Refreshed the pages of open report ${u.reportId} (${u.patternKey})`)
+      for (const w of outcome.wouldFile ?? []) console.log(`Would file: ${w.title} (${w.pages} page(s), ${w.patternKey})`)
+      for (const s of outcome.skipped) console.log(`Not filed ${s.patternKey}: ${s.reason}`)
     },
   )
 

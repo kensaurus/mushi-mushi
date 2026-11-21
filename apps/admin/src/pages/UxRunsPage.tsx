@@ -11,13 +11,16 @@
  *
  * The first-time user test (fresh-eyes runs) was a tab here; it has its own
  * page now (/first-user-test), and ?tab=fresh-eyes redirects there.
+ *
+ * ?view=scorecard shows the UX scorecard (ADR 0067): every page scored on a
+ * written rubric, worst first, and the root causes across pages.
  */
 
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PageHeaderBar } from '../components/PageHeaderBar'
 import { PagePosture, POSTURE_PRIORITY } from '../components/PagePosture'
-import { Badge, EmptyState, Loading, StatCard } from '../components/ui'
+import { Badge, EmptyState, Loading, SegmentedControl, StatCard } from '../components/ui'
 import { formatRelative } from '../components/ui/metrics'
 import { PageLoadError } from '../components/PageLoadError'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -25,6 +28,7 @@ import { UxStartRunCard } from '../components/ux-runs/UxStartRunCard'
 import { UxRunProgress } from '../components/ux-runs/UxRunProgress'
 import { UxRunPullRequest } from '../components/ux-runs/UxRunPullRequest'
 import { UxSurfaceDetail } from '../components/ux-runs/UxSurfaceDetail'
+import { UxScorecardView } from '../components/ux-runs/UxScorecardView'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
@@ -43,7 +47,56 @@ export function UxRunsPage() {
       </div>
     )
   }
+  if (params.get('view') === 'scorecard') return <ProjectUxScorecard key={projectId} projectId={projectId} />
   return <ProjectUxRuns key={projectId} projectId={projectId} />
+}
+
+/** Runs | Scorecard: two views of the same page, kept in ?view= so a link opens either. */
+function UxViewSwitch({ view }: { view: 'runs' | 'scorecard' }) {
+  const [params, setParams] = useSearchParams()
+  return (
+    <SegmentedControl
+      ariaLabel="UX runs view"
+      size="sm"
+      value={view}
+      options={[
+        { id: 'runs', label: 'Agent runs' },
+        { id: 'scorecard', label: 'Scorecard' },
+      ]}
+      onChange={(v) => {
+        const next = new URLSearchParams(params)
+        next.delete('run')
+        if (v === 'scorecard') next.set('view', 'scorecard')
+        else next.delete('view')
+        setParams(next, { replace: true })
+      }}
+    />
+  )
+}
+
+function ProjectUxScorecard({ projectId }: { projectId: string }) {
+  const [params, setParams] = useSearchParams()
+  return (
+    <div className={PAGE_CONTENT_STACK}>
+      <PageHeaderBar
+        title="UX runs"
+        helpTitle="What is the UX scorecard?"
+        helpWhatIsIt="Every page of your app, scored 1 to 10 on a written rubric: clarity, hierarchy, consistency, loading/empty/error states, truthfulness, copy, accessibility and speed. A page's score follows its worst problem. Problems that repeat across pages are grouped into one root cause, so one fix lifts many pages."
+        helpHowToUse="Run mushi-ux scorecard --url <your app> --profile-dir <your signed-in browser profile> --sync on your computer. Read the root causes first; each says where to fix it. Add --file to file the top ones as bugs (one per cause, at most five a run). Run it again after a fix to see each page's trend."
+        helpFlowPath="/ux-runs"
+      />
+      <UxViewSwitch view="scorecard" />
+      <UxScorecardView
+        projectId={projectId}
+        runId={params.get('run')}
+        onPickRun={(id) => {
+          const next = new URLSearchParams(params)
+          next.set('run', id)
+          setParams(next, { replace: true })
+        }}
+      />
+    </div>
+  )
 }
 
 function ProjectUxRuns({ projectId }: { projectId: string }) {
@@ -93,6 +146,7 @@ function ProjectUxRuns({ projectId }: { projectId: string }) {
         helpHowToUse="Start a run from the card at the top: the studio (mushi ux ui) runs on your own computer, or start a cloud run. This page mirrors the run and merges its PR; it cannot open the studio for you. Start with screens marked Moved by another fix or Rolled back. File anything you want fixed as a bug. Review the branch, open it as a draft PR from the studio, and merge it here once its required checks pass. Nothing merges until you confirm."
         helpFlowPath="/ux-runs"
       />
+      <UxViewSwitch view="runs" />
       <p className="text-2xs text-fg-muted">
         Want to know if a new user gets through your app? That is the <Link className="text-brand underline underline-offset-2" to="/first-user-test">first-time user test</Link>.
       </p>

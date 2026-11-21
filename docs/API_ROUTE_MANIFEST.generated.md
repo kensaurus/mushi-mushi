@@ -2,13 +2,13 @@
 
 > Auto-generated from `packages/server/supabase/functions/api/routes/*.ts`.
 > Do not edit by hand — run `pnpm gen:route-manifest`.
-> Generated: 2026-11-21 · **835** routes.
+> Generated: 2026-11-21 · **842** routes.
 
 External base: `{SUPABASE_URL}/functions/v1/api`
 
 | Auth | Count |
 | --- | ---: |
-| `adminOrApiKey` | 229 |
+| `adminOrApiKey` | 236 |
 | `apiKeyAuth` | 60 |
 | `jwtAuth` | 423 |
 | `jwtOrApiKey` | 1 |
@@ -514,6 +514,13 @@ External base: `{SUPABASE_URL}/functions/v1/api`
 | POST | `/v1/admin/projects/:pid/ux-runs/:runId/surfaces/:key/report` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | POST | `/v1/admin/projects/:pid/ux-runs/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-runs.ts` |
 | POST | `/v1/admin/projects/:pid/ux-runs/cloud` | `jwtAuth` | `packages/server/supabase/functions/api/routes/ux-cloud.ts` |
+| GET | `/v1/admin/projects/:pid/ux-scorecard` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| PATCH | `/v1/admin/projects/:pid/ux-scorecard` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| PUT | `/v1/admin/projects/:pid/ux-scorecard/:runId` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| POST | `/v1/admin/projects/:pid/ux-scorecard/:runId/file` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| POST | `/v1/admin/projects/:pid/ux-scorecard/:runId/group` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| POST | `/v1/admin/projects/:pid/ux-scorecard/:runId/score` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
+| POST | `/v1/admin/projects/:pid/ux-scorecard/:runId/uploads` | `adminOrApiKey` | `packages/server/supabase/functions/api/routes/ux-scorecard.ts` |
 | GET | `/v1/admin/projects/:projectId/support-tickets/linkable` | `jwtAuth` | `packages/server/supabase/functions/api/routes/admin-ops.ts` |
 | GET | `/v1/admin/projects/stats` | `jwtAuth` | `packages/server/supabase/functions/api/routes/projects-crud.ts` |
 | GET | `/v1/admin/prompt-lab` | `jwtAuth` | `packages/server/supabase/functions/api/routes/prompt-lab.ts` |
