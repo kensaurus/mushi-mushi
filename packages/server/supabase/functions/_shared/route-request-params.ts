@@ -42,6 +42,8 @@ export function activeRouteParams(): Record<string, unknown> | undefined {
 export function applyRouteParams(body: Record<string, unknown>, url: string): Record<string, unknown> {
   const params = active.getStore()
   if (!params) return body
+  const host = hostOf(url)
+  const onOpenRouter = host === 'openrouter.ai' || host.endsWith('.openrouter.ai')
   const out: Record<string, unknown> = { ...body }
   const extra = params.body
   if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
@@ -51,18 +53,27 @@ export function applyRouteParams(body: Record<string, unknown>, url: string): Re
   const maxOut = params.max_output_tokens
   if (typeof maxOut === 'number' && maxOut > 0 && !('max_tokens' in out) && !('max_completion_tokens' in out)) {
     // OpenAI's own host takes the new name; other OpenAI-compatible hosts the old one.
-    if (/api\.openai\.com/i.test(url)) out.max_completion_tokens = maxOut
+    if (host === 'api.openai.com') out.max_completion_tokens = maxOut
     else out.max_tokens = maxOut
   }
   const effort = params.reasoning_effort
   if (typeof effort === 'string' && effort) {
-    if (/openrouter\.ai/i.test(url)) {
+    if (onOpenRouter) {
       if (!('reasoning' in out)) out.reasoning = { effort }
     } else if (!('reasoning_effort' in out)) {
       out.reasoning_effort = effort
     }
   }
   return out
+}
+
+/** The request's hostname, lower-cased ('' when the URL does not parse). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
 }
 
 /** Wrap a fetch so chat-completions requests carry the active route params. */
