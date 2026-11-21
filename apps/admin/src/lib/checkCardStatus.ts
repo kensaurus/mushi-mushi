@@ -222,8 +222,11 @@ function fromQa(qa: CheckCardsInput['qa'], now: number): CheckCardView {
   if (qa.topPriority === 'no_stories' || stories === 0) return notSetUp('/qa-coverage')
   if (qa.topPriority === 'disabled_all') return notSetUp('/qa-coverage')
   if (failing > 0) return findings(failing, qa.lastRunAt, now)
-  if (qa.topPriority === 'healthy' && qa.lastRunAt && (qa.pendingRuns ?? 0) === 0) return pass(qa.lastRunAt, now)
-  return withTime(NOT_CHECKED, qa.lastRunAt, now)
+  // A run in progress does not undo the last finished one. The card read "Not run
+  // yet" while /qa-coverage showed 7 of 7 passing 3 h earlier (audit 2026-11-21).
+  if ((qa.topPriority === 'healthy' || qa.topPriority === 'pending') && qa.lastRunAt) return pass(qa.lastRunAt, now)
+  // "Not run yet" with "Last run 3h ago" under it said two things; nothing ran means no time.
+  return NOT_CHECKED
 }
 
 function fromHealth(health: CheckCardsInput['health'], now: number): CheckCardView {

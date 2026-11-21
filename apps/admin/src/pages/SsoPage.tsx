@@ -174,10 +174,14 @@ export function SsoPage() {
         helpHowToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
+      {/* Locked plan: the upgrade panel below is the page. A status banner with its own
+          "View plans" and four zero tiles ("GoTrue registration state") on top of it said
+          the same thing three times (audit 2026-11-21). */}
       <PagePosture
         slots={[
           {
             priority: POSTURE_PRIORITY.status,
+            show: ssoUnlocked,
             children: (
               <SsoStatusBanner
                 stats={stats}
@@ -192,6 +196,7 @@ export function SsoPage() {
           },
           {
             priority: POSTURE_PRIORITY.heroOrSnapshot,
+            show: ssoUnlocked,
             children: (
               <SsoSnapshotStrip
                 stats={stats}
@@ -203,7 +208,7 @@ export function SsoPage() {
           },
           {
             priority: POSTURE_PRIORITY.guide,
-            show: !shouldHideGuideWhenBannerActive(
+            show: ssoUnlocked && !shouldHideGuideWhenBannerActive(
               true,
               COMMON_HEALTHY_PRIORITIES,
               stats.topPriority,

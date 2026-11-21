@@ -687,10 +687,11 @@ export function CompliancePage() {
         ) : (
           <Badge tone="warnSubtle">{stats.planDisplayName} — upgrade for compliance</Badge>
         )}
-        <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
+        {/* Header actions are size sm on every page; these two were the default size (audit 2026-11-21). */}
+        <Btn size="sm" onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
           Refresh evidence
         </Btn>
-        <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
+        <Btn size="sm" variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
           Export PDF
         </Btn>
       </PageHeaderBar>

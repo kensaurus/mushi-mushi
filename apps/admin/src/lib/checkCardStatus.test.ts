@@ -108,6 +108,22 @@ describe('buildCheckCardViews', () => {
     expect(view).toMatchObject({ state: 'findings', chip: '2 findings', detail: 'Last run 12h ago' })
   })
 
+  // Audit 2026-11-21: /checks said "Not run yet" while /qa-coverage showed 7 of 7
+  // passing, because two runs were in progress.
+  it('scheduled tests with runs in progress keep the last finished result', () => {
+    const view = buildCheckCardViews(input({
+      qa: { totalStories: 7, failingStories: 0, pendingRuns: 2, lastRunAt: RECENT, topPriority: 'pending' },
+    }), NOW)['/qa-coverage']
+    expect(view).toMatchObject({ state: 'pass', chip: 'Pass', detail: 'Last run 12h ago' })
+  })
+
+  it('scheduled tests that never ran say Not run yet with no run time', () => {
+    const view = buildCheckCardViews(input({
+      qa: { totalStories: 3, failingStories: 0, pendingRuns: 0, lastRunAt: null, topPriority: 'no_runs' },
+    }), NOW)['/qa-coverage']
+    expect(view).toMatchObject({ state: 'not_checked', chip: 'Not run yet', detail: null })
+  })
+
   it('scheduled tests that are turned off are Not set up', () => {
     const view = buildCheckCardViews(input({
       qa: { totalStories: 3, topPriority: 'disabled_all', lastRunAt: RECENT },

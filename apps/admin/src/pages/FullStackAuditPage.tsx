@@ -280,7 +280,7 @@ export function FullStackAuditPage() {
       >
         <Btn
           variant={topFinding ? 'ghost' : 'primary'}
-          size="md"
+          size="sm"
           onClick={runAudit}
           disabled={loading || !projectId}
           loading={loading}

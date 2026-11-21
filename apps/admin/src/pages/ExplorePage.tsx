@@ -634,9 +634,9 @@ export function ExplorePage() {
     )
   }
 
+  const indexOffOrEmpty = stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
   const notIndexed =
-    stats.topPriority === 'empty' ||
-    stats.topPriority === 'not_enabled' ||
+    indexOffOrEmpty ||
     (!loading && !error && allNodes.length === 0 && stats.indexedFiles === 0)
 
   const layerEntries = payload
@@ -935,7 +935,9 @@ export function ExplorePage() {
         </div>
       )}
 
-      {!ux.hideExploreSnapshot && activeTab === 'overview' && (
+      {/* Indexing off or empty: the banner above names the one next step. Four tiles of
+          "0 / Not checked / Not checked / 0" under it said nothing more (audit 2026-11-21). */}
+      {!ux.hideExploreSnapshot && activeTab === 'overview' && !indexOffOrEmpty && (
       // One level of box: the four tiles under a plain heading, not tiles in a card; no second time
       // beside the status's "indexed 14 hours ago" (round 3).
       <section aria-label="Code map at a glance" data-testid="explore-snapshot">
