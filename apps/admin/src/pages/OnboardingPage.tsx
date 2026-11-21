@@ -25,6 +25,7 @@ import { OnboardingSetupReadout } from '../components/onboarding/OnboardingSetup
 import { SetupGapsSection } from '../components/onboarding/SetupGapsSection'
 import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useRealtimeReload } from '../lib/realtime'
 import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
@@ -418,8 +419,7 @@ export function OnboardingPage() {
 
   usePublishPageContext({
     route: '/onboarding',
-    title: `${activeTabMeta.label} · Set up`,
-    summary: activeTabMeta.description,
+    title: tabbedPageTitle('Set up', activeTabMeta.label, activeTabMeta.id === ONBOARDING_TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
   })

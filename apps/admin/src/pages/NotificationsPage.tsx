@@ -9,6 +9,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { apiFetch } from '../lib/supabase'
@@ -176,8 +177,7 @@ export function NotificationsPage() {
 
   usePublishPageContext({
     route: '/notifications',
-    title: `${activeMeta.label} · Notifications`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Reporter updates', activeMeta.label, activeMeta.id === TABS[0].id),
     filters: { tab: activeTab, show: filter, type: type || undefined, project_id: activeProjectId ?? undefined },
     criticalCount: stats.notificationsEnabled ? 0 : 1,
   })

@@ -86,6 +86,7 @@ describe('allAppsSupportFor', () => {
     expect(allAppsSupportFor('/providers')).toBe('account')
     expect(allAppsSupportFor('/users')).toBe('account')
     expect(allAppsSupportFor('/docs-bridge')).toBe('account')
+    expect(allAppsSupportFor('/feedback')).toBe('account')
     expect(allAppsSupportFor('/projects/abc/qa-coverage/s1')).toBe('single')
     expect(allAppsSupportFor('/reports')).toBe('combined')
     expect(allAppsSupportFor('/reports/123')).toBe('single')

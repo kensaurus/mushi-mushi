@@ -143,6 +143,13 @@ describe('Run now', () => {
     expect(text.match(/Run now/g)).toHaveLength(1)
   })
 
+  // axe 2026-11-21: "1 / 2 / 3" were 18 px targets (WCAG 2.5.8 asks for 24 px).
+  it('names the visitor counts in words, wide enough to hit', () => {
+    render(GLOT)
+    const picker = host.querySelector('[role="radiogroup"][aria-label="Visitors"]')!
+    expect([...picker.querySelectorAll('[role="radio"]')].map((r) => r.textContent)).toEqual(['1 visitor', '2 visitors', '3 visitors'])
+  })
+
   it('posts one request and shows that it started', async () => {
     render(GLOT)
     await act(async () => button('Run now')!.click())

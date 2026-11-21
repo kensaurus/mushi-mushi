@@ -615,7 +615,7 @@ export function IntegrationsPage() {
           <div id={`platform-card-${id}`} className="scroll-mt-chrome space-y-2">
             <p className="text-2xs leading-snug text-fg-secondary">
               Or fix bugs with the agent in your own editor from{' '}
-              <Link to="/mcp" className="text-accent-foreground underline-offset-2 hover:text-accent hover:underline">
+              <Link to="/mcp" className="text-accent-foreground underline underline-offset-2 hover:text-accent">
                 Editor agents
               </Link>
               .
@@ -762,7 +762,7 @@ export function IntegrationsPage() {
                       lede: (
                         <>
                           A cloud agent writes the fix and opens the pull request. Or use the agent in your own editor from{' '}
-                          <Link to="/mcp" className="text-accent-foreground underline-offset-2 hover:text-accent hover:underline">
+                          <Link to="/mcp" className="text-accent-foreground underline underline-offset-2 hover:text-accent">
                             Editor agents
                           </Link>
                           .

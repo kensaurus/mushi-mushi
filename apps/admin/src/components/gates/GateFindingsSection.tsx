@@ -19,7 +19,7 @@
  * Data: GET /v1/admin/inventory/:projectId/findings[?gate=]
  */
 
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Loading, formatRelative } from '../ui'
 import { PageLoadError } from '../PageLoadError'
 import { GateFindingCard } from '../inventory/GateFindingCard'
@@ -236,8 +236,13 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
   const status = STATUS_TEXT[g.status] ?? { label: g.status, tone: 'text-fg-muted', glyph: 'off' as const }
   const days = g.ranAt ? Math.floor((Date.now() - Date.parse(g.ranAt)) / 86_400_000) : null
   const shown = g.findings.slice(0, limit)
+  // A link to this check (/fullstack-audit#check-<gate>) opens its findings.
+  const location = useLocation()
+  const linkedHere = location.hash === `#check-${g.gate}`
+  // On Full-stack audit a link to this same card would only scroll to itself.
+  const pageIsHere = info?.page?.to === `${location.pathname}#check-${g.gate}`
   return (
-    <div className="space-y-2 py-3 first:pt-0" data-check={g.gate}>
+    <div className="space-y-2 py-3 first:pt-0 scroll-mt-4" data-check={g.gate} id={`check-${g.gate}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-fg">
@@ -271,14 +276,14 @@ function CheckGroupCard({ projectId, group: g, limit, onChanged }: { projectId: 
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        {info?.page && (
+        {info?.page && !pageIsHere && (
           <Link to={info.page.to} className={`text-xs ${LINK_ACCENT}`}>
             {info.page.label} →
           </Link>
         )}
       </div>
       {g.open > 0 && (
-        <details open={g.open <= 3}>
+        <details open={g.open <= 3 || linkedHere}>
           <summary className="cursor-pointer text-xs text-fg-muted hover:text-fg">
             {findingsDisclosureLabel(g.open, shown.length)}
           </summary>

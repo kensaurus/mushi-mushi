@@ -3,12 +3,14 @@
  * PURPOSE: The Providers tab: one dense row per provider account, worst
  *          first. State mark with how long it held, label + provider chip,
  *          a balance or usage bar against warn/crit, last probe age, open
- *          incidents, dependent apps, an on/off switch and the thresholds
- *          editor (a drawer).
+ *          incidents, the apps whose routes try it (from the routes, not the
+ *          account's stale `depends`; 2026-11-21), an on/off switch and the
+ *          thresholds editor (a drawer).
  */
 
-import type { ProviderAccount } from '../../lib/kensaurusOpsTypes'
-import { accountLabel, ageLabel, allSharedAccounts, appUses, balanceWhy, PROVIDER_STATE_WORD, PROVIDER_STATUS, providerColumns, providerGauge, providerNeeds, providerState, type Gauge } from '../../lib/providersView'
+import type { AiRoute, ProviderAccount } from '../../lib/kensaurusOpsTypes'
+import { routeUsers } from '../../lib/routeChains'
+import { accountLabel, ageLabel, allSharedAccounts, balanceWhy, PROVIDER_STATE_WORD, PROVIDER_STATUS, providerColumns, providerGauge, providerNeeds, providerState, type Gauge } from '../../lib/providersView'
 import type { SetupProject } from '../../lib/useSetupStatus'
 import { faviconSourceFromProject } from '../../lib/resolveProjectDomain'
 import { ProjectFavicon } from '../ProjectFavicon'
@@ -44,6 +46,8 @@ function GaugeCell({ gauge, why }: { gauge: Gauge | null; why: string }) {
 
 export interface ProvidersTableProps {
   providers: readonly ProviderAccount[]
+  /** The AI routes: "Used by" is the apps whose turned-on routes try the account's provider. */
+  routes: readonly AiRoute[]
   incidents: ReadonlyMap<string, { total: number; crit: number }>
   now: number
   pending: ReadonlySet<string>
@@ -60,7 +64,7 @@ function AppChip({ app, features, name, project }: { app: string; features: stri
   return (
     <span
       className="inline-flex max-w-full items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised px-1 py-px text-2xs font-medium text-fg"
-      title={features.length > 0 ? `${name}: ${features.join(', ')}` : name}
+      title={features.length > 0 ? `${name} routes to it for: ${features.join(', ')}` : name}
       data-testid="provider-app"
       data-app={app}
     >
@@ -72,7 +76,7 @@ function AppChip({ app, features, name, project }: { app: string; features: stri
 
 export const providerPendingKey = (id: string) => `provider:${id}`
 
-export function ProvidersTable({ providers, incidents, now, pending, onToggle, onEditThresholds, appName = (a) => a, appProject = () => null }: ProvidersTableProps) {
+export function ProvidersTable({ providers, routes, incidents, now, pending, onToggle, onEditThresholds, appName = (a) => a, appProject = () => null }: ProvidersTableProps) {
   if (providers.length === 0) return <p className="text-xs text-fg-muted">No provider accounts yet.</p>
   // Balance and Incidents draw only once some row has a value; the note says it once otherwise.
   const cols = providerColumns(providers, incidents)
@@ -100,7 +104,7 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
         const shown = accountLabel(p, sharedAll)
         const inc = incidents.get(p.id)
         const busy = pending.has(providerPendingKey(p.id))
-        const apps = appUses(p, appName)
+        const apps = routeUsers(routes, p.provider, appName)
         const probed = ageLabel(p.status?.last_probe_at, now)
         const age = ageLabel(p.status?.state_since, now)
         const needs = providerNeeds(p, now)
@@ -168,10 +172,11 @@ export function ProvidersTable({ providers, incidents, now, pending, onToggle, o
             </span>
             )}
             {/* One chip per app with its icon; the features it calls this account for on hover. */}
-            <span className={`flex min-w-0 flex-wrap gap-1 ${COL.apps}`} aria-label="Apps that use it">
+            <span className={`flex min-w-0 flex-wrap gap-1 ${COL.apps}`} aria-label="Apps whose routes try it" data-testid="provider-used-by">
               {apps.map((a) => (
                 <AppChip key={a.app} app={a.app} features={a.features} name={appName(a.app)} project={appProject(a.app)} />
               ))}
+              {apps.length === 0 && <span className="text-3xs text-fg-faint">no AI routes</span>}
             </span>
             <span className={`flex items-center justify-end gap-1.5 ${COL.on}`}>
               {busy && (

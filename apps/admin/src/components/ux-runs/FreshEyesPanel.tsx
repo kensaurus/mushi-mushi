@@ -302,7 +302,8 @@ function RunNowCard({ projectId, data, onQueued }: { projectId: string; data: Fr
             size="sm"
             ariaLabel="Visitors"
             value={sessions}
-            options={['1', '2', '3'].map((n) => ({ id: n, label: n }))}
+            // "1 / 2 / 3" were 18 px targets, under WCAG 2.5.8's 24 px (axe, audit 2026-11-21).
+            options={['1', '2', '3'].map((n) => ({ id: n, label: n === '1' ? '1 visitor' : `${n} visitors` }))}
             onChange={setSessions}
             className="self-start"
           />

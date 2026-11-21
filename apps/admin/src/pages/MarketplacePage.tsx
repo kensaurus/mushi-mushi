@@ -11,6 +11,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { NextStep } from '../components/NextStep'
@@ -273,8 +274,7 @@ export function MarketplacePage() {
 
   usePublishPageContext({
     route: '/marketplace',
-    title: `${activeMeta.label} · Plugins`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Plugins', activeMeta.label, activeMeta.id === TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.deliveriesFailed + stats.failingPlugins,
   })

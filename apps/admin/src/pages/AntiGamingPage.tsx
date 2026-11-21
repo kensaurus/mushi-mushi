@@ -29,6 +29,7 @@ import {
   Badge,
   Btn,
   FilterSelect,
+  formatRelative,
   Input,
   SegmentedControl,
   Tooltip,
@@ -93,6 +94,19 @@ const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
   velocity_anomaly: CHIP_TONE.dangerSubtle,
   manual_flag: CHIP_TONE.dangerSubtle,
   unflag: CHIP_TONE.okSubtle,
+}
+
+/** Words for each event type; rows showed `velocity_anomaly` verbatim (audit 2026-11-21). */
+const EVENT_LABEL: Record<AntiGamingEvent['event_type'], string> = {
+  multi_account: 'Multi-account',
+  velocity_anomaly: 'Too many reports',
+  manual_flag: 'Flagged by hand',
+  unflag: 'Unflagged',
+}
+
+/** @internal Exported for tests. */
+export function antiGamingEventLabel(type: string): string {
+  return (EVENT_LABEL as Record<string, string | undefined>)[type] ?? (type ? type.replace(/_/g, ' ') : 'All types')
 }
 
 const EVENT_TYPE_OPTIONS = ['', 'multi_account', 'velocity_anomaly', 'manual_flag', 'unflag']
@@ -702,6 +716,7 @@ export function AntiGamingPage() {
               label="Type"
               value={eventFilter}
               options={EVENT_TYPE_OPTIONS}
+              optionLabel={antiGamingEventLabel}
               onChange={(e) => setEventFilter(e.currentTarget.value)}
             />
           </div>
@@ -728,12 +743,13 @@ export function AntiGamingPage() {
                     disabled={!isRecurring}
                     className="w-full min-w-0 flex flex-wrap items-center gap-2 justify-start px-2 py-1 text-left border-0 bg-transparent shadow-none hover:bg-transparent disabled:cursor-default"
                   >
+                    {/* "10/28/2026, 2:5…" cut the time in a fixed 8rem chip; an age fits (audit 2026-11-21). */}
                     <span title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
-                      <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
-                        {new Date(g.last_at).toLocaleString()}
+                      <SignalChip tone="neutral" className="shrink-0 tabular-nums">
+                        {formatRelative(new Date(g.last_at))}
                       </SignalChip>
                     </span>
-                    <Badge className={EVENT_BADGE[g.event_type]}>{g.event_type}</Badge>
+                    <Badge className={EVENT_BADGE[g.event_type]}>{antiGamingEventLabel(g.event_type)}</Badge>
                     {isRecurring && (
                       <Badge className="bg-surface-raised text-fg-muted border border-edge-subtle">
                         ×{g.count}
@@ -776,10 +792,12 @@ export function AntiGamingPage() {
           <div className="space-y-0.5 font-mono text-2xs">
             {visibleEvents.map(e => (
               <div key={e.id} className="flex items-center gap-2 px-2 py-1 rounded-sm hover:bg-surface-overlay/40">
-                <SignalChip tone="neutral" className="w-32 truncate font-mono tabular-nums">
-                  {new Date(e.created_at).toLocaleString()}
-                </SignalChip>
-                <Badge className={EVENT_BADGE[e.event_type]}>{e.event_type}</Badge>
+                <span title={new Date(e.created_at).toLocaleString()}>
+                  <SignalChip tone="neutral" className="shrink-0 tabular-nums">
+                    {formatRelative(new Date(e.created_at))}
+                  </SignalChip>
+                </span>
+                <Badge className={EVENT_BADGE[e.event_type]}>{antiGamingEventLabel(e.event_type)}</Badge>
                 <span className="text-fg-secondary truncate flex-1">{e.reason ?? '—'}</span>
                 <SignalChip tone="neutral" className="shrink-0 max-w-32 truncate font-mono">
                   tok:{shortReporterKey(e.reporter_token_hash)}…

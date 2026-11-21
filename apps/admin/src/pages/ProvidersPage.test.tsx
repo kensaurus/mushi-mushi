@@ -2,11 +2,14 @@
  * @vitest-environment jsdom
  *
  * /providers (Providers & AI routes): every tab renders from a fixture
- * snapshot; a loss cell is outlined; reorder sends the feature's full
- * current order; the last enabled default cannot be turned off or deleted;
- * an optimistic toggle moves at once and falls back on a 409; the model
- * dropdown lists only priced models; a meta with `effort` shows that field
- * for anthropic only.
+ * snapshot; a loss cell is outlined. Routes (the default tab): the status
+ * line, provider cards and the app × provider matrix; features with the same
+ * steps fold into one chain; the drawer lists only priced models, saves one
+ * edit to every feature after a review, re-reads first and refuses a chain
+ * that changed, stops at the first refusal and says so; the default needs a
+ * step turned on; a meta with `effort` shows that field for anthropic only;
+ * a provider switch is confirmed with the apps it affects. "Used by" comes
+ * from the routes.
  */
 
 import { act, createElement } from 'react'
@@ -23,17 +26,21 @@ const state = vi.hoisted(() => ({
   reads: [] as string[],
   writes: [] as Array<Record<string, unknown>>,
   writeResult: null as null | Promise<Result> | Result,
+  /** Answers for the next writes, in order; falls back to writeResult. */
+  writeQueue: [] as Result[],
+  feed: null as unknown,
   toasts: [] as Array<{ tone: string; title: string }>,
 }))
 
 vi.mock('../lib/supabase', () => ({
   apiFetch: async (path: string) => {
+    if (path.startsWith('/v1/admin/ops/events')) return { ok: true, data: state.feed ?? { events: [], apps: [], nextBefore: null, canAck: true } }
     state.reads.push(path)
     return state.readError ? { ok: false, error: state.readError } : { ok: true, data: state.read }
   },
   apiFetchMutate: async (_path: string, opts: { body: string }) => {
     state.writes.push(JSON.parse(opts.body))
-    return state.writeResult ?? { ok: true, data: { action: 'x', result: null } }
+    return state.writeQueue.shift() ?? state.writeResult ?? { ok: true, data: { action: 'x', result: null } }
   },
 }))
 vi.mock('../lib/toast', () => ({
@@ -213,7 +220,13 @@ function opsSnapshot(): OpsSnapshot {
       route({ app: 'yen-yen', feature: '*', priority: 1, provider: 'openai', model: 'gpt-6-luna', params: { reasoning_effort: 'none' }, provider_state: 'down' }),
       route({ app: 'yen-yen', feature: '*', priority: 3, provider: 'anthropic', model: 'claude-haiku-5-5', params: { effort: 'high' } }),
       route({ app: 'yen-yen', feature: 'chat', priority: 1, provider: 'anthropic', model: 'claude-haiku-5-5', enabled: false }),
+      // glot-it: three features with the same two steps (translate at other priorities): one chain.
       route({ app: 'glot-it', feature: '*', priority: 1, provider: 'openai', model: 'gpt-6-luna' }),
+      route({ app: 'glot-it', feature: '*', priority: 2, provider: 'openrouter', model: 'openai/gpt-6-luna', provider_state: 'unknown' }),
+      route({ app: 'glot-it', feature: 'story', priority: 1, provider: 'openai', model: 'gpt-6-luna' }),
+      route({ app: 'glot-it', feature: 'story', priority: 2, provider: 'openrouter', model: 'openai/gpt-6-luna', provider_state: 'unknown' }),
+      route({ app: 'glot-it', feature: 'translate', priority: 2, provider: 'openai', model: 'gpt-6-luna' }),
+      route({ app: 'glot-it', feature: 'translate', priority: 3, provider: 'openrouter', model: 'openai/gpt-6-luna', provider_state: 'unknown' }),
     ],
     route_changes: [
       {
@@ -242,7 +255,10 @@ function opsSnapshot(): OpsSnapshot {
     prices: [
       { provider: 'anthropic', model: 'claude-haiku-5-5', unit_kind: 'tokens', input_per_mtok_micro: 1, output_per_mtok_micro: 5, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-10-08T00:00:00Z' },
       { provider: 'anthropic', model: 'claude-opus-5-5', unit_kind: 'tokens', input_per_mtok_micro: 15, output_per_mtok_micro: 75, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-09-26T00:00:00Z' },
-      { provider: 'openai', model: 'gpt-6-luna', unit_kind: 'tokens', input_per_mtok_micro: 0, output_per_mtok_micro: 0, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
+      { provider: 'openai', model: 'gpt-6-luna', unit_kind: 'tokens', input_per_mtok_micro: 100_000, output_per_mtok_micro: 500_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
+      { provider: 'openai', model: 'gpt-6.1-terra', unit_kind: 'tokens', input_per_mtok_micro: 1_000_000, output_per_mtok_micro: 5_000_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
+      { provider: 'openai', model: 'text-embedding-3-small', unit_kind: 'tokens', input_per_mtok_micro: 20_000, output_per_mtok_micro: 0, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-08-08T00:00:00Z' },
+      { provider: 'openrouter', model: 'openai/gpt-6-luna', unit_kind: 'tokens', input_per_mtok_micro: 100_000, output_per_mtok_micro: 500_000, cached_input_per_mtok_micro: null, per_unit_micro: null, effective_from: '2026-11-01T00:00:00Z' },
     ],
   }
 }
@@ -268,6 +284,20 @@ async function render(path = '/providers', read: OpsReadResponse = opsRead()) {
 }
 
 const q = <T extends Element = HTMLElement>(sel: string) => container.querySelector<T>(sel)
+/** The drawer and dialogs render into document.body. */
+const d = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel)
+
+async function click(el: HTMLElement | null) {
+  expect(el).not.toBeNull()
+  await act(async () => {
+    el!.click()
+  })
+  await flush()
+}
+
+function buttonByText(text: string): HTMLButtonElement | null {
+  return [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === text) ?? null
+}
 
 function choose(select: HTMLSelectElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
@@ -282,6 +312,8 @@ beforeEach(() => {
   state.reads = []
   state.writes = []
   state.writeResult = null
+  state.writeQueue = []
+  state.feed = null
   state.readError = null
   state.toasts = []
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -293,8 +325,8 @@ afterEach(() => {
 })
 
 describe('ProvidersPage tabs', () => {
-  it('opens on Providers: alert cards first, one row per account, worst first', async () => {
-    await render()
+  it('opens Providers on ?tab=providers: alert cards first, one row per account, worst first', async () => {
+    await render('/providers?tab=providers')
     expect(q('h1')?.textContent).toBe('Providers & AI routes')
     expect(state.reads[0]).toBe('/v1/admin/kensaurus/ops')
     const alerts = [...container.querySelectorAll('[data-testid^="providers-alert-"]')].map((el) => el.getAttribute('data-testid'))
@@ -307,7 +339,7 @@ describe('ProvidersPage tabs', () => {
   })
 
   it('lines every value up under its column name, and labels values on a phone', async () => {
-    await render()
+    await render('/providers?tab=providers')
     const width = (el: Element) => (el.className.match(/md:w-\S+|md:flex-1/g) ?? []).join(' ')
     const head = [...q('[data-testid="providers-head"]')!.children].map(width)
     const row = q('[data-testid^="provider-row-"]')!
@@ -342,16 +374,27 @@ describe('ProvidersPage tabs', () => {
     expect(q('[data-testid="spend-cell-yen-yen-anthropic"]')?.className).toContain('ring-danger')
   })
 
-  it('renders Routes per app and feature, a down provider struck and tried last', async () => {
-    await render('/providers?tab=routes')
-    expect(q('[data-testid="chain-yen-yen-*"]')?.textContent).toContain('default')
-    const first = q('[data-testid="route-yen-yen|*|1"]')!
-    expect(first.textContent).toContain('tried last')
-    // The model shows once: the switcher is its name, struck when its provider is down.
-    const model = first.querySelector<HTMLSelectElement>('[data-testid="switch-model"]')!
-    expect(model.value).toBe('gpt-6-luna')
-    expect(model.className).toContain('line-through')
-    expect(q('[data-testid="route-yen-yen|*|3"] [data-testid="route-param-chips"]')?.textContent).toContain('effort high')
+  it('opens on Routes: one status line, a card per routed provider, the matrix and folded chains', async () => {
+    await render()
+    const line = q('[data-testid="routes-status-line"]')!
+    expect(line.textContent).toBe('OpenAI down · Anthropic healthy · OpenRouter no health check yet · 1 open incident')
+    expect(line.getAttribute('data-tone')).toBe('danger')
+    expect([...container.querySelectorAll('[data-testid^="provider-card-"]')].map((c) => c.getAttribute('data-testid'))).toEqual([
+      'provider-card-openai',
+      'provider-card-anthropic',
+      'provider-card-openrouter',
+    ])
+    // OpenRouter has no account on kenji: no health check, and its switch says so.
+    expect(q('[data-testid="provider-card-openrouter"]')?.getAttribute('data-health')).toBe('no_check')
+    expect(q<HTMLButtonElement>('[data-testid="provider-switch-openrouter"]')!.disabled).toBe(true)
+    const role = (app: string, p: string) => q(`[data-testid="matrix-cell-${app}-${p}"]`)?.getAttribute('data-role')
+    expect([role('yen-yen', 'openai'), role('yen-yen', 'anthropic'), role('yen-yen', 'openrouter')]).toEqual(['primary', 'last', 'none'])
+    expect([role('glot-it', 'openai'), role('glot-it', 'openrouter'), role('glot-it', 'anthropic')]).toEqual(['primary', 'last', 'none'])
+    expect(q('[data-testid="matrix-cell-yen-yen-openai"]')?.textContent).toContain('100')
+    // glot-it's three features share one line; yen-yen's chat has its own order.
+    expect(q('[data-testid="chain-glot-it-*"]')?.getAttribute('data-features')).toBe('3')
+    expect(q('[data-testid="chain-glot-it-*"] [data-testid="chain-features"]')?.textContent).toBe('default, story, translate')
+    expect(q('[data-testid="chain-yen-yen-chat"]')).not.toBeNull()
   })
 
   it('renders History newest first with before → after', async () => {
@@ -365,98 +408,157 @@ describe('ProvidersPage tabs', () => {
 })
 
 describe('ProvidersPage routes', () => {
-  it('sends the full current order when moving a candidate up', async () => {
-    await render('/providers?tab=routes')
-    const third = q('[data-testid="route-yen-yen|*|3"]')!
+  const openChain = async (sel: string) => {
+    await render()
+    await click(q<HTMLButtonElement>(`${sel} [data-testid="chain-open"]`))
+    expect(d('[data-testid="chain-editor"]')).not.toBeNull()
+  }
+  const switchFirstModel = async (model: string) => {
     await act(async () => {
-      third.querySelector<HTMLButtonElement>('button[aria-label="Move up"]')!.click()
+      choose(d<HTMLSelectElement>('[data-testid="step-0"] [data-testid="step-model"]')!, model)
     })
-    await flush()
+  }
+
+  it('lists only priced chat models of the step’s provider, with prices and size', async () => {
+    await openChain('[data-testid="chain-glot-it-*"]')
+    const options = [...d<HTMLSelectElement>('[data-testid="step-0"] [data-testid="step-model"]')!.options]
+    expect(options.map((o) => o.value)).toEqual(['gpt-6-luna', 'gpt-6.1-terra'])
+    expect(options[0]!.textContent).toBe('gpt-6-luna — $0.10 in / $0.50 out per 1M · small')
+  })
+
+  it('saves one model switch to every feature of the chain after a review, reading fresh first', async () => {
+    await openChain('[data-testid="chain-glot-it-*"]')
+    await switchFirstModel('gpt-6.1-terra')
+    expect(d('[data-testid="chain-change-count"]')?.textContent).toBe('1 change')
+    await click(d('[data-testid="chain-review-open"]'))
+    expect(d('[data-testid="chain-changes"]')?.textContent).toBe('OpenAI: gpt-6-luna → gpt-6.1-terra')
+    expect(d('[data-testid="chain-before"]')?.textContent).toContain('gpt-6-luna')
+    expect(d('[data-testid="chain-after"]')?.textContent).toContain('gpt-6.1-terra')
+    expect(state.writes).toEqual([])
+    const readsBefore = state.reads.length
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes).toEqual([
+      { action: 'upsert_route', app: 'glot-it', feature: '*', priority: 1, provider: 'openai', model: 'gpt-6.1-terra' },
+      { action: 'upsert_route', app: 'glot-it', feature: 'story', priority: 1, provider: 'openai', model: 'gpt-6.1-terra' },
+      { action: 'upsert_route', app: 'glot-it', feature: 'translate', priority: 2, provider: 'openai', model: 'gpt-6.1-terra' },
+    ])
+    // One fresh read before the writes and one after, not one per write.
+    expect(state.reads.slice(readsBefore)).toEqual(['/v1/admin/kensaurus/ops?fresh=1', '/v1/admin/kensaurus/ops?fresh=1'])
+    expect(state.toasts).toEqual([{ tone: 'success', title: 'Saved to all 3 features of glot-it.' }])
+    expect(d('[data-testid="chain-editor"]')).toBeNull()
+  })
+
+  it('stops at the first refusal and says which features changed', async () => {
+    await openChain('[data-testid="chain-glot-it-*"]')
+    await switchFirstModel('gpt-6.1-terra')
+    await click(d('[data-testid="chain-review-open"]'))
+    state.writeQueue = [
+      { ok: true, data: {} },
+      { ok: false, error: { code: 'unpriced_model', message: 'No price for gpt-6.1-terra on openai' } },
+    ]
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes).toHaveLength(2)
+    expect(q('[data-testid="routes-save-report"]')?.textContent).toBe(
+      'Saved 1 of 3 features. Stopped at story: No price for gpt-6.1-terra on openai. 1 not changed: translate. The rest keep the old order; open it again to finish.',
+    )
+    expect(state.toasts).toEqual([{ tone: 'error', title: 'Save stopped at story: 1 of 3 features changed.' }])
+  })
+
+  it('refuses to save a chain that changed since it was opened, and sends nothing', async () => {
+    await openChain('[data-testid="chain-glot-it-*"]')
+    await switchFirstModel('gpt-6.1-terra')
+    await click(d('[data-testid="chain-review-open"]'))
+    const changed = opsRead()
+    changed.snapshot.routes = changed.snapshot.routes.map((r) => (r.app === 'glot-it' && r.feature === 'story' && r.priority === 1 ? { ...r, model: 'gpt-6.1-terra' } : r))
+    state.read = changed
+    await click(d('[data-testid="chain-save"]'))
+    expect(state.writes).toEqual([])
+    expect(state.toasts[0]?.tone).toBe('error')
+    expect(state.toasts[0]?.title).toContain('This order changed since you opened it (story)')
+  })
+
+  it('keeps the default saveable only while one step is turned on', async () => {
+    await openChain('[data-testid="chain-yen-yen-*"]')
+    await click(d<HTMLButtonElement>('[data-testid="step-0"] [role="switch"]'))
+    await click(d<HTMLButtonElement>('[data-testid="step-1"] [role="switch"]'))
+    expect(d('[data-testid="chain-change-count"]')?.textContent).toBe('The default needs at least one step turned on.')
+    expect(d<HTMLButtonElement>('[data-testid="chain-review-open"]')!.disabled).toBe(true)
+  })
+
+  it('reorders in the drawer and saves one reorder with the current priorities', async () => {
+    await openChain('[data-testid="chain-yen-yen-*"]')
+    await click(d<HTMLButtonElement>('[data-testid="step-1"] button[aria-label^="Move step 2"][aria-label$="up"]'))
+    await click(d('[data-testid="chain-review-open"]'))
+    await click(d('[data-testid="chain-save"]'))
     expect(state.writes).toEqual([{ action: 'reorder', app: 'yen-yen', feature: '*', order: [3, 1] }])
-    // Refetched fresh after the write.
-    expect(state.reads.at(-1)).toBe('/v1/admin/kensaurus/ops?fresh=1')
-  })
-
-  it('disables turning off or deleting the last enabled default', async () => {
-    await render('/providers?tab=routes')
-    const glot = q('[data-testid="route-glot-it|*|1"]')!
-    expect(glot.querySelector('[data-testid="route-toggle-wrap"]')?.getAttribute('title')).toBe('Enable another default first')
-    expect(glot.querySelector<HTMLButtonElement>('[role="switch"]')!.disabled).toBe(true)
-    expect(glot.querySelector<HTMLButtonElement>('button[aria-label="Delete #1"]')!.disabled).toBe(true)
-    // yen-yen has a second enabled default, so its #1 may go off.
-    expect(q<HTMLButtonElement>('[data-testid="route-yen-yen|*|1"] [role="switch"]')!.disabled).toBe(false)
-  })
-
-  it('moves a toggle at once and puts it back when the server answers 409', async () => {
-    await render('/providers?tab=routes')
-    let answer!: (r: Result) => void
-    state.writeResult = new Promise<Result>((resolve) => {
-      answer = resolve
-    })
-    const sel = '[data-testid="route-yen-yen|*|1"]'
-    await act(async () => {
-      q<HTMLButtonElement>(`${sel} [role="switch"]`)!.click()
-    })
-    expect(q(sel)?.getAttribute('data-enabled')).toBe('false')
-    expect(q(`${sel} [data-testid="pending-mark"]`)).not.toBeNull()
-    expect(state.writes[0]).toEqual({ action: 'disable_route', app: 'yen-yen', feature: '*', priority: 1 })
-    await act(async () => {
-      // Upstream's 409 message is what the toast reads (contract confirmed 2026-11-18).
-      answer({ ok: false, error: { code: 'last_default_route', message: 'yen-yen would have no enabled default route' } })
-    })
-    await flush()
-    expect(q(sel)?.getAttribute('data-enabled')).toBe('true')
-    expect(q(`${sel} [data-testid="pending-mark"]`)).toBeNull()
-    expect(state.toasts).toEqual([{ tone: 'error', title: 'yen-yen would have no enabled default route' }])
-  })
-
-  it('offers only priced models of the route’s provider', async () => {
-    await render('/providers?tab=routes')
-    const options = (sel: string) => [...q<HTMLSelectElement>(`${sel} [data-testid="switch-model"]`)!.options].map((o) => o.value)
-    expect(options('[data-testid="route-yen-yen|*|3"]')).toEqual(['claude-haiku-5-5', 'claude-opus-5-5'])
-    expect(options('[data-testid="route-yen-yen|*|1"]')).toEqual(['gpt-6-luna'])
-  })
-
-  it('switches a model with upsert_route and keeps stored params', async () => {
-    await render('/providers?tab=routes')
-    await act(async () => {
-      choose(q<HTMLSelectElement>('[data-testid="route-yen-yen|*|3"] [data-testid="switch-model"]')!, 'claude-opus-5-5')
-    })
-    await flush()
-    expect(state.writes).toEqual([{ action: 'upsert_route', app: 'yen-yen', feature: '*', priority: 3, provider: 'anthropic', model: 'claude-opus-5-5' }])
-    expect(state.toasts[0]).toEqual({ tone: 'success', title: '#3 now claude-opus-5-5' })
   })
 
   it('shows a meta param such as effort only for the provider that reads it', async () => {
     const read = opsRead()
     read.meta = { ...read.meta!, route_params: { ...read.meta!.route_params, effort: ['low', 'medium', 'high', 'xhigh', 'max'] } }
-    await render('/providers?tab=routes', read)
-    const chain = q('[data-testid="chain-yen-yen-*"]')!
-    await act(async () => {
-      chain.querySelector<HTMLButtonElement>('button[aria-label="Add a candidate"]')!.click()
-    })
-    const form = () => chain.querySelector('[data-testid="add-candidate"]')!
+    await render('/providers', read)
+    await click(q<HTMLButtonElement>('[data-testid="chain-yen-yen-*"] [data-testid="chain-open"]'))
+    await click(d('[data-testid="add-step-open"]'))
+    const form = () => d('[data-testid="add-step"]')!
     expect(form().querySelector('select[aria-label="effort"]')).toBeNull()
     expect(form().querySelector('select[aria-label="reasoning_effort"]')).not.toBeNull()
     await act(async () => {
-      choose(form().querySelector<HTMLSelectElement>('select[aria-label="Provider"]')!, 'anthropic')
+      choose(form().querySelector<HTMLSelectElement>('select[aria-label="Provider for the new step"]')!, 'anthropic')
     })
     const effort = form().querySelector<HTMLSelectElement>('select[aria-label="effort"]')
-    expect(effort).not.toBeNull()
     expect([...effort!.options].map((o) => o.value)).toEqual(['', 'low', 'medium', 'high', 'xhigh', 'max'])
     expect(form().querySelector('select[aria-label="reasoning_effort"]')).toBeNull()
+  })
+
+  it('switches a provider off for every app only after a confirm that names the apps', async () => {
+    await render()
+    await click(q<HTMLButtonElement>('[data-testid="provider-switch-anthropic"]'))
+    expect(document.body.textContent).toContain('Switch Anthropic off for every app?')
+    expect(document.body.textContent).toContain('Apps that use it now: yen-yen.')
+    expect(state.writes).toEqual([])
+    await click(buttonByText('Switch off'))
+    expect(state.writes).toEqual([{ action: 'set_provider_enabled', account_id: 'kenji:anthropic', enabled: false }])
+    expect(state.toasts).toEqual([{ tone: 'success', title: 'Anthropic off for every app' }])
+  })
+
+  it('shows the weekly scout’s cheaper model and marks the chain it would change', async () => {
+    state.feed = {
+      events: [
+        {
+          kind: 'ai.model_scout',
+          occurred_at: '2026-11-16T01:10:00Z',
+          body: 'Suggestions only.\nopenai gpt-6-luna ($0.20/M) → openai/gpt-6-nano ($0.05/M, −75%), used by glot-it/* p1',
+        },
+      ],
+      apps: [],
+      nextBefore: null,
+      canAck: true,
+    }
+    await render('/providers?org=11111111-1111-4111-8111-111111111111')
+    expect(q('[data-testid="routes-cheaper-item"]')?.textContent).toContain('openai/gpt-6-nano')
+    expect(q('[data-testid="chain-glot-it-*"]')?.textContent).toContain('cheaper model available')
   })
 })
 
 describe('ProvidersPage providers', () => {
   it('turns a provider off optimistically and confirms with a link to History', async () => {
-    await render()
+    await render('/providers?tab=providers')
     await act(async () => {
       q<HTMLButtonElement>('[data-testid="provider-row-kenji:anthropic"] [role="switch"]')!.click()
     })
     await flush()
     expect(state.writes).toEqual([{ action: 'set_provider_enabled', account_id: 'kenji:anthropic', enabled: false }])
     expect(state.toasts).toEqual([{ tone: 'success', title: 'Anthropic off' }])
+  })
+
+  it('says who uses an account from the routes, not the account’s stale list', async () => {
+    await render('/providers?tab=providers')
+    const apps = (id: string) => [...q(`[data-testid="provider-row-${id}"] [data-testid="provider-used-by"]`)!.querySelectorAll('[data-app]')].map((el) => el.getAttribute('data-app'))
+    expect(apps('kenji:openai')).toEqual(['glot-it', 'yen-yen'])
+    // yen-yen's chat step on Anthropic is off; its default step is on.
+    expect(apps('kenji:anthropic')).toEqual(['yen-yen'])
+    // ElevenLabs lists glot-it in `depends`, but no route tries it.
+    expect(q('[data-testid="provider-row-kenji:elevenlabs"] [data-testid="provider-used-by"]')?.textContent).toBe('no AI routes')
   })
 
   it('says the page is not connected when the server has no ops URL', async () => {

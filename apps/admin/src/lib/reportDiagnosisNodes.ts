@@ -55,6 +55,7 @@ const SOURCE_LABEL: Record<string, { title: string; detail: string }> = {
   store_review: { title: 'From an app store review', detail: 'low-star review' },
   voice: { title: 'Filed by voice', detail: 'transcribed request' },
   ux_loop: { title: 'Found by a UX run', detail: 'screen check' },
+  ux_scorecard: { title: 'Found by the UX scorecard', detail: 'root cause across pages' },
   code_audit: { title: 'Found by a code audit', detail: 'no user reported it' },
   security_advisory: { title: 'From a security advisory', detail: 'a dependency is vulnerable' },
   library_modernizer: { title: 'Found by the library check', detail: 'outdated dependency' },

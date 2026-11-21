@@ -6,6 +6,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { usePageContext, usePublishPageContext } from './pageContext'
+import { tabbedPageTitle } from './pageTitle'
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -62,5 +63,14 @@ describe('usePublishPageContext', () => {
     readCtx!.actions![0].run()
     expect(second).toHaveBeenCalledTimes(1)
     expect(first).not.toHaveBeenCalled()
+  })
+})
+
+// Console audit 2026-11-21: tabs led the title and the tab description rode along
+// ("Overview · Notifications · Messages your bug reporters see i…").
+describe('tabbedPageTitle', () => {
+  it('leads with the page and adds the tab only when it is not the first', () => {
+    expect(tabbedPageTitle('Reporter updates', 'Summary', true)).toBe('Reporter updates')
+    expect(tabbedPageTitle('Reporter updates', 'Sent', false)).toBe('Reporter updates · Sent')
   })
 })

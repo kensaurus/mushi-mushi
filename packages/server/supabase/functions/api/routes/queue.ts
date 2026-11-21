@@ -155,7 +155,14 @@ export function registerQueueRoutes(app: Hono<{ Variables: Variables }>): void {
       topPriorityTo = '/queue'
     } else if (oldestPendingMinutes !== null && oldestPendingMinutes > 15) {
       topPriority = 'stalled'
-      topPriorityLabel = `Oldest pending job is ${oldestPendingMinutes}m old — possible stall.`
+      // An age, not a minute count ("34865m old" read as a clock; console audit 2026-11-21).
+      const waited =
+        oldestPendingMinutes < 120
+          ? `${oldestPendingMinutes} min`
+          : oldestPendingMinutes < 48 * 60
+            ? `${Math.round(oldestPendingMinutes / 60)} h`
+            : `${Math.round(oldestPendingMinutes / 1440)} d`
+      topPriorityLabel = `The oldest waiting job has waited ${waited} — possible stall.`
       topPriorityTo = '/queue?status=pending'
     } else {
       topPriorityLabel = `${running} running · ${pending} pending — pipeline nominal.`

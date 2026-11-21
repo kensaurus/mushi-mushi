@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
@@ -305,8 +306,7 @@ export function QueryPage() {
 
   usePublishPageContext({
     route: '/query',
-    title: `${activeTabMeta.label} · SQL query`,
-    summary: activeTabMeta.description,
+    title: tabbedPageTitle('SQL query', activeTabMeta.label, activeTabMeta.id === QUERY_TABS[0].id),
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.errors24h,
   })

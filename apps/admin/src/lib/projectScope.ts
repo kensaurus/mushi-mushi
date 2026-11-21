@@ -70,9 +70,11 @@ const ALL_APPS_EXACT: readonly string[] = ['/reports']
  * Pages that never show one app's data, so the one-app notice would be wrong
  * on them: the account-wide portfolio, the project list, team settings, and
  * Providers & AI routes (the platform's provider accounts, never one app's;
- * it said "This page shows one app at a time", 2026-11-18).
+ * it said "This page shows one app at a time", 2026-11-18). Help & support
+ * lists your tickets to the Mushi team across every app, each with its app
+ * name (console audit 2026-11-21).
  */
-const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers', '/users', '/docs-bridge']
+const ACCOUNT_WIDE_ROUTE_PREFIXES: readonly string[] = ['/portfolio', '/projects', '/org/', '/providers', '/users', '/docs-bridge', '/feedback']
 
 type AllAppsSupport = 'combined' | 'account' | 'single'
 

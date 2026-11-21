@@ -25,6 +25,7 @@ const SOURCE_TO_KIND: Readonly<Record<string, Exclude<ReportSourceKind, 'user' |
   skill_run: 'check',
   fresh_eyes: 'check',
   ux_loop: 'check',
+  ux_scorecard: 'check',
 }
 
 export function reportSourceKind(r: { source?: string | null; metadata_source?: string | null }): ReportSourceKind {

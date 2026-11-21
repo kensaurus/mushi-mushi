@@ -6,13 +6,15 @@
  * docs/kensaurus-provider-watch.md, "Operator console API"):
  *   - alert cards first: providers down or warn, open critical incidents,
  *     apps that cost more than they sell;
- *   - tabs on `?tab=`: Providers (default) · Spend · Routes · History.
+ *   - tabs on `?tab=`: Routes (default: overview, provider switches, fallback
+ *     orders folded into chains) · Providers · Spend · History.
  *
- * Writes: toggles and reorders move at once (useOptimistic inside a
- * transition) and fall back when the server refuses; delete, model switch,
- * add and thresholds wait for the answer. Every write refetches with
- * ?fresh=1 and is audited upstream (History). A change that would leave an
- * app with no enabled default route is disabled before it can 409.
+ * Writes: a provider toggle moves at once (useOptimistic inside a transition)
+ * and falls back when the server refuses; thresholds wait for the answer. A
+ * chain edit (ChainDrawer) re-reads ?fresh=1, refuses when the chain changed
+ * meanwhile, then sends one audited write at a time for every feature in the
+ * chain (kensaurus-ops has no batch action) and stops at the first refusal,
+ * saying which features changed. Every write is audited upstream (History).
  *
  * Data: GET /v1/admin/kensaurus/ops[?fresh=1] → OpsReadResponse
  *       POST /v1/admin/kensaurus/ops { action, … } (actor set by the server)
@@ -32,7 +34,9 @@ import { ProvidersAlerts } from '../components/providers/ProvidersAlerts'
 import { ProvidersTable, providerPendingKey } from '../components/providers/ProvidersTable'
 import { ThresholdsDrawer } from '../components/providers/ThresholdsDrawer'
 import { SpendPanel } from '../components/providers/SpendPanel'
-import { RoutesPanel, featurePendingKey, routePendingKey, type NewRoute } from '../components/providers/RoutesPanel'
+import { RoutesPanel } from '../components/providers/RoutesPanel'
+import { RoutesOverview, switchPendingKey } from '../components/providers/RoutesOverview'
+import { ChainDrawer } from '../components/providers/ChainDrawer'
 import { HistoryPanel } from '../components/providers/HistoryPanel'
 import { PAGE_CONTENT_STACK } from '../lib/pageLayout'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -43,7 +47,23 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useReadTimedOut } from '../lib/ciReadTimeout'
 import { CiNotChecked } from '../components/ci/CiNotChecked'
-import type { AiRoute, OpsAction, ProviderAccount } from '../lib/kensaurusOpsTypes'
+import type { OpsAction, ProviderAccount } from '../lib/kensaurusOpsTypes'
+import {
+  buildOverview,
+  driftedFeatures,
+  findChain,
+  groupChains,
+  planChainSave,
+  providerHealth,
+  providerName,
+  routedProviders,
+  routesStatusLine,
+  runChainSave,
+  saveReportText,
+  type DraftStep,
+  type ProviderHealth,
+  type RouteChain,
+} from '../lib/routeChains'
 import {
   PROVIDERS_TABS,
   ageLabel,
@@ -52,12 +72,9 @@ import {
   buildHistory,
   incidentCounts,
   providerState,
-  reorderPermutation,
   resolveProvidersTab,
   sortProviders,
-  wouldDropLastDefault,
   writeErrorText,
-  type FeatureChain,
   type OptimisticPatch,
   type ProvidersTab,
   makeAppNamer,
@@ -72,7 +89,7 @@ export function ProvidersPage() {
   const tabHref = useCallback(
     (id: ProvidersTab) => {
       const next = new URLSearchParams(searchParams)
-      if (id === 'providers') next.delete('tab')
+      if (id === 'routes') next.delete('tab')
       else next.set('tab', id)
       const q = next.toString()
       return q ? `${location.pathname}?${q}` : location.pathname
@@ -83,7 +100,7 @@ export function ProvidersPage() {
     (id: ProvidersTab) =>
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (id === 'providers') next.delete('tab')
+        if (id === 'routes') next.delete('tab')
         else next.set('tab', id)
         return next
       }),
@@ -142,47 +159,78 @@ export function ProvidersPage() {
     run(providerPendingKey(p.id), { action: 'set_provider_thresholds', account_id: p.id, thresholds }, `${p.label} thresholds saved`)
   }
 
-  const onRouteToggle = (r: AiRoute, enabled: boolean) => {
-    if (!enabled && snapshot && wouldDropLastDefault(snapshot.routes, r)) return
-    const key = { app: r.app, feature: r.feature, priority: r.priority }
-    run(routePendingKey(r), { action: enabled ? 'enable_route' : 'disable_route', ...key }, `#${r.priority} ${r.model} ${enabled ? 'on' : 'off'}`, {
-      kind: 'route-enabled',
-      ...key,
-      enabled,
+  /** A provider switched off (or on) for every app: each of its accounts, one write at a time. */
+  const onProviderSwitch = (h: ProviderHealth, enabled: boolean) => {
+    const accounts = h.accounts.filter((a) => a.enabled !== enabled)
+    if (accounts.length === 0) return
+    const key = switchPendingKey(h.provider)
+    setBusy(key, true)
+    startTransition(async () => {
+      for (const a of accounts) addPatch({ kind: 'provider-enabled', id: a.id, enabled })
+      for (const a of accounts) {
+        const res = await ops.write({ action: 'set_provider_enabled', account_id: a.id, enabled })
+        if (!res.ok) {
+          toast.error(writeErrorText(res.error))
+          await ops.load(true)
+          setBusy(key, false)
+          return
+        }
+      }
+      await ops.load(true)
+      toast.success(`${providerName(h.provider)} ${enabled ? 'on' : 'off'} for every app`, undefined, { label: 'History', onClick: () => openTab('history') })
+      setBusy(key, false)
     })
   }
 
-  const onMove = (chain: FeatureChain, index: number, dir: -1 | 1) => {
-    const order = reorderPermutation(chain.routes, index, dir)
-    if (!order) return
-    run(featurePendingKey(chain.app, chain.feature), { action: 'reorder', app: chain.app, feature: chain.feature, order }, 'Order saved', {
-      kind: 'reorder',
-      app: chain.app,
-      feature: chain.feature,
-      order,
-    })
+  // ── chains ──
+  const [openChainId, setOpenChainId] = useState<string | null>(null)
+  const [saving, setSaving] = useState<{ done: number; total: number } | null>(null)
+  const [report, setReport] = useState<{ app: string; text: string } | null>(null)
+  const chainApps = useMemo(() => (snapshot ? groupChains(snapshot.routes) : []), [snapshot])
+  const openChain = openChainId ? findChain(chainApps, openChainId) : null
+
+  /**
+   * Save one chain edit to every feature in it. Re-reads first and refuses when any feature's
+   * order changed meanwhile; then one write at a time, stopping at the first refusal.
+   */
+  const onSaveChain = async (chain: RouteChain, draft: DraftStep[]) => {
+    setSaving({ done: 0, total: chain.members.length })
+    setReport(null)
+    const fresh = await ops.load(true)
+    if (!fresh) {
+      toast.error("Couldn't read the latest routes, so nothing was saved. Try again.")
+      setSaving(null)
+      return
+    }
+    const drifted = driftedFeatures(chain, fresh.snapshot.routes)
+    if (drifted.length > 0) {
+      toast.error(`This order changed since you opened it (${drifted.slice(0, 3).map((f) => (f === '*' ? 'default' : f)).join(', ')}). Nothing was saved; open it again to see the latest.`)
+      setSaving(null)
+      setOpenChainId(null)
+      return
+    }
+    // Plan from the fresh rows: twins keep their own priorities, which the signature does not cover.
+    const latest = findChain(groupChains(fresh.snapshot.routes), chain.id)!
+    const target = { ...latest, members: latest.members.filter((m) => chain.members.some((o) => o.feature === m.feature)) }
+    const plans = planChainSave(target, draft, fresh.meta)
+    const result = await runChainSave(plans, ops.write, (done, total) => setSaving({ done, total }))
+    await ops.load(true)
+    const text = saveReportText(appName(chain.app), result, plans.length, (e) => writeErrorText(e))
+    setSaving(null)
+    setOpenChainId(null)
+    if (result.failed) {
+      setReport({ app: chain.app, text })
+      toast.error(`Save stopped at ${result.failed.feature === '*' ? 'default' : result.failed.feature}: ${result.saved.length} of ${plans.length} features changed.`)
+    } else {
+      toast.success(text, undefined, { label: 'History', onClick: () => openTab('history') })
+    }
   }
-
-  const onDelete = (r: AiRoute) => {
-    if (r.enabled && snapshot && wouldDropLastDefault(snapshot.routes, r)) return
-    run(routePendingKey(r), { action: 'delete_route', app: r.app, feature: r.feature, priority: r.priority }, `#${r.priority} ${r.model} deleted`)
-  }
-
-  const onSwitchModel = (r: AiRoute, model: string) =>
-    run(
-      routePendingKey(r),
-      { action: 'upsert_route', app: r.app, feature: r.feature, priority: r.priority, provider: r.provider, model },
-      `#${r.priority} now ${model}`,
-    )
-
-  const onAdd = (app: string, feature: string, nr: NewRoute) =>
-    run(
-      featurePendingKey(app, feature),
-      { action: 'upsert_route', app, feature, priority: nr.priority, provider: nr.provider, model: nr.model, enabled: true, ...(nr.params ? { params: nr.params } : {}) },
-      `#${nr.priority} ${nr.model} added`,
-    )
 
   const providers = useMemo(() => (snapshot ? sortProviders(snapshot.providers) : []), [snapshot])
+  const routeProviders = useMemo(() => (snapshot ? routedProviders(snapshot.routes, meta) : []), [snapshot, meta])
+  const health = useMemo(() => new Map(routeProviders.map((p) => [p, providerHealth(p, snapshot?.providers ?? [])])), [routeProviders, snapshot])
+  const overviewRows = useMemo(() => (snapshot ? buildOverview(snapshot, routeProviders, health) : []), [snapshot, routeProviders, health])
+  const statusLine = useMemo(() => routesStatusLine([...health.values()], snapshot?.incidents.length ?? 0), [health, snapshot])
   const incidents = useMemo(() => (snapshot ? incidentCounts(snapshot) : new Map()), [snapshot])
   const alerts = useMemo(() => (snapshot ? buildAlerts(snapshot, now) : []), [snapshot, now])
   const history = useMemo(() => (snapshot ? buildHistory(snapshot.route_changes, snapshot.provider_changes) : []), [snapshot])
@@ -215,7 +263,7 @@ export function ProvidersPage() {
         description="Every app's AI provider accounts, what they cost, and which model each app tries first."
         helpTitle="About Providers & AI routes"
         helpWhatIsIt="The provider accounts every Kensaurus app calls through, their balance and health, what each app spends against what it sells, and the ordered model routes the router tries. Read from the provider watch on kenji."
-        helpHowToUse="Start with the red cards. Turn a provider off to stop routing to it; reorder or switch a route's model on Routes. Every change is audited on History."
+        helpHowToUse="Start on Routes: the status line and the table show which provider each app tries first. Switch a provider off for every app from its card; open a fallback order to change it for every feature that shares it. Every change is audited on History."
       >
         {updated && (
           <span className="text-2xs text-fg-muted tabular-nums" data-testid="providers-updated">
@@ -311,25 +359,54 @@ export function ProvidersPage() {
           />
           <ProvidersAlerts alerts={alerts} onOpen={openTab} />
           <TabbedSubNav ariaLabel="Providers views" tabs={tabs} />
-          {tab === 'providers' && (
-            <ProvidersTable providers={providers} incidents={incidents} now={now} pending={pending} onToggle={onProviderToggle} onEditThresholds={setEditing} appName={appName} appProject={appProject} />
-          )}
-          {tab === 'spend' && <SpendPanel snapshot={snapshot} appName={appName} />}
           {tab === 'routes' && (
             <RoutesPanel
-              routes={snapshot.routes}
-              meta={meta}
-              prices={snapshot.prices}
-              pending={pending}
-              onToggle={onRouteToggle}
-              onMove={onMove}
-              onDelete={onDelete}
-              onSwitchModel={onSwitchModel}
-              onAdd={onAdd}
+              apps={chainApps}
+              health={health}
               appName={appName}
+              report={report}
+              onDismissReport={() => setReport(null)}
+              onOpen={setOpenChainId}
+              overview={
+                <RoutesOverview
+                  routes={snapshot.routes}
+                  providers={routeProviders}
+                  health={health}
+                  rows={overviewRows}
+                  status={statusLine}
+                  busy={pending}
+                  appName={appName}
+                  onSwitch={onProviderSwitch}
+                />
+              }
             />
           )}
+          {tab === 'providers' && (
+            <ProvidersTable
+              providers={providers}
+              routes={snapshot.routes}
+              incidents={incidents}
+              now={now}
+              pending={pending}
+              onToggle={onProviderToggle}
+              onEditThresholds={setEditing}
+              appName={appName}
+              appProject={appProject}
+            />
+          )}
+          {tab === 'spend' && <SpendPanel snapshot={snapshot} appName={appName} />}
           {tab === 'history' && <HistoryPanel rows={history} now={now} />}
+          <ChainDrawer
+            chain={tab === 'routes' ? openChain : null}
+            appName={appName}
+            meta={meta}
+            prices={snapshot.prices}
+            health={health}
+            now={now}
+            saving={saving}
+            onClose={() => setOpenChainId(null)}
+            onSave={(c, d) => void onSaveChain(c, d)}
+          />
           <ThresholdsDrawer
             account={editing}
             keys={meta?.threshold_keys ?? []}

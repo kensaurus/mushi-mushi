@@ -17,6 +17,7 @@ import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
+import { tabbedPageTitle } from '../lib/pageTitle'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { NextStep } from '../components/NextStep'
 import { useToast } from '../lib/toast'
@@ -247,8 +248,7 @@ export function McpPage() {
 
   usePublishPageContext({
     route: '/mcp',
-    title: `${activeMeta.label} · Editor agents`,
-    summary: activeMeta.description,
+    title: tabbedPageTitle('Editor agents', activeMeta.label, activeMeta.id === MCP_PAGE_TABS[0].id),
     filters: { tab: activeTab, catalog: catalogTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.neverConnectedCount + (stats.endpointMismatch ? 1 : 0),
   })
