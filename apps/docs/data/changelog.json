@@ -26,6 +26,10 @@
         "description": "The top links say \"Self-host with Docker\", and the self-host section starts with the one-command Docker install."
       },
       {
+        "title": "`search_mushi_docs` finds the new Theming page",
+        "description": "the widget's colour, language and route attributes for the script tag, the `--mushi-*` design tokens and the contrast rule."
+      },
+      {
         "title": "Closing the panel mid-screenshot sends nothing.",
         "description": "Thanks to [PeepSo](https://peepso.com), whose question led to these tests. With a host `screenshotProvider` the panel stays on screen while it captures, so the reporter can close it before the capture returns. The late screenshot then went out unseen with their next report, and a Send pressed in the closed panel could still post whatever they had started typing after reopening it. Every report now opens with no screenshot attached, a capture that lands after its panel closed (automatic, button, tab share or Mark up) is thrown away, and a Send from a closed panel stops there."
       },
@@ -48,6 +52,26 @@
       {
         "title": "Score on Mushi or on your machine",
         "description": "`--score-via server` (the default) uses your app's AI key, then Mushi's; `claude-code`, `cursor` and `anthropic-api` score locally. `--sync` puts the scorecard on the console (UX runs → Scorecard) with each page's trend across runs. Pages come from `--path` / `--paths-file`, your source (`--routes-from`) or a crawl; `/team?view=sso` counts as its own page. `--from-captures` scores captures another browser driver made, so no second browser opens on a profile already in use."
+      },
+      {
+        "title": "More settings on the script tag",
+        "description": "`data-accent`, `data-accent-text`, `data-locale` and `data-hide-on-routes` (comma-separated), so Lovable, Bolt and plain HTML sites can brand the widget without code."
+      },
+      {
+        "title": "Script tag typos no longer slip through",
+        "description": "every attribute is checked. A value the widget does not take is skipped with one console warning naming the attribute and the values it accepts; it never throws or breaks the page."
+      },
+      {
+        "title": "Route rules take simple globs",
+        "description": "`hideOnRoutes: ['/admin/*', '/blog/**']`. An entry without `*` still matches anywhere in the path, exactly as before."
+      },
+      {
+        "title": "Text on your accent stays readable",
+        "description": "when `accentText`, `data-accent-text` or a CSS `--mushi-accent-fg` is under 3:1 contrast on the accent, the widget uses black or white instead and says so in `Mushi.diagnose().warnings` (and in the console with `debug: true`). Your accent colour itself is never changed. A CSS `--mushi-accent` now also gets matching text colour instead of the panel background."
+      },
+      {
+        "title": "oklch and lab accents are measured correctly",
+        "description": "for these contrast checks."
       },
       {
         "title": "The wizard names the entry file your app has.",
