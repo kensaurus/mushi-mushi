@@ -37,6 +37,7 @@ import { pgSafeSlice, pgSafeText } from '../../_shared/pg-text.ts'
 import { buildUnifiedReportTimeline } from '../../_shared/unified-timeline.ts'
 import { postReporterReply, postTeamNote, computeTwoWayHealth } from '../../_shared/reporter-comms.ts'
 import { isSdkKey } from '../../_shared/setup-signals.ts'
+import { REQUIRED_SETUP_STEPS, requiredSetupProgress } from '../../_shared/setup-steps.ts'
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -629,7 +630,7 @@ export function registerSyncRoutes(app: Hono<{ Variables: Variables }>) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** The four required ingest steps for one project (key, SDK heartbeat, first report). */
+/** The required setup steps for one project (_shared/setup-steps.ts: project, key, SDK heartbeat, first report). */
 async function ingestSetup(c: Context<{ Variables: Variables }>, projectId: string, projectName: string) {
     const db = getServiceClient()
 
@@ -682,55 +683,22 @@ async function ingestSetup(c: Context<{ Variables: Variables }>, projectId: stri
     // Only an SDK-key check-in installs the SDK: test reports, site audits and
     // repo scans also carry a platform, and counted apps that never checked in.
     const hasSdk = Boolean(heartbeat?.last_seen_at)
-    const hasReport = reportCount > 0
 
-    type Step = {
-      id: 'api_key_generated' | 'sdk_installed' | 'first_report_received' | 'project_created'
-      label: string
-      complete: boolean
-      required: boolean
-      hint: string
-    }
-
-    const steps: Step[] = [
-      {
-        id: 'project_created',
-        label: 'Project exists',
-        complete: true,
+    // The required steps of the one step list (_shared/setup-steps.ts), in the
+    // wording the CLI and MCP print. Only the required steps: this view is the
+    // ingest path, and its count is the one /v1/admin/setup shows.
+    const signals = { hasKey, hasSdk, reportCount }
+    const steps = REQUIRED_SETUP_STEPS.map((step) => {
+      const complete = step.complete(signals)
+      return {
+        id: step.id,
+        label: step.ingest.label,
+        complete,
         required: true,
-        hint: 'Project row is provisioned in Mushi.',
-      },
-      {
-        id: 'api_key_generated',
-        label: 'API key active',
-        complete: hasKey,
-        required: true,
-        hint: hasKey
-          ? 'At least one active API key is configured.'
-          : 'Mint an API key in Projects → Generate key.',
-      },
-      {
-        id: 'sdk_installed',
-        label: 'SDK heartbeat',
-        complete: hasSdk,
-        required: true,
-        hint: hasSdk
-          ? 'An SDK key from the app checked in with this backend.'
-          : 'Install the snippet, set env vars, restart your dev server.',
-      },
-      {
-        id: 'first_report_received',
-        label: 'First report ingested',
-        complete: hasReport,
-        required: true,
-        hint: hasReport
-          ? 'At least one report row exists for this project.'
-          : 'Send a test report from Projects or open the banner in your app.',
-      },
-    ]
-
-    const requiredSteps = steps.filter((s) => s.required)
-    const requiredComplete = requiredSteps.filter((s) => s.complete).length
+        hint: complete ? step.ingest.doneHint : step.ingest.todoHint,
+      }
+    })
+    const progress = requiredSetupProgress(signals)
 
     return c.json({
       ok: true,
@@ -738,9 +706,9 @@ async function ingestSetup(c: Context<{ Variables: Variables }>, projectId: stri
         project_id: projectId,
         project_name: projectName,
         project_slug: projectRes.data?.slug ?? null,
-        ready: requiredComplete === requiredSteps.length,
-        required_total: requiredSteps.length,
-        required_complete: requiredComplete,
+        ready: progress.setupDone,
+        required_total: progress.requiredTotal,
+        required_complete: progress.requiredComplete,
         steps,
         recent_report_count: reportCount,
         diagnostic: {
