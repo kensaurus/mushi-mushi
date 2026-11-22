@@ -143,6 +143,12 @@ describe('snippet injection under --yes (finding 2)', () => {
     expect(readFileSync(join(dir, 'src/main.tsx'), 'utf8')).toBe('render()\n')
   })
 
+  it('a JavaScript app is pointed at its real entry file (src/main.jsx, not src/main.tsx)', async () => {
+    mkdirSync(join(dir, 'src'))
+    writeFileSync(join(dir, 'src/main.jsx'), 'render()\n')
+    expect(await planSnippetInjection(dir, FRAMEWORKS.react)).toEqual({ kind: 'manual', target: 'src/main.jsx' })
+  })
+
   it('no entry file found: manual, with the target from the snippet', async () => {
     expect(await planSnippetInjection(dir, vanilla)).toEqual({ kind: 'manual', target: snippetTarget(vanilla) })
     expect(snippetTarget(FRAMEWORKS.next)).toMatch(/^app\/providers\.tsx/)
