@@ -346,7 +346,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
                       {i === 0 ? `${g.repo}#${g.pr_number}` : `#${g.pr_number}`}
                     </a>
                     {many && (
-                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
+                      <Btn variant="ghost" size="sm" className="!px-1 !text-3xs pointer-coarse:min-h-11 pointer-coarse:min-w-11" aria-label={`Remove #${g.pr_number} from the queue`} title="Remove from the queue" loading={removing === g.id} onClick={() => void remove(g)}>
                         ✕
                       </Btn>
                     )}
@@ -357,7 +357,7 @@ export function MergeQueuePanel({ projectId, refreshKey, onMerged }: Props) {
                 {r.detail ? withoutReasonCode(r.detail) : 'Queued.'} <span className="text-fg-faint">· <RelativeTime value={r.updated_at} /></span>
               </span>
               {!many && (
-                <Btn variant="ghost" size="sm" className="shrink-0" loading={removing === r.id} onClick={() => void remove(r)}>
+                <Btn variant="ghost" size="sm" className="shrink-0 pointer-coarse:min-h-11" aria-label={`Remove #${r.pr_number} from the queue`} loading={removing === r.id} onClick={() => void remove(r)}>
                   Remove
                 </Btn>
               )}

@@ -132,6 +132,28 @@ describe('MergeQueuePanel', () => {
     expect(host.querySelector('[data-testid="auto-decide-note"]')?.textContent).toContain('up to 3 tries per bug')
   })
 
+  // Console polish 2026-11-22: the per-PR ✕ on a grouped line was ~20 px on a touch screen.
+  it("gives each PR's remove button a name and a 44 px target on touch", async () => {
+    await render()
+    const same = { repo: 'o/r', state: 'queued', detail: 'Approved; waits for the next release train.' }
+    await answer([row({ id: 'q1', pr_number: 7, ...same }), row({ id: 'q2', pr_number: 8, ...same })])
+    const x7 = host.querySelector('button[aria-label="Remove #7 from the queue"]') as HTMLButtonElement
+    const x8 = host.querySelector('button[aria-label="Remove #8 from the queue"]') as HTMLButtonElement
+    expect(x7.textContent).toContain('✕')
+    for (const b of [x7, x8]) {
+      expect(b.className).toContain('pointer-coarse:min-h-11')
+      expect(b.className).toContain('pointer-coarse:min-w-11')
+    }
+  })
+
+  it("names a lone row's Remove button after its PR and makes it 44 px tall on touch", async () => {
+    await render()
+    await answer([row()])
+    const remove = host.querySelector('button[aria-label="Remove #7 from the queue"]') as HTMLButtonElement
+    expect(remove.textContent).toContain('Remove')
+    expect(remove.className).toContain('pointer-coarse:min-h-11')
+  })
+
   it('renders nothing without an active app', async () => {
     await render(null)
     expect(host.innerHTML).toBe('')

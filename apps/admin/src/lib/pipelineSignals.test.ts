@@ -7,7 +7,10 @@
 
 import { describe, expect, it } from 'vitest'
 import type { PipelineGroup, PipelineItem, PipelineStage } from './pipeline'
-import { groupPrimary, needYouAges, needsYouCount, needsYouGroups, primaryAction, stageTones, stuckAges } from './pipelineSignals'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { isClosingAction } from '../components/pipeline/PipelineGroups'
+import { CLOSING_ACTIONS, groupPrimary, needYouAges, needsYouCount, needsYouGroups, primaryAction, stageTones, stuckAges } from './pipelineSignals'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString()
@@ -162,5 +165,21 @@ describe('needsYouCount (one source with Home "Needs you")', () => {
     expect(merged.needYou).toEqual([1, 11, 21, 10])
     expect(merged.waiting).toEqual([0, 0, 0, 0])
     expect(merged.needYou.reduce((a, b) => a + b, 0)).toBe(needsYouCount(stages).total)
+  })
+})
+
+// Console polish 2026-11-22: PipelineGroups kept its own copy of the closing-action set.
+describe('CLOSING_ACTIONS', () => {
+  it('is close, dismiss and remove, and the groups list reads the same set', () => {
+    expect([...CLOSING_ACTIONS].sort()).toEqual(['close', 'dismiss', 'remove'])
+    for (const a of ['close', 'dismiss', 'remove', 'dispatch', 'retry', 'merge'] as const) {
+      expect(isClosingAction(a as never), a).toBe(CLOSING_ACTIONS.has(a as never))
+    }
+  })
+
+  it('has one copy: PipelineGroups imports it instead of declaring its own', () => {
+    const src = readFileSync(join(__dirname, '../components/pipeline/PipelineGroups.tsx'), 'utf8')
+    expect(src).not.toMatch(/new Set\(\[\s*'close'/)
+    expect(src).toMatch(/import \{[^}]*\bCLOSING_ACTIONS\b[^}]*\} from '\.\.\/\.\.\/lib\/pipelineSignals'/)
   })
 })

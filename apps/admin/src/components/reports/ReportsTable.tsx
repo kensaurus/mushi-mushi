@@ -271,9 +271,9 @@ export function ReportsTable({
           {/* The count is on the Open chip and in the pager (round-3 sweep 2026-11-19).
               "scroll for status & actions" hid the actions behind a scroll
               that does not happen at desktop width (console UX pass 2026-11-22):
-              the row's own action is always shown, and copy link, new tab and
-              dismiss appear on hover or keyboard focus (always on touch). */}
-          Click a row to open it<span className="hidden sm:inline">. Hover a row or tab to it for copy link, new tab and dismiss.</span>
+              the row's own action is always shown, and its More menu (copy link,
+              new tab, dismiss) appears on hover or keyboard focus (always on touch). */}
+          Click a row to open it<span className="hidden sm:inline">. Hover a row or tab to it for More: copy link, new tab, dismiss.</span>
         </span>
       </div>
       {blocks ? (

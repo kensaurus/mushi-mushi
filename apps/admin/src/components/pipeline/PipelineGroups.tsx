@@ -15,7 +15,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Btn } from '../ui'
 import { IconChevronDown, IconChevronRight, IconExternalLink } from '../icons'
 import { ACTION_META, actionableIds, ageLabel, sharedBlockReason, type ActionOutcome, type PipelineAction, type PipelineGroup, type PipelineItem } from '../../lib/pipeline'
-import { AGE_BUCKET_LABELS, groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
+import { AGE_BUCKET_LABELS, CLOSING_ACTIONS, groupPrimary, offeredActions, primaryAction } from '../../lib/pipelineSignals'
 import { heldReasonOf, withoutReasonCode } from '../../lib/heldReason'
 import type { PendingAction } from './PipelineActionDialog'
 import { MoreActionsMenu } from '../signal/MoreActionsMenu'
@@ -116,9 +116,6 @@ const AGE_INK: Record<AgeBucket, string> = {
   2: 'text-danger-foreground',
   3: 'font-semibold text-danger-foreground',
 }
-
-/** Actions that close or remove something: they never gather groups under one bulk button. */
-const CLOSING_ACTIONS: ReadonlySet<PipelineAction> = new Set(['close', 'dismiss', 'remove'])
 
 /** True for an action that closes or removes something (the page's "Start here" never offers one). */
 export function isClosingAction(action: PipelineAction): boolean {
