@@ -25,14 +25,17 @@ const CONFIG: MushiConfig = {
 const SECRETS = ['hunter2-secret', '4111111111111111', '123-45-6789', 'mask-me-token'];
 const MASKED_JPEG = 'data:image/jpeg;base64,TUFTS0VELUNBUFRVUkU=';
 // The widget mounts lazily; on a loaded CI runner that takes longer than
-// vi.waitFor's 1 s default, so give it a real deadline instead.
-const WAIT = { timeout: 5000 };
+// vi.waitFor's 1 s default, so give it a real deadline instead. The release
+// job runs every package's tests at once: on 2026-11-22 this file took 24 s
+// there (3.5 s alone) and a 5 s wait ran out between two captures. The
+// assertions are unchanged; only how long a slow runner may take.
+const WAIT = { timeout: 12_000 };
 
 function shadow(): ShadowRoot {
   return document.getElementById('mushi-mushi-widget')!.shadowRoot!;
 }
 
-describe('screenshot submission', { timeout: 15_000 }, () => {
+describe('screenshot submission', { timeout: 30_000 }, () => {
   let posts: Array<{ url: string; body: Record<string, unknown> }>;
 
   beforeEach(() => {
