@@ -149,6 +149,13 @@ describe('ChecksPage', () => {
     expect(pill('fullstack-audit')).toBe('passed')
   })
 
+  it('lets a card head wrap so a phone never cuts the check name for its pill (2026-11-22)', () => {
+    render()
+    const heads = [...container.querySelectorAll('[data-testid="checks-card-head"]')]
+    expect(heads.length).toBeGreaterThan(0)
+    for (const head of heads) expect(head.className).toContain('flex-wrap')
+  })
+
   it('leads with counts as marks, not a sentence naming the cards below', () => {
     render()
     const status = container.querySelector('[data-testid="checks-status"]')!
